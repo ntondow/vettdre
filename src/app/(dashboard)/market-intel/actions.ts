@@ -10,6 +10,9 @@ const PLUTO_ID = "64uk-42ks";
 const ACRIS_LEGALS = "8h5j-fqxa";
 const ACRIS_MASTER = "bnx9-e6tj";
 const ACRIS_PARTIES = "636b-3b5g";
+const NYS_ENTITY_NAMES = "ekwr-p59j";
+const NYS_ENTITY_FILINGS = "63wc-4exh";
+const NYS_BASE = "https://data.ny.gov/resource";
 
 const BORO_CODE: Record<string, string> = {
   Manhattan: "1", Bronx: "2", Brooklyn: "3", Queens: "4", "Staten Island": "5",
@@ -292,7 +295,9 @@ export async function lookupACRIS(borough: string, block: string, lot: string) {
   let legals: any[] = [];
   try {
     const url = new URL(BASE + "/" + ACRIS_LEGALS + ".json");
-    url.searchParams.set("$where", "borough='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
+    const acrisBoroMap: Record<string, string> = {"MANHATTAN":"1","BRONX":"2","BROOKLYN":"3","QUEENS":"4","STATEN ISLAND":"5","1":"1","2":"2","3":"3","4":"4","5":"5"};
+    const acrisBoro = acrisBoroMap[boroCode.toUpperCase()] || boroCode;
+    url.searchParams.set("$where", "borough='" + acrisBoro + "' AND block='" + block + "' AND lot='" + lot + "'");
     url.searchParams.set("$limit", "50");
     url.searchParams.set("$order", "good_through_date DESC");
     console.log("ACRIS Legals URL:", url.toString());
@@ -365,4 +370,252 @@ export async function lookupACRIS(borough: string, block: string, lot: string) {
 
   console.log("=== ACRIS RESULTS:", merged.length, "documents with", parties.length, "parties ===");
   return { documents: merged, parties };
+}
+
+
+// ============================================================
+// NYS SECRETARY OF STATE - LLC/ENTITY LOOKUP
+// ============================================================
+export async function lookupEntity(entityName: string) {
+  const raw = entityName.trim().toUpperCase();
+  const name = raw.replace(/[,.'"’]/g, "").replace(/\b(LLC|INC|CORP|CORPORATION|COMPANY|CO|LTD|LP|PARTNERSHIP)\b/g, "").replace(/\s+/g, " ").trim();
+  console.log("=== NYS ENTITY LOOKUP ===", name);
+
+  let entities: any[] = [];
+  let filings: any[] = [];
+
+  // Step 1: Search by entity name
+  try {
+    const url = new URL(NYS_BASE + "/" + NYS_ENTITY_NAMES + ".json");
+    url.searchParams.set("$where", "upper(corp_name) like '%" + name + "%'");
+    url.searchParams.set("$limit", "20");
+    url.searchParams.set("$order", "date_filed DESC");
+    console.log("NYS Names URL:", url.toString());
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      console.log("NYS Names count:", data.length);
+      entities = data.map((r: any) => ({
+        corpId: r.corpid_num || "",
+        filmNum: r.film_num || "",
+        dateFiled: r.date_filed || "",
+        nameType: r.name_type === "A" ? "Active Name" : r.name_type === "F" ? "Former Name" : r.name_type || "",
+        nameStatus: r.name_status === "A" ? "Active" : r.name_status === "I" ? "Inactive" : r.name_status || "",
+        corpName: r.corp_name || "",
+      }));
+    }
+  } catch (err) { console.error("NYS Names error:", err); }
+
+  // Step 2: Get filing details for found entities
+  const filmNums = [...new Set(entities.map(e => e.filmNum).filter(Boolean))];
+  if (filmNums.length > 0) {
+    try {
+      const filmList = filmNums.slice(0, 20).map(f => "'" + f + "'").join(",");
+      const url = new URL(NYS_BASE + "/" + NYS_ENTITY_FILINGS + ".json");
+      url.searchParams.set("$where", "film_num in(" + filmList + ")");
+      url.searchParams.set("$limit", "50");
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const data = await res.json();
+        console.log("NYS Filings count:", data.length);
+        filings = data.map((r: any) => ({
+          filmNum: r.film_num || "",
+          dateFiled: r.date_filed || "",
+          approvedDate: r.approved_date || "",
+          effDate: r.eff_date || "",
+          entityType: r.entitytype || "",
+          documentType: r.documenttype || "",
+          county: r.county || "",
+          jurisdiction: r.jurisdiction || "",
+        }));
+      }
+    } catch (err) { console.error("NYS Filings error:", err); }
+  }
+
+  // Step 3: Also search for entities that might be related
+  // (e.g., search for just the address part of an LLC name like "143 N 11" from "143 N11 LLC")
+  const words = name.replace(/\b(LLC|INC|CORP|CORPORATION|COMPANY|CO|LTD|LP|PARTNERSHIP|REALTY|PROPERTIES|MANAGEMENT|HOLDINGS|GROUP|ENTERPRISES|ASSOCIATES)\b/g, "").trim();
+
+  let relatedEntities: any[] = [];
+  if (words.length > 3 && words !== name) {
+    try {
+      const url = new URL(NYS_BASE + "/" + NYS_ENTITY_NAMES + ".json");
+      url.searchParams.set("$where", "upper(corp_name) like '%" + words + "%'");
+      url.searchParams.set("$limit", "10");
+      url.searchParams.set("$order", "date_filed DESC");
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        const data = await res.json();
+        relatedEntities = data
+          .filter((r: any) => r.corp_name !== name)
+          .map((r: any) => ({
+            corpId: r.corpid_num || "",
+            corpName: r.corp_name || "",
+            nameStatus: r.name_status === "A" ? "Active" : "Inactive",
+            dateFiled: r.date_filed || "",
+          }));
+      }
+    } catch (err) {}
+  }
+
+  // Merge entities with their filings
+  const merged = entities.map(e => ({
+    ...e,
+    filings: filings.filter(f => f.filmNum === e.filmNum),
+  }));
+
+  // Group by corpId to show unique entities
+  const corpMap = new Map();
+  merged.forEach(e => {
+    const key = e.corpId || e.filmNum;
+    if (!corpMap.has(key)) {
+      corpMap.set(key, {
+        corpId: e.corpId,
+        corpName: e.corpName,
+        nameStatus: e.nameStatus,
+        dateFiled: e.dateFiled,
+        entityType: e.filings[0]?.entityType || "",
+        documentType: e.filings[0]?.documentType || "",
+        county: e.filings[0]?.county || "",
+        allFilings: [],
+      });
+    }
+    corpMap.get(key).allFilings.push(...e.filings);
+  });
+
+  const results = Array.from(corpMap.values());
+  console.log("=== NYS ENTITY RESULTS:", results.length, "entities,", relatedEntities.length, "related ===");
+
+  return { entities: results, relatedEntities };
+}
+
+// ============================================================
+// NAME / ENTITY SEARCH — Find all properties tied to a name
+// ============================================================
+export async function searchByName(name: string) {
+  const searchName = name.trim().toUpperCase();
+  console.log("=== NAME SEARCH ===", searchName);
+
+  let properties: any[] = [];
+
+  // Search ACRIS parties for this name
+  try {
+    const url = new URL(BASE + "/" + ACRIS_PARTIES + ".json");
+    url.searchParams.set("$where", "upper(name) like '%" + searchName + "%'");
+    url.searchParams.set("$limit", "100");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const parties = await res.json();
+      console.log("ACRIS parties found:", parties.length);
+
+      // Get document IDs
+      const docIds = [...new Set(parties.map((p: any) => p.document_id))] as string[];
+
+      if (docIds.length > 0) {
+        // Get legals to find block/l for each document
+        const docList = docIds.slice(0, 40).map((id: string) => "'" + id + "'").join(",");
+        const legUrl = new URL(BASE + "/" + ACRIS_LEGALS + ".json");
+        legUrl.searchParams.set("$where", "document_id in(" + docList + ")");
+        legUrl.searchParams.set("$limit", "200");
+        const legRes = await fetch(legUrl.toString());
+
+        if (legRes.ok) {
+          const legals = await legRes.json();
+
+          // Get master docs for amounts/dates
+          const masterUrl = new URL(BASE + "/" + ACRIS_MASTER + ".json");
+          masterUrl.searchParams.set("$where", "document_id in(" + docList + ")");
+          masterUrl.searchParams.set("$limit", "200");
+          masterUrl.searchParams.set("$order", "recorded_datetime DESC");
+          const masterRes = await fetch(masterUrl.toString());
+          const masters = masterRes.ok ? await masterRes.json() : [];
+
+          // Build property list
+          const propMap = new Map();
+          legals.forEach((l: any) => {
+            const key = l.borough + "-" + l.block + "-" + l.lot;
+            const master = masters.find((m: any) => m.document_id === l.document_id);
+            const party = parties.find((p: any) => p.document_id === l.document_id);
+
+            if (!propMap.has(key)) {
+              propMap.set(key, {
+                borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(l.borough)] || l.borough,
+                boroCode: l.borough,
+                block: l.block,
+                lot: l.lot,
+                address: l.street_number ? l.street_number + " " + (l.street_name || "") : "",
+                unit: l.unit || null,
+                documents: [],
+              });
+            }
+            propMap.get(key).documents.push({
+              documentId: l.document_id,
+              docType: master?.doc_type || "",
+              amount: parseInt(master?.document_amt || "0"),
+              recordedDate: master?.recorded_datetime || "",
+              role: party?.party_type === "1" ? "Grantee" : "Grantor",
+              name: party?.name || "",
+            });
+          });
+
+          properties = Array.from(propMap.values());
+          // Sort by most recent transaction
+          properties.sort((a: any, b: any) => {
+            const aDate = Math.max(...a.documents.map((d: any) => new Date(d.recordedDate || 0).getTime()));
+            const bDate = Math.max(...b.documents.map((d: any) => new Date(d.recordedDate || 0).getTime()));
+            return bDate - aDate;
+          });
+        }
+      }
+    }
+  } catch (err) { console.error("Name search ACRIS error:", err); }
+
+  // Also search HPD contacts
+  let hpdProperties: any[] = [];
+  try {
+    const url = new URL(BASE + "/" + HPD_CONTACTS + ".json");
+    url.searchParams.set("$where", "upper(corporationname) like '%" + searchName + "%' OR upper(lastname) like '%" + searchName + "%'");
+    url.searchParams.set("$limit", "50");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const contacts = await res.json();
+      const regIds = [...new Set(contacts.map((c: any) => c.registrationid))] as string[];
+
+      if (regIds.length > 0) {
+        const regList = regIds.slice(0, 30).map((id: string) => "'" + id + "'").join(",");
+        const regUrl = new URL(BASE + "/" + HPD_REGISTRATIONS + ".json");
+        regUrl.searchParams.set("$where", "registrationid in(" + regList + ")");
+        regUrl.searchParams.set("$limit", "100");
+        const regRes = await fetch(regUrl.toString());
+        if (regRes.ok) {
+          const regs = await regRes.json();
+          hpdProperties = regs.map((r: any) => ({
+            borough: r.boro || "",
+            boroCode: r.boroid || "",
+            block: r.block || "",
+            lot: r.lot || "",
+            address: r.housenumber ? r.housenumber + " " + (r.streetname || "") : "",
+            zip: r.zip || "",
+            source: "HPD",
+            registrationId: r.registrationid,
+          }));
+        }
+      }
+    }
+  } catch (err) { console.error("Name search HPD error:", err); }
+
+  // Merge: add HPD properties that aren't already in ACRIS results
+  hpdProperties.forEach((hp: any) => {
+    const key = hp.boroCode + "-" + hp.block + "-" + hp.lot;
+    const existing = properties.find((p: any) => p.boroCode + "-" + p.block + "-" + p.lot === key);
+    if (!existing) {
+      properties.push({
+        ...hp,
+        documents: [{ docType: "HPD REG", role: "Registered Owner", recordedDate: "", name: searchName }],
+      });
+    }
+  });
+
+  console.log("=== NAME SEARCH RESULTS:", properties.length, "properties ===");
+  return { properties, searchName };
 }
