@@ -1,25 +1,15 @@
-import Header from "@/components/layout/header";
+import { getOrCreatePipeline, getContacts, getProperties } from "./actions";
+import PipelineBoard from "./pipeline-board";
 
-const stages = ["New Lead", "Contacted", "Showing", "Offer", "Under Contract", "Closed"];
+export default async function PipelinePage() {
+  const { pipeline, deals, stages } = await getOrCreatePipeline();
+  const contacts = await getContacts();
+  const properties = await getProperties();
 
-export default function PipelinePage() {
-  return (
-    <>
-      <Header title="Pipeline" subtitle="Track your deals" />
-      <div className="p-8">
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {stages.map((stage) => (
-            <div key={stage} className="flex-shrink-0 w-64 bg-white rounded-xl border border-slate-200">
-              <div className="p-4 border-b border-slate-100">
-                <h3 className="text-sm font-semibold text-slate-700">{stage}</h3>
-              </div>
-              <div className="p-4 min-h-[300px] flex items-center justify-center">
-                <p className="text-xs text-slate-400">No deals</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </>
-  );
+  // Serialize Decimal/Date objects for client component
+  const serializedDeals = JSON.parse(JSON.stringify(deals));
+  const serializedProperties = JSON.parse(JSON.stringify(properties));
+  const serializedPipeline = JSON.parse(JSON.stringify(pipeline));
+
+  return <PipelineBoard pipeline={serializedPipeline} deals={serializedDeals} stages={stages} contacts={contacts} properties={serializedProperties} />;
 }
