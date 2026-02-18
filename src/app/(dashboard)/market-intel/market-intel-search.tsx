@@ -1,263 +1,752 @@
 "use client";
 
 import { useState } from "react";
-import { lookupProperty } from "./actions";
-// Types inferred from server action
+import { lookupProperty, searchOwnership } from "./actions";
 
-type Tab = "sales" | "permits" | "violations";
+type MainTab = "property" | "ownership";
+type View = "results" | "building";
 
 export default function MarketIntelSearch() {
+  const [mainTab, setMainTab] = useState<MainTab>("property");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<{
-    sales: SalesRecord[];
-    permits: Permit[];
-    violations: Violation[];
-    query: { address: string; borough: string; zip: string };
-  } | null>(null);
-  const [activeTab, setActiveTab] = useState<Tab>("sales");
+  const [propResults, setPropResults] = useState<any | null>(null);
+  const [view, setView] = useState<View>("results");
+  const [selectedBuilding, setSelectedBuilding] = useState<any | null>(null);
+  const [detailTab, setDetailTab] = useState<"sales" | "permits" | "violations">("sales");
+  const [ownerResults, setOwnerResults] = useState<any | null>(null);
+  const [expandedOwner, setExpandedOwner] = useState<number | null>(null);
 
-  const handleSearch = async (e: React.FormEvent<HTMLFormElement>) => {
+  const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
+
+  const fmtDate = (d: string | null) => {
+    if (!d) return "—";
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).format(new Date(d));
+    } catch {
+      return d;
+    }
+  };
+
+  const handlePropertySearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setView("results");
+    setSelectedBuilding(null);
     try {
-      const data = await lookupProperty(new FormData(e.currentTarget));
-      setResults(data);
-      setActiveTab("sales");
+      setPropResults(await lookupProperty(new FormData(e.currentTarget)));
     } catch (err: any) {
-      setError(err.message || "Search failed");
+      setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const fmtPrice = (n: number) => n > 0 ? `$${n.toLocaleString()}` : "—";
-  const fmtDate = (d: string | null) => {
-    if (!d) return "—";
-    try { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(d)); }
-    catch { return d; }
+  const handleOwnershipSearch = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    setExpandedOwner(null);
+    try {
+      setOwnerResults(await searchOwnership(new FormData(e.currentTarget)));
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   };
-  const fmtSqft = (n: number) => n > 0 ? `${n.toLocaleString()} sq ft` : "—";
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5">
-        <div className="flex items-center gap-3">
+      <div className="bg-white border-b border-slate-200">
+        <div className="px-8 py-5 flex items-center gap-3">
           <span className="text-2xl">🔍</span>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Market Intelligence</h1>
-            <p className="text-sm text-slate-500">Search NYC property records — powered by NYC Open Data</p>
+            <p className="text-sm text-slate-500">
+              NYC property records & ownership data — powered by NYC Open Data
+            </p>
           </div>
+        </div>
+        <div className="px-8 flex gap-0">
+          <button
+            onClick={() => setMainTab("property")}
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === "property"
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            🏠 Property Search
+          </button>
+          <button
+            onClick={() => setMainTab("ownership")}
+            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+              mainTab === "ownership"
+                ? "border-blue-600 text-blue-700"
+                : "border-transparent text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            👤 Ownership Lookup
+          </button>
         </div>
       </div>
 
       <div className="px-8 py-6">
-        {/* Search Form */}
-        <form onSubmit={handleSearch} className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Street address *</label>
-              <input name="address" required placeholder="e.g., 350 5th Avenue" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="w-48">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Borough *</label>
-              <select name="borough" required className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">Select...</option>
-                <option value="Manhattan">Manhattan</option>
-                <option value="Brooklyn">Brooklyn</option>
-                <option value="Queens">Queens</option>
-                <option value="Bronx">Bronx</option>
-                <option value="Staten Island">Staten Island</option>
-              </select>
-            </div>
-            <div className="w-32">
-              <label className="block text-sm font-medium text-slate-700 mb-1">ZIP (optional)</label>
-              <input name="zip" placeholder="10001" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-            </div>
-            <div className="flex items-end">
-              <button type="submit" disabled={loading} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors">
-                {loading ? "Searching..." : "Search"}
-              </button>
-            </div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
+            {error}
           </div>
-          {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
-        </form>
+        )}
 
-        {/* Results */}
-        {results && (
+        {/* ======================== PROPERTY TAB ======================== */}
+        {mainTab === "property" && (
           <>
-            {/* Summary Cards */}
-            <div className="grid grid-cols-3 gap-4 mb-6">
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <p className="text-sm text-slate-500">Sales Records</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{results.sales.length}</p>
-                {results.sales.length > 0 && (
-                  <p className="text-xs text-slate-400 mt-1">Last sale: {fmtPrice(results.sales[0]?.salePrice)} on {fmtDate(results.sales[0]?.saleDate)}</p>
-                )}
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <p className="text-sm text-slate-500">Building Permits</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{results.permits.length}</p>
-                {results.permits.length > 0 && (
-                  <p className="text-xs text-slate-400 mt-1">Latest: {fmtDate(results.permits[0]?.filingDate)}</p>
-                )}
-              </div>
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <p className="text-sm text-slate-500">DOB Violations</p>
-                <p className="text-2xl font-bold text-slate-900 mt-1">{results.violations.length}</p>
-                {results.violations.length > 0 && (
-                  <p className="text-xs text-slate-400 mt-1">Latest: {fmtDate(results.violations[0]?.issueDate)}</p>
-                )}
-              </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="bg-white rounded-xl border border-slate-200">
-              <div className="flex border-b border-slate-200">
-                {([
-                  { key: "sales", label: `Sales History (${results.sales.length})`, icon: "💰" },
-                  { key: "permits", label: `Permits (${results.permits.length})`, icon: "📋" },
-                  { key: "violations", label: `Violations (${results.violations.length})`, icon: "⚠️" },
-                ] as const).map(tab => (
-                  <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                    className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-                    <span className="mr-1.5">{tab.icon}</span>{tab.label}
+            <form onSubmit={handlePropertySearch} className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+              <div className="flex gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Street address *</label>
+                  <input
+                    name="address"
+                    required
+                    placeholder="e.g., 350 Park Avenue"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="w-48">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Borough *</label>
+                  <select
+                    name="borough"
+                    required
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select...</option>
+                    <option value="Manhattan">Manhattan</option>
+                    <option value="Brooklyn">Brooklyn</option>
+                    <option value="Queens">Queens</option>
+                    <option value="Bronx">Bronx</option>
+                    <option value="Staten Island">Staten Island</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                  >
+                    {loading ? "..." : "Search"}
                   </button>
-                ))}
+                </div>
               </div>
+            </form>
 
-              {/* SALES TAB */}
-              {activeTab === "sales" && (
-                <div className="p-5">
-                  {results.sales.length > 0 ? (
-                    <div className="overflow-x-auto">
+            {/* Property Results List */}
+            {propResults && view === "results" && (
+              <>
+                <div className="grid grid-cols-4 gap-4 mb-6">
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Buildings</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{propResults.buildings.length}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Sales</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{propResults.sales.length}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Permits</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{propResults.permits.length}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Violations</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{propResults.violations.length}</p>
+                  </div>
+                </div>
+
+                {propResults.buildings.length > 0 && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {propResults.buildings.map((b: any, i: number) => (
+                      <button
+                        key={i}
+                        onClick={() => {
+                          setSelectedBuilding(b);
+                          setView("building");
+                          setDetailTab("sales");
+                        }}
+                        className="bg-white rounded-xl border border-slate-200 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all group"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600">
+                              {b.address}
+                            </h3>
+                            <p className="text-sm text-slate-500 mt-0.5">
+                              {b.neighborhood}, {b.borough}
+                            </p>
+                          </div>
+                          <span className="text-slate-400 group-hover:text-blue-500 text-lg">→</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-4">
+                          <div>
+                            <p className="text-xs text-slate-400">Last Sale</p>
+                            <p className="text-sm font-semibold">{fmtPrice(b.lastSalePrice)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Year Built</p>
+                            <p className="text-sm">{b.yearBuilt || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Units</p>
+                            <p className="text-sm">{b.totalUnits || "—"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-slate-400">Sales</p>
+                            <p className="text-sm">{b.salesCount}</p>
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {propResults.permits.length > 0 && (
+                  <div className="mt-6">
+                    <h2 className="text-sm font-semibold text-slate-700 mb-3">📋 Permits</h2>
+                    <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                      {propResults.permits.map((p: any, i: number) => (
+                        <div key={i} className="p-4 flex justify-between">
+                          <div>
+                            <span className="text-sm font-medium text-slate-900">
+                              {p.jobDescription || p.jobType}
+                            </span>
+                            <span
+                              className={`ml-2 text-xs px-1.5 py-0.5 rounded font-medium ${
+                                p.status.includes("APPROVED") || p.status.includes("SIGN")
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {p.status}
+                            </span>
+                            <div className="flex gap-3 mt-1 text-xs text-slate-400">
+                              <span>#{p.jobNumber}</span>
+                              <span>{fmtDate(p.filingDate)}</span>
+                            </div>
+                          </div>
+                          {p.estimatedCost && (
+                            <span className="text-sm font-semibold text-slate-700">
+                              {fmtPrice(p.estimatedCost)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {propResults.violations.length > 0 && (
+                  <div className="mt-6">
+                    <h2 className="text-sm font-semibold text-slate-700 mb-3">⚠️ Violations</h2>
+                    <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                      {propResults.violations.map((v: any, i: number) => (
+                        <div key={i} className="p-4 flex justify-between">
+                          <div>
+                            <span className="text-sm font-medium text-slate-900">
+                              {v.description || v.violationType}
+                            </span>
+                            <div className="flex gap-3 mt-1 text-xs text-slate-400">
+                              <span>#{v.violationNumber}</span>
+                              <span>{fmtDate(v.issueDate)}</span>
+                            </div>
+                          </div>
+                          <span
+                            className={`text-xs px-1.5 py-0.5 rounded font-medium ${
+                              v.status === "Open"
+                                ? "bg-red-50 text-red-700"
+                                : "bg-emerald-50 text-emerald-700"
+                            }`}
+                          >
+                            {v.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Building Detail View */}
+            {propResults && view === "building" && selectedBuilding && (
+              <div>
+                <button onClick={() => setView("results")} className="text-sm text-blue-600 font-medium mb-4">
+                  &larr; Back
+                </button>
+                <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h2 className="text-2xl font-bold text-slate-900">{selectedBuilding.address}</h2>
+                      <p className="text-base text-slate-500 mt-1">
+                        {selectedBuilding.neighborhood}, {selectedBuilding.borough} {selectedBuilding.zipCode}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-slate-400">Last Sale</p>
+                      <p className="text-2xl font-bold text-slate-900">
+                        {fmtPrice(selectedBuilding.lastSalePrice)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-6 gap-4 mt-6 pt-6 border-t border-slate-100">
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Year Built</p>
+                      <p className="text-lg font-semibold mt-0.5">{selectedBuilding.yearBuilt || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Units</p>
+                      <p className="text-lg font-semibold mt-0.5">{selectedBuilding.totalUnits || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Gross Sq Ft</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {selectedBuilding.grossSqft > 0 ? selectedBuilding.grossSqft.toLocaleString() : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Land Sq Ft</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {selectedBuilding.landSqft > 0 ? selectedBuilding.landSqft.toLocaleString() : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Block / Lot</p>
+                      <p className="text-lg font-semibold mt-0.5">
+                        {selectedBuilding.block} / {selectedBuilding.lot}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase">Class</p>
+                      <p className="text-sm font-semibold mt-0.5">{selectedBuilding.buildingClass || "—"}</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-slate-200">
+                  <div className="flex border-b border-slate-200">
+                    {(["sales", "permits", "violations"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setDetailTab(t)}
+                        className={`px-5 py-3 text-sm font-medium border-b-2 capitalize transition-colors ${
+                          detailTab === t
+                            ? "border-blue-600 text-blue-700"
+                            : "border-transparent text-slate-500"
+                        }`}
+                      >
+                        {t === "sales" ? "💰" : t === "permits" ? "📋" : "⚠️"} {t} (
+                        {t === "sales"
+                          ? selectedBuilding.sales.length
+                          : t === "permits"
+                          ? propResults?.permits.length
+                          : propResults?.violations.length}
+                        )
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-5">
+                    {detailTab === "sales" && selectedBuilding.sales.length > 0 && (
                       <table className="w-full">
                         <thead>
                           <tr className="border-b border-slate-200">
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Address</th>
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Neighborhood</th>
-                            <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Sale Price</th>
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Sale Date</th>
-                            <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Sq Ft</th>
-                            <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase">$/SqFt</th>
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Year Built</th>
-                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">Units</th>
+                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              Address
+                            </th>
+                            <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              Price
+                            </th>
+                            <th className="text-left px-3 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              Date
+                            </th>
+                            <th className="text-right px-3 py-2 text-xs font-semibold text-slate-500 uppercase">
+                              $/SqFt
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                          {results.sales.map((s, i) => (
+                          {selectedBuilding.sales.map((s: any, i: number) => (
                             <tr key={i} className="hover:bg-slate-50">
-                              <td className="px-3 py-2.5 text-sm text-slate-900 font-medium">
-                                {s.address}{s.apartmentNumber ? ` #${s.apartmentNumber}` : ""}
+                              <td className="px-3 py-2.5 text-sm">
+                                {s.address}
+                                {s.apartmentNumber ? ` #${s.apartmentNumber}` : ""}
                               </td>
-                              <td className="px-3 py-2.5 text-sm text-slate-600">{s.neighborhood || "—"}</td>
-                              <td className="px-3 py-2.5 text-sm text-slate-900 font-semibold text-right">{fmtPrice(s.salePrice)}</td>
+                              <td className="px-3 py-2.5 text-sm font-semibold text-right">
+                                {fmtPrice(s.salePrice)}
+                              </td>
                               <td className="px-3 py-2.5 text-sm text-slate-600">{fmtDate(s.saleDate)}</td>
-                              <td className="px-3 py-2.5 text-sm text-slate-600 text-right">{s.grossSqft > 0 ? s.grossSqft.toLocaleString() : "—"}</td>
                               <td className="px-3 py-2.5 text-sm text-slate-600 text-right">
-                                {s.grossSqft > 0 && s.salePrice > 0 ? `$${Math.round(s.salePrice / s.grossSqft).toLocaleString()}` : "—"}
+                                {s.grossSqft > 0
+                                  ? `$${Math.round(s.salePrice / s.grossSqft).toLocaleString()}`
+                                  : "—"}
                               </td>
-                              <td className="px-3 py-2.5 text-sm text-slate-600">{s.yearBuilt > 0 ? s.yearBuilt : "—"}</td>
-                              <td className="px-3 py-2.5 text-sm text-slate-600">{s.totalUnits > 0 ? s.totalUnits : "—"}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400 text-center py-8">No sales records found for this address.</p>
-                  )}
+                    )}
+                    {detailTab === "sales" && selectedBuilding.sales.length === 0 && (
+                      <p className="text-sm text-slate-400 text-center py-8">No sales</p>
+                    )}
+                    {detailTab !== "sales" && (
+                      <p className="text-sm text-slate-400 text-center py-8">
+                        See results page for {detailTab}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* PERMITS TAB */}
-              {activeTab === "permits" && (
-                <div className="p-5">
-                  {results.permits.length > 0 ? (
-                    <div className="space-y-3">
-                      {results.permits.map((p, i) => (
-                        <div key={i} className="border border-slate-200 rounded-lg p-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-slate-900">{p.jobDescription || p.jobType || "Permit"}</span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                                  p.status === "ISSUED" || p.status === "APPROVED" ? "bg-emerald-50 text-emerald-700" :
-                                  p.status === "EXPIRED" ? "bg-red-50 text-red-700" :
-                                  "bg-amber-50 text-amber-700"
-                                }`}>{p.status}</span>
-                              </div>
-                              <p className="text-xs text-slate-500 mt-1">Job #{p.jobNumber} • Type: {p.jobType}</p>
-                            </div>
-                            {p.estimatedCost && <span className="text-sm font-semibold text-slate-700">{fmtPrice(p.estimatedCost)}</span>}
-                          </div>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                            <span>Filed: {fmtDate(p.filingDate)}</span>
-                            {p.issuanceDate && <span>Issued: {fmtDate(p.issuanceDate)}</span>}
-                            {p.expirationDate && <span>Expires: {fmtDate(p.expirationDate)}</span>}
-                          </div>
-                          {p.ownerName && <p className="text-xs text-slate-500 mt-1.5">Owner: {p.ownerName}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400 text-center py-8">No building permits found for this address.</p>
-                  )}
-                </div>
-              )}
-
-              {/* VIOLATIONS TAB */}
-              {activeTab === "violations" && (
-                <div className="p-5">
-                  {results.violations.length > 0 ? (
-                    <div className="space-y-3">
-                      {results.violations.map((v, i) => (
-                        <div key={i} className="border border-slate-200 rounded-lg p-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-slate-900">{v.description || v.violationType || "Violation"}</span>
-                                <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${
-                                  v.status === "RESOLVE" || v.status === "DISMISSED" ? "bg-emerald-50 text-emerald-700" :
-                                  v.status === "ACTIVE" || v.status === "OPEN" ? "bg-red-50 text-red-700" :
-                                  "bg-amber-50 text-amber-700"
-                                }`}>{v.status || "Unknown"}</span>
-                              </div>
-                              <p className="text-xs text-slate-500 mt-1">#{v.violationNumber} • {v.violationType} • {v.violationCategory}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4 mt-2 text-xs text-slate-400">
-                            <span>Issued: {fmtDate(v.issueDate)}</span>
-                            {v.dispositionDate && <span>Resolved: {fmtDate(v.dispositionDate)}</span>}
-                          </div>
-                          {v.dispositionComments && <p className="text-xs text-slate-500 mt-1.5">{v.dispositionComments}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400 text-center py-8">No DOB violations found for this address.</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Data Source Attribution */}
-            <p className="text-xs text-slate-400 mt-4 text-center">
-              Data provided by NYC Open Data (data.cityofnewyork.us). Updated periodically by the City of New York.
-            </p>
+            {!propResults && !loading && mainTab === "property" && (
+              <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+                <p className="text-4xl mb-4">🏙️</p>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">Search any NYC property</h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  Enter a street address and borough to pull sales history, permits, and violations.
+                </p>
+              </div>
+            )}
           </>
         )}
 
-        {/* Empty State */}
-        {!results && !loading && (
-          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
-            <p className="text-4xl mb-4">🏙️</p>
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Search any NYC property</h3>
-            <p className="text-sm text-slate-500 max-w-md mx-auto">Enter a street address and borough above to pull sales history, building permits, and DOB violations from NYC public records.</p>
-          </div>
+        {/* ======================== OWNERSHIP TAB ======================== */}
+        {mainTab === "ownership" && (
+          <>
+            <form onSubmit={handleOwnershipSearch} className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
+              <p className="text-sm text-slate-500 mb-4">
+                Search HPD-registered multifamily buildings to find owner names, building details, and
+                contact info. Enriched with PLUTO property data.
+              </p>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Borough</label>
+                  <select
+                    name="borough"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Any</option>
+                    <option value="Manhattan">Manhattan</option>
+                    <option value="Brooklyn">Brooklyn</option>
+                    <option value="Queens">Queens</option>
+                    <option value="Bronx">Bronx</option>
+                    <option value="Staten Island">Staten Island</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">ZIP code</label>
+                  <input
+                    name="zip"
+                    placeholder="e.g., 11211"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Street name</label>
+                  <input
+                    name="street"
+                    placeholder="e.g., Bedford Avenue"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">House #</label>
+                  <input
+                    name="houseNumber"
+                    placeholder="e.g., 143"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Owner / Corp name</label>
+                  <input
+                    name="ownerName"
+                    placeholder="e.g., Smith or ABC LLC"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+              <div className="flex items-end gap-4 mt-4">
+                <div className="w-48">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Min. units</label>
+                  <select
+                    name="minUnits"
+                    defaultValue="3"
+                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="0">Any size</option>
+                    <option value="3">3+ units</option>
+                    <option value="5">5+ units</option>
+                    <option value="10">10+ units</option>
+                    <option value="20">20+ units</option>
+                    <option value="50">50+ units</option>
+                  </select>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                >
+                  {loading ? "Searching..." : "Search Owners"}
+                </button>
+              </div>
+            </form>
+
+            {/* Ownership Results */}
+            {ownerResults && (
+              <>
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Buildings Found</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{ownerResults.buildings.length}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">Owner Records</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">{ownerResults.totalContacts}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <p className="text-sm text-slate-500">HPD Registrations</p>
+                    <p className="text-2xl font-bold text-slate-900 mt-1">
+                      {ownerResults.totalRegistrations}
+                    </p>
+                  </div>
+                </div>
+
+                {ownerResults.buildings.length > 0 ? (
+                  <div className="space-y-3">
+                    {ownerResults.buildings.map((b: any, i: number) => (
+                      <div
+                        key={i}
+                        className={`bg-white rounded-xl border transition-all ${
+                          expandedOwner === i ? "border-blue-300 shadow-md" : "border-slate-200"
+                        }`}
+                      >
+                        <button
+                          onClick={() => setExpandedOwner(expandedOwner === i ? null : i)}
+                          className="w-full p-5 text-left"
+                        >
+                          <div className="flex items-start justify-between">
+                            <div>
+                              <h3 className="text-base font-semibold text-slate-900">{b.address}</h3>
+                              <p className="text-sm text-slate-500 mt-0.5">
+                                {b.boro} • ZIP: {b.zip} • Block {b.block}, Lot {b.lot}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {b.totalUnits > 0 && (
+                                <span className="inline-flex items-center px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold">
+                                  {b.totalUnits} units
+                                </span>
+                              )}
+                              <span className="text-slate-400 text-lg">
+                                {expandedOwner === i ? "▾" : "→"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-6 mt-3">
+                            {b.yearBuilt > 0 && (
+                              <span className="text-xs text-slate-500">Built {b.yearBuilt}</span>
+                            )}
+                            {b.numFloors > 0 && (
+                              <span className="text-xs text-slate-500">{b.numFloors} floors</span>
+                            )}
+                            {b.bldgArea > 0 && (
+                              <span className="text-xs text-slate-500">
+                                {b.bldgArea.toLocaleString()} sq ft
+                              </span>
+                            )}
+                            {b.buildingClass && (
+                              <span className="text-xs text-slate-500">Class {b.buildingClass}</span>
+                            )}
+                            {b.zoneDist && (
+                              <span className="text-xs text-slate-500">Zone: {b.zoneDist}</span>
+                            )}
+                            {b.assessedValue > 0 && (
+                              <span className="text-xs text-slate-500">
+                                Assessed: {fmtPrice(b.assessedValue)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-xs text-slate-400">Owner:</span>
+                            <span className="text-sm font-medium text-slate-700">
+                              {b.ownerNamePluto ||
+                                (b.owners.length > 0
+                                  ? b.owners[0].corporateName ||
+                                    `${b.owners[0].firstName} ${b.owners[0].lastName}`.trim()
+                                  : "—")}
+                            </span>
+                            {b.owners.length > 1 && (
+                              <span className="text-xs text-slate-400">
+                                +{b.owners.length - 1} contacts
+                              </span>
+                            )}
+                          </div>
+                        </button>
+
+                        {/* Expanded Details */}
+                        {expandedOwner === i && (
+                          <div className="border-t border-slate-100 p-5 bg-slate-50/50">
+                            <div className="grid grid-cols-4 gap-4 mb-5">
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Total Units</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.totalUnits || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Residential</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.residentialUnits || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Year Built</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.yearBuilt || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Floors</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.numFloors || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Building Area</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.bldgArea > 0 ? `${b.bldgArea.toLocaleString()} sf` : "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Lot Area</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.lotArea > 0 ? `${b.lotArea.toLocaleString()} sf` : "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Zoning</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.zoneDist || "—"}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400 uppercase">Assessed Value</p>
+                                <p className="text-base font-semibold text-slate-900">
+                                  {b.assessedValue > 0 ? fmtPrice(b.assessedValue) : "—"}
+                                </p>
+                              </div>
+                            </div>
+
+                            {b.ownerNamePluto && (
+                              <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
+                                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                                  Property Owner (PLUTO)
+                                </p>
+                                <p className="text-sm font-semibold text-slate-900">{b.ownerNamePluto}</p>
+                              </div>
+                            )}
+
+                            {b.owners.length > 0 && (
+                              <>
+                                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">
+                                  HPD Registered Contacts ({b.owners.length})
+                                </h4>
+                                <div className="space-y-2">
+                                  {b.owners.map((o: any, j: number) => (
+                                    <div
+                                      key={j}
+                                      className="bg-white rounded-lg border border-slate-200 p-4"
+                                    >
+                                      <div className="flex items-start justify-between">
+                                        <div>
+                                          <p className="text-sm font-semibold text-slate-900">
+                                            {o.corporateName ||
+                                              `${o.firstName} ${o.lastName}`.trim() ||
+                                              "Unknown"}
+                                          </p>
+                                          <span className="text-xs text-slate-400 capitalize">
+                                            {o.contactDescription || o.type}
+                                          </span>
+                                        </div>
+                                      </div>
+                                      {(o.businessAddress || o.businessCity) && (
+                                        <p className="text-sm text-slate-600 mt-2">
+                                          📍{" "}
+                                          {[
+                                            o.businessAddress,
+                                            o.businessCity,
+                                            o.businessState,
+                                            o.businessZip,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(", ")}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+
+                            {b.owners.length === 0 && (
+                              <p className="text-sm text-slate-400">
+                                No HPD contact records found for this registration.
+                              </p>
+                            )}
+
+                            <p className="text-xs text-slate-400 mt-4">
+                              HPD Registration ID: {b.registrationId} • BIN: {b.bin} • Last
+                              registered: {fmtDate(b.lastRegistration)}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                    <p className="text-sm text-slate-500">
+                      No buildings found. Try a different ZIP, lower the unit minimum, or search by
+                      owner name.
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {!ownerResults && !loading && mainTab === "ownership" && (
+              <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+                <p className="text-4xl mb-4">👤</p>
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Find multifamily building owners
+                </h3>
+                <p className="text-sm text-slate-500 max-w-md mx-auto">
+                  Search by ZIP, street, or owner name. Results enriched with PLUTO data (units,
+                  floors, year built, zoning, assessed value).
+                </p>
+              </div>
+            )}
+          </>
         )}
+
+        <p className="text-xs text-slate-400 mt-6 text-center">
+          Data: NYC Open Data (data.cityofnewyork.us) — HPD Registrations, PLUTO, DOB, ACRIS
+        </p>
       </div>
     </div>
   );
