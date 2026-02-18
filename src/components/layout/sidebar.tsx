@@ -18,6 +18,7 @@ const nav = [
   { label: "Intelligence", items: [
     { name: "AI Insights", href: "/insights", icon: "🧠" },
     { name: "Analytics", href: "/analytics", icon: "📈" },
+    { name: "Prospecting", href: "/prospecting", icon: "🎯" },
     { name: "Market Intel", href: "/market-intel", icon: "🔍" },
   ]},
 ];

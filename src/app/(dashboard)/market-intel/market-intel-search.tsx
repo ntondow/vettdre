@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { lookupProperty, searchOwnership } from "./actions";
+import { addBuildingToList } from "../prospecting/actions";
+import { getLists } from "../prospecting/actions";
 
 type MainTab = "property" | "ownership";
 type View = "results" | "building";
@@ -16,6 +18,10 @@ export default function MarketIntelSearch() {
   const [detailTab, setDetailTab] = useState<"sales" | "permits" | "violations">("sales");
   const [ownerResults, setOwnerResults] = useState<any | null>(null);
   const [expandedOwner, setExpandedOwner] = useState<number | null>(null);
+  const [prospectLists, setProspectLists] = useState<any[]>([]);
+  const [saveModal, setSaveModal] = useState<any | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
 
@@ -30,6 +36,42 @@ export default function MarketIntelSearch() {
     } catch {
       return d;
     }
+  };
+
+  const loadLists = async () => {
+    try { const lists = await getLists(); setProspectLists(JSON.parse(JSON.stringify(lists))); } catch {}
+  };
+
+  const handleSaveToList = async (listId: string, building: any) => {
+    setSaving(true);
+    try {
+      await addBuildingToList(listId, {
+        address: building.address || building.streetAddress || "",
+        borough: building.borough || building.boro || null,
+        zip: building.zip || building.zipCode || null,
+        block: building.block || null,
+        lot: building.lot || null,
+        bin: building.bin || null,
+        totalUnits: building.totalUnits || null,
+        residentialUnits: building.residentialUnits || null,
+        yearBuilt: building.yearBuilt || null,
+        numFloors: building.numFloors || null,
+        buildingArea: building.bldgArea || building.buildingArea || null,
+        lotArea: building.lotArea || null,
+        buildingClass: building.buildingClass || null,
+        zoning: building.zoneDist || building.zoning || null,
+        assessedValue: building.assessedValue || null,
+        ownerName: building.ownerNamePluto || building.ownerName || (building.owners?.length > 0 ? (building.owners[0].corporateName || building.owners[0].firstName + " " + building.owners[0].lastName).trim() : null),
+        ownerAddress: building.owners?.length > 0 ? [building.owners[0].businessAddress, building.owners[0].businessCity, building.owners[0].businessState].filter(Boolean).join(", ") : null,
+        lastSalePrice: building.lastSalePrice || null,
+        lastSaleDate: building.lastSaleDate || null,
+      });
+      setSavedMsg("Saved!");
+      setTimeout(() => setSavedMsg(null), 2000);
+      setSaveModal(null);
+    } catch (err) {
+      console.error(err);
+    } finally { setSaving(false); }
   };
 
   const handlePropertySearch = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -99,6 +141,42 @@ export default function MarketIntelSearch() {
       </div>
 
       <div className="px-8 py-6">
+        {/* Save to List Modal */}
+        {saveModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                <h2 className="text-base font-semibold text-slate-900">Save to Prospecting List</h2>
+                <button onClick={() => setSaveModal(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-slate-500 mb-3">{saveModal.address}</p>
+                {prospectLists.length > 0 ? (
+                  <div className="space-y-2">
+                    {prospectLists.map((list: any) => (
+                      <button key={list.id} onClick={() => handleSaveToList(list.id, saveModal)}
+                        disabled={saving}
+                        className="w-full text-left p-3 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                        <span className="text-sm font-medium text-slate-900">{list.name}</span>
+                        <span className="text-xs text-slate-400 ml-2">{list._count.items} items</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/prospecting" className="text-blue-600 hover:underline">Create one first</a></p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Saved Toast */}
+        {savedMsg && (
+          <div className="fixed top-4 right-4 bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg z-50">
+            {savedMsg}
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
             {error}
@@ -189,7 +267,7 @@ export default function MarketIntelSearch() {
                               {b.neighborhood}, {b.borough}
                             </p>
                           </div>
-                          <span className="text-slate-400 group-hover:text-blue-500 text-lg">→</span>
+                          <span className="text-slate-400 group-her:text-blue-500 text-lg">→</span>
                         </div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 mt-4">
                           <div>
@@ -650,6 +728,13 @@ export default function MarketIntelSearch() {
                                   {b.assessedValue > 0 ? fmtPrice(b.assessedValue) : "—"}
                                 </p>
                               </div>
+                            </div>
+
+                            <div className="flex gap-2 mb-4">
+                              <button onClick={(e) => { e.stopPropagation(); loadLists(); setSaveModal(b); }}
+                                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">
+                                🎯 Save to List
+                              </button>
                             </div>
 
                             {b.ownerNamePluto && (

@@ -196,6 +196,8 @@ model Organization {
   emailTemplates       EmailTemplate[]
   automations          Automation[]
   auditLogs            AuditLog[]
+  prospectingLists     ProspectingList[]
+  prospectingItems     ProspectingItem[]
 
   @@map("organizations")
 }
@@ -227,6 +229,7 @@ model User {
   createdTemplates EmailTemplate[]
   createdAutomations Automation[]
   auditLogs        AuditLog[]
+  prospectingLists ProspectingList[] @relation("ListCreator")
 
   @@unique([orgId, email])
   @@map("users")
@@ -262,6 +265,7 @@ model Contact {
   organization      Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignedAgent     User?         @relation("AssignedAgent", fields: [assignedTo], references: [id], onDelete: SetNull)
   enrichmentProfiles EnrichmentProfile[]
+  prospectingItems   ProspectingItem[]
   qualificationScores QualificationScore[]
   deals             Deal[]
   activities        Activity[]
@@ -270,6 +274,7 @@ model Contact {
   propertyInterests ContactPropertyInterest[]
 
   @@index([orgId, status])
+
   @@index([orgId, qualificationScore(sort: Desc)])
   @@index([orgId, email])
   @@index([orgId, lastName, firstName])
@@ -440,6 +445,8 @@ model Deal {
   @@index([orgId, status])
   @@index([contactId])
   @@index([pipelineId, stageId])
+  prospectingItems ProspectingItem[]
+
   @@map("deals")
 }
 
@@ -621,4 +628,61 @@ model AuditLog {
   @@index([orgId, createdAt(sort: Desc)])
   @@index([entityType, entityId])
   @@map("audit_log")
+}
+
+model ProspectingList {
+  id          String   @id @default(cuid())
+  orgId       String   @map("org_id")
+  createdBy   String   @map("created_by")
+  name        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User         @relation("ListCreator", fields: [createdBy], references: [id])
+  items        ProspectingItem[]
+
+  @@map("prospecting_lists")
+}
+
+model ProspectingItem {
+  id               String   @id @default(cuid())
+  listId           String   @map("list_id")
+  orgId            String   @map("org_id")
+  address          String
+  borough          String?
+  zip              String?
+  block            String?
+  lot              String?
+  bin              String?
+  neighborhood     String?
+  totalUnits       Int?     @map("total_units")
+  residentialUnits Int?     @map("residential_units")
+  yearBuilt        Int?     @map("year_built")
+  numFloors        Int?     @map("num_floors")
+  buildingArea     Int?     @map("building_area")
+  lotArea          Int?     @map("lot_area")
+  buildingClass    String?  @map("building_class")
+  zoning           String?
+  assessedValue    Int?     @map("assessed_value")
+  ownerName        String?  @map("owner_name")
+  ownerAddress     String?  @map("owner_address")
+  ownerType        String?  @map("owner_type")
+  lastSalePrice    Int?     @map("last_sale_price")
+  lastSaleDate     String?  @map("last_sale_date")
+  status           String   @default("new")
+  notes            String?
+  contactId        String?  @map("contact_id")
+  dealId           String?  @map("deal_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  list         ProspectingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact      Contact?        @relation(fields: [contactId], references: [id])
+  deal         Deal?           @relation(fields: [dealId], references: [id])
+
+  @@map("prospecting_items")
 }
