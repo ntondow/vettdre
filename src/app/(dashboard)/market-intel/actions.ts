@@ -7,6 +7,9 @@ const PERMITS_ID = "ic3t-wcy2";
 const HPD_REGISTRATIONS = "tesw-yqqr";
 const HPD_CONTACTS = "feu5-w2e2";
 const PLUTO_ID = "64uk-42ks";
+const ACRIS_LEGALS = "8h5j-fqxa";
+const ACRIS_MASTER = "bnx9-e6tj";
+const ACRIS_PARTIES = "636b-3b5g";
 
 const BORO_CODE: Record<string, string> = {
   Manhattan: "1", Bronx: "2", Brooklyn: "3", Queens: "4", "Staten Island": "5",
@@ -274,4 +277,92 @@ export async function searchOwnership(formData: FormData) {
 
   console.log(`=== OWNERSHIP RESULTS: ${buildings.length} buildings (after filter), ${contacts.length} contacts ===`);
   return { buildings, totalRegistrations: registrations.length, totalContacts: contacts.length };
+}
+
+
+// ============================================================
+// ACRIS LOOKUP - Deeds, Mortgages, Party Names
+// ============================================================
+export async function lookupACRIS(borough: string, block: string, lot: string) {
+  const boroCode = BORO_CODE[borough] || borough;
+  console.log("=== ACRIS LOOKUP === Borough:", boroCode, "Block:", block, "Lot:", lot);
+
+  // Step 1: Find all document IDs for this property
+  let docIds: string[] = [];
+  let legals: any[] = [];
+  try {
+    const url = new URL(BASE + "/" + ACRIS_LEGALS + ".json");
+    url.searchParams.set("$where", "borough='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
+    url.searchParams.set("$limit", "50");
+    url.searchParams.set("$order", "good_through_date DESC");
+    console.log("ACRIS Legals URL:", url.toString());
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      legals = await res.json();
+      docIds = [...new Set(legals.map((l: any) => l.document_id))];
+      console.log("ACRIS Legals count:", legals.length, "Unique docs:", docIds.length);
+    }
+  } catch (err) { console.error("ACRIS Legals error:", err); }
+
+  if (docIds.length === 0) return { documents: [], parties: [] };
+
+  // Step 2: Get document details (type, amount, date)
+  let documents: any[] = [];
+  try {
+    const docList = docIds.slice(0, 30).map(id => "'" + id + "'").join(",");
+    const url = new URL(BASE + "/" + ACRIS_MASTER + ".json");
+    url.searchParams.set("$where", "document_id in(" + docList + ")");
+    url.searchParams.set("$limit", "100");
+    url.searchParams.set("$order", "recorded_datetime DESC");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      console.log("ACRIS Master count:", data.length);
+      documents = data.map((d: any) => ({
+        documentId: d.document_id,
+        docType: d.doc_type || "",
+        documentDate: d.document_date || "",
+        recordedDate: d.recorded_datetime || "",
+        amount: parseInt(d.document_amt || "0"),
+        borough: d.recorded_borough || "",
+        percentTrans: d.percent_trans || "",
+      }));
+    }
+  } catch (err) { console.error("ACRIS Master error:", err); }
+
+  // Step 3: Get all party names for these documents
+  let parties: any[] = [];
+  try {
+    const docList = docIds.slice(0, 30).map(id => "'" + id + "'").join(",");
+    const url = new URL(BASE + "/" + ACRIS_PARTIES + ".json");
+    url.searchParams.set("$where", "document_id in(" + docList + ")");
+    url.searchParams.set("$limit", "200");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      console.log("ACRIS Parties count:", data.length);
+      parties = data.map((p: any) => ({
+        documentId: p.document_id,
+        partyType: p.party_type === "1" ? "Buyer/Grantee" : p.party_type === "2" ? "Seller/Grantor" : "Other",
+        name: p.name || "",
+        address1: p.address_1 || "",
+        address2: p.address_2 || "",
+        city: p.city || "",
+        state: p.state || "",
+        zip: p.zip || "",
+      }));
+    }
+  } catch (err) { console.error("ACRIS Parties error:", err); }
+
+  // Merge documents with their parties
+  const merged = documents.map(doc => ({
+    ...doc,
+    parties: parties.filter(p => p.documentId === doc.documentId),
+    streetAddress: legals.find((l: any) => l.document_id === doc.documentId)?.street_number
+      ? legals.find((l: any) => l.document_id === doc.documentId).street_number + " " + (legals.find((l: any) => l.document_id === doc.documentId).street_name || "")
+      : "",
+  }));
+
+  console.log("=== ACRIS RESULTS:", merged.length, "documents with", parties.length, "parties ===");
+  return { documents: merged, parties };
 }

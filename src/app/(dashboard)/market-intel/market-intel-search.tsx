@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { lookupProperty, searchOwnership } from "./actions";
+import { lookupProperty, searchOwnership, lookupACRIS } from "./actions";
 import { addBuildingToList } from "../prospecting/actions";
 import { getLists } from "../prospecting/actions";
 
@@ -21,6 +21,9 @@ export default function MarketIntelSearch() {
   const [prospectLists, setProspectLists] = useState<any[]>([]);
   const [saveModal, setSaveModal] = useState<any | null>(null);
   const [saving, setSaving] = useState(false);
+  const [acrisData, setAcrisData] = useState<any>(null);
+  const [loadingAcris, setLoadingAcris] = useState(false);
+  const [acrisBuilding, setAcrisBuilding] = useState<number | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
@@ -72,6 +75,16 @@ export default function MarketIntelSearch() {
     } catch (err) {
       console.error(err);
     } finally { setSaving(false); }
+  };
+
+  const handleLoadACRIS = async (borough: string, block: string, lot: string, idx: number) => {
+    setLoadingAcris(true);
+    setAcrisBuilding(idx);
+    try {
+      const data = await lookupACRIS(borough, block, lot);
+      setAcrisData(data);
+    } catch (err) { console.error(err); }
+    finally { setLoadingAcris(false); }
   };
 
   const handlePropertySearch = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -733,9 +746,66 @@ export default function MarketIntelSearch() {
                             <div className="flex gap-2 mb-4">
                               <button onClick={(e) => { e.stopPropagation(); loadLists(); setSaveModal(b); }}
                                 className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg">
-                                🎯 Save to List
+                              🎯 Save to List
                               </button>
+                              {b.block && b.lot && (
+                                <button onClick={(e) => { e.stopPropagation(); handleLoadACRIS(b.boro || b.borough || "", b.block, b.lot, i); }}
+                                  disabled={loadingAcris}
+                                  className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-medium rounded-lg disabled:opacity-50">
+                                  {loadingAcris && acrisBuilding === i ? "Loading..." : "📜 ACRIS Records"}
+                                </button>
+                              )}
                             </div>
+
+                            {/* ACRIS Data */}
+                            {acrisBuilding === i && acrisData && (
+                              <div className="mb-4 bg-white rounded-lg border border-purple-200 p-4">
+                                <h4 className="text-xs font-semibold text-purple-700 uppercase tracking-r mb-3">
+                                  ACRIS Transaction History ({acrisData.documents.length} records)
+                                </h4>
+                                {acrisData.documents.length > 0 ? (
+                                  <div className="space-y-3">
+                                    {acrisData.documents.map((doc: any, di: number) => (
+                                      <div key={di} className="border border-slate-200 rounded-lg p-3">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2">
+                                            <span className={"text-xs font-semibold px-2 py-0.5 rounded " + (
+                                              doc.docType === "DEED" ? "bg-emerald-50 text-emerald-700" :
+                                              doc.docType === "MTGE" ? "bg-blue-50 text-blue-700" :
+                                              doc.docType === "ASST" ? "bg-amber-50 text-amber-700" :
+                                              "bg-slate-100 text-slate-600"
+                                            )}>{doc.docType}</span>
+                                            <span className="text-xs text-slate-500">{fmtDate(doc.recordedDate)}</span>
+                                          </div>
+                                          {doc.amount > 0 && (
+                                            <span className="text-sm font-semibold text-slate-900">{fmtPrice(doc.amount)}</span>
+                                          )}
+                                        </div>
+                                        {doc.parties.length > 0 && (
+                                          <div className="mt-2 space-y-1">
+                                            {doc.parties.map((p: any, pi: number) => (
+                                              <div key={pi} className="flex items-start gap-2">
+                                                <span className={"text-xs font-medium px-1.5 py-0.5 rounded flex-shrink-0 " + (
+                                                  p.partyType === "Buyer/Grantee" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
+                                                )}>{p.partyType === "Buyer/Grantee" ? "TO" : "FROM"}</span>
+                                                <div>
+                                                  <span className="text-sm font-medium text-slate-900">{p.name}</span>
+                                                  {(p.address1 || p.city) && (
+                                                    <p className="text-xs text-slate-400">{[p.address1, p.address2, p.city, p.state, p.zip].filter(Boolean).join(", ")}</p>
+                                                  )}
+                                                </div>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-slate-400">No ACRIS records found for this block/lot.</p>
+                                )}
+                              </div>
+                            )}
 
                             {b.ownerNamePluto && (
                               <div className="bg-white rounded-lg border border-slate-200 p-4 mb-4">
