@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { deleteContact } from "./actions";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 interface Contact {
   id: string;
@@ -22,7 +23,9 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
   const router = useRouter();
   const [deleting, setDeleting] = useState<string | null>(null);
 
-  const handleDelete = async (id: string, name: string) => {
+  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
+    e.preventDefault();
+    e.stopPropagation();
     if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
     setDeleting(id);
     try {
@@ -54,12 +57,12 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
           {contacts.map((contact) => (
             <tr key={contact.id} className="hover:bg-slate-50 transition-colors">
               <td className="px-5 py-3">
-                <div className="flex items-center gap-3">
+                <Link href={`/contacts/${contact.id}`} className="flex items-center gap-3 group">
                   <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
                     {contact.firstName[0]}{contact.lastName[0]}
                   </div>
-                  <span className="text-sm font-medium text-slate-900">{contact.firstName} {contact.lastName}</span>
-                </div>
+                  <span className="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">{contact.firstName} {contact.lastName}</span>
+                </Link>
               </td>
               <td className="px-5 py-3 text-sm text-slate-600">{contact.email || "—"}</td>
               <td className="px-5 py-3 text-sm text-slate-600">{contact.phone || "—"}</td>
@@ -87,7 +90,7 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
               </td>
               <td className="px-5 py-3 text-right">
                 <button
-                  onClick={() => handleDelete(contact.id, `${contact.firstName} ${contact.lastName}`)}
+                  onClick={(e) => handleDelete(e, contact.id, `${contact.firstName} ${contact.lastName}`)}
                   disabled={deleting === contact.id}
                   className="text-xs text-slate-400 hover:text-red-600 transition-colors"
                 >
