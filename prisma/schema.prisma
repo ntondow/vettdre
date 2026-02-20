@@ -34,6 +34,7 @@ enum UserRole {
   admin
   manager
   agent
+  viewer
 }
 
 enum ContactStatus {
@@ -198,6 +199,12 @@ model Organization {
   auditLogs            AuditLog[]
   prospectingLists     ProspectingList[]
   prospectingItems     ProspectingItem[]
+  emailMessages        EmailMessage[]
+  emailLabels          EmailLabel[]
+  followUpReminders    FollowUpReminder[]
+  leadAssignmentRule   LeadAssignmentRule?
+  aiSettings           AiSettings?
+  brandSettings        BrandSettings?
 
   @@map("organizations")
 }
@@ -212,7 +219,10 @@ model User {
   avatarUrl        String?   @map("avatar_url")
   phone            String?
   timezone         String    @default("America/New_York")
+  title            String?
   licenseNumber    String?   @map("license_number")
+  brokerage        String?
+  invitedBy        String?   @map("invited_by")
   isActive         Boolean   @default(true) @map("is_active")
   lastLoginAt      DateTime? @map("last_login_at")
   notificationPrefs Json     @default("{\"email\": true, \"push\": true, \"sms\": false}") @map("notification_prefs")
@@ -230,6 +240,11 @@ model User {
   createdAutomations Automation[]
   auditLogs        AuditLog[]
   prospectingLists ProspectingList[] @relation("ListCreator")
+  gmailAccounts    GmailAccount[]
+  emailSignature   EmailSignature?
+  notificationPreferences NotificationPreferences?
+  workingHours     WorkingHours?
+  syncSettings     SyncSettings?
 
   @@unique([orgId, email])
   @@map("users")
@@ -272,6 +287,8 @@ model Contact {
   tasks             Task[]
   showings          Showing[]
   propertyInterests ContactPropertyInterest[]
+  emailMessages     EmailMessage[]
+  followUpReminders FollowUpReminder[]
 
   @@index([orgId, status])
 
@@ -685,4 +702,281 @@ model ProspectingItem {
   deal         Deal?           @relation(fields: [dealId], references: [id])
 
   @@map("prospecting_items")
+}
+
+
+// ============================================================
+// Gmail Integration
+// ============================================================
+
+model GmailAccount {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  email        String
+  accessToken  String    @map("access_token")
+  refreshToken String    @map("refresh_token")
+  tokenExpiry  DateTime  @map("token_expiry")
+  historyId    String?   @map("history_id")
+  syncedAt     DateTime? @map("synced_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+  @@map("gmail_accounts")
+}
+
+model EmailMessage {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  gmailMessageId  String   @map("gmail_message_id")
+  threadId        String?  @map("thread_id")
+  contactId       String?  @map("contact_id")
+  direction       String   // "inbound" | "outbound"
+  fromEmail       String   @map("from_email")
+  fromName        String?  @map("from_name")
+  toEmails        String[] @map("to_emails")
+  ccEmails        String[] @default([]) @map("cc_emails")
+  subject         String?
+  bodyText        String?  @map("body_text")
+  bodyHtml        String?  @map("body_html")
+  snippet         String?
+  labelIds        String[] @default([]) @map("label_ids")
+  isRead          Boolean  @default(false) @map("is_read")
+  isStarred       Boolean  @default(false) @map("is_starred")
+  hasAttachments  Boolean  @default(false) @map("has_attachments")
+  isArchived      Boolean  @default(false) @map("is_archived")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  isPinned        Boolean  @default(false) @map("is_pinned")
+  snoozedUntil    DateTime? @map("snoozed_until")
+  category        String?   // "lead", "newsletter", "personal", "transactional", "spam"
+  receivedAt      DateTime @map("received_at")
+
+  // AI parsing results
+  aiParsed        Boolean  @default(false) @map("ai_parsed")
+  leadSource      String?  @map("lead_source")
+  leadIntent      String?  @map("lead_intent")
+  extractedName   String?  @map("extracted_name")
+  extractedPhone  String?  @map("extracted_phone")
+  extractedBudget String?  @map("extracted_budget")
+  extractedArea   String?  @map("extracted_area")
+  aiSummary       String?  @map("ai_summary")
+  sentimentScore  Int?     @map("sentiment_score")
+
+  createdAt       DateTime     @default(now()) @map("created_at")
+  organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact         Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  threadLabels     EmailThreadLabel[]
+
+  @@unique([orgId, gmailMessageId])
+  @@index([orgId, contactId])
+  @@index([orgId, receivedAt(sort: Desc)])
+  @@index([orgId, leadSource])
+  @@index([orgId, threadId])
+  @@index([orgId, category])
+  @@index([orgId, snoozedUntil])
+  @@map("email_messages")
+}
+
+// ============================================================
+// Email Labels & Follow-ups
+// ============================================================
+
+model EmailLabel {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  color     String   // hex color e.g. "#ef4444"
+  icon      String?  // emoji icon
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  threadLabels EmailThreadLabel[]
+
+  @@unique([orgId, name])
+  @@map("email_labels")
+}
+
+model EmailThreadLabel {
+  id       String @id @default(uuid())
+  threadId String @map("thread_id")
+  labelId  String @map("label_id")
+  emailMessageId String? @map("email_message_id")
+
+  label        EmailLabel    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  emailMessage EmailMessage? @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, labelId])
+  @@map("email_thread_labels")
+}
+
+model FollowUpReminder {
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
+  threadId    String    @map("thread_id")
+  contactId   String?   @map("contact_id")
+  status      String    @default("pending") // "pending", "dismissed", "completed"
+  reason      String    // e.g. "no_reply_24h"
+  dueAt       DateTime  @map("due_at")
+  dismissedAt DateTime? @map("dismissed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, threadId, reason])
+  @@index([orgId, status, dueAt])
+  @@map("follow_up_reminders")
+}
+
+// ============================================================
+// Portfolio Intelligence
+// ============================================================
+model Portfolio {
+  id            String   @id @default(uuid())
+  name          String   // Primary entity name (e.g., "Parkway Management NY LLC")
+  slug          String   @unique
+  totalBuildings Int     @default(0)
+  totalUnits    Int      @default(0)
+  totalValue    Float    @default(0)
+  avgDistress   Float    @default(0)
+  borough       String?
+  neighborhood  String?
+  entityNames   String[] // All linked entity names (LLCs, individuals)
+  headOfficers  String[] // Known head officers
+  addresses     String[] // Known business addresses
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  buildings     PortfolioBuilding[]
+}
+
+model PortfolioBuilding {
+  id          String   @id @default(uuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  bbl         String   // Borough-Block-Lot
+  boroCode    String
+  block       String
+  lot         String
+  address     String
+  borough     String
+  units       Int      @default(0)
+  floors      Int      @default(0)
+  yearBuilt   Int      @default(0)
+  assessedValue Float  @default(0)
+  ownerName   String?
+  buildingClass String?
+  zoning      String?
+  createdAt   DateTime @default(now())
+
+  @@unique([portfolioId, bbl])
+}
+
+// ============================================================
+// Settings Models
+// ============================================================
+
+model EmailSignature {
+  id          String  @id @default(uuid())
+  userId      String  @unique @map("user_id")
+  template    String  @default("classic") // "classic", "with_logo", "minimal"
+  html        String  @db.Text
+  logoUrl     String? @map("logo_url")
+  accentColor String  @default("#2563EB") @map("accent_color")
+  linkedinUrl String? @map("linkedin_url")
+  websiteUrl  String? @map("website_url")
+  isActive    Boolean @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("email_signatures")
+}
+
+model NotificationPreferences {
+  id                 String  @id @default(uuid())
+  userId             String  @unique @map("user_id")
+  newLeadEmail       Boolean @default(true) @map("new_lead_email")
+  newLeadPush        Boolean @default(true) @map("new_lead_push")
+  followUpEmail      Boolean @default(true) @map("follow_up_email")
+  followUpPush       Boolean @default(true) @map("follow_up_push")
+  newEmailPush       Boolean @default(true) @map("new_email_push")
+  taskDueEmail       Boolean @default(true) @map("task_due_email")
+  taskDuePush        Boolean @default(true) @map("task_due_push")
+  taskOverdueEmail   Boolean @default(true) @map("task_overdue_email")
+  weeklySummaryEmail Boolean @default(true) @map("weekly_summary_email")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("notification_preferences")
+}
+
+model WorkingHours {
+  id       String @id @default(uuid())
+  userId   String @unique @map("user_id")
+  timezone String @default("America/New_York")
+  schedule Json   // { mon: { active: true, start: "09:00", end: "18:00" }, ... }
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("working_hours")
+}
+
+model LeadAssignmentRule {
+  id           String  @id @default(uuid())
+  orgId        String  @unique @map("org_id")
+  method       String  @default("manual") // "round_robin", "by_source", "by_geography", "manual"
+  rules        Json?   // { "streeteasy": "agent-uuid-1", ... }
+  agentOrder   Json?   @map("agent_order") // ["agent-uuid-1", ...]
+  lastAssigned String? @map("last_assigned")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  @@map("lead_assignment_rules")
+}
+
+model AiSettings {
+  id                  String  @id @default(uuid())
+  orgId               String  @unique @map("org_id")
+  autoResponseEnabled Boolean @default(false) @map("auto_response_enabled")
+  autoResponseMode    String  @default("draft") // "draft", "auto_send", "off"
+  responseDelay       Int     @default(5) @map("response_delay")
+  responseTone        String  @default("professional") @map("response_tone")
+  customInstructions  String? @map("custom_instructions") @db.Text
+  autoParseEmails     Boolean @default(true) @map("auto_parse_emails")
+  autoCategorize      Boolean @default(true) @map("auto_categorize")
+  parseModel          String  @default("sonnet") @map("parse_model")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  @@map("ai_settings")
+}
+
+model BrandSettings {
+  id           String  @id @default(uuid())
+  orgId        String  @unique @map("org_id")
+  logoUrl      String? @map("logo_url")
+  primaryColor String  @default("#2563EB") @map("primary_color")
+  companyName  String? @map("company_name")
+  tagline      String?
+  websiteUrl   String? @map("website_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  @@map("brand_settings")
+}
+
+model SyncSettings {
+  id            String   @id @default(uuid())
+  userId        String   @unique @map("user_id")
+  autoSync      Boolean  @default(true) @map("auto_sync")
+  syncFrequency Int      @default(15) @map("sync_frequency")
+  syncDepth     String   @default("30d") @map("sync_depth")
+  syncLabels    String[] @default(["INBOX", "SENT"]) @map("sync_labels")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  totalSynced   Int      @default(0) @map("total_synced")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("sync_settings")
 }
