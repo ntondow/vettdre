@@ -97,6 +97,16 @@ const categoryConfig: Record<string, { icon: string; label: string; color: strin
   spam: { icon: "🚫", label: "Spam", color: "text-slate-400" },
 };
 
+const gmailFolders = [
+  { id: "INBOX", label: "Inbox", icon: "📥" },
+  { id: "SENT", label: "Sent", icon: "📤" },
+  { id: "STARRED", label: "Starred", icon: "⭐" },
+  { id: "DRAFT", label: "Drafts", icon: "📝" },
+  { id: "TRASH", label: "Trash", icon: "🗑️" },
+  { id: "SPAM", label: "Spam", icon: "⚠️" },
+  { id: "ALL", label: "All Mail", icon: "📁" },
+];
+
 // Avatar color by first letter
 function getAvatarColor(name: string): string {
   const first = (name || "?")[0].toUpperCase();
@@ -160,6 +170,32 @@ export default function MessagesView({
   const [crmVisible, setCrmVisible] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const [gmailFolder, setGmailFolder] = useState("INBOX");
+  const [autoSync, setAutoSync] = useState(true);
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [lastSyncedAgo, setLastSyncedAgo] = useState("");
+  const [newThreadFlash, setNewThreadFlash] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<string | null>(null);
+  const [toastExiting, setToastExiting] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const threadsRef = useRef<ThreadSummary[]>([]);
+
+  // Keep ref in sync
+  useEffect(() => { threadsRef.current = threads; }, [threads]);
+
+  // Load auto-sync preference from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem("vettdre_auto_sync");
+    if (saved !== null) setAutoSync(saved !== "false");
+  }, []);
+
+  const toggleAutoSync = () => {
+    setAutoSync(prev => {
+      const next = !prev;
+      localStorage.setItem("vettdre_auto_sync", String(next));
+      return next;
+    });
+  };
 
   // Debounce search
   useEffect(() => {
@@ -170,6 +206,7 @@ export default function MessagesView({
   // Load threads
   const loadThreads = useCallback(async () => {
     const filters: any = {};
+    if (gmailFolder !== "INBOX") filters.gmailFolder = gmailFolder;
     if (searchDebounced) filters.search = searchDebounced;
     switch (filter) {
       case "unread": filters.isRead = false; break;
@@ -188,7 +225,8 @@ export default function MessagesView({
     const data = await getThreads(Object.keys(filters).length > 0 ? filters : undefined);
     setThreads(data);
     setLoading(false);
-  }, [searchDebounced, filter]);
+    return data;
+  }, [searchDebounced, filter, gmailFolder]);
 
   useEffect(() => { if (gmailConnected) loadThreads(); }, [gmailConnected, loadThreads]);
 
@@ -215,7 +253,7 @@ export default function MessagesView({
 
   const handleSync = async () => {
     setSyncing(true);
-    try { await syncGmail(); await loadThreads(); } catch (err) { console.error("Sync error:", err); }
+    try { await syncGmail(); await loadThreads(); setLastSyncedAt(new Date()); } catch (err) { console.error("Sync error:", err); }
     setSyncing(false);
   };
 
@@ -289,13 +327,64 @@ export default function MessagesView({
           break;
         case "?":
           e.preventDefault();
-          alert("Keyboard Shortcuts:\n\nc — Compose\nj/k — Navigate threads\ne — Archive\n# — Delete\ns — Star\np — Pin\n/ — Search\nEsc — Close");
+          setShortcutsOpen(prev => !prev);
           break;
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [focusedIndex, threads, selectedThreadId]);
+
+  // Auto-sync interval (60s)
+  useEffect(() => {
+    if (!autoSync || !gmailConnected) return;
+
+    const doAutoSync = async () => {
+      try {
+        const prevIds = new Set(threadsRef.current.map(t => t.threadId));
+        const result = await syncGmail();
+        setLastSyncedAt(new Date());
+
+        if (result && "synced" in result && (result as any).synced > 0) {
+          const data = await loadThreads();
+          if (data) {
+            const fresh = new Set<string>();
+            for (const t of data) {
+              if (!prevIds.has(t.threadId)) fresh.add(t.threadId);
+            }
+            if (fresh.size > 0) {
+              setNewThreadFlash(fresh);
+              setToast(`${fresh.size} new email${fresh.size > 1 ? "s" : ""}`);
+              setToastExiting(false);
+              setTimeout(() => {
+                setToastExiting(true);
+                setTimeout(() => { setToast(null); setToastExiting(false); }, 200);
+                setNewThreadFlash(new Set());
+              }, 3000);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Auto-sync error:", err);
+      }
+    };
+
+    const interval = setInterval(doAutoSync, 60000);
+    return () => clearInterval(interval);
+  }, [autoSync, gmailConnected, loadThreads]);
+
+  // Live "last synced" timer
+  useEffect(() => {
+    if (!lastSyncedAt) return;
+    const update = () => {
+      const diff = Math.floor((Date.now() - lastSyncedAt.getTime()) / 1000);
+      if (diff < 60) setLastSyncedAgo(`${diff}s ago`);
+      else setLastSyncedAgo(`${Math.floor(diff / 60)}m ago`);
+    };
+    update();
+    const interval = setInterval(update, 5000);
+    return () => clearInterval(interval);
+  }, [lastSyncedAt]);
 
   // Category counts
   const leadCount = threads.filter(t => t.category === "lead").length;
@@ -341,6 +430,20 @@ export default function MessagesView({
           onClear={() => setSelectedThreadIds(new Set())}
         />
 
+        {/* Gmail Folders */}
+        <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50/50 overflow-x-auto scrollbar-hide">
+          {gmailFolders.map(f => (
+            <button key={f.id} onClick={() => { setGmailFolder(f.id); setFilter("all"); setSelectedThreadId(null); }}
+              className={`px-2 py-1 text-[11px] rounded font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                gmailFolder === f.id
+                  ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                  : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+              }`}>
+              <span className="mr-0.5">{f.icon}</span>{f.label}
+            </button>
+          ))}
+        </div>
+
         {/* Toolbar */}
         <div className="p-3 border-b border-slate-200 space-y-2">
           <div className="flex items-center gap-2">
@@ -357,40 +460,58 @@ export default function MessagesView({
                 </span>
               ) : "Sync"}
             </button>
+            <button onClick={toggleAutoSync}
+              className={`text-[10px] px-2 py-1 rounded-full font-medium transition-colors ${
+                autoSync ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100" : "bg-slate-100 text-slate-400 hover:bg-slate-200"
+              }`} title={autoSync ? "Disable auto-sync" : "Enable auto-sync (every 60s)"}>
+              {autoSync ? (
+                <span className="flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Auto
+                </span>
+              ) : "Auto: off"}
+            </button>
             <div className="flex-1" />
+            {lastSyncedAgo && (
+              <span className="text-[10px] text-slate-400">Synced {lastSyncedAgo}</span>
+            )}
             {initialUnreadCount > 0 && (
               <span className="text-xs font-bold text-blue-600">{initialUnreadCount} unread</span>
             )}
           </div>
           <input ref={searchRef} value={search} onChange={e => setSearch(e.target.value)} placeholder="Search emails... (press /)"
             className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-          <div className="flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-hide">
-            {[
-              { key: "all", label: "All" },
-              { key: "leads", label: `Leads${leadCount > 0 ? ` (${leadCount})` : ""}` },
-              { key: "personal", label: `Personal${personalCount > 0 ? ` (${personalCount})` : ""}` },
-              { key: "newsletters", label: `News${newsletterCount > 0 ? ` (${newsletterCount})` : ""}` },
-              { key: "snoozed", label: `Snoozed${snoozedCount > 0 ? ` (${snoozedCount})` : ""}` },
-              { key: "pinned", label: `Pinned${pinnedCount > 0 ? ` (${pinnedCount})` : ""}` },
-              { key: "unread", label: "Unread" },
-            ].map(f => (
-              <button key={f.key} onClick={() => setFilter(f.key)}
-                className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                  filter === f.key ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-          {filter === "leads" && (
-            <div className="flex items-center gap-1 flex-wrap">
-              {["streeteasy", "zillow", "realtor", "referral"].map(src => (
-                <button key={src} onClick={() => setFilter(src)}
-                  className={`px-2 py-0.5 text-[10px] rounded-full font-medium ${sourceColors[src]}`}>
-                  {sourceLabels[src]}
-                </button>
-              ))}
-            </div>
+          {gmailFolder === "INBOX" && (
+            <>
+              <div className="flex items-center gap-1 flex-nowrap overflow-x-auto scrollbar-hide">
+                {[
+                  { key: "all", label: "All" },
+                  { key: "leads", label: `Leads${leadCount > 0 ? ` (${leadCount})` : ""}` },
+                  { key: "personal", label: `Personal${personalCount > 0 ? ` (${personalCount})` : ""}` },
+                  { key: "newsletters", label: `News${newsletterCount > 0 ? ` (${newsletterCount})` : ""}` },
+                  { key: "snoozed", label: `Snoozed${snoozedCount > 0 ? ` (${snoozedCount})` : ""}` },
+                  { key: "pinned", label: `Pinned${pinnedCount > 0 ? ` (${pinnedCount})` : ""}` },
+                  { key: "unread", label: "Unread" },
+                ].map(f => (
+                  <button key={f.key} onClick={() => setFilter(f.key)}
+                    className={`px-2.5 py-1 text-xs rounded-full font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                      filter === f.key ? "bg-blue-600 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}>
+                    {f.label}
+                  </button>
+                ))}
+              </div>
+              {filter === "leads" && (
+                <div className="flex items-center gap-1 flex-wrap">
+                  {["streeteasy", "zillow", "realtor", "referral"].map(src => (
+                    <button key={src} onClick={() => setFilter(src)}
+                      className={`px-2 py-0.5 text-[10px] rounded-full font-medium ${sourceColors[src]}`}>
+                      {sourceLabels[src]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -416,7 +537,7 @@ export default function MessagesView({
             /* Skeleton loader */
             <div className="divide-y divide-slate-100">
               {[1, 2, 3, 4, 5, 6].map(i => (
-                <div key={i} className="px-4 py-3 animate-pulse flex items-start gap-3">
+                <div key={i} className="px-4 py-3 animate-pulse [animation-duration:1.5s] flex items-start gap-3">
                   <div className="w-9 h-9 bg-slate-100 rounded-full flex-shrink-0" />
                   <div className="flex-1 space-y-2">
                     <div className="flex justify-between">
@@ -461,7 +582,8 @@ export default function MessagesView({
                     <ThreadRow key={thread.threadId} thread={thread} index={idx}
                       isSelected={selectedThreadId === thread.threadId} isChecked={selectedThreadIds.has(thread.threadId)}
                       onSelect={() => handleSelectThread(thread)} onCheck={(sk) => handleCheckboxToggle(thread.threadId, idx, sk)}
-                      onPin={(e) => handlePin(thread.threadId, e)} gmailEmail={gmailEmail} />
+                      onPin={(e) => handlePin(thread.threadId, e)} gmailEmail={gmailEmail}
+                      isNew={newThreadFlash.has(thread.threadId)} folder={gmailFolder} />
                   ))}
                   {unpinnedThreads.length > 0 && (
                     <div className="px-4 py-1 bg-slate-50/80 border-b border-slate-100">
@@ -476,7 +598,8 @@ export default function MessagesView({
                   <ThreadRow key={thread.threadId} thread={thread} index={actualIndex}
                     isSelected={selectedThreadId === thread.threadId} isChecked={selectedThreadIds.has(thread.threadId)}
                     onSelect={() => handleSelectThread(thread)} onCheck={(sk) => handleCheckboxToggle(thread.threadId, actualIndex, sk)}
-                    onPin={(e) => handlePin(thread.threadId, e)} gmailEmail={gmailEmail} />
+                    onPin={(e) => handlePin(thread.threadId, e)} gmailEmail={gmailEmail}
+                    isNew={newThreadFlash.has(thread.threadId)} folder={gmailFolder} />
                 );
               })}
             </>
@@ -499,15 +622,15 @@ export default function MessagesView({
           <div className="flex-1 flex items-center justify-center">
             <div className="text-center">
               <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-3xl">📬</span>
+                <span className="text-3xl opacity-50">📬</span>
               </div>
               <p className="text-sm font-semibold text-slate-700">Select a conversation to view</p>
               <p className="text-xs text-slate-400 mt-1">Connected as {gmailEmail}</p>
               <div className="mt-4 flex items-center justify-center gap-3 text-[10px] text-slate-400">
-                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono">j</span>
-                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono">k</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono animate-bounce [animation-duration:2s]">j</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono animate-bounce [animation-duration:2s] [animation-delay:100ms]">k</span>
                 <span>to navigate</span>
-                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono">c</span>
+                <span className="px-1.5 py-0.5 bg-slate-100 rounded font-mono animate-bounce [animation-duration:2s] [animation-delay:200ms]">c</span>
                 <span>to compose</span>
               </div>
             </div>
@@ -570,12 +693,58 @@ export default function MessagesView({
           onCreated={(contactId) => { setCreateModal(null); router.push("/contacts/" + contactId); }} />
       )}
 
+      {/* Toast notification */}
+      {toast && (
+        <div
+          className="fixed top-4 right-4 z-50 flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg shadow-lg"
+          style={{
+            animation: toastExiting
+              ? "slide-up 200ms ease-in reverse forwards"
+              : "slide-up 200ms ease-out",
+          }}
+        >
+          <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+          {toast}
+        </div>
+      )}
+
       {/* Keyboard shortcut hint */}
-      <button onClick={() => alert("Keyboard Shortcuts:\n\nc — Compose\nj/k — Navigate threads\ne — Archive\n# — Delete\ns — Star\np — Pin\n/ — Search\nEsc — Close")}
+      <button onClick={() => setShortcutsOpen(true)}
         className="fixed bottom-4 right-4 w-7 h-7 bg-slate-200 hover:bg-slate-300 text-slate-500 text-xs font-bold rounded-full flex items-center justify-center z-30 shadow-sm transition-colors"
         title="Keyboard shortcuts (?)">
         ?
       </button>
+
+      {/* Keyboard shortcuts modal */}
+      {shortcutsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30" onClick={() => setShortcutsOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()} style={{ animation: "modal-in 200ms ease-out" }}>
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-900">Keyboard Shortcuts</h3>
+              <button onClick={() => setShortcutsOpen(false)} className="w-6 h-6 rounded hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600">&times;</button>
+            </div>
+            <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-2">
+              {[
+                ["c", "Compose new email"],
+                ["j", "Next thread"],
+                ["k", "Previous thread"],
+                ["/", "Focus search"],
+                ["e", "Archive thread"],
+                ["#", "Delete thread"],
+                ["s", "Star thread"],
+                ["p", "Pin thread"],
+                ["?", "Toggle shortcuts"],
+                ["Esc", "Close / Deselect"],
+              ].map(([key, desc]) => (
+                <div key={key} className="flex items-center gap-2">
+                  <kbd className="bg-slate-100 text-slate-700 rounded px-2 py-1 font-mono text-xs font-semibold min-w-[28px] text-center">{key}</kbd>
+                  <span className="text-xs text-slate-600">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -584,24 +753,24 @@ export default function MessagesView({
 // THREAD ROW
 // ============================================================
 function ThreadRow({
-  thread, index, isSelected, isChecked, onSelect, onCheck, onPin, gmailEmail,
+  thread, index, isSelected, isChecked, onSelect, onCheck, onPin, gmailEmail, isNew, folder,
 }: {
   thread: ThreadSummary; index: number; isSelected: boolean; isChecked: boolean;
   onSelect: () => void; onCheck: (shiftKey: boolean) => void; onPin: (e: React.MouseEvent) => void;
-  gmailEmail: string | null;
+  gmailEmail: string | null; isNew?: boolean; folder?: string;
 }) {
   const cat = thread.category ? categoryConfig[thread.category] : null;
   const displayName = thread.latestDirection === "outbound"
-    ? (thread.contactName || thread.latestFromEmail)
+    ? (thread.contactName || thread.latestToEmails?.[0] || thread.latestFromEmail)
     : (thread.latestFromName || thread.latestFromEmail);
   const initial = (displayName || "?")[0].toUpperCase();
   const avatarBg = getAvatarColor(displayName || "?");
 
   return (
     <div
-      className={`group w-full text-left px-3 py-2.5 border-b border-slate-100 hover:bg-slate-50 transition-all cursor-pointer flex items-start gap-2.5 ${
-        isSelected ? "bg-blue-50 border-l-[3px] border-l-blue-600" : "border-l-[3px] border-l-transparent"
-      } ${isChecked ? "bg-blue-50/60" : ""} ${!thread.isRead ? "bg-blue-50/30" : ""}`}
+      className={`group w-full text-left px-3 py-2.5 border-b border-slate-100 hover:bg-slate-50 hover:shadow-[inset_0_0_0_1px_rgba(0,0,0,0.04)] transition-colors duration-100 cursor-pointer flex items-start gap-2.5 ${
+        isSelected ? "bg-blue-50 shadow-[inset_3px_0_0_#2563eb]" : ""
+      } ${isChecked ? "bg-blue-50/60" : ""} ${!thread.isRead ? "bg-blue-50/30" : ""} ${isNew ? "animate-pulse bg-blue-100" : ""}`}
     >
       <input type="checkbox" checked={isChecked} onChange={() => {}}
         onClick={(e) => { e.stopPropagation(); onCheck(e.shiftKey); }}
@@ -615,7 +784,7 @@ function ThreadRow({
       <div className="min-w-0 flex-1" onClick={onSelect}>
         <div className="flex items-center justify-between mb-0.5">
           <span className={`text-sm truncate ${!thread.isRead ? "font-semibold text-slate-900" : "font-medium text-slate-600"}`}>
-            {thread.latestDirection === "outbound" ? "To: " : ""}{displayName}
+            {(thread.latestDirection === "outbound" || folder === "SENT") ? "To: " : ""}{displayName}
           </span>
           <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
             {thread.isPinned && <span className="text-[10px]">📌</span>}
@@ -811,7 +980,7 @@ function ThreadDetail({
                 {isOutbound ? "Y" : initial}
               </div>
 
-              <div className={`flex-1 min-w-0 rounded-xl ${isOutbound ? "bg-blue-50 border border-blue-200" : "bg-white border border-slate-200"} shadow-sm`}>
+              <div className={`flex-1 min-w-0 rounded-xl ${isOutbound ? "bg-blue-50 border border-blue-200 border-l-4 border-l-blue-500" : "bg-white border border-slate-200 border-l-4 border-l-slate-300"} shadow-sm hover:shadow-md transition-shadow duration-150`}>
                 {/* Header */}
                 <div className="px-4 py-2 flex items-center justify-between cursor-pointer" onClick={() => toggleExpand(msg.id)}>
                   <div className="flex items-center gap-2 min-w-0">
@@ -940,7 +1109,7 @@ function ComposeModal({ templates, gmailEmail, onClose, onSent }: { templates: T
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col animate-in fade-in slide-in-from-bottom-2 duration-200" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()} style={{ animation: "modal-in 200ms ease-out" }}>
         {/* Header */}
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900">New Message</h3>

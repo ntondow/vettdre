@@ -202,6 +202,8 @@ model Organization {
   emailMessages        EmailMessage[]
   emailLabels          EmailLabel[]
   followUpReminders    FollowUpReminder[]
+  calendarEvents       CalendarEvent[]
+  showingSlots         ShowingSlot[]
   leadAssignmentRule   LeadAssignmentRule?
   aiSettings           AiSettings?
   brandSettings        BrandSettings?
@@ -245,6 +247,8 @@ model User {
   notificationPreferences NotificationPreferences?
   workingHours     WorkingHours?
   syncSettings     SyncSettings?
+  calendarEvents   CalendarEvent[]
+  showingSlots     ShowingSlot[]
 
   @@unique([orgId, email])
   @@map("users")
@@ -289,6 +293,8 @@ model Contact {
   propertyInterests ContactPropertyInterest[]
   emailMessages     EmailMessage[]
   followUpReminders FollowUpReminder[]
+  calendarEvents    CalendarEvent[]
+  showingSlots      ShowingSlot[]
 
   @@index([orgId, status])
 
@@ -458,6 +464,7 @@ model Deal {
   activities       Activity[]
   tasks            Task[]
   showings         Showing[]
+  calendarEvents   CalendarEvent[]
 
   @@index([orgId, status])
   @@index([contactId])
@@ -979,4 +986,94 @@ model SyncSettings {
   updatedAt     DateTime @updatedAt @map("updated_at")
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@map("sync_settings")
+}
+
+// ============================================================
+// Calendar
+// ============================================================
+
+model CalendarEvent {
+  id               String    @id @default(uuid())
+  orgId            String    @map("org_id")
+  userId           String    @map("user_id")
+  googleEventId    String?   @map("google_event_id")
+  googleCalendarId String?   @map("google_calendar_id")
+
+  title            String
+  description      String?   @db.Text
+  location         String?
+
+  startAt          DateTime  @map("start_at")
+  endAt            DateTime  @map("end_at")
+  allDay           Boolean   @default(false) @map("all_day")
+  timezone         String    @default("America/New_York")
+
+  recurring        Boolean   @default(false)
+  recurrenceRule   String?   @map("recurrence_rule")
+
+  eventType        String    @default("general") // "showing","meeting","open_house","inspection","closing","task_deadline","deal_milestone","general"
+  contactId        String?   @map("contact_id")
+  propertyId       String?   @map("property_id")
+  dealId           String?   @map("deal_id")
+  showingId        String?   @map("showing_id")
+
+  propertyAddress  String?   @map("property_address")
+  unitNumber       String?   @map("unit_number")
+
+  status           String    @default("confirmed") // "confirmed","tentative","cancelled"
+  color            String    @default("#3B82F6")
+
+  attendees        Json?
+
+  syncedAt         DateTime? @map("synced_at")
+  lastModified     DateTime? @map("last_modified")
+  source           String    @default("vettdre") // "vettdre","google","scheduler"
+
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact          Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  deal             Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  showingSlots     ShowingSlot[]
+
+  @@unique([orgId, googleEventId])
+  @@index([orgId, startAt])
+  @@index([userId, startAt])
+  @@index([contactId])
+  @@index([propertyAddress])
+  @@map("calendar_events")
+}
+
+model ShowingSlot {
+  id               String    @id @default(uuid())
+  orgId            String    @map("org_id")
+  userId           String    @map("user_id")
+  propertyAddress  String    @map("property_address")
+  unitNumber       String?   @map("unit_number")
+
+  startAt          DateTime  @map("start_at")
+  endAt            DateTime  @map("end_at")
+  duration         Int       @default(30)
+
+  isBooked         Boolean   @default(false) @map("is_booked")
+  bookedByName     String?   @map("booked_by_name")
+  bookedByEmail    String?   @map("booked_by_email")
+  bookedByPhone    String?   @map("booked_by_phone")
+  bookedAt         DateTime? @map("booked_at")
+  contactId        String?   @map("contact_id")
+  calendarEventId  String?   @map("calendar_event_id")
+
+  notes            String?
+
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  organization     Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact          Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  calendarEvent    CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, propertyAddress, startAt])
+  @@map("showing_slots")
 }

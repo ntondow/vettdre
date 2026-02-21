@@ -390,6 +390,13 @@ export async function discoverPortfolio(candidates: { name: string; isEntity: bo
     address: string;
     matchedVia: string;
     documents: { docType: string; role: string; amount: number; recordedDate: string; name: string }[];
+    ownerName?: string;
+    units?: number;
+    yearBuilt?: number;
+    assessedValue?: number;
+    numFloors?: number;
+    bldgArea?: number;
+    zoning?: string;
   }
 
   const allProperties = new Map<string, PortfolioProperty>();
@@ -495,6 +502,89 @@ export async function discoverPortfolio(candidates: { name: string; isEntity: bo
     const bDate = Math.max(...b.documents.map(d => new Date(d.recordedDate || 0).getTime()), 0);
     return bDate - aDate;
   });
+
+  // Enrich properties with PLUTO data to get full addresses
+  const propsNeedingAddr = properties.filter(p => !p.address || p.address.trim().length < 5);
+  if (propsNeedingAddr.length > 0) {
+    try {
+      // Group by borough for batch PLUTO queries
+      const boroGroups = new Map<string, typeof propsNeedingAddr>();
+      propsNeedingAddr.forEach(p => {
+        const boro = p.boroCode || "3";
+        if (!boroGroups.has(boro)) boroGroups.set(boro, []);
+        boroGroups.get(boro)!.push(p);
+      });
+
+      const plutoPromises = Array.from(boroGroups.entries()).map(async ([boro, props]) => {
+        const conditions = props.slice(0, 20).map(p => "(block='" + p.block + "' AND lot='" + p.lot + "')").join(" OR ");
+        try {
+          const url = new URL(NYC + "/64uk-42ks.json");
+          url.searchParams.set("$where", "borocode='" + boro + "' AND (" + conditions + ")");
+          url.searchParams.set("$select", "block,lot,address,ownername,unitsres,yearbuilt,assesstot,numfloors,bldgarea,zonedist1");
+          url.searchParams.set("$limit", "50");
+          const res = await fetch(url.toString());
+          if (res.ok) {
+            const plutoData = await res.json();
+            plutoData.forEach((pl: any) => {
+              const match = props.find(p => p.block === pl.block && p.lot === pl.lot);
+              if (match) {
+                if (pl.address) match.address = pl.address;
+                match.ownerName = pl.ownername || "";
+                match.units = parseInt(pl.unitsres || "0");
+                match.yearBuilt = parseInt(pl.yearbuilt || "0");
+                match.assessedValue = parseInt(pl.assesstot || "0");
+                match.numFloors = parseInt(pl.numfloors || "0");
+                match.bldgArea = parseInt(pl.bldgarea || "0");
+                match.zoning = pl.zonedist1 || "";
+              }
+            });
+          }
+        } catch {}
+      });
+      await Promise.all(plutoPromises);
+    } catch (err) { console.error("Portfolio PLUTO enrichment error:", err); }
+  }
+
+  // Also enrich properties that have addresses from ACRIS but no other data
+  const propsWithAddr = properties.filter(p => p.address && p.address.trim().length >= 5 && !p.units);
+  if (propsWithAddr.length > 0) {
+    try {
+      const boroGroups = new Map<string, typeof propsWithAddr>();
+      propsWithAddr.forEach(p => {
+        const boro = p.boroCode || "3";
+        if (!boroGroups.has(boro)) boroGroups.set(boro, []);
+        boroGroups.get(boro)!.push(p);
+      });
+
+      const plutoPromises2 = Array.from(boroGroups.entries()).map(async ([boro, props]) => {
+        const conditions = props.slice(0, 20).map(p => "(block='" + p.block + "' AND lot='" + p.lot + "')").join(" OR ");
+        try {
+          const url = new URL(NYC + "/64uk-42ks.json");
+          url.searchParams.set("$where", "borocode='" + boro + "' AND (" + conditions + ")");
+          url.searchParams.set("$select", "block,lot,address,ownername,unitsres,yearbuilt,assesstot,numfloors,bldgarea,zonedist1");
+          url.searchParams.set("$limit", "50");
+          const res = await fetch(url.toString());
+          if (res.ok) {
+            const plutoData = await res.json();
+            plutoData.forEach((pl: any) => {
+              const match = props.find(p => p.block === pl.block && p.lot === pl.lot);
+              if (match) {
+                if (pl.address && (!match.address || match.address.length < pl.address.length)) match.address = pl.address;
+                match.ownerName = pl.ownername || "";
+                match.units = parseInt(pl.unitsres || "0");
+                match.yearBuilt = parseInt(pl.yearbuilt || "0");
+                match.assessedValue = parseInt(pl.assesstot || "0");
+                match.numFloors = parseInt(pl.numfloors || "0");
+                match.bldgArea = parseInt(pl.bldgarea || "0");
+                match.zoning = pl.zonedist1 || "";
+              }
+            });
+          }
+        } catch {}
+      });
+      await Promise.all(plutoPromises2);
+    } catch {}
+  }
 
   console.log("=== PORTFOLIO DISCOVERY COMPLETE ===", properties.length, "properties found");
   return { properties, searchedNames: searchNames, searchedAddresses: [...addresses] };

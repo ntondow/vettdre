@@ -1,5 +1,36 @@
 "use server";
 
+const PUBLIC_OWNERS_LIST = [
+  "NYC HOUSING AUTHORITY", "NYCHA", "NEW YORK CITY HOUSING AUTH",
+  "CITY OF NEW YORK", "DEPT OF HOUSING PRESERV", "HPD",
+  "NYC DEPT OF ED", "NYC DEPARTMENT OF EDUCATION", "BOARD OF EDUCATION",
+  "NYC TRANSIT AUTHORITY", "MTA", "METROPOLITAN TRANS AUTH",
+  "NYC HEALTH & HOSPITALS", "HEALTH & HOSP CORP",
+  "DEPARTMENT OF PARKS", "PARKS & RECREATION",
+  "NYC SCHOOL CONSTRUCTION", "SCHOOL CONSTRUCTION AUTH",
+  "FIRE DEPT CITY OF NY", "POLICE DEPT CITY OF NY",
+  "DEPT OF CITYWIDE ADMIN", "DCAS",
+  "STATE OF NEW YORK", "UNITED STATES GOVERNMENT", "US GOVT",
+  "NYC ECONOMIC DEVELOPMENT", "DEPT OF SANITATION",
+  "DEPT OF TRANSPORTATION", "HOUSING PRESERVATION",
+  "HOUSING DEVELOPMENT CORP", "DORMITORY AUTHORITY",
+  "PORT AUTHORITY", "ROOSEVELT ISLAND",
+];
+
+export async function isPublicOwner(name: string): Promise<boolean> {
+  if (!name) return false;
+  const upper = name.toUpperCase().trim();
+  return PUBLIC_OWNERS_LIST.some(p => upper.includes(p)) ||
+    upper.startsWith("NYC ") ||
+    upper.startsWith("CITY OF ") ||
+    upper.startsWith("STATE OF ") ||
+    upper.startsWith("UNITED STATES") ||
+    upper.includes("HOUSING AUTHORITY") ||
+    upper.includes("CITY UNIVERSITY") ||
+    upper.includes("STATE UNIVERSITY") ||
+    /^(DEPT|DEPARTMENT) OF /.test(upper);
+}
+
 const BASE = "https://data.cityofnewyork.us/resource";
 const SALES_ID = "usep-8jbt";
 const VIOLATIONS_ID = "3h2n-5cm9";
@@ -615,6 +646,43 @@ export async function searchByName(name: string) {
       });
     }
   });
+
+  // Enrich with PLUTO for full addresses and building data
+  if (properties.length > 0) {
+    try {
+      const boroGroups = new Map();
+      properties.forEach((p) => {
+        const boro = p.boroCode || "3";
+        if (!boroGroups.has(boro)) boroGroups.set(boro, []);
+        boroGroups.get(boro).push(p);
+      });
+
+      const plutoPromises = Array.from(boroGroups.entries()).map(async ([boro, props]: [string, any[]]) => {
+        const conditions = props.slice(0, 25).map((p: any) => "(block='" + p.block + "' AND lot='" + p.lot + "')").join(" OR ");
+        try {
+          const url = new URL(BASE + "/64uk-42ks.json");
+          url.searchParams.set("$where", "borocode='" + boro + "' AND (" + conditions + ")");
+          url.searchParams.set("$select", "block,lot,address,ownername,unitsres,yearbuilt,assesstot");
+          url.searchParams.set("$limit", "50");
+          const res = await fetch(url.toString());
+          if (res.ok) {
+            const plutoData = await res.json();
+            plutoData.forEach((pl: any) => {
+              const match = props.find((p: any) => p.block === pl.block && p.lot === pl.lot);
+              if (match) {
+                if (pl.address && (!match.address || match.address.trim().length < 5)) match.address = pl.address;
+                match.ownerName = pl.ownername || "";
+                match.units = parseInt(pl.unitsres || "0");
+                match.yearBuilt = parseInt(pl.yearbuilt || "0");
+                match.assessedValue = parseInt(pl.assesstot || "0");
+              }
+            });
+          }
+        } catch {}
+      });
+      await Promise.all(plutoPromises);
+    } catch {}
+  }
 
   console.log("=== NAME SEARCH RESULTS:", properties.length, "properties ===");
   return { properties, searchName };

@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { lookupProperty, searchOwnership, searchByName } from "./actions";
 import BuildingDetail from "./building-detail";
+import BuildingProfile from "./building-profile";
+import { getLists } from "../prospecting/actions";
+import dynamic from "next/dynamic";
+const MapSearch = dynamic(() => import("./map-search"), { ssr: false, loading: () => <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div></div> });
 
-type MainTab = "property" | "ownership" | "name";
+type MainTab = "property" | "ownership" | "name" | "map";
 type View = "results" | "building";
 
 export default function MarketIntelSearch() {
@@ -23,8 +27,14 @@ export default function MarketIntelSearch() {
   const [ownerDetailBuilding, setOwnerDetailBuilding] = useState<any>(null);
 
   // Name search
+  const [selectedProperty, setSelectedProperty] = useState<any>(null);
   const [nameResults, setNameResults] = useState<any | null>(null);
+  const [nameDetailBuilding, setNameDetailBuilding] = useState<any>(null);
   const [nameQuery, setNameQuery] = useState("");
+  const [prospectLists, setProspectLists] = useState<any[]>([]);
+  const [saveModal, setSaveModal] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
   const fmtDate = (d: string | null) => {
@@ -34,6 +44,46 @@ export default function MarketIntelSearch() {
     } catch {
       return d;
     }
+  };
+
+  const loadLists = async () => {
+    try { const lists = await getLists(); setProspectLists(JSON.parse(JSON.stringify(lists))); } catch {}
+  };
+
+  const handleSaveToList = async (listId: string, building: any) => {
+    setSaving(true);
+    try {
+      await fetch("/api/lists/" + listId + "/items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: building.address || building.streetAddress || "",
+          borough: building.borough || building.boro || null,
+          zip: building.zip || building.zipCode || null,
+          block: building.block || null,
+          lot: building.lot || null,
+          bin: building.bin || null,
+          totalUnits: building.totalUnits || null,
+          residentialUnits: building.residentialUnits || null,
+          yearBuilt: building.yearBuilt || null,
+          numFloors: building.numFloors || null,
+          buildingArea: building.bldgArea || building.buildingArea || null,
+          lotArea: building.lotArea || null,
+          buildingClass: building.buildingClass || null,
+          zoning: building.zoneDist || building.zoning || null,
+          assessedValue: building.assessedValue || null,
+          ownerName: building.ownerNamePluto || building.ownerName || (building.owners?.length > 0 ? (building.owners[0].corporateName || building.owners[0].firstName + " " + building.owners[0].lastName).trim() : null),
+          ownerAddress: building.owners?.length > 0 ? [building.owners[0].businessAddress, building.owners[0].businessCity, building.owners[0].businessState].filter(Boolean).join(", ") : null,
+          lastSalePrice: building.lastSalePrice || null,
+          lastSaleDate: building.lastSaleDate || null,
+        }),
+      });
+      setSavedMsg("Saved!");
+      setTimeout(() => setSavedMsg(null), 2000);
+      setSaveModal(null);
+    } catch (err) {
+      console.error(err);
+    } finally { setSaving(false); }
   };
 
   const handlePropertySearch = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -113,6 +163,7 @@ export default function MarketIntelSearch() {
             { key: "property" as const, label: "🏠 Property Search" },
             { key: "ownership" as const, label: "👤 Ownership Lookup" },
             { key: "name" as const, label: "🔎 Name / Portfolio" },
+            { key: "map" as const, label: "🗺️ Map Search" },
           ]).map((t) => (
             <button
               key={t.key}
@@ -130,6 +181,42 @@ export default function MarketIntelSearch() {
       </div>
 
       <div className="px-8 py-6">
+        {/* Save to List Modal */}
+        {saveModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-sm">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200">
+                <h2 className="text-base font-semibold text-slate-900">Save to Prospecting List</h2>
+                <button onClick={() => setSaveModal(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+              </div>
+              <div className="p-4">
+                <p className="text-sm text-slate-500 mb-3">{saveModal.address}</p>
+                {prospectLists.length > 0 ? (
+                  <div className="space-y-2">
+                    {prospectLists.map((list: any) => (
+                      <button key={list.id} onClick={() => handleSaveToList(list.id, saveModal)}
+                        disabled={saving}
+                        className="w-full text-left p-3 border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                        <span className="text-sm font-medium text-slate-900">{list.name}</span>
+                        <span className="text-xs text-slate-400 ml-2">{list._count.items} items</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/prospecting" className="text-blue-600 hover:underline">Create one first</a></p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Saved Toast */}
+        {savedMsg && (
+          <div className="fixed top-4 right-4 bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg z-50">
+            {savedMsg}
+          </div>
+        )}
+
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg p-3 mb-4">
             {error}
@@ -432,8 +519,8 @@ export default function MarketIntelSearch() {
                     {nameResults.properties.map((p: any, i: number) => (
                       <div key={i} className="bg-white rounded-xl border border-slate-200 p-5">
                         <div className="flex items-start justify-between">
-                          <div>
-                            <h3 className="text-base font-semibold text-slate-900">
+                          <div className="flex-1">
+                            <h3 className="text-base font-semibold text-slate-900 cursor-pointer hover:text-blue-600" onClick={() => setNameDetailBuilding({ boroCode: p.boroCode || String(p.boro || ""), block: p.block, lot: p.lot, address: p.address, borough: p.borough, ownerName: nameResults.searchName })}>
                               {p.address || `Block ${p.block}, Lot ${p.lot}`}
                             </h3>
                             <p className="text-sm text-slate-500 mt-0.5">
@@ -499,6 +586,32 @@ export default function MarketIntelSearch() {
               </>
             )}
 
+            {nameDetailBuilding && (
+              <div className="fixed inset-0 z-[2000] flex">
+                <div className="absolute inset-0 bg-black/40" onClick={() => setNameDetailBuilding(null)} />
+                <div className="relative ml-auto w-full max-w-3xl bg-white shadow-2xl overflow-y-auto">
+                  <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-sm font-bold text-slate-900">{nameDetailBuilding.address}</h2>
+                      <p className="text-xs text-slate-500">{nameDetailBuilding.borough}</p>
+                    </div>
+                    <button onClick={() => setNameDetailBuilding(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+                  </div>
+                  <div className="p-5">
+                    <BuildingProfile
+                      boroCode={nameDetailBuilding.boroCode}
+                      block={nameDetailBuilding.block}
+                      lot={nameDetailBuilding.lot}
+                      address={nameDetailBuilding.address}
+                      borough={nameDetailBuilding.borough}
+                      ownerName={nameDetailBuilding.ownerName}
+                      onClose={() => setNameDetailBuilding(null)}
+                      onNameClick={(name) => { setNameDetailBuilding(null); searchOwnerName(name); }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
             {!nameResults && !loading && mainTab === "name" && (
               <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
                 <p className="text-4xl mb-4">🔎</p>
@@ -510,6 +623,9 @@ export default function MarketIntelSearch() {
             )}
           </>
         )}
+        <div style={mainTab !== "map" ? { position: "absolute", left: "-9999px", width: "100%" } : {}}>
+          <MapSearch onNameClick={(name) => { setMainTab("name"); searchOwnerName(name); }} />
+        </div>
 
         <p className="text-xs text-slate-400 mt-6 text-center">
           Data: NYC Open Data • NYS Dept. of State • ACRIS • HPD • PLUTO • DOB

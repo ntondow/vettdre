@@ -20,6 +20,7 @@ async function getContact(id: string) {
       tasks: { orderBy: { dueAt: "asc" }, where: { status: { not: "completed" } } },
       showings: { orderBy: { scheduledAt: "desc" }, take: 10, include: { property: { select: { address: true, city: true, state: true } } } },
       enrichmentProfiles: { orderBy: { version: "desc" }, take: 1 },
+      emailMessages: { orderBy: { receivedAt: "desc" }, take: 50, select: { id: true, direction: true, fromEmail: true, fromName: true, toEmails: true, subject: true, snippet: true, receivedAt: true, isRead: true, leadSource: true, aiSummary: true, sentimentScore: true } },
     },
   });
   return contact;
@@ -29,5 +30,5 @@ export default async function ContactPage({ params }: { params: Promise<{ id: st
   const { id } = await params;
   const contact = await getContact(id);
   if (!contact) notFound();
-  return <ContactDossier contact={contact} />;
+  return <ContactDossier contact={JSON.parse(JSON.stringify(contact))} />;
 }

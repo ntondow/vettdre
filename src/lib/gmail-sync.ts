@@ -191,7 +191,7 @@ export async function initialSync(gmailAccountId: string, maxResults = 500) {
   console.log("  Token:", token ? token.slice(0, 10) + "..." : "NO TOKEN");
 
   // List recent messages
-  const listUrl = `${GMAIL_API}/messages?maxResults=${maxResults}`;
+  const listUrl = `${GMAIL_API}/messages?maxResults=${maxResults}&includeSpamTrash=true`;
   console.log("  Gmail API URL:", listUrl);
   const listRes = await fetch(listUrl, {
     headers: { Authorization: `Bearer ${token}` },

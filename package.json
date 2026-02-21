@@ -6,9 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "update-zillow": "bash scripts/download-zillow-data.sh"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.76.0",
     "@prisma/client": "^5.22.0",
     "@supabase/ssr": "^0.8.0",
     "@supabase/supabase-js": "^2.95.3",

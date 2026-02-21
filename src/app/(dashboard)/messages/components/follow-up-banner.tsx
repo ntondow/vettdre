@@ -47,11 +47,11 @@ export default function FollowUpBanner({
   };
 
   return (
-    <div className="bg-amber-50 border border-amber-200 rounded-lg mx-3 mt-3 p-3">
+    <div className="bg-amber-50 border border-amber-200 rounded-lg mx-3 mt-3 p-3" style={{ animation: "slide-up 200ms ease-out" }}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
           <span className="text-amber-600 text-sm font-semibold">Needs Follow-up</span>
-          <span className="bg-amber-200 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+          <span className="bg-amber-200 text-amber-800 text-[10px] font-bold px-1.5 py-0.5 rounded-full animate-pulse">
             {followUps.length}
           </span>
         </div>

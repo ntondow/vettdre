@@ -31,20 +31,20 @@ export default function BulkActionBar({
   };
 
   return (
-    <div className="sticky top-0 z-10 bg-blue-600 text-white px-4 py-2 flex items-center gap-2 text-sm font-medium shadow-md">
+    <div className="sticky top-0 z-10 bg-blue-600 text-white px-4 py-2 flex items-center gap-2.5 text-sm font-medium shadow-md">
       <span className="mr-2">{count} selected</span>
       <span className="w-px h-5 bg-blue-400" />
       <button onClick={() => run(bulkMarkRead)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Mark read">
-        Read
+        ✓ Read
       </button>
       <button onClick={() => run(bulkMarkUnread)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Mark unread">
         Unread
       </button>
       <button onClick={() => run(bulkStar)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Star">
-        Star
+        ☆ Star
       </button>
       <button onClick={() => run(bulkPin)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Pin">
-        Pin
+        📌 Pin
       </button>
       <div className="relative">
         <button onClick={() => setLabelOpen(!labelOpen)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Label">
@@ -84,10 +84,10 @@ export default function BulkActionBar({
         )}
       </div>
       <button onClick={() => run(bulkArchive)} className="px-2 py-1 hover:bg-blue-500 rounded" title="Archive">
-        Archive
+        📁 Archive
       </button>
       <button onClick={() => run(bulkDelete)} className="px-2 py-1 hover:bg-blue-500 rounded text-red-200 hover:text-white" title="Delete">
-        Delete
+        🗑 Delete
       </button>
       <div className="flex-1" />
       <button onClick={onClear} className="px-2 py-1 hover:bg-blue-500 rounded text-blue-200 hover:text-white">

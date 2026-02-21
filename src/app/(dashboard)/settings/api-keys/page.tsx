@@ -13,7 +13,7 @@ interface ApiInfo {
 
 const apis: ApiInfo[] = [
   { name: "People Data Labs", key: "pdl", icon: "🔍", desc: "Skip tracing and contact enrichment" },
-  { name: "Apollo.io", key: "apollo", icon: "🚀", desc: "Professional enrichment and lead verification" },
+  { name: "Apollo.io", key: "apollo", icon: "🚀", desc: "People Search, People Enrichment, Organization Intel, Bulk Enrich" },
   { name: "Tracerfy", key: "tracerfy", icon: "📋", desc: "Backup skip trace (CSV-based)" },
   { name: "Anthropic (Claude AI)", key: "anthropic", icon: "🤖", desc: "Email parsing, ownership analysis, AI features" },
   { name: "Gmail", key: "gmail", icon: "📬", desc: "Email sync and send" },
@@ -74,9 +74,35 @@ export default function ApiKeysPage() {
                 </div>
               </div>
 
+              {/* Apollo-specific details */}
+              {api.key === "apollo" && configured && !loading && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                    <div className="bg-indigo-50 rounded-lg p-2.5">
+                      <p className="text-[10px] text-indigo-400 uppercase font-semibold">Endpoints Available</p>
+                      <div className="mt-1 space-y-0.5 text-indigo-700">
+                        <p>People Search <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 rounded">FREE</span></p>
+                        <p>People Enrichment <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">CREDITS</span></p>
+                        <p>Bulk Enrichment <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">CREDITS</span></p>
+                        <p>Org Enrichment <span className="text-[9px] bg-amber-100 text-amber-700 px-1 rounded">CREDITS</span></p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-2.5">
+                      <p className="text-[10px] text-slate-400 uppercase font-semibold">Used In</p>
+                      <div className="mt-1 space-y-0.5 text-slate-600">
+                        <p>Building Profiles (auto)</p>
+                        <p>Contact Enrichment</p>
+                        <p>Bulk Enrich (contacts)</p>
+                        <p>Lead Verification</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Test connection + result */}
               {!api.comingSoon && configured && (
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-3">
+                <div className={"flex items-center gap-3 " + (api.key === "apollo" ? "" : "mt-3 pt-3 border-t border-slate-100")}>
                   <button onClick={() => handleTest(api.key)} disabled={testing === api.key}
                     className="text-xs px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 disabled:opacity-50 font-medium transition-colors">
                     {testing === api.key ? "Testing..." : "Test Connection"}

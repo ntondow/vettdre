@@ -396,6 +396,25 @@ export async function testApiConnection(api: string): Promise<{ success: boolean
         });
         return (res.status === 200 || res.status === 404) ? { success: true, message: "Connected" } : { success: false, message: `HTTP ${res.status}` };
       }
+      case "apollo": {
+        const key = process.env.APOLLO_API_KEY;
+        if (!key) return { success: false, message: "API key not configured" };
+        // Use People Search (FREE endpoint) to test connection
+        const res = await fetch("https://api.apollo.io/api/v1/mixed_people/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Api-Key": key },
+          body: JSON.stringify({ person_titles: ["CEO"], person_locations: ["New York, New York, United States"], per_page: 1 }),
+        });
+        if (res.ok) return { success: true, message: "Connected (Organization Plan)" };
+        if (res.status === 403) return { success: false, message: "Forbidden — check plan level" };
+        if (res.status === 401) return { success: false, message: "Invalid API key" };
+        return { success: false, message: `HTTP ${res.status}` };
+      }
+      case "tracerfy": {
+        const key = process.env.TRACERFY_API_KEY;
+        if (!key) return { success: false, message: "API key not configured" };
+        return { success: true, message: "Key configured (CSV-based)" };
+      }
       default:
         return { success: false, message: "Unknown API" };
     }

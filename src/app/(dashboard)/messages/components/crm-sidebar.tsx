@@ -48,7 +48,7 @@ function CollapsibleSection({ title, count, defaultOpen = true, children }: {
         </span>
         <span className={`text-slate-400 text-xs transition-transform ${open ? "rotate-180" : ""}`}>&#9660;</span>
       </button>
-      <div className={`overflow-hidden transition-all ${open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
+      <div className={`overflow-hidden transition-all duration-200 ${open ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"}`}>
         <div className="px-3 pb-3">{children}</div>
       </div>
     </div>

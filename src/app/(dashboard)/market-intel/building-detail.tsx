@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { enrichBuilding, discoverPortfolio } from "./enrichment";
+import { enrichBuilding } from "./enrichment";
+import { buildOwnershipGraph } from "./graph-engine";
+import BuildingProfile from "./building-profile";
+import { analyzeOwnership } from "./ai-analysis";
 import { addBuildingToList } from "../prospecting/actions";
 import { getLists } from "../prospecting/actions";
 
@@ -50,7 +53,10 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
   const [lists, setLists] = useState<any[]>([]);
   const [saved, setSaved] = useState(false);
   const [portfolio, setPortfolio] = useState<any>(null);
+  const [viewingProperty, setViewingProperty] = useState<any>(null);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
+  const [aiAnalysis, setAiAnalysis] = useState<any>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
 
   useEffect(() => {
     const doEnrich = async () => {
@@ -71,25 +77,45 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
         });
         setEnrichment(data);
 
-        // Auto-trigger portfolio discovery for top candidates
+        // Auto-trigger AI analysis
         if (data.candidates && data.candidates.length > 0) {
+          setLoadingAI(true);
+          analyzeOwnership(
+            {
+              address: building.address,
+              block: building.block,
+              lot: building.lot,
+              boro: building.boro || building.borough || "",
+              totalUnits: building.totalUnits,
+              yearBuilt: building.yearBuilt,
+              assessedValue: building.assessedValue,
+              numFloors: building.numFloors,
+              bldgArea: building.bldgArea,
+              zoneDist: building.zoneDist,
+            },
+            data.candidates,
+            data.transactions,
+            data.nysEntities,
+          ).then(result => {
+            if (result.summary) setAiAnalysis(result.summary);
+            setLoadingAI(false);
+          }).catch(() => setLoadingAI(false));
+        }
+
+        // Auto-trigger graph-based portfolio discovery
+        if (building.block && building.lot) {
           setLoadingPortfolio(true);
           try {
-            const portfolioData = await discoverPortfolio(
-              data.candidates.slice(0, 5).map((c: any) => ({
-                name: c.name,
-                isEntity: c.isEntity,
-                contactInfo: c.contactInfo,
-              }))
-            );
-            // Filter out the current building from portfolio
-            const currentKey = (building.boro === "MANHATTAN" ? "1" : building.boro === "BRONX" ? "2" : building.boro === "BROOKLYN" ? "3" : building.boro === "QUEENS" ? "4" : building.boro === "STATEN ISLAND" ? "5" : building.boro || "") + "-" + building.block + "-" + building.lot;
-            portfolioData.properties = portfolioData.properties.filter(
-              (p: any) => (p.boroCode + "-" + p.block + "-" + p.lot) !== currentKey
-            );
-            setPortfolio(portfolioData);
+            const boroMap: Record<string, string> = {"MANHATTAN":"1","BRONX":"2","BROOKLYN":"3","QUEENS":"4","STATEN ISLAND":"5","1":"1","2":"2","3":"3","4":"4","5":"5"};
+            const boroCode = boroMap[(building.boro || building.borough || "").toUpperCase()] || "3";
+            const graphPromise = buildOwnershipGraph(building.block, building.lot, boroCode, 1);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 30000));
+            const graphResult = await Promise.race([graphPromise, timeoutPromise]) as any;
+            const currentBBL = boroCode + "-" + building.block + "-" + building.lot;
+            graphResult.properties = graphResult.properties.filter((p: any) => p.bbl !== currentBBL);
+            setPortfolio(graphResult);
           } catch (err) {
-            console.error("Portfolio discovery error:", err);
+            console.error("Graph engine error:", err);
           } finally {
             setLoadingPortfolio(false);
           }
@@ -257,6 +283,125 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
       {/* Results */}
       {enrichment && !loading && (
         <>
+          {/* AI Analysis Card */}
+          {(loadingAI || aiAnalysis) && (
+            <div className="bg-white rounded-xl border border-slate-200 mb-4 overflow-hidden">
+              <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-6 py-4 border-b border-amber-100 flex items-center gap-2">
+                <span className="text-lg">✨</span>
+                <h3 className="text-base font-bold text-slate-900">AI Owner Analysis</h3>
+                <span className="text-xs text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full font-medium ml-1">Claude</span>
+              </div>
+              {loadingAI && !aiAnalysis ? (
+                <div className="p-6 flex items-center gap-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-amber-600 border-t-transparent"></div>
+                  <p className="text-sm text-slate-500">Analyzing ownership data...</p>
+                </div>
+              ) : aiAnalysis ? (
+                <div className="p-6">
+                  {/* Top summary row */}
+                  <div className="grid grid-cols-3 gap-4 mb-5">
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Most Likely Owner</p>
+                    <p className="text-base font-bold text-slate-900">{aiAnalysis.likelyOwner}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={"text-xs font-medium px-1.5 py-0.5 rounded " + (
+                          aiAnalysis.ownerType === "Individual" ? "bg-emerald-50 text-emerald-700" : "bg-blue-50 text-blue-700"
+                        )}>{aiAnalysis.ownerType}</span>
+                        <span className={"text-xs font-medium px-1.5 py-0.5 rounded " + (
+                          aiAnalysis.confidence === "High" ? "bg-emerald-50 text-emerald-700" :
+                          aiAnalysis.confidence === "Medium" ? "bg-amber-50 text-amber-700" :
+                          "bg-red-50 text-red-700"
+                        )}>{aiAnalysis.confidence} confidence</span>
+                      </div>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Ownership Structure</p>
+                      <p className="text-sm font-medium text-slate-800">{aiAnalysis.ownershipStructure}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Portfolio Size</p>
+                      <p className="text-2xl font-bold text-slate-900">{aiAnalysis.portfolioSize}</p>
+                      <p className="text-xs text-slate-500">properties connected</p>
+                    </div>
+                  </div>
+
+                  {/* Contact & Transaction row */}
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div className="border border-slate-200 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Best Contact</p>
+                      <p className="text-sm font-medium text-slate-900">📍 {aiAnalysis.bestContactAddress || "Not available"}</p>
+                    {aiAnalysis.bestContactSource && <p className="text-xs text-slate-400 mt-1">Source: {aiAnalysis.bestContactSource}</p>}
+                    </div>
+                    <div className="border border-slate-200 rounded-lg p-4">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Last Transaction</p>
+                      <p className="text-sm font-medium text-slate-900">{aiAnalysis.lastTransaction || "No records"}</p>
+                      <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
+                        {aiAnalysis.lastTransactionDate && <span>{aiAnalysis.lastTransactionDate}</span>}
+                        {aiAnalysis.lastTransactionAmount && <span className="font-semibold text-slate-700">{aiAnalysis.lastTransactionAmount}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Names & Entities */}
+                  <div className="grid grid-cols-2 gap-4 mb-5">
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Key People</p>
+                      <div className="space-y-1">
+                        {(aiAnalysis.keyNames || []).map((name: string, i: number) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">👤</span>
+                            {onNameClick ? (
+                              <button onClick={() => onNameClick(name)} className="text-sm text-blue-600 hover:underline font-medium">{name} →</button>
+                            ) : (
+                              <span className="text-sm text-slate-700 font-medium">{name}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-400 uppercase tracking-wider mb-2">Associated Ents</p>
+                      <div className="space-y-1">
+                        {(aiAnalysis.keyEntities || []).map((ent: string, i: number) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="text-xs text-slate-400">🏢</span>
+                            {onNameClick ? (
+                              <button onClick={() => onNameClick(ent)} className="text-sm text-indigo-600 hover:underline font-medium">{ent} →</button>
+                            ) : (
+                              <span className="text-sm text-slate-700 font-medium">{ent}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Common Address */}
+                  {aiAnalysis.commonAddress && (
+                    <div className="mb-5">
+                      <p className="text-xs text-slate-400 uppercase tracking-wider1">Most Common Business Address</p>
+                      <p className="text-sm text-slate-700">📍 {aiAnalysis.commonAddress}</p>
+                    </div>
+                  )}
+
+                  {/* Insights */}
+                  {aiAnalysis.insights && aiAnalysis.insights.length > 0 && (
+                    <div className="bg-amber-50 rounded-lg p-4">
+                      <p className="text-xs text-amber-700 font-semibold uppercase tracking-wider mb-2">Key Insights</p>
+                      <div className="space-y-1.5">
+                        {aiAnalysis.insights.map((insight: string, i: number) => (
+                          <p key={i} className="text-sm text-amber-900 flex gap-2">
+                            <span className="flex-shrink-0">→</span>
+                            <span>{insight}</span>
+                          </p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>       )}
+
           {/* AI Owner Intelligence Card */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-6 mb-4">
             <div className="flex items-center gap-2 mb-4">
@@ -507,6 +652,19 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
 
               {activeTab === "portfolio" && (
                 <>
+                  {viewingProperty && (
+                    <BuildingProfile
+                      boroCode={viewingProperty.boroCode}
+                      block={viewingProperty.block}
+                      lot={viewingProperty.lot}
+                      address={viewingProperty.address}
+                      borough={viewingProperty.borough}
+                      ownerName={viewingProperty.ownerName || viewingProperty.ownerNamePluto}
+                      connectedVia={viewingProperty.connectedVia}
+                      onClose={() => setViewingProperty(null)}
+                      onNameClick={(name) => { setViewingProperty(null); if (onNameClick) onNameClick(name); }}
+                    />
+                  )}
                   {loadingPortfolio ? (
                     <div className="text-center py-8">
                       <div className="inline-block animate-spin rounded-full h-6 w-6 border-4 border-indigo-600 border-t-transparent mb-3"></div>
@@ -516,10 +674,10 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
                     <div>
                       <div className="bg-indigo-50 rounded-lg p-3 mb-4">
                         <p className="text-sm text-indigo-800 font-medium">
-                          Found {portfolio.properties.length} other properties connected to this owner
+                          Found {portfolio.properties.length} other properties in this ownership network
                         </p>
                         <p className="text-xs text-indigo-600 mt-1">
-                          Searched: {portfolio.searchedNames.join(", ")}
+                          Graph: {portfolio.graph?.nodes || 0} nodes, {portfolio.graph?.edges || 0} edges
                         </p>
                       </div>
                       <div className="space-y-3">

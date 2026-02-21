@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags } from "./actions";
+import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact } from "./actions";
+import { enrichContact } from "./enrich-actions";
+import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
 
 // ---- TYPES ----
 interface Contact {
@@ -17,7 +19,8 @@ interface Contact {
   deals: Array<{ id: string; name: string | null; dealValue: any; status: string; stageId: string; property: { address: string; city: string; state: string } | null; pipeline: { name: string } }>;
   tasks: Array<{ id: string; title: string; type: string; priority: string; status: string; dueAt: Date | null }>;
   showings: Array<{ id: string; scheduledAt: Date; status: string; feedback: string | null; interestLevel: string | null; property: { address: string; city: string; state: string } }>;
-  enrichmentProfiles: Array<{ id: string; employer: string | null; jobTitle: string | null; industry: string | null; incomeRangeLow: number | null; incomeRangeHigh: number | null; linkedinUrl: string | null; aiSummary: string | null; aiInsights: any; profilePhotoUrl: string | null }>;
+  enrichmentProfiles: Array<{ id: string; employer: string | null; jobTitle: string | null; industry: string | null; incomeRangeLow: number | null; incomeRangeHigh: number | null; linkedinUrl: string | null; aiSummary: string | null; aiInsights: any; profilePhotoUrl: string | null; dataSources?: string[]; rawData?: any }>;
+  emailMessages?: Array<{ id: string; direction: string; fromEmail: string; fromName: string | null; toEmails: string[]; subject: string | null; snippet: string | null; receivedAt: string; isRead: boolean; leadSource: string | null; aiSummary: string | null; sentimentScore: number | null }>;
 }
 
 // ---- HELPERS ----
@@ -41,7 +44,7 @@ function InfoField({ label, value }: { label: string; value: string | null | und
 // ---- MAIN COMPONENT ----
 export default function ContactDossier({ contact }: { contact: Contact }) {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<"overview" | "details" | "activity" | "deals" | "tasks">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "details" | "activity" | "deals" | "tasks" | "emails">("overview");
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +55,50 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
   const [logOpen, setLogOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [tagInput, setTagInput] = useState("");
+  const [enriching, setEnriching] = useState(false);
+  const [enrichResult, setEnrichResult] = useState<any>(null);
+  const [emailComposeOpen, setEmailComposeOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteContact(contact.id);
+      router.push("/contacts");
+    } catch (err) {
+      console.error("Delete error:", err);
+      setDeleting(false);
+      setDeleteConfirm(false);
+    }
+  };
+
+  const handleEnrich = async () => {
+    setEnriching(true);
+    try {
+      const result = await enrichContact(contact.id);
+      setEnrichResult(result);
+      router.refresh();
+    } catch (err) { console.error("Enrichment error:", err); }
+    setEnriching(false);
+  };
+  const handleSendEmail = async () => {
+    if (!contact.email || !emailSubject) return;
+    setEmailSending(true);
+    try {
+      await sendNewEmail(contact.email, emailSubject, emailBody || "<p></p>", contact.id);
+      setEmailComposeOpen(false);
+      setEmailSubject("");
+      setEmailBody("");
+      router.refresh();
+    } catch (err) {
+      console.error("Send error:", err);
+    }
+    setEmailSending(false);
+  };
 
   const enrichment = contact.enrichmentProfiles[0] || null;
   const scoreColor = contact.qualificationScore === null ? "bg-slate-100 text-slate-500 border-slate-200" : contact.qualificationScore >= 80 ? "bg-emerald-50 text-emerald-700 border-emerald-200" : contact.qualificationScore >= 60 ? "bg-amber-50 text-amber-700 border-amber-200" : contact.qualificationScore >= 40 ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-red-50 text-red-700 border-red-200";
@@ -105,6 +152,7 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
     { key: "activity", label: `Activity (${contact.activities.length})`, icon: "📊" },
     { key: "deals", label: `Deals (${contact.deals.length})`, icon: "💰" },
     { key: "tasks", label: `Tasks (${contact.tasks.length})`, icon: "✅" },
+    { key: "emails", label: `Emails (${contact.emailMessages?.length || 0})`, icon: "📬" },
   ] as const;
 
   return (
@@ -132,17 +180,23 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                 </div>
               </div>
             </div>
-            <div className={`rounded-xl border px-5 py-3 text-center ${scoreColor}`}>
-              <p className="text-3xl font-bold">{contact.qualificationScore ?? "—"}</p>
-              <p className="text-xs font-medium mt-0.5">{scoreLabel}</p>
+            <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-1.5">
+                <button onClick={() => { setEditing(true); setActiveTab("details"); }} className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors">Edit</button>
+                <button onClick={() => setDeleteConfirm(true)} className="px-3 py-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors">Delete</button>
+              </div>
+              <div className={`rounded-xl border px-5 py-3 text-center ${scoreColor}`}>
+                <p className="text-3xl font-bold">{contact.qualificationScore ?? "—"}</p>
+                <p className="text-xs font-medium mt-0.5">{scoreLabel}</p>
+              </div>
             </div>
           </div>
 
           {/* Quick Actions */}
           <div className="flex items-center gap-2 mt-4">
-            <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">✉️ Email</button>
+            <button onClick={() => { setActiveTab("emails"); setEmailComposeOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">✉️ Email</button>
             <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">📞 Log Call</button>
-            <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">💬 Text</button>
+            <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">💬 Log Text</button>
             <button onClick={() => { setActiveTab("tasks"); setTaskOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">✅ Add Task</button>
             <div className="h-5 w-px bg-slate-200 mx-1" />
             {/* Tags */}
@@ -177,32 +231,209 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
         {/* OVERVIEW TAB */}
         {activeTab === "overview" && (
           <div className="grid grid-cols-3 gap-6">
-            {/* AI Profile */}
+            {/* AI Lead Intelligence */}
             <div className="col-span-2 space-y-6">
-              <div className="bg-white rounded-xl border border-slate-200 p-6">
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="text-lg">🧠</span>
-                  <h3 className="text-sm font-semibold text-slate-700">AI Profile</h3>
-                  <span className="ml-auto text-xs text-slate-400">{enrichment ? "Enriched" : "Pending enrichment"}</span>
-                </div>
-                {enrichment?.aiSummary ? (
-                  <p className="text-sm text-slate-700 leading-relaxed">{enrichment.aiSummary}</p>
-                ) : (
-                  <div className="bg-slate-50 rounded-lg p-4 text-center">
-                    <p className="text-sm text-slate-500">AI profile will be generated when enrichment data is available. This contact will be analyzed for employment, income, property ownership, and social presence.</p>
+              <div className={"rounded-xl border p-6 " + (
+                enrichResult?.grade === "A" ? "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300" :
+                enrichResult?.grade === "B" ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300" :
+                enrichResult?.grade === "C" ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300" :
+                "bg-white border-slate-200"
+              )}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🧠</span>
+                    <h3 className="text-sm font-bold text-slate-900">AI Lead Intelligence</h3>
+                    {enrichment?.dataSources && enrichment.dataSources.length > 0 && (
+                      <div className="flex gap-1">
+                        {enrichment.dataSources.map((s: string, i: number) => (
+                          <span key={i} className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">{s}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
+                  <button onClick={handleEnrich} disabled={enriching}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg">
+                    {enriching ? "Analyzing..." : enrichment?.rawData ? "Re-verify" : "Verify & Enrich"}
+                  </button>
+                </div>
+
+                {enrichment?.aiSummary && (
+                  <p className="text-sm text-slate-700 leading-relaxed mb-4">{enrichment.aiSummary}</p>
                 )}
-                {enrichment && (
+
+                {(() => {
+                  const data = enrichResult || (enrichment?.rawData && typeof enrichment.rawData === "object" ? enrichment.rawData as any : null);
+                  if (!data) return (
+                    <div className="bg-slate-50 rounded-lg p-4 text-center">
+                      <p className="text-sm text-slate-500">Click <strong>Verify & Enrich</strong> to analyze this contact with PDL and NYC property records.</p>
+                    </div>
+                  );
+                  return (
+                    <div className="space-y-4">
+                      {/* Score */}
+                      {data.signals?.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className={"text-3xl font-black " + (
+                              data.grade === "A" ? "text-emerald-700" : data.grade === "B" ? "text-blue-700" :
+                              data.grade === "C" ? "text-amber-700" : "text-slate-500"
+                            )}>{data.score || 0}</span>
+                            <span className={"text-xl font-black px-2.5 py-1 rounded " + (
+                              data.grade === "A" ? "bg-emerald-200 text-emerald-800" : data.grade === "B" ? "bg-blue-200 text-blue-800" :
+                              data.grade === "C" ? "bg-amber-200 text-amber-800" : "bg-slate-200 text-slate-600"
+                            )}>{data.grade || "?"}</span>
+                          </div>
+                          <div className="space-y-1">
+                            {data.signals.slice(0, 8).map((s: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={s.points >= 10 ? "text-emerald-500" : "text-slate-400"}>{s.points >= 10 ? "🔥" : "✓"}</span>
+                                  <span className="text-slate-700 font-medium">{s.label}</span>
+                                  <span className="text-slate-400 ml-1">{s.detail}</span>
+                                </div>
+                                <span className={"font-bold " + (s.points >= 10 ? "text-emerald-600" : "text-slate-500")}>+{s.points}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Merged Contact Info with Source Badges */}
+                      {data.merged && (
+                        <div className="pt-3 border-t border-slate-200/60">
+                          <div className="flex items-center gap-2 mb-2">
+                            {data.merged.dataSources?.map((s: string, i: number) => (
+                              <span key={i} className={"text-[9px] px-1.5 py-0.5 rounded font-bold " + (
+                                s === "Apollo" ? "bg-indigo-100 text-indigo-700" :
+                                s === "Apollo_Org" ? "bg-violet-100 text-violet-700" :
+                                s === "PDL" ? "bg-blue-100 text-blue-700" :
+                                "bg-slate-100 text-slate-600"
+                              )}>{s}</span>
+                            ))}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                            {data.merged.title && (
+                              <div><span className="text-slate-400">Title:</span> <span className="text-slate-900 font-medium">{data.merged.title}</span></div>
+                            )}
+                            {data.merged.company && (
+                              <div><span className="text-slate-400">Company:</span> <span className="text-slate-900 font-medium">{data.merged.company}</span></div>
+                            )}
+
+                            {/* Emails with source verification */}
+                            {data.merged.emails?.length > 0 && (
+                              <div className="col-span-2">
+                                <span className="text-slate-400">Emails:</span>
+                                <div className="mt-1 space-y-1">
+                                  {data.merged.emails.slice(0, 3).map((em: string, i: number) => {
+                                    const sources = data.merged.emailSources?.[em.toLowerCase()] || [];
+                                    const verified = sources.length > 1;
+                                    return (
+                                      <div key={i} className="flex items-center gap-1.5">
+                                        <a href={"mailto:" + em} className="text-blue-600 hover:underline">{em}</a>
+                                        {verified && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded font-bold">Verified</span>}
+                                        <span className="text-[9px] text-slate-400">{sources.join(" + ")}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Phones with source verification */}
+                            {data.merged.phones?.length > 0 && (
+                              <div className="col-span-2">
+                                <span className="text-slate-400">Phones:</span>
+                                <div className="mt-1 space-y-1">
+                                  {data.merged.phones.slice(0, 3).map((ph: string, i: number) => {
+                                    const clean = ph.replace(/\D/g, "").slice(-10);
+                                    const sources = data.merged.phoneSources?.[clean] || [];
+                                    const verified = sources.length > 1;
+                                    return (
+                                      <div key={i} className="flex items-center gap-1.5">
+                                        <a href={"tel:" + ph} className={"font-bold hover:underline " + (verified ? "text-emerald-700" : "text-slate-900")}>{ph}</a>
+                                        {verified && <span className="text-[9px] bg-emerald-100 text-emerald-700 px-1 py-0.5 rounded font-bold">Verified</span>}
+                                        <span className="text-[9px] text-slate-400">{sources.join(" + ")}</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {data.merged.linkedinUrl && (
+                              <div className="col-span-2">
+                                <a href={data.merged.linkedinUrl.startsWith("http") ? data.merged.linkedinUrl : "https://" + data.merged.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">🔗 LinkedIn Profile</a>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Company Intel (from Apollo Org) */}
+                          {data.merged.companyIndustry && (
+                            <div className="mt-3 pt-2 border-t border-slate-100">
+                              <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">Company Intelligence</p>
+                              <div className="flex items-start gap-2">
+                                {data.merged.companyLogo && (
+                                  <img src={data.merged.companyLogo} alt="" className="w-6 h-6 rounded object-contain border border-slate-200" />
+                                )}
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs flex-1">
+                                  <div><span className="text-slate-400">Industry:</span> <span className="text-slate-700">{data.merged.companyIndustry}</span></div>
+                                  {data.merged.companySize && <div><span className="text-slate-400">Size:</span> <span className="text-slate-700">{data.merged.companySize} employees</span></div>}
+                                  {data.merged.companyRevenue && <div><span className="text-slate-400">Revenue:</span> <span className="text-slate-700">{data.merged.companyRevenue}</span></div>}
+                                  {data.merged.companyWebsite && (
+                                    <div><a href={data.merged.companyWebsite.startsWith("http") ? data.merged.companyWebsite : "https://" + data.merged.companyWebsite} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">🌐 Website</a></div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Fallback: show PDL-only data if no merged data */}
+                      {!data.merged && data.pdl && (
+                        <div className="pt-3 border-t border-slate-200/60">
+                          <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">People Data Labs</span>
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs mt-2">
+                            {data.pdl.jobTitle && <div><span className="text-slate-400">Title:</span> <span className="text-slate-900 font-medium">{data.pdl.jobTitle}</span></div>}
+                            {data.pdl.jobCompany && <div><span className="text-slate-400">Company:</span> <span className="text-slate-900 font-medium">{data.pdl.jobCompany}</span></div>}
+                            {data.pdl.phones?.length > 0 && <div><span className="text-slate-400">Phone:</span> <a href={"tel:" + data.pdl.phones[0]} className="text-emerald-700 font-bold">{data.pdl.phones[0]}</a></div>}
+                            {data.pdl.emails?.length > 0 && <div><span className="text-slate-400">Email:</span> <a href={"mailto:" + data.pdl.emails[0]} className="text-blue-600">{data.pdl.emails[0]}</a></div>}
+                            {data.pdl.linkedin && <div className="col-span-2"><a href={data.pdl.linkedin.startsWith("http") ? data.pdl.linkedin : "https://" + data.pdl.linkedin} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">🔗 LinkedIn</a></div>}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* NYC Properties */}
+                      {data.nycProperties?.length > 0 && (
+                        <div className="pt-3 border-t border-slate-200/60">
+                          <div className="flex items-center gap-1.5 mb-2">
+                            <span className="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-bold">NYC Properties</span>
+                            <span className="text-[10px] text-slate-500">{data.nycProperties.length} found</span>
+                          </div>
+                          <div className="space-y-1">
+                            {data.nycProperties.slice(0, 5).map((prop: any, i: number) => (
+                              <div key={i} className="flex items-center justify-between text-xs bg-slate-50 rounded p-2">
+                                <div>
+                                  <span className="font-medium text-slate-900">{prop.address}</span>
+                                  <span className="text-slate-400 ml-1">{prop.borough}</span>
+                                </div>
+                                <span className="text-indigo-700 font-bold">{prop.units} units</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Legacy enrichment fields */}
+                {enrichment && !enrichResult && !enrichment.rawData && (
                   <div className="grid grid-cols-3 gap-4 mt-5 pt-5 border-t border-slate-100">
                     <InfoField label="Employer" value={enrichment.employer} />
                     <InfoField label="Job Title" value={enrichment.jobTitle} />
                     <InfoField label="Industry" value={enrichment.industry} />
-                    {enrichment.incomeRangeLow && (
-                      <InfoField label="Est. Income" value={`$${(enrichment.incomeRangeLow/1000).toFixed(0)}K - $${((enrichment.incomeRangeHigh || enrichment.incomeRangeLow)/1000).toFixed(0)}K`} />
-                    )}
-                    {enrichment.linkedinUrl && (
-                      <InfoField label="LinkedIn" value={enrichment.linkedinUrl} />
-                    )}
                   </div>
                 )}
               </div>
@@ -519,7 +750,95 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
             ) : null}
           </div>
         )}
+
+        {/* EMAILS TAB */}
+        {activeTab === "emails" && (
+          <div className="max-w-3xl space-y-4">
+            {/* Compose */}
+            {contact.email && (
+              emailComposeOpen ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Send Email to {contact.firstName}</h3>
+                  <div className="space-y-3">
+                    <div className="text-xs text-slate-400">To: {contact.email}</div>
+                    <input value={emailSubject} onChange={e => setEmailSubject(e.target.value)} placeholder="Subject"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <textarea value={emailBody} onChange={e => setEmailBody(e.target.value)} placeholder="Write your message..."
+                      rows={6}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
+                    <div className="flex gap-2">
+                      <button onClick={() => setEmailComposeOpen(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+                      <button onClick={handleSendEmail} disabled={emailSending || !emailSubject}
+                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
+                        {emailSending ? "Sending..." : "Send Email"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setEmailComposeOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg">
+                  ✉️ Compose Email
+                </button>
+              )
+            )}
+
+            {/* Email List */}
+            {contact.emailMessages && contact.emailMessages.length > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 divide-y divide-slate-100">
+                {contact.emailMessages.map(email => (
+                  <div key={email.id} className={`p-4 ${!email.isRead ? "bg-blue-50/30" : ""}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs font-medium ${email.direction === "outbound" ? "text-blue-600" : "text-slate-700"}`}>
+                          {email.direction === "outbound" ? "Sent" : (email.fromName || email.fromEmail)}
+                        </span>
+                        {email.leadSource && email.leadSource !== "unknown" && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 font-medium">{email.leadSource}</span>
+                        )}
+                        {email.sentimentScore && email.sentimentScore >= 4 && (
+                          <span className="text-[10px] font-bold text-red-600">Urgent</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-slate-400">{fmtFull(email.receivedAt)}</span>
+                    </div>
+                    <p className="text-sm font-medium text-slate-900">{email.subject || "(no subject)"}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{email.snippet}</p>
+                    {email.aiSummary && <p className="text-xs text-slate-400 mt-1 italic">AI: {email.aiSummary}</p>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                <p className="text-3xl mb-3">📬</p>
+                <p className="text-sm text-slate-500">No emails linked to this contact.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  <Link href="/messages" className="text-blue-600 hover:underline">Sync Gmail</Link> to see email history.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Contact</h3>
+            <p className="text-sm text-slate-600 mb-1">
+              Are you sure you want to delete <strong>{contact.firstName} {contact.lastName}</strong>?
+            </p>
+            <p className="text-xs text-slate-400 mb-5">This will remove the contact and unlink all associated emails. This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirm(false)} disabled={deleting} className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+              <button onClick={handleDelete} disabled={deleting} className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
+                {deleting ? "Deleting..." : "Delete Contact"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

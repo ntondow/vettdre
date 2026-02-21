@@ -42,6 +42,7 @@ export interface ThreadSummary {
   latestDirection: string;
   latestFromName: string | null;
   latestFromEmail: string;
+  latestToEmails: string[];
   contactId: string | null;
   contactName: string | null;
 }
@@ -58,30 +59,31 @@ export async function getThreads(filters?: {
   isPinned?: boolean;
   isSnoozed?: boolean;
   labelId?: string;
+  gmailFolder?: string;
 }): Promise<ThreadSummary[]> {
   const user = await getUser();
   if (!user) return [];
 
-  const where: any = {
-    orgId: user.orgId,
-    isDeleted: false,
-    isArchived: false,
-  };
+  const folder = filters?.gmailFolder || "INBOX";
+  const where: any = { orgId: user.orgId };
 
-  // By default, exclude snoozed threads (unless specifically filtering for them)
-  if (filters?.isSnoozed) {
-    where.snoozedUntil = { not: null };
-  } else if (!filters?.isSnoozed) {
-    where.OR = where.OR || undefined;
-    // Show threads that are NOT snoozed or whose snooze has expired
-    where.AND = [
-      {
-        OR: [
-          { snoozedUntil: null },
-          { snoozedUntil: { lte: new Date() } },
-        ],
-      },
-    ];
+  if (folder === "INBOX") {
+    where.isDeleted = false;
+    where.isArchived = false;
+    if (filters?.isSnoozed) {
+      where.snoozedUntil = { not: null };
+    } else {
+      where.AND = [
+        {
+          OR: [
+            { snoozedUntil: null },
+            { snoozedUntil: { lte: new Date() } },
+          ],
+        },
+      ];
+    }
+  } else if (folder !== "ALL") {
+    where.labelIds = { has: folder };
   }
 
   if (filters?.search) {
@@ -202,6 +204,7 @@ export async function getThreads(filters?: {
       latestDirection: latest.direction,
       latestFromName: latest.fromName,
       latestFromEmail: latest.fromEmail,
+      latestToEmails: latest.toEmails,
       contactId: latest.contact?.id || first.contact?.id || null,
       contactName: latest.contact ? (latest.contact.firstName + " " + latest.contact.lastName).trim() : first.contact ? (first.contact.firstName + " " + first.contact.lastName).trim() : null,
     });

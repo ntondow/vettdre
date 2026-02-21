@@ -31,7 +31,7 @@ export async function updateContact(contactId: string, formData: FormData) {
       city: (formData.get("city") as string)?.trim() || null,
       state: (formData.get("state") as string)?.trim() || null,
       zip: (formData.get("zip") as string)?.trim() || null,
-      status: (formData.get("status") as string) || "lead",
+      status: ((formData.get("status") as string) || "lead") as any,
       source: (formData.get("source") as string)?.trim() || null,
     },
   });
@@ -124,5 +124,14 @@ export async function updateTags(contactId: string, tags: string[]) {
     data: { tags },
   });
   revalidatePath(`/contacts/${contactId}`);
+  return { success: true };
+}
+
+export async function deleteContact(contactId: string) {
+  const user = await getAuthUser();
+  await prisma.contact.deleteMany({
+    where: { id: contactId, orgId: user.orgId },
+  });
+  revalidatePath("/contacts");
   return { success: true };
 }
