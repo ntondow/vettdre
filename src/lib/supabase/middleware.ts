@@ -20,13 +20,44 @@ export async function updateSession(request: NextRequest) {
     }
   );
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user && !request.nextUrl.pathname.startsWith("/login") && !request.nextUrl.pathname.startsWith("/signup") && !request.nextUrl.pathname.startsWith("/auth") && request.nextUrl.pathname !== "/") {
-    const url = request.nextUrl.clone(); url.pathname = "/login";
+
+  const pathname = request.nextUrl.pathname;
+  const isPublicRoute =
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/signup") ||
+    pathname.startsWith("/auth") ||
+    pathname.startsWith("/pending-approval") ||
+    pathname.startsWith("/book") ||
+    pathname === "/";
+
+  // Redirect unauthenticated users to login (except public pages)
+  if (!user && !isPublicRoute) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
     return NextResponse.redirect(url);
   }
-  if (user && (request.nextUrl.pathname.startsWith("/login") || request.nextUrl.pathname.startsWith("/signup"))) {
-    const url = request.nextUrl.clone(); url.pathname = "/dashboard";
+
+  // Redirect authenticated users away from auth pages
+  if (user && (pathname.startsWith("/login") || pathname.startsWith("/signup"))) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
+
+  // Check account approval for authenticated users on protected routes
+  if (user && !isPublicRoute) {
+    const { data: dbUser } = await supabase
+      .from("users")
+      .select("is_approved")
+      .eq("auth_provider_id", user.id)
+      .single();
+
+    if (!dbUser || !dbUser.is_approved) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/pending-approval";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return supabaseResponse;
 }
