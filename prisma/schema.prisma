@@ -226,6 +226,7 @@ model User {
   brokerage        String?
   invitedBy        String?   @map("invited_by")
   isActive         Boolean   @default(true) @map("is_active")
+  isApproved       Boolean   @default(false) @map("is_approved")
   lastLoginAt      DateTime? @map("last_login_at")
   notificationPrefs Json     @default("{\"email\": true, \"push\": true, \"sms\": false}") @map("notification_prefs")
   createdAt        DateTime  @default(now()) @map("created_at")
