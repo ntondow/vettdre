@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { lookupProperty, searchOwnership, searchByName } from "./actions";
 import { searchNewDevelopments, NewDevelopment } from "./new-development-actions";
 import { createContactFromBuilding } from "./building-profile-actions";
 import BuildingDetail from "./building-detail";
 import BuildingProfile from "./building-profile";
 import { getLists, addBuildingToList } from "../prospecting/actions";
+import { getNeighborhoodsByBorough, getNeighborhoodNameByZip, getZipCodesForNeighborhoods } from "@/lib/neighborhoods";
 import dynamic from "next/dynamic";
 const MapSearch = dynamic(() => import("./map-search"), { ssr: false, loading: () => <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div></div> });
 
@@ -57,6 +58,13 @@ export default function MarketIntelSearch() {
   const [pitchTo, setPitchTo] = useState("");
   const [pitchSubject, setPitchSubject] = useState("");
   const [pitchBody, setPitchBody] = useState("");
+
+  // Neighborhood filter
+  const [ownerBorough, setOwnerBorough] = useState("");
+  const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
+  const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
+  const [showNeighborhoodDropdown, setShowNeighborhoodDropdown] = useState(false);
+  const neighborhoodRef = useRef<HTMLDivElement>(null);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
   const fmtDate = (d: string | null) => {
@@ -157,13 +165,37 @@ export default function MarketIntelSearch() {
     }
   };
 
+  // Close neighborhood dropdown on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (neighborhoodRef.current && !neighborhoodRef.current.contains(e.target as Node)) {
+        setShowNeighborhoodDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const handleOwnershipSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setOwnerDetailBuilding(null);
     try {
-      setOwnerResults(await searchOwnership(new FormData(e.currentTarget)));
+      const fd = new FormData(e.currentTarget);
+      // If neighborhoods selected, override zip with neighborhood zip codes
+      if (selectedNeighborhoods.length > 0) {
+        const zips = getZipCodesForNeighborhoods(selectedNeighborhoods);
+        if (zips.length > 0) fd.set("zip", zips[0]); // Primary zip — server will use it
+        // We'll filter client-side by all zips after
+      }
+      const results = await searchOwnership(fd);
+      // Client-side filter by neighborhood zips if multiple
+      if (selectedNeighborhoods.length > 0 && results?.buildings) {
+        const allZips = new Set(getZipCodesForNeighborhoods(selectedNeighborhoods));
+        results.buildings = results.buildings.filter((b: any) => !b.zip || allZips.has(b.zip));
+      }
+      setOwnerResults(results);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -504,13 +536,73 @@ export default function MarketIntelSearch() {
                   <p className="text-sm text-slate-500 mb-4">Search HPD-registered buildings. Click any building for AI owner analysis.</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Borough</label>
-                      <select name="borough" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white">
+                      <select name="borough" value={ownerBorough} onChange={(e) => { setOwnerBorough(e.target.value); setSelectedNeighborhoods([]); setNeighborhoodSearch(""); }} className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white">
                         <option value="">Any</option><option value="Manhattan">Manhattan</option><option value="Brooklyn">Brooklyn</option>
                         <option value="Queens">Queens</option><option value="Bronx">Bronx</option><option value="Staten Island">Staten Island</option>
                       </select>
                     </div>
+                    <div ref={neighborhoodRef} className="relative"><label className="block text-sm font-medium text-slate-700 mb-1">Neighborhood</label>
+                      <div
+                        onClick={() => ownerBorough && setShowNeighborhoodDropdown(!showNeighborhoodDropdown)}
+                        className={`w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white cursor-pointer flex items-center gap-1 min-h-[42px] ${!ownerBorough ? "text-slate-400" : "text-slate-700"}`}
+                      >
+                        {!ownerBorough ? (
+                          <span>Select borough first</span>
+                        ) : selectedNeighborhoods.length === 0 ? (
+                          <span className="text-slate-400">Any neighborhood</span>
+                        ) : selectedNeighborhoods.length <= 2 ? (
+                          <span className="truncate">{selectedNeighborhoods.join(", ")}</span>
+                        ) : (
+                          <span>{selectedNeighborhoods.length} selected</span>
+                        )}
+                        <svg className="w-4 h-4 ml-auto text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+                      </div>
+                      {showNeighborhoodDropdown && ownerBorough && (() => {
+                        const neighborhoods = getNeighborhoodsByBorough(ownerBorough);
+                        const filtered = neighborhoodSearch
+                          ? neighborhoods.filter(n => n.name.toLowerCase().includes(neighborhoodSearch.toLowerCase()))
+                          : neighborhoods;
+                        return (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-64 overflow-hidden flex flex-col">
+                            <div className="p-2 border-b border-slate-100">
+                              <input
+                                value={neighborhoodSearch}
+                                onChange={(e) => setNeighborhoodSearch(e.target.value)}
+                                placeholder="Search neighborhoods..."
+                                className="w-full px-2.5 py-1.5 border border-slate-200 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                autoFocus
+                              />
+                            </div>
+                            {selectedNeighborhoods.length > 0 && (
+                              <button onClick={() => setSelectedNeighborhoods([])} className="px-3 py-1.5 text-xs text-blue-600 hover:bg-blue-50 text-left border-b border-slate-100">
+                                Clear all ({selectedNeighborhoods.length})
+                              </button>
+                            )}
+                            <div className="overflow-y-auto max-h-48">
+                              {filtered.map(n => (
+                                <label key={n.name} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedNeighborhoods.includes(n.name)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedNeighborhoods([...selectedNeighborhoods, n.name]);
+                                      else setSelectedNeighborhoods(selectedNeighborhoods.filter(s => s !== n.name));
+                                    }}
+                                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  <span>{n.name}</span>
+                                </label>
+                              ))}
+                              {filtered.length === 0 && (
+                                <p className="px-3 py-4 text-sm text-slate-400 text-center">No neighborhoods match</p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">ZIP code</label>
-                      <input name="zip" placeholder="e.g., 11211" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input name="zip" placeholder="e.g., 11211" disabled={selectedNeighborhoods.length > 0} className={`w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${selectedNeighborhoods.length > 0 ? "bg-slate-50 text-slate-400" : ""}`} />
                     </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Street name</label>
                       <input name="street" placeholder="e.g., Bedford Ave" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -554,7 +646,10 @@ export default function MarketIntelSearch() {
                             <div className="flex items-start justify-between">
                               <div>
                                 <h3 className="text-base font-semibold text-slate-900 group-hover:text-blue-600">{b.address}</h3>
-                                <p className="text-sm text-slate-500 mt-0.5">{b.boro} • ZIP: {b.zip} • Block {b.block}, Lot {b.lot}</p>
+                                <p className="text-sm text-slate-500 mt-0.5">
+                                  {b.zip ? (() => { const nh = getNeighborhoodNameByZip(b.zip); return nh ? `${nh}, ${b.boro}` : b.boro; })() : b.boro}
+                                  {" "}• ZIP: {b.zip} • Block {b.block}, Lot {b.lot}
+                                </p>
                               </div>
                               <div className="flex items-center gap-3">
                                 {b.totalUnits > 0 && (

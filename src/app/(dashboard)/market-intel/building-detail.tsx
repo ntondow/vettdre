@@ -7,6 +7,7 @@ import BuildingProfile from "./building-profile";
 import { analyzeOwnership } from "./ai-analysis";
 import { addBuildingToList } from "../prospecting/actions";
 import { getLists } from "../prospecting/actions";
+import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 
 interface Props {
   building: any;
@@ -175,7 +176,8 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
           <div>
             <h2 className="text-2xl font-bold text-slate-900">{building.address}</h2>
             <p className="text-base text-slate-500 mt-1">
-              {building.boro} • ZIP: {building.zip} • Block {building.block}, Lot{" "}
+              {building.zip ? (() => { const nh = getNeighborhoodNameByZip(building.zip); return nh ? `${nh}, ${building.boro}` : building.boro; })() : building.boro}
+              {" "}• ZIP: {building.zip} • Block {building.block}, Lot{" "}
               {building.lot}
             </p>
           </div>

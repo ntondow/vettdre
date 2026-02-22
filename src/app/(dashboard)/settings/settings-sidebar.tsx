@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+const ADMIN_EMAIL = "nathan@ntrec.co";
+
 const NAV = [
   {
     group: "Account",
@@ -51,17 +53,27 @@ const NAV = [
   },
 ];
 
-const ALL_ITEMS = NAV.flatMap((g) => g.items);
+const ADMIN_NAV = {
+  group: "Admin",
+  items: [
+    { href: "/settings/admin", icon: "🛡️", label: "Dashboard" },
+    { href: "/settings/admin/users", icon: "👥", label: "Manage Users" },
+    { href: "/settings/admin/waitlist", icon: "➕", label: "Add User" },
+  ],
+};
 
-export default function SettingsSidebar() {
+export default function SettingsSidebar({ userEmail }: { userEmail?: string }) {
   const pathname = usePathname();
+  const isAdmin = userEmail === ADMIN_EMAIL;
+  const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
+  const allItems = nav.flatMap((g) => g.items);
 
   return (
     <>
       {/* Mobile: horizontal scrolling pills */}
       <div className="md:hidden overflow-x-auto no-scrollbar bg-slate-50 border-b border-slate-200 px-3 py-2">
         <div className="flex gap-1.5">
-          {ALL_ITEMS.map((item) => {
+          {allItems.map((item) => {
             const active = pathname === item.href;
             return (
               <Link
@@ -83,7 +95,7 @@ export default function SettingsSidebar() {
 
       {/* Desktop: vertical sidebar */}
       <nav className="hidden md:block w-[220px] flex-shrink-0 bg-slate-50 border-r border-slate-200 overflow-y-auto py-4">
-        {NAV.map((group) => (
+        {nav.map((group) => (
           <div key={group.group} className="mb-4">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-4 py-1.5">
               {group.group}

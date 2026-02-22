@@ -7,23 +7,40 @@ import { getUnreadCount } from "@/app/(dashboard)/messages/actions";
 import { getFollowUpCount } from "@/app/(dashboard)/messages/follow-up-actions";
 import { useSidebar } from "./sidebar-context";
 
-const nav = [
+interface NavItem {
+  name: string;
+  href: string;
+  icon: string;
+  badge?: boolean;
+  locked?: boolean;
+}
+
+const nav: { label: string; items: NavItem[] }[] = [
   { label: "Main", items: [
     { name: "Dashboard", href: "/dashboard", icon: "📊" },
     { name: "Contacts", href: "/contacts", icon: "👥" },
-    { name: "Pipeline", href: "/pipeline", icon: "📋" },
-    { name: "Properties", href: "/properties", icon: "🏠" },
-  ]},
-  { label: "Activity", items: [
-    { name: "Tasks", href: "/tasks", icon: "✅" },
     { name: "Calendar", href: "/calendar", icon: "📅" },
     { name: "Messages", href: "/messages", icon: "📬", badge: true },
   ]},
+  { label: "Deals", items: [
+    { name: "Pipeline", href: "/pipeline", icon: "📋" },
+    { name: "Properties", href: "/properties", icon: "🏠" },
+  ]},
   { label: "Intelligence", items: [
-    { name: "AI Insights", href: "/insights", icon: "🧠" },
-    { name: "Analytics", href: "/analytics", icon: "📈" },
-    { name: "Prospecting", href: "/prospecting", icon: "🎯" },
     { name: "Market Intel", href: "/market-intel", icon: "🔍" },
+    { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+  ]},
+  { label: "Outreach", items: [
+    { name: "Campaigns", href: "/settings/billing", icon: "📣", locked: true },
+    { name: "Sequences", href: "/settings/billing", icon: "🔄", locked: true },
+  ]},
+  { label: "Assets", items: [
+    { name: "Portfolios", href: "/portfolios", icon: "🏢" },
+    { name: "Comp Analysis", href: "/settings/billing", icon: "📈", locked: true },
+  ]},
+  { label: "Capital", items: [
+    { name: "Financing", href: "/settings/billing", icon: "💰", locked: true },
+    { name: "Investors", href: "/settings/billing", icon: "🤝", locked: true },
   ]},
   { label: "Settings", items: [
     { name: "Settings", href: "/settings", icon: "⚙️" },
@@ -56,7 +73,7 @@ export default function Sidebar() {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-6">
+      <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-5">
         {nav.map((group) => (
           <div key={group.label}>
             {!collapsed && (
@@ -64,16 +81,28 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                const isActive = pathname.startsWith(item.href);
+                const isActive = !item.locked && pathname.startsWith(item.href);
                 return (
                   <Link key={item.name} href={item.href} title={collapsed ? item.name : undefined}
                     className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group ${
                       collapsed ? "justify-center" : ""
-                    } ${isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"}`}>
-                    <span className={`${collapsed ? "text-lg" : "text-base"}`}>{item.icon}</span>
-                    {!collapsed && <span className="flex-1">{item.name}</span>}
+                    } ${item.locked
+                      ? "text-slate-400 hover:text-slate-500 hover:bg-slate-50"
+                      : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                    }`}>
+                    <span className={`${collapsed ? "text-lg" : "text-base"} ${item.locked ? "opacity-50" : ""}`}>{item.icon}</span>
+                    {!collapsed && (
+                      <>
+                        <span className="flex-1">{item.name}</span>
+                        {item.locked && (
+                          <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                        )}
+                      </>
+                    )}
                     {/* Badge */}
-                    {!collapsed && "badge" in item && item.badge && (unread > 0 || followUps > 0) && (
+                    {!collapsed && item.badge && (unread > 0 || followUps > 0) && (
                       <span className="flex items-center gap-1">
                         {unread > 0 && (
                           <span className="min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
@@ -88,13 +117,17 @@ export default function Sidebar() {
                       </span>
                     )}
                     {/* Collapsed badge dot */}
-                    {collapsed && "badge" in item && item.badge && unread > 0 && (
+                    {collapsed && item.badge && unread > 0 && (
                       <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                    )}
+                    {/* Collapsed lock dot */}
+                    {collapsed && item.locked && (
+                      <span className="absolute top-1 right-1 w-2 h-2 bg-slate-300 rounded-full" />
                     )}
                     {/* Tooltip on hover when collapsed */}
                     {collapsed && (
                       <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                        {item.name}
+                        {item.name}{item.locked ? " (Coming Soon)" : ""}
                       </span>
                     )}
                   </Link>

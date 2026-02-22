@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding } from "./building-profile-actions";
 import { skipTrace } from "./tracerfy";
+import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 
 interface Props {
   boroCode: string;
@@ -140,6 +141,8 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const p = data?.pluto;
   const displayAddr = p?.address || address || `Block ${block}, Lot ${lot}`;
   const displayBorough = p?.borough || borough || ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(boroCode)] || "";
+  const displayZip = p?.zipCode || data?.registrations?.[0]?.zip || "";
+  const displayNeighborhood = displayZip ? getNeighborhoodNameByZip(displayZip) : null;
 
   return (
     <div className="space-y-4">
@@ -174,7 +177,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-xl font-bold text-slate-900">{displayAddr}</h2>
-                <p className="text-sm text-slate-500 mt-1">{displayBorough} • Block {block}, Lot {lot}</p>
+                <p className="text-sm text-slate-500 mt-1">{displayNeighborhood ? `${displayNeighborhood}, ${displayBorough}` : displayBorough} • Block {block}, Lot {lot}</p>
               </div>
               {data && !crmResult && (
                 <button
