@@ -5,6 +5,8 @@ import { fetchPropertiesInBounds, geocodeAddress, fetchNewDevelopmentsInBounds }
 import type { MapNewDevelopment } from "./map-actions";
 import { buildOwnershipGraph } from "./graph-engine";
 import BuildingProfile from "./building-profile";
+import { getNeighborhoodsByBorough, getNeighborhoodByZip, getZipCodesForNeighborhoods, getAllBoroughs, type Neighborhood } from "@/lib/neighborhoods";
+import NeighborhoodDropdown from "./neighborhood-dropdown";
 
 const fmtPrice = (n: number) => n > 0 ? "$" + n.toLocaleString() : "—";
 
@@ -13,6 +15,7 @@ interface MapProperty {
   yearBuilt: number; numFloors: number; assessTotal: number; bldgClass: string;
   zoneDist: string; boroCode: string; block: string; lot: string;
   lat: number; lng: number; bldgArea: number; lotArea: number; borough: string;
+  zip: string;
 }
 
 interface Filters {
@@ -46,6 +49,8 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   const newDevMarkersRef = useRef<any>(null);
   const fetchTimeoutRef = useRef<any>(null);
   const searchHighlightRef = useRef<any>(null);
+  const [mapBorough, setMapBorough] = useState("");
+  const [mapNeighborhoods, setMapNeighborhoods] = useState<string[]>([]);
 
   // Load Leaflet dynamically (client-side only)
   useEffect(() => {
@@ -257,6 +262,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
             bldgArea: 0,
             lotArea: 0,
             borough: pp.borough || "",
+            zip: pp.zipcode || pp.zip || "",
           }));
         setPortfolioMarkers(portfolioProps);
 
@@ -478,18 +484,22 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   const isPinnedMatch = (p: MapProperty) =>
     pinnedSearch && p.address.toLowerCase().includes(pinnedSearch.toLowerCase());
 
-  const sortedProperties = [...properties].sort((a, b) => {
-    const aPinned = isPinnedMatch(a);
-    const bPinned = isPinnedMatch(b);
-    if (aPinned && !bPinned) return -1;
-    if (!aPinned && bPinned) return 1;
-    switch (sortBy) {
-      case "value": return b.assessTotal - a.assessTotal;
-      case "year": return b.yearBuilt - a.yearBuilt;
-      case "floors": return b.numFloors - a.numFloors;
-      default: return b.unitsRes - a.unitsRes;
-    }
-  });
+  const neighborhoodZips = mapNeighborhoods.length > 0 ? new Set(getZipCodesForNeighborhoods(mapNeighborhoods)) : null;
+
+  const sortedProperties = [...properties]
+    .filter(p => !neighborhoodZips || !p.zip || neighborhoodZips.has(p.zip))
+    .sort((a, b) => {
+      const aPinned = isPinnedMatch(a);
+      const bPinned = isPinnedMatch(b);
+      if (aPinned && !bPinned) return -1;
+      if (!aPinned && bPinned) return 1;
+      switch (sortBy) {
+        case "value": return b.assessTotal - a.assessTotal;
+        case "year": return b.yearBuilt - a.yearBuilt;
+        case "floors": return b.numFloors - a.numFloors;
+        default: return b.unitsRes - a.unitsRes;
+      }
+    });
 
   const handleFilterChange = (key: keyof Filters, value: string) => {
     const num = value === "" ? undefined : parseInt(value);
@@ -502,6 +512,22 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
 
   const clearFilters = () => {
     setFilters({});
+    setMapBorough("");
+    setMapNeighborhoods([]);
+  };
+
+  const handleMapNeighborhoodChange = (selected: string[]) => {
+    setMapNeighborhoods(selected);
+    if (selected.length > 0 && leafletMapRef.current && mapBorough) {
+      // Find the selected neighborhoods and compute center
+      const neighborhoods = getNeighborhoodsByBorough(mapBorough);
+      const matched = neighborhoods.filter(n => selected.includes(n.name));
+      if (matched.length > 0) {
+        const avgLat = matched.reduce((sum, n) => sum + n.lat, 0) / matched.length;
+        const avgLng = matched.reduce((sum, n) => sum + n.lng, 0) / matched.length;
+        leafletMapRef.current.setView([avgLat, avgLng], selected.length === 1 ? 15 : 14);
+      }
+    }
   };
 
   const activeFilterCount = Object.values(filters).filter(v => v !== undefined).length;
@@ -635,12 +661,30 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                 </select>
               </div>
             </div>
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-1.5 mt-1.5">
+              <div>
+                <label className="text-[10px] text-slate-500 font-medium uppercase">Borough</label>
+                <select value={mapBorough}
+                  onChange={e => { setMapBorough(e.target.value); setMapNeighborhoods([]); }}
+                  className="w-full mt-0.5 px-2 py-1 text-xs border border-slate-200 rounded bg-white">
+                  <option value="">Any</option>
+                  <option value="Manhattan">Manhattan</option>
+                  <option value="Brooklyn">Brooklyn</option>
+                  <option value="Queens">Queens</option>
+                  <option value="Bronx">Bronx</option>
+                  <option value="Staten Island">Staten Island</option>
+                </select>
+              </div>
+              <div>
+                <NeighborhoodDropdown compact borough={mapBorough} selected={mapNeighborhoods} onChange={handleMapNeighborhoodChange} />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-1.5">
               <button onClick={loadProperties}
                 className="flex-1 px-2 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-semibold rounded transition-colors">
                 Apply
               </button>
-              {activeFilterCount > 0 && (
+              {(activeFilterCount > 0 || mapNeighborhoods.length > 0) && (
                 <button onClick={clearFilters}
                   className="px-2 py-1.5 bg-white border border-slate-200 text-slate-500 text-[11px] font-medium rounded hover:bg-slate-50">
                   Clear
@@ -674,7 +718,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                 {/* Address Header */}
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 leading-tight">{selectedProperty.address}</h3>
-                  <p className="text-xs text-slate-400 mt-0.5">{selectedProperty.borough} · Blk {selectedProperty.block}, Lot {selectedProperty.lot}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{selectedProperty.zip ? (() => { const nh = getNeighborhoodByZip(selectedProperty.zip); return nh ? `${nh.name}, ${selectedProperty.borough}` : selectedProperty.borough; })() : selectedProperty.borough} · Blk {selectedProperty.block}, Lot {selectedProperty.lot}</p>
                 </div>
 
                 {/* Key Stats - 3 columns, compact */}
@@ -859,7 +903,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                     )}>{p.unitsRes} units</span>
                   </div>
                   <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
-                    <span>{p.borough}</span>
+                    <span>{p.zip ? (() => { const nh = getNeighborhoodByZip(p.zip); return nh ? `${nh.name}, ${p.borough}` : p.borough; })() : p.borough}</span>
                     <span>{p.numFloors} fl</span>
                     <span>{p.yearBuilt || "—"}</span>
                     <span className="ml-auto font-medium text-slate-700">{fmtPrice(p.assessTotal)}</span>
@@ -1036,6 +1080,22 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                     <option value="M">Manufacturing</option>
                   </select>
                 </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 font-medium">Borough</label>
+                <select value={mapBorough}
+                  onChange={e => { setMapBorough(e.target.value); setMapNeighborhoods([]); }}
+                  className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-white">
+                  <option value="">Any</option>
+                  <option value="Manhattan">Manhattan</option>
+                  <option value="Brooklyn">Brooklyn</option>
+                  <option value="Queens">Queens</option>
+                  <option value="Bronx">Bronx</option>
+                  <option value="Staten Island">Staten Island</option>
+                </select>
+              </div>
+              <div>
+                <NeighborhoodDropdown borough={mapBorough} selected={mapNeighborhoods} onChange={handleMapNeighborhoodChange} />
               </div>
               <div className="flex gap-3 pt-2">
                 {activeFilterCount > 0 && (

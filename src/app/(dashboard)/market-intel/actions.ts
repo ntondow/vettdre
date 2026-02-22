@@ -50,7 +50,257 @@ const BORO_CODE: Record<string, string> = {
 };
 
 // ============================================================
-// PROPERTY SEARCH
+// ADDRESS ABBREVIATION NORMALIZATION
+// ============================================================
+const STREET_ABBREVS: Record<string, string> = {
+  "ST": "STREET", "AVE": "AVENUE", "AV": "AVENUE", "BLVD": "BOULEVARD",
+  "DR": "DRIVE", "PL": "PLACE", "CT": "COURT", "RD": "ROAD",
+  "LN": "LANE", "TER": "TERRACE", "PKWY": "PARKWAY", "CIR": "CIRCLE",
+  "HWY": "HIGHWAY", "SQ": "SQUARE", "EXPY": "EXPRESSWAY", "TPKE": "TURNPIKE",
+  "N": "NORTH", "S": "SOUTH", "E": "EAST", "W": "WEST",
+};
+
+function normalizeAddress(raw: string): string {
+  const upper = raw.toUpperCase().trim();
+  return upper.split(/\s+/).map(w => STREET_ABBREVS[w] || w).join(" ");
+}
+
+// ============================================================
+// ADDRESS TYPEAHEAD — PLUTO-powered search
+// ============================================================
+export interface AddressSuggestion {
+  address: string;
+  borough: string;
+  boroCode: string;
+  block: string;
+  lot: string;
+  zip: string;
+  unitsRes: number;
+  yearBuilt: number;
+  numFloors: number;
+  bldgClass: string;
+  ownerName: string;
+  assessTotal: number;
+  bldgArea: number;
+  lotArea: number;
+  zoneDist: string;
+}
+
+export async function searchAddresses(query: string): Promise<AddressSuggestion[]> {
+  const trimmed = query.trim();
+  if (trimmed.length < 3) return [];
+
+  // Detect BBL format: 10-digit number (e.g., 1006340001) or B-Block-Lot (e.g., 1-634-1)
+  const bblMatch = trimmed.match(/^(\d)[\s-]?(\d{1,5})[\s-]?(\d{1,4})$/);
+  const bbl10 = trimmed.match(/^(\d)(\d{5})(\d{4})$/);
+
+  if (bblMatch || bbl10) {
+    const m = bblMatch || bbl10;
+    const boro = m![1];
+    const block = bblMatch ? m![2] : m![2];
+    const lot = bblMatch ? m![3] : m![3];
+    try {
+      const url = new URL(`${BASE}/${PLUTO_ID}.json`);
+      url.searchParams.set("$where", `borocode='${boro}' AND block='${block.replace(/^0+/, "")}' AND lot='${lot.replace(/^0+/, "")}'`);
+      url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,zipcode,bldgarea,lotarea");
+      url.searchParams.set("$limit", "5");
+      const res = await fetch(url.toString());
+      if (!res.ok) return [];
+      const data = await res.json();
+      return data.map((p: any) => ({
+        address: p.address || "",
+        borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+        boroCode: p.borocode || "",
+        block: p.block || "",
+        lot: p.lot || "",
+        zip: p.zipcode || "",
+        unitsRes: parseInt(p.unitsres || "0"),
+        yearBuilt: parseInt(p.yearbuilt || "0"),
+        numFloors: parseInt(p.numfloors || "0"),
+        bldgClass: p.bldgclass || "",
+        ownerName: p.ownername || "",
+        assessTotal: parseInt(p.assesstot || "0"),
+        bldgArea: parseInt(p.bldgarea || "0"),
+        lotArea: parseInt(p.lotarea || "0"),
+        zoneDist: p.zonedist1 || "",
+      }));
+    } catch { return []; }
+  }
+
+  // Normal address search — normalize abbreviations
+  const normalized = normalizeAddress(trimmed);
+  const parts = normalized.split(/\s+/);
+  const houseNum = parts[0];
+  const streetPart = parts.slice(1).join(" ");
+
+  // Build search: try house number match + street name fragment
+  const conditions: string[] = [];
+  if (/^\d+$/.test(houseNum) && streetPart.length > 0) {
+    // User typed something like "350 PARK AVENUE"
+    conditions.push(`upper(address) like '${houseNum} ${streetPart}%'`);
+  } else {
+    // User typed just a street name or partial
+    conditions.push(`upper(address) like '%${normalized}%'`);
+  }
+
+  try {
+    const url = new URL(`${BASE}/${PLUTO_ID}.json`);
+    url.searchParams.set("$where", conditions.join(" AND "));
+    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,zipcode,bldgarea,lotarea");
+    url.searchParams.set("$limit", "12");
+    url.searchParams.set("$order", "unitsres DESC");
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+
+    // Deduplicate by address+borough
+    const seen = new Set<string>();
+    return data
+      .map((p: any) => ({
+        address: p.address || "",
+        borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+        boroCode: p.borocode || "",
+        block: p.block || "",
+        lot: p.lot || "",
+        zip: p.zipcode || "",
+        unitsRes: parseInt(p.unitsres || "0"),
+        yearBuilt: parseInt(p.yearbuilt || "0"),
+        numFloors: parseInt(p.numfloors || "0"),
+        bldgClass: p.bldgclass || "",
+        ownerName: p.ownername || "",
+        assessTotal: parseInt(p.assesstot || "0"),
+        bldgArea: parseInt(p.bldgarea || "0"),
+        lotArea: parseInt(p.lotarea || "0"),
+        zoneDist: p.zonedist1 || "",
+      }))
+      .filter((s: AddressSuggestion) => {
+        const key = `${s.address}-${s.boroCode}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================
+// PROPERTY LOOKUP BY BBL — direct block/lot query
+// ============================================================
+export async function lookupPropertyByBBL(boroCode: string, block: string, lot: string) {
+  const borough = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(boroCode)] || "";
+
+  // Get PLUTO data for this lot
+  let pluto: any = null;
+  try {
+    const url = new URL(`${BASE}/${PLUTO_ID}.json`);
+    url.searchParams.set("$where", `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`);
+    url.searchParams.set("$limit", "1");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      if (data.length > 0) pluto = data[0];
+    }
+  } catch {}
+
+  const address = pluto?.address || `Block ${block}, Lot ${lot}`;
+  const streetName = (pluto?.address || "").replace(/^\d+\s*/, "").toUpperCase();
+  const houseNum = (pluto?.address || "").split(/\s+/)[0] || "";
+
+  let sales: any[] = [], permits: any[] = [], violations: any[] = [];
+
+  // SALES by borough + block/lot
+  try {
+    const url = new URL(`${BASE}/${SALES_ID}.json`);
+    url.searchParams.set("$where", `borough='${boroCode}' AND block='${block}' AND lot='${lot}'`);
+    url.searchParams.set("$order", "sale_date DESC");
+    url.searchParams.set("$limit", "25");
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const data = await res.json();
+      sales = data.filter((r: any) => parseInt((r.sale_price || "0").replace(/,/g, "")) > 1000).map((r: any) => ({
+        address: r.address || "", apartmentNumber: r.apartment_number || null, neighborhood: r.neighborhood || "",
+        borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(r.borough)] || "",
+        buildingClass: r.building_class_category || "", salePrice: parseInt((r.sale_price || "0").replace(/,/g, "")),
+        saleDate: r.sale_date || "", grossSqft: parseInt((r.gross_square_feet || "0").replace(/,/g, "")),
+        landSqft: parseInt((r.land_square_feet || "0").replace(/,/g, "")), yearBuilt: parseInt(r.year_built || "0"),
+        totalUnits: parseInt(r.total_units || "0"), residentialUnits: parseInt(r.residential_units || "0"),
+        commercialUnits: parseInt(r.commercial_units || "0"), zipCode: r.zip_code || "", block: r.block || "", lot: r.lot || "",
+      }));
+    }
+  } catch (err) { console.error("BBL Sales error:", err); }
+
+  // PERMITS by address
+  if (houseNum && streetName) {
+    try {
+      const url = new URL(`${BASE}/${PERMITS_ID}.json`);
+      url.searchParams.set("$where", `house__='${houseNum}' AND upper(street_name) like '%${streetName}%'`);
+      url.searchParams.set("$order", "filing_date DESC");
+      url.searchParams.set("$limit", "20");
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        permits = (await res.json()).map((r: any) => ({
+          jobNumber: r.job__ || "", jobType: r.job_type || "", jobDescription: r.job_description || r.job_status_descrp || "",
+          filingDate: r.filing_date || r.latest_action_date || "", issuanceDate: r.issuance_date || null,
+          expirationDate: r.expiration_date || null, status: r.job_status_descrp || r.job_status || "",
+          ownerName: r.owner_s_last_name ? `${r.owner_s_first_name || ""} ${r.owner_s_last_name}`.trim() : (r.owner_s_business_name || null),
+          estimatedCost: r.estimated_job_cost ? parseFloat(String(r.estimated_job_cost).replace(/,/g, "")) : null,
+        }));
+      }
+    } catch (err) { console.error("BBL Permits error:", err); }
+  }
+
+  // VIOLATIONS by address
+  if (houseNum && streetName) {
+    try {
+      const url = new URL(`${BASE}/${VIOLATIONS_ID}.json`);
+      url.searchParams.set("$where", `house_number='${houseNum}' AND upper(street) like '%${streetName}%'`);
+      url.searchParams.set("$order", "issue_date DESC");
+      url.searchParams.set("$limit", "20");
+      const res = await fetch(url.toString());
+      if (res.ok) {
+        violations = (await res.json()).map((r: any) => ({
+          violationNumber: r.violation_number || r.isn_dob_bis_viol || "", violationType: r.violation_type || r.violation_type_code || "",
+          violationCategory: r.violation_category || "", description: r.description || "", issueDate: r.issue_date || "",
+          dispositionDate: r.disposition_date || null, dispositionComments: r.disposition_comments || null,
+          status: r.disposition_date ? "Resolved" : "Open",
+        }));
+      }
+    } catch (err) { console.error("BBL Violations error:", err); }
+  }
+
+  const buildingMap = new Map<string, any>();
+  // Create a building entry from PLUTO if we have it
+  if (pluto) {
+    buildingMap.set(address, {
+      address, neighborhood: "", borough, zipCode: pluto.zipcode || "",
+      buildingClass: pluto.bldgclass || "", yearBuilt: parseInt(pluto.yearbuilt || "0"),
+      totalUnits: parseInt(pluto.unitstotal || pluto.unitsres || "0"),
+      grossSqft: parseInt(pluto.bldgarea || "0"), landSqft: parseInt(pluto.lotarea || "0"),
+      block, lot, salesCount: 0, lastSalePrice: 0, lastSaleDate: "", sales: [] as any[],
+    });
+  }
+
+  sales.forEach(s => {
+    const key = s.address.replace(/,.*$/, "").trim() || address;
+    if (!buildingMap.has(key)) {
+      buildingMap.set(key, { address: key, neighborhood: s.neighborhood, borough: s.borough, zipCode: s.zipCode,
+        buildingClass: s.buildingClass, yearBuilt: s.yearBuilt, totalUnits: s.totalUnits, grossSqft: s.grossSqft,
+        landSqft: s.landSqft, block: s.block, lot: s.lot, salesCount: 0, lastSalePrice: 0, lastSaleDate: "", sales: [] as any[] });
+    }
+    const b = buildingMap.get(key)!;
+    b.salesCount++; b.sales.push(s);
+    if (!b.lastSaleDate || s.saleDate > b.lastSaleDate) { b.lastSalePrice = s.salePrice; b.lastSaleDate = s.saleDate; }
+    if (s.yearBuilt > b.yearBuilt) b.yearBuilt = s.yearBuilt;
+    if (s.totalUnits > b.totalUnits) b.totalUnits = s.totalUnits;
+    if (s.grossSqft > b.grossSqft) b.grossSqft = s.grossSqft;
+  });
+
+  return { sales, permits, violations, buildings: Array.from(buildingMap.values()).sort((a, b) => b.salesCount - a.salesCount), query: { address, borough, zip: pluto?.zipcode || "" } };
+}
+
+// ============================================================
+// PROPERTY SEARCH (legacy form-based)
 // ============================================================
 export async function lookupProperty(formData: FormData) {
   const rawAddress = (formData.get("address") as string).trim();

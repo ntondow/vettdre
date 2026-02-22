@@ -98,7 +98,7 @@ export async function fetchPropertiesInBounds(
   try {
     const url = new URL(NYC + "/" + PLUTO + ".json");
     url.searchParams.set("$where", conditions.join(" AND "));
-    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea");
+    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea,zipcode");
     url.searchParams.set("$limit", "400");
     url.searchParams.set("$order", "unitsres DESC");
 
@@ -125,6 +125,7 @@ export async function fetchPropertiesInBounds(
       bldgArea: parseInt(p.bldgarea || "0"),
       lotArea: parseInt(p.lotarea || "0"),
       borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+      zip: p.zipcode || "",
     })).filter((p: any) => p.lat !== 0 && p.lng !== 0)
       .filter((p: any) => filters?.excludePublic ? !checkPublicOwner(p.ownerName) : true);
 
