@@ -60,6 +60,16 @@ export async function addNote(contactId: string, body: string) {
   return { success: true };
 }
 
+export async function updateContactTypeData(contactId: string, typeData: any) {
+  const user = await getAuthUser();
+  await prisma.contact.updateMany({
+    where: { id: contactId, orgId: user.orgId },
+    data: { typeData },
+  });
+  revalidatePath(`/contacts/${contactId}`);
+  return { success: true };
+}
+
 export async function logInteraction(contactId: string, type: string, subject: string, body: string) {
   const user = await getAuthUser();
   await prisma.activity.create({

@@ -1,169 +1,158 @@
 "use server";
 
 // ============================================================
-// AI Lead Scoring Engine
+// Data Confidence Scoring Engine
 // ============================================================
-export interface LeadScore {
+export interface ConfidenceFactor {
+  name: string;
+  points: number;
+  maxPoints: number;
+  source: string;
+  matched: boolean;
+}
+
+export interface ConfidenceScoreBreakdown {
   total: number; // 0-100
   grade: "A" | "B" | "C" | "D" | "F";
-  signals: { label: string; points: number; detail: string }[];
+  factors: ConfidenceFactor[];
   recommendation: string;
 }
 
-export async function calculateLeadScore(params: {
-  // NYC data
-  portfolioSize?: number;
-  totalUnits?: number;
-  totalValue?: number;
-  distressScore?: number;
-  openViolations?: number;
-  openLitigation?: number;
-  ecbPenalties?: number;
-  onSpeculationList?: boolean;
-  recentSales?: number; // sales in last 2 years
-  // Contact data
-  hasPhone?: boolean;
-  hasEmail?: boolean;
-  hasLinkedin?: boolean;
-  // Apollo/PDL data
-  jobTitle?: string;
-  company?: string;
-  isRealEstateIndustry?: boolean;
-  companySize?: number;
-  // Verification
-  identityVerified?: boolean;
-  multipleSourcesMatch?: boolean;
-  // Apollo-specific signals
-  apolloPersonMatch?: boolean;
-  apolloPhoneMatchesDOB?: boolean;
+export async function calculateConfidenceScore(params: {
+  hpdOwnerMatch?: boolean;
+  acrisDeedMatch?: boolean;
+  plutoOwnerMatch?: boolean;
+  dobFilingMatch?: boolean;
+  phoneFound?: boolean;
+  phoneVerified?: boolean; // 2+ sources
+  dobPhoneFound?: boolean;
+  dobPhoneCrossMatch?: boolean; // DOB phone matches another source
+  pdlEmailFound?: boolean;
   apolloEmailFound?: boolean;
-  apolloOrgMatchesHPD?: boolean;
-  apolloOrgHasWebsite?: boolean;
-  apolloFoundKeyPeople?: boolean;
-}): Promise<LeadScore> {
-  const signals: { label: string; points: number; detail: string }[] = [];
+  emailsSameAcrossSources?: boolean; // PDL + Apollo confirm same email
+  apolloPersonMatch?: boolean;
+  apolloOrgMatch?: boolean;
+  pdlPersonMatch?: boolean;
+  linkedinFound?: boolean;
+  mailingAddressMatch?: boolean;
+}): Promise<ConfidenceScoreBreakdown> {
+  const factors: ConfidenceFactor[] = [];
   let total = 0;
 
-  // Portfolio signals (0-30 points)
-  if (params.portfolioSize && params.portfolioSize >= 5) {
-    const pts = Math.min(15, params.portfolioSize);
-    signals.push({ label: "Large Portfolio", points: pts, detail: params.portfolioSize + " properties" });
-    total += pts;
-  }
-  if (params.totalUnits && params.totalUnits >= 50) {
-    const pts = Math.min(15, Math.round(params.totalUnits / 20));
-    signals.push({ label: "High Unit Count", points: pts, detail: params.totalUnits + " total units" });
-    total += pts;
-  }
+  // === IDENTITY (NYC public data confirms who owns the building) ===
 
-  // Distress signals (0-25 points)
-  if (params.distressScore && params.distressScore >= 40) {
-    signals.push({ label: "High Distress", points: 15, detail: "Distress score: " + params.distressScore });
-    total += 15;
-  } else if (params.distressScore && params.distressScore >= 20) {
-    signals.push({ label: "Moderate Distress", points: 8, detail: "Distress score: " + params.distressScore });
-    total += 8;
-  }
-  if (params.openLitigation && params.openLitigation > 0) {
-    signals.push({ label: "Active Lawsuits", points: 10, detail: params.openLitigation + " open cases" });
-    total += 10;
-  }
-  if (params.ecbPenalties && params.ecbPenalties > 10000) {
-    signals.push({ label: "Heavy ECB Fines", points: 8, detail: "$" + Math.round(params.ecbPenalties).toLocaleString() + " owed" });
-    total += 8;
-  }
-  if (params.onSpeculationList) {
-    signals.push({ label: "Speculation Watch List", points: 7, detail: "HPD flagged" });
-    total += 7;
-  }
+  // HPD Registration Match: +15
+  const hpdMatched = !!params.hpdOwnerMatch;
+  factors.push({ name: "HPD Registration Match", points: hpdMatched ? 15 : 0, maxPoints: 15, source: "HPD", matched: hpdMatched });
+  if (hpdMatched) total += 15;
 
-  // Transaction velocity (0-10 points)
-  if (params.recentSales && params.recentSales >= 2) {
-    signals.push({ label: "Active Seller", points: 10, detail: params.recentSales + " sales in 2 years" });
-    total += 10;
-  }
+  // ACRIS Deed Match: +15
+  const acrisMatched = !!params.acrisDeedMatch;
+  factors.push({ name: "ACRIS Deed Match", points: acrisMatched ? 15 : 0, maxPoints: 15, source: "ACRIS", matched: acrisMatched });
+  if (acrisMatched) total += 15;
 
-  // Contact accessibility (0-15 points)
-  if (params.hasPhone) {
-    signals.push({ label: "Phone Available", points: 7, detail: "Direct phone number" });
-    total += 7;
-  }
-  if (params.hasEmail) {
-    signals.push({ label: "Email Available", points: 5, detail: "Email address found" });
-    total += 5;
-  }
-  if (params.hasLinkedin) {
-    signals.push({ label: "LinkedIn Profile", points: 3, detail: "Professional profile found" });
-    total += 3;
-  }
+  // PLUTO Owner Match: +10
+  const plutoMatched = !!params.plutoOwnerMatch;
+  factors.push({ name: "PLUTO Owner Match", points: plutoMatched ? 10 : 0, maxPoints: 10, source: "PLUTO", matched: plutoMatched });
+  if (plutoMatched) total += 10;
 
-  // Professional signals (0-10 points)
-  if (params.isRealEstateIndustry) {
-    signals.push({ label: "RE Industry", points: 5, detail: "Works in real estate" });
-    total += 5;
-  }
-  if (params.jobTitle && params.jobTitle.match(/owner|president|ceo|director|manager|partner|principal/i)) {
-    signals.push({ label: "Decision Maker", points: 5, detail: params.jobTitle });
-    total += 5;
-  }
+  // DOB Filing Match: +5
+  const dobMatched = !!params.dobFilingMatch;
+  factors.push({ name: "DOB Filing Match", points: dobMatched ? 5 : 0, maxPoints: 5, source: "DOB", matched: dobMatched });
+  if (dobMatched) total += 5;
 
-  // Verification bonus (0-10 points)
-  if (params.identityVerified) {
-    signals.push({ label: "Identity Verified", points: 5, detail: "Matched across multiple databases" });
-    total += 5;
-  }
-  if (params.multipleSourcesMatch) {
-    signals.push({ label: "Multi-Source Match", points: 5, detail: "HPD + PLUTO + Apollo/PDL aligned" });
-    total += 5;
-  }
+  // === REACHABILITY (can we actually contact the owner?) ===
 
-  // Apollo-specific signals (0-50 bonus points)
-  if (params.apolloPersonMatch) {
-    signals.push({ label: "Apollo Match", points: 10, detail: "Person found in Apollo database" });
-    total += 10;
+  // Phone Found: +5
+  const phoneFound = !!params.phoneFound;
+  factors.push({ name: "Phone Found", points: phoneFound ? 5 : 0, maxPoints: 5, source: "Skip Trace", matched: phoneFound });
+  if (phoneFound) total += 5;
+
+  // Phone Verified (2+ sources): +10
+  const phoneVerified = !!params.phoneVerified;
+  factors.push({ name: "Phone Verified (2+ sources)", points: phoneVerified ? 10 : 0, maxPoints: 10, source: "Multi-Source", matched: phoneVerified });
+  if (phoneVerified) total += 10;
+
+  // DOB Phone Found: +5
+  const dobPhoneFound = !!params.dobPhoneFound;
+  factors.push({ name: "DOB Phone Found", points: dobPhoneFound ? 5 : 0, maxPoints: 5, source: "DOB", matched: dobPhoneFound });
+  if (dobPhoneFound) total += 5;
+
+  // DOB Phone Cross-Match: +5 (DOB phone matches PDL/Apollo)
+  const dobPhoneCrossMatch = !!params.dobPhoneCrossMatch;
+  factors.push({ name: "DOB Phone Cross-Match", points: dobPhoneCrossMatch ? 5 : 0, maxPoints: 5, source: "Multi-Source", matched: dobPhoneCrossMatch });
+  if (dobPhoneCrossMatch) total += 5;
+
+  // Email — PDL: +5, Apollo: +8, both same email: +12 total (capped)
+  const pdlEmail = !!params.pdlEmailFound;
+  const apolloEmail = !!params.apolloEmailFound;
+  const emailSame = !!params.emailsSameAcrossSources;
+  let emailPoints = 0;
+  if (emailSame && pdlEmail && apolloEmail) {
+    emailPoints = 12;
+    factors.push({ name: "Email Confirmed (PDL + Apollo)", points: 12, maxPoints: 12, source: "Multi-Source", matched: true });
+  } else {
+    if (pdlEmail) {
+      emailPoints += 5;
+      factors.push({ name: "PDL Email Found", points: 5, maxPoints: 5, source: "PDL", matched: true });
+    } else {
+      factors.push({ name: "PDL Email Found", points: 0, maxPoints: 5, source: "PDL", matched: false });
+    }
+    if (apolloEmail) {
+      emailPoints += 8;
+      factors.push({ name: "Apollo Email Found", points: 8, maxPoints: 8, source: "Apollo", matched: true });
+    } else {
+      factors.push({ name: "Apollo Email Found", points: 0, maxPoints: 8, source: "Apollo", matched: false });
+    }
   }
-  if (params.apolloPhoneMatchesDOB) {
-    signals.push({ label: "Phone Confirmed", points: 15, detail: "Apollo phone matches DOB filing" });
-    total += 15;
-  }
-  if (params.apolloEmailFound) {
-    signals.push({ label: "Apollo Email", points: 5, detail: "Verified email via Apollo" });
-    total += 5;
-  }
-  if (params.apolloOrgMatchesHPD) {
-    signals.push({ label: "Org Confirmed", points: 10, detail: "Apollo org matches HPD entity" });
-    total += 10;
-  }
-  if (params.apolloOrgHasWebsite) {
-    signals.push({ label: "Company Website", points: 5, detail: "Organization has web presence" });
-    total += 5;
-  }
-  if (params.apolloFoundKeyPeople) {
-    signals.push({ label: "Key People Found", points: 5, detail: "Decision-makers identified at org" });
-    total += 5;
-  }
+  total += emailPoints;
+
+  // === ENRICHMENT (additional data quality signals) ===
+
+  // Apollo Person Match: +10
+  const apolloPersonMatched = !!params.apolloPersonMatch;
+  factors.push({ name: "Apollo Person Match", points: apolloPersonMatched ? 10 : 0, maxPoints: 10, source: "Apollo", matched: apolloPersonMatched });
+  if (apolloPersonMatched) total += 10;
+
+  // Apollo Org Match: +5
+  const apolloOrgMatched = !!params.apolloOrgMatch;
+  factors.push({ name: "Apollo Org Match", points: apolloOrgMatched ? 5 : 0, maxPoints: 5, source: "Apollo", matched: apolloOrgMatched });
+  if (apolloOrgMatched) total += 5;
+
+  // PDL Person Match: +5
+  const pdlMatched = !!params.pdlPersonMatch;
+  factors.push({ name: "PDL Person Match", points: pdlMatched ? 5 : 0, maxPoints: 5, source: "PDL", matched: pdlMatched });
+  if (pdlMatched) total += 5;
+
+  // LinkedIn Found: +5
+  const linkedinFound = !!params.linkedinFound;
+  factors.push({ name: "LinkedIn Found", points: linkedinFound ? 5 : 0, maxPoints: 5, source: "Apollo/PDL", matched: linkedinFound });
+  if (linkedinFound) total += 5;
+
+  // Mailing Address Match: +5
+  const mailingMatched = !!params.mailingAddressMatch;
+  factors.push({ name: "Mailing Address Match", points: mailingMatched ? 5 : 0, maxPoints: 5, source: "PDL", matched: mailingMatched });
+  if (mailingMatched) total += 5;
 
   total = Math.min(100, total);
 
   // Grade
   let grade: "A" | "B" | "C" | "D" | "F";
-  if (total >= 80) grade = "A";
-  else if (total >= 60) grade = "B";
-  else if (total >= 40) grade = "C";
-  else if (total >= 20) grade = "D";
+  if (total >= 85) grade = "A";
+  else if (total >= 70) grade = "B";
+  else if (total >= 50) grade = "C";
+  else if (total >= 30) grade = "D";
   else grade = "F";
 
   // Recommendation
   let recommendation: string;
-  if (total >= 80) recommendation = "Hot lead — high-value target with multiple distress signals. Prioritize outreach immediately.";
-  else if (total >= 60) recommendation = "Strong lead — significant portfolio with motivated seller indicators. Schedule outreach this week.";
-  else if (total >= 40) recommendation = "Moderate lead — some positive signals. Worth a call to gauge interest.";
-  else if (total >= 20) recommendation = "Low priority — limited signals. Monitor for changes in distress or transaction activity.";
-  else recommendation = "Insufficient data — need more information to score this lead effectively.";
+  if (total >= 85) recommendation = "High confidence -- ownership and contact data verified across multiple authoritative sources. Safe to initiate outreach.";
+  else if (total >= 70) recommendation = "Good confidence -- most key data points confirmed. Minor gaps remain but outreach is well-supported.";
+  else if (total >= 50) recommendation = "Moderate confidence -- some data verified but significant gaps exist. Verify key details before outreach.";
+  else if (total >= 30) recommendation = "Low confidence -- limited verification. Cross-reference with additional sources before relying on this data.";
+  else recommendation = "Insufficient data -- unable to verify ownership or contact information. Additional research required.";
 
-  signals.sort((a, b) => b.points - a.points);
-
-  return { total, grade, signals, recommendation };
+  return { total, grade, factors, recommendation };
 }
 
 // ============================================================
@@ -179,7 +168,7 @@ export async function verifyLead(
   console.log("=== LEAD VERIFICATION ===", ownerName, "|", companyName);
 
   const results: any = {
-    leadScore: null,
+    confidenceScore: null,
     verified: false,
     verificationDetails: [],
   };
@@ -199,9 +188,9 @@ export async function verifyLead(
   } else {
     const isLLC = ownerName.toUpperCase().match(/LLC|CORP|INC|L\.P\.|TRUST/);
     if (isLLC) {
-      results.verificationDetails.push("Corporate entity — individual behind LLC not yet identified");
+      results.verificationDetails.push("Corporate entity -- individual behind LLC not yet identified");
     } else {
-      results.verificationDetails.push("No PDL match found — limited verification");
+      results.verificationDetails.push("No PDL match found -- limited verification");
     }
   }
 
@@ -233,7 +222,7 @@ export async function verifyLead(
   const apolloPhoneClean = apolloPerson?.phone?.replace(/\D/g, "").slice(-10);
   const apolloPhoneMatchesDOB = !!(apolloPhoneClean && dobPhones.some((dp: string) => dp === apolloPhoneClean));
   if (apolloPhoneMatchesDOB) {
-    results.verificationDetails.push("Apollo phone matches DOB filing phone — HIGH confidence");
+    results.verificationDetails.push("Apollo phone matches DOB filing phone -- HIGH confidence");
   }
 
   // Check if Apollo org matches HPD entity
@@ -244,41 +233,100 @@ export async function verifyLead(
     hc.includes(apolloOrg.name.split(" ")[0].toUpperCase()) || apolloOrg.name.toUpperCase().includes(hc.split(" ")[0])
   ));
 
-  // Calculate lead score using PDL + Apollo data
-  const scoreParams: any = {
-    hasPhone: !!buildingData?.rankedContacts?.some((c: any) => c.phone) || !!pdl?.phones?.length || !!apolloPerson?.phone,
-    hasEmail: !!pdl?.emails?.length || !!apolloPerson?.email,
-    hasLinkedin: !!pdl?.linkedin || !!apolloPerson?.linkedinUrl,
-    distressScore: buildingData?.distressScore || 0,
-    openViolations: buildingData?.violationSummary?.open || 0,
-    openLitigation: buildingData?.litigationSummary?.open || 0,
-    ecbPenalties: buildingData?.ecbSummary?.totalPenalty || 0,
-    onSpeculationList: buildingData?.speculation?.onWatchList || false,
-    portfolioSize: buildingData?.relatedCount || 0,
-    totalUnits: buildingData?.pluto?.unitsRes || 0,
-    identityVerified: results.verified,
-    multipleSourcesMatch: results.verified && (!!buildingData?.rankedContacts?.some((c: any) => c.phone) || !!apolloPerson),
-    // Apollo-specific signals
-    apolloPersonMatch: !!apolloPerson,
-    apolloPhoneMatchesDOB,
-    apolloEmailFound: !!apolloPerson?.email,
-    apolloOrgMatchesHPD,
-    apolloOrgHasWebsite: !!apolloOrg?.website,
-    apolloFoundKeyPeople: (apolloKeyPeople?.length || 0) > 0,
-  };
+  // --- Build confidence score params ---
+  const ownerUpper = ownerName.toUpperCase();
 
-  if (apolloPerson) {
-    scoreParams.jobTitle = apolloPerson.title || pdl?.jobTitle;
-    scoreParams.company = apolloPerson.company || pdl?.jobCompany;
-    scoreParams.isRealEstateIndustry = (apolloPerson.companyIndustry || apolloPerson.company || pdl?.jobCompany || "").toLowerCase().match(/real estate|realty|property|housing/);
-  } else if (pdl) {
-    scoreParams.jobTitle = pdl.jobTitle;
-    scoreParams.company = pdl.jobCompany;
-    scoreParams.isRealEstateIndustry = (pdl.jobCompany || "").toLowerCase().match(/real estate|realty|property|housing/);
-  }
+  // HPD owner match: check if any HPD contact name matches the owner name
+  const hpdContacts = buildingData?.hpdContacts || [];
+  const hpdOwnerMatch = hpdContacts.some((c: any) => {
+    const name = ((c.firstName || "") + " " + (c.lastName || "")).trim().toUpperCase();
+    const corp = (c.corporateName || "").toUpperCase();
+    return (name && ownerUpper.includes(name.split(" ")[0]) || ownerUpper.includes(corp.split(" ")[0]) && corp.length > 2);
+  });
 
-  results.leadScore = await calculateLeadScore(scoreParams);
+  // PLUTO owner match: check if PLUTO ownerName matches
+  const plutoOwner = (buildingData?.pluto?.ownerName || "").toUpperCase();
+  const plutoOwnerMatch = plutoOwner.length > 2 && (
+    plutoOwner.includes(ownerUpper.split(" ")[0]) || ownerUpper.includes(plutoOwner.split(" ")[0])
+  );
 
-  console.log("Lead score:", results.leadScore.total, results.leadScore.grade);
+  // DOB filing match: check if any DOB permit has matching owner name
+  const dobPermits = buildingData?.dobPermits || [];
+  const dobFilingMatch = dobPermits.some((p: any) => {
+    const permitOwner = (p.owner_s_first_name || "" + " " + p.owner_s_last_name || "").toUpperCase();
+    const permitBiz = (p.owner_s_business_name || "").toUpperCase();
+    return (permitOwner.length > 2 && ownerUpper.includes(permitOwner.split(" ")[0])) ||
+           (permitBiz.length > 2 && ownerUpper.includes(permitBiz.split(" ")[0]));
+  });
+
+  // Phone found: any phone found for the owner
+  const phoneFound = !!buildingData?.rankedContacts?.some((c: any) => c.phone) || !!pdl?.phones?.length || !!apolloPerson?.phone;
+
+  // Phone verified: phone found in 2+ sources
+  const phoneSources = [
+    !!buildingData?.rankedContacts?.some((c: any) => c.phone),
+    !!pdl?.phones?.length,
+    !!apolloPerson?.phone,
+  ].filter(Boolean).length;
+  const phoneVerified = phoneSources >= 2;
+
+  // DOB Phone Found: any owner phone from DOB filings
+  const dobPhoneNumbers = (buildingData?.phoneRankings || []).map((p: any) => p.phone?.replace(/\D/g, "").slice(-10));
+  const dobPhoneFound = dobPhoneNumbers.length > 0;
+
+  // DOB Phone Cross-Match: DOB phone matches PDL or Apollo phone
+  const pdlPhones = (pdl?.phones || []).map((p: any) => (p.number || "").replace(/\D/g, "").slice(-10));
+  const dobPhoneCrossMatch = dobPhoneFound && (
+    (apolloPhoneClean && dobPhoneNumbers.some((dp: string) => dp === apolloPhoneClean)) ||
+    pdlPhones.some((pp: string) => pp.length >= 7 && dobPhoneNumbers.some((dp: string) => dp === pp))
+  );
+
+  // Email: separate PDL and Apollo
+  const pdlEmailFound = !!(pdl?.emails?.length);
+  const apolloEmailFound = !!apolloPerson?.email;
+
+  // Check if PDL and Apollo have the same email
+  const pdlEmails = (pdl?.emails || []).map((e: string) => e.toLowerCase());
+  const apolloEmailLower = apolloPerson?.email?.toLowerCase() || "";
+  const emailsSameAcrossSources = pdlEmailFound && apolloEmailFound && pdlEmails.includes(apolloEmailLower);
+
+  // Apollo person match
+  const apolloPersonMatch = !!apolloPerson;
+
+  // Apollo org match
+  const apolloOrgMatch = apolloOrgMatchesHPD;
+
+  // PDL person match
+  const pdlPersonMatch = !!(pdl && !pdl.error);
+
+  // LinkedIn found
+  const linkedinFound = !!pdl?.linkedin || !!apolloPerson?.linkedinUrl;
+
+  // Mailing address match: pass false for now
+  const mailingAddressMatch = false;
+
+  // ACRIS deed match: pass false for now
+  const acrisDeedMatch = false;
+
+  results.confidenceScore = await calculateConfidenceScore({
+    hpdOwnerMatch,
+    acrisDeedMatch,
+    plutoOwnerMatch,
+    dobFilingMatch,
+    phoneFound,
+    phoneVerified,
+    dobPhoneFound,
+    dobPhoneCrossMatch,
+    pdlEmailFound,
+    apolloEmailFound,
+    emailsSameAcrossSources,
+    apolloPersonMatch,
+    apolloOrgMatch,
+    pdlPersonMatch,
+    linkedinFound,
+    mailingAddressMatch,
+  });
+
+  console.log("Confidence score:", results.confidenceScore.total, results.confidenceScore.grade);
   return results;
 }

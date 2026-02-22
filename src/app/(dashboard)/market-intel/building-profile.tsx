@@ -499,53 +499,55 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 );
               })()}
 
-              {/* AI Lead Score — nested inside ownership */}
-              {data?.leadVerification?.leadScore && (
+              {/* Data Confidence Score */}
+              {data?.leadVerification?.confidenceScore && (
                 <div className={"mt-4 rounded-lg border p-4 " + (
-                  data.leadVerification.leadScore.grade === "A" ? "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300" :
-                  data.leadVerification.leadScore.grade === "B" ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300" :
-                  data.leadVerification.leadScore.grade === "C" ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300" :
+                  data.leadVerification.confidenceScore.grade === "A" ? "bg-gradient-to-r from-emerald-50 to-green-50 border-emerald-300" :
+                  data.leadVerification.confidenceScore.grade === "B" ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-300" :
+                  data.leadVerification.confidenceScore.grade === "C" ? "bg-gradient-to-r from-amber-50 to-yellow-50 border-amber-300" :
+                  data.leadVerification.confidenceScore.grade === "D" ? "bg-gradient-to-r from-orange-50 to-red-50 border-orange-300" :
                   "bg-gradient-to-r from-slate-50 to-gray-50 border-slate-200"
                 )}>
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg">🎯</span>
-                      <span className="text-sm font-bold text-slate-900">AI Lead Score</span>
-                      {data.leadVerification.verified && (
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-bold">✓ Verified</span>
-                      )}
+                      <span className="text-lg">🔒</span>
+                      <span className="text-sm font-bold text-slate-900">Data Confidence Score</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <div className={"text-3xl font-black " + (
-                        data.leadVerification.leadScore.grade === "A" ? "text-emerald-700" :
-                        data.leadVerification.leadScore.grade === "B" ? "text-blue-700" :
-                        data.leadVerification.leadScore.grade === "C" ? "text-amber-700" :
-                        "text-slate-500"
+                        data.leadVerification.confidenceScore.grade === "A" ? "text-emerald-700" :
+                        data.leadVerification.confidenceScore.grade === "B" ? "text-blue-700" :
+                        data.leadVerification.confidenceScore.grade === "C" ? "text-amber-700" :
+                        data.leadVerification.confidenceScore.grade === "D" ? "text-orange-700" :
+                        "text-red-700"
                       )}>
-                        {data.leadVerification.leadScore.total}
+                        {data.leadVerification.confidenceScore.total}
                       </div>
                       <div className={"text-xl font-black px-2 py-0.5 rounded " + (
-                        data.leadVerification.leadScore.grade === "A" ? "bg-emerald-200 text-emerald-800" :
-                        data.leadVerification.leadScore.grade === "B" ? "bg-blue-200 text-blue-800" :
-                        data.leadVerification.leadScore.grade === "C" ? "bg-amber-200 text-amber-800" :
-                        "bg-slate-200 text-slate-600"
+                        data.leadVerification.confidenceScore.grade === "A" ? "bg-emerald-200 text-emerald-800" :
+                        data.leadVerification.confidenceScore.grade === "B" ? "bg-blue-200 text-blue-800" :
+                        data.leadVerification.confidenceScore.grade === "C" ? "bg-amber-200 text-amber-800" :
+                        data.leadVerification.confidenceScore.grade === "D" ? "bg-orange-200 text-orange-800" :
+                        "bg-red-200 text-red-800"
                       )}>
-                        {data.leadVerification.leadScore.grade}
+                        {data.leadVerification.confidenceScore.grade}
                       </div>
                     </div>
                   </div>
-                  <p className="text-xs text-slate-600 mb-3 leading-relaxed">{data.leadVerification.leadScore.recommendation}</p>
-                  <div className="space-y-1">
-                    {data.leadVerification.leadScore.signals?.slice(0, 8).map((s: any, i: number) => (
+                  <p className="text-xs text-slate-600 mb-3 leading-relaxed">{data.leadVerification.confidenceScore.recommendation}</p>
+                  <div className="space-y-1.5">
+                    {data.leadVerification.confidenceScore.factors?.map((f: any, i: number) => (
                       <div key={i} className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5">
-                          <span className={s.points >= 10 ? "text-emerald-500" : s.points >= 5 ? "text-blue-500" : "text-slate-400"}>
-                            {s.points >= 10 ? "🔥" : s.points >= 5 ? "✓" : "·"}
+                          <span className={f.matched ? "text-emerald-500" : "text-slate-300"}>
+                            {f.matched ? "✅" : "⬜"}
                           </span>
-                          <span className="text-slate-700 font-medium">{s.label}</span>
-                          <span className="text-slate-400">{s.detail}</span>
+                          <span className={f.matched ? "text-slate-700 font-medium" : "text-slate-400"}>{f.name}</span>
+                          <span className="text-slate-400 text-[10px]">{f.source}</span>
                         </div>
-                        <span className={"font-bold " + (s.points >= 10 ? "text-emerald-600" : "text-slate-500")}>+{s.points}</span>
+                        <span className={f.matched ? "font-bold text-emerald-600" : "text-slate-300"}>
+                          {f.matched ? `+${f.points}` : "0"}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -586,18 +588,38 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
           {/* ============================================================ */}
           {(data?.ownerContacts?.length > 0 || data?.hpdContacts?.length > 0 || data?.rankedContacts?.length > 0) && (() => {
             const cleanPh = (ph: string) => ph.replace(/\D/g, "").slice(-10);
-            const phoneContacts = (data.ownerContacts || []).filter((c: any) => c.phone);
+            // Merge ALL phone sources: DOB/HPD contacts, PDL phones, Apollo phone
             const phoneGroups = new Map<string, { phone: string; names: string[]; sources: string[]; addresses: string[]; count: number }>();
-            phoneContacts.forEach((c: any) => {
-              const key = cleanPh(c.phone);
+            const addPhone = (phone: string, name: string, source: string, address?: string) => {
+              const key = cleanPh(phone);
               if (key.length < 7) return;
-              if (!phoneGroups.has(key)) phoneGroups.set(key, { phone: c.phone, names: [], sources: [], addresses: [], count: 0 });
+              if (!phoneGroups.has(key)) phoneGroups.set(key, { phone, names: [], sources: [], addresses: [], count: 0 });
               const g = phoneGroups.get(key)!;
               g.count++;
-              if (c.name && !g.names.includes(c.name)) g.names.push(c.name);
-              if (c.source && !g.sources.includes(c.source)) g.sources.push(c.source);
-              if (c.address && !g.addresses.includes(c.address)) g.addresses.push(c.address);
+              if (name && !g.names.includes(name)) g.names.push(name);
+              if (source && !g.sources.includes(source)) g.sources.push(source);
+              if (address && !g.addresses.includes(address)) g.addresses.push(address);
+            };
+            // DOB/HPD owner contacts
+            (data.ownerContacts || []).filter((c: any) => c.phone).forEach((c: any) => {
+              addPhone(c.phone, c.name, c.source, c.address);
             });
+            // PDL phones
+            if (data.pdlEnrichment?.phones?.length) {
+              const pdlName = data.pdlEnrichment.fullName || data.pdlEnrichment.firstName ? [data.pdlEnrichment.firstName, data.pdlEnrichment.lastName].filter(Boolean).join(" ") : "";
+              data.pdlEnrichment.phones.forEach((ph: any) => {
+                addPhone(ph.number, pdlName, "PDL (" + (ph.type || "phone") + ")");
+              });
+            }
+            // Apollo phone
+            if (data.apolloEnrichment?.phone) {
+              const apolloName = [data.apolloEnrichment.firstName, data.apolloEnrichment.lastName].filter(Boolean).join(" ");
+              addPhone(data.apolloEnrichment.phone, apolloName, "Apollo");
+            }
+            // Apollo org phone
+            if (data.apolloOrgEnrichment?.phone) {
+              addPhone(data.apolloOrgEnrichment.phone, data.apolloOrgEnrichment.name || "", "Apollo Org");
+            }
             const hpdOwners = (data.hpdContacts || [])
               .filter((c: any) => (c.type?.includes("Owner") || c.type?.includes("Head")) && c.businessAddress)
               .slice(0, 4);
@@ -611,32 +633,52 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200"
                 collapsed={isCollapsed("contacts")} onToggle={() => toggle("contacts")}>
                 <div className="space-y-3">
-                  {/* Deduplicated phone groups */}
-                  {Array.from(phoneGroups.values()).map((g, i) => (
-                    <div key={"pg-" + i} className="bg-white rounded-lg border border-blue-100 p-4">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <a href={"tel:" + g.phone} className="text-lg font-bold text-slate-900 hover:text-blue-600">📞 {g.phone}</a>
-                          {g.count > 1 && (
-                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">Found in {g.count} filings</span>
-                          )}
+                  {/* Deduplicated phone groups — all sources merged */}
+                  {Array.from(phoneGroups.values()).map((g, i) => {
+                    const sourceColors: Record<string, string> = {
+                      "DOB Permit": "bg-amber-100 text-amber-700",
+                      "DOB Job Filing": "bg-amber-100 text-amber-700",
+                      "DOB NOW Filing": "bg-amber-100 text-amber-700",
+                      "DOB NOW (Owner)": "bg-amber-100 text-amber-700",
+                      "HPD Agent/Manager": "bg-teal-100 text-teal-700",
+                      "Apollo": "bg-orange-100 text-orange-700",
+                      "Apollo Org": "bg-orange-100 text-orange-700",
+                    };
+                    const getSourceColor = (src: string) => {
+                      if (src.startsWith("PDL")) return "bg-blue-100 text-blue-700";
+                      if (src.startsWith("DOB")) return "bg-amber-100 text-amber-700";
+                      return sourceColors[src] || "bg-slate-100 text-slate-600";
+                    };
+                    return (
+                      <div key={"pg-" + i} className="bg-white rounded-lg border border-blue-100 p-4">
+                        <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center gap-2">
+                            <a href={"tel:" + g.phone} className="text-lg font-bold text-slate-900 hover:text-blue-600">📞 {g.phone}</a>
+                            {g.sources.length > 1 && (
+                              <span className="text-[10px] font-bold bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full">{g.sources.length} sources</span>
+                            )}
+                          </div>
+                          <a href={"tel:" + g.phone} className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition-colors">Call</a>
                         </div>
-                        <a href={"tel:" + g.phone} className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded hover:bg-emerald-100 transition-colors">Call</a>
+                        <p className="text-sm text-slate-600">
+                          {g.names.map((name, ni) => (
+                            <span key={ni}>
+                              {onNameClick ? (
+                                <button onClick={() => onNameClick(name)} className="text-blue-600 hover:underline">{name}</button>
+                              ) : name}
+                              {ni < g.names.length - 1 && <span className="text-slate-300 mx-1">·</span>}
+                            </span>
+                          ))}
+                        </p>
+                        {g.addresses[0] && <p className="text-xs text-slate-400 mt-1">📍 {g.addresses[0]}</p>}
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {g.sources.map((src, si) => (
+                            <span key={si} className={"text-[9px] font-bold px-1.5 py-0.5 rounded " + getSourceColor(src)}>{src}</span>
+                          ))}
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        {g.names.map((name, ni) => (
-                          <span key={ni}>
-                            {onNameClick ? (
-                              <button onClick={() => onNameClick(name)} className="text-blue-600 hover:underline">{name}</button>
-                            ) : name}
-                            {ni < g.names.length - 1 && <span className="text-slate-300 mx-1">·</span>}
-                          </span>
-                        ))}
-                      </p>
-                      {g.addresses[0] && <p className="text-xs text-slate-400 mt-1">📍 {g.addresses[0]}</p>}
-                      <p className="text-[10px] text-slate-400 mt-0.5">{g.sources.join(", ")}</p>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* HPD owners without phone */}
                   {hpdOwners.map((c: any, i: number) => (
