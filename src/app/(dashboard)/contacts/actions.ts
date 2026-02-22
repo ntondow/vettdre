@@ -49,8 +49,15 @@ export async function createContact(formData: FormData) {
   const state = formData.get("state") as string;
   const source = formData.get("source") as string;
   const notes = formData.get("notes") as string;
+  const contactType = (formData.get("contactType") as string) || "renter";
+  const typeDataRaw = formData.get("typeData") as string;
 
   if (!firstName || !lastName) throw new Error("First and last name are required");
+
+  let typeData = null;
+  if (typeDataRaw) {
+    try { typeData = JSON.parse(typeDataRaw); } catch { /* ignore */ }
+  }
 
   await prisma.contact.create({
     data: {
@@ -64,6 +71,8 @@ export async function createContact(formData: FormData) {
       state: state?.trim() || null,
       source: source?.trim() || null,
       notes: notes?.trim() || null,
+      contactType: contactType as any,
+      typeData,
       status: "lead",
     },
   });

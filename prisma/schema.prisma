@@ -37,6 +37,13 @@ enum UserRole {
   viewer
 }
 
+enum ContactType {
+  landlord
+  buyer
+  seller
+  renter
+}
+
 enum ContactStatus {
   lead
   active
@@ -268,6 +275,7 @@ model Contact {
   city              String?
   state             String?
   zip               String?
+  contactType       ContactType   @default(renter) @map("contact_type")
   status            ContactStatus @default(lead)
   source            String?
   sourceDetail      String?       @map("source_detail")
@@ -279,6 +287,7 @@ model Contact {
   lastActivityAt    DateTime?     @map("last_activity_at")
   totalActivities   Int           @default(0) @map("total_activities")
   preferences       Json          @default("{}")
+  typeData          Json?         @map("type_data")
   notes             String?
   createdAt         DateTime      @default(now()) @map("created_at")
   updatedAt         DateTime      @updatedAt @map("updated_at")
