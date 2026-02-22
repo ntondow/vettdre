@@ -44,7 +44,7 @@ export default function Sidebar() {
   const handleSignOut = async () => { await supabase.auth.signOut(); router.push("/login"); router.refresh(); };
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-200 flex flex-col z-40">
+    <aside className="fixed inset-y-0 left-0 w-60 bg-white border-r border-slate-200 hidden md:flex flex-col z-40">
       <div className="h-14 flex items-center px-5 border-b border-slate-100">
         <Link href="/dashboard" className="text-xl font-bold text-slate-900">Vettd<span className="text-blue-600">RE</span></Link>
       </div>
