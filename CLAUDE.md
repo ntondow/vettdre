@@ -4,18 +4,19 @@
 VettdRE is a CRM platform for NYC real estate agents combining traditional CRM with AI-powered property intelligence. The key differentiator is Market Intelligence — integrating 17+ NYC Open Data APIs with skip tracing (People Data Labs) and professional enrichment (Apollo.io) to identify property owners, discover portfolios, and score leads automatically.
 
 ## Tech Stack
-- **Framework:** Next.js 16.1.6 (App Router, Turbopack)
+- **Framework:** Next.js 16.1.6 (App Router, Turbopack, standalone output)
 - **Language:** TypeScript 5 (strict mode)
 - **React:** 19.2.3
 - **Database:** PostgreSQL via Supabase (Session Pooler)
 - **ORM:** Prisma 5.22
-- **Auth:** Supabase Auth with SSR middleware
-- **Styling:** Tailwind CSS 4 (no custom config, uses `globals.css` for keyframes)
-- **Icons:** Lucide React
+- **Auth:** Supabase Auth with SSR middleware + user approval system
+- **Styling:** Tailwind CSS 4 (custom animations + mobile utilities in `globals.css`)
+- **Icons:** Lucide React + emoji icons in some UI elements
 - **Maps:** Leaflet + OpenStreetMap (dynamic import, `circleMarker` for performance)
 - **AI:** Anthropic Claude API (`@anthropic-ai/sdk` ^0.76.0)
 - **Skip Tracing:** People Data Labs API (primary), Tracerfy API (fallback)
 - **Professional Enrichment:** Apollo.io API (Organization Plan — People Search, People Enrichment, Org Enrichment, Bulk Enrich)
+- **Deployment:** Docker + Google Cloud Run (cloudbuild.yaml)
 - **Utilities:** clsx, tailwind-merge
 
 ## Environment Variables
@@ -37,13 +38,15 @@ GOOGLE_REDIRECT_URI=
 ```
 src/
 ├── app/
-│   ├── globals.css                # Custom keyframes: fade-in, modal-in, slide-up
-│   ├── layout.tsx                 # Root HTML layout with metadata
+│   ├── globals.css                # Keyframes: fade-in, modal-in, slide-up, slide-up-sheet
+│   │                              # Utilities: pb-safe, pt-safe, no-scrollbar
+│   ├── layout.tsx                 # Root layout with PWA meta tags, viewport, apple-web-app
 │   ├── page.tsx                   # Root redirect (→ /dashboard or /login)
 │   │
 │   ├── (auth)/
 │   │   ├── login/page.tsx         # Email/password login
-│   │   └── signup/page.tsx        # Registration with email confirmation
+│   │   ├── signup/page.tsx        # Registration with email confirmation
+│   │   └── pending-approval/page.tsx  # Shown when user account not yet approved
 │   │
 │   ├── auth/callback/route.ts     # Supabase OAuth callback
 │   │
@@ -54,8 +57,8 @@ src/
 │   │
 │   ├── book/[slug]/page.tsx       # Public showing booking page (no auth)
 │   │
-│   └── (dashboard)/               # Protected layout (auth required)
-│       ├── layout.tsx             # Sidebar + Header wrapper
+│   └── (dashboard)/               # Protected layout (auth + approval required)
+│       ├── layout.tsx             # Sidebar (desktop) + MobileNav (phone) + responsive main
 │       ├── dashboard/             # Home dashboard
 │       ├── contacts/              # CRM contacts + [id] detail
 │       ├── pipeline/              # Kanban deal board
@@ -65,11 +68,12 @@ src/
 │       ├── properties/            # Property listings (minimal)
 │       ├── prospecting/           # Saved prospects from Market Intel
 │       ├── portfolios/            # Portfolio dashboard (schema exists, basic UI)
-│       └── settings/              # 13 settings sub-pages
+│       └── settings/              # 14 settings sub-pages
 │
 ├── components/layout/
 │   ├── header.tsx                 # Top navigation bar
-│   └── sidebar.tsx                # Left sidebar navigation
+│   ├── sidebar.tsx                # Desktop left sidebar (hidden on mobile: hidden md:flex)
+│   └── mobile-nav.tsx             # Mobile bottom tab bar + "More" sheet overlay
 │
 ├── lib/
 │   ├── prisma.ts                  # Prisma client singleton
@@ -88,13 +92,55 @@ src/
 │   └── supabase/
 │       ├── client.ts              # Supabase browser client
 │       ├── server.ts              # Supabase server client
-│       └── middleware.ts           # Auth middleware (redirect logic)
+│       └── middleware.ts           # Auth middleware (session + approval check)
 │
 ├── middleware.ts                   # Next.js middleware → Supabase session
 │
 └── prisma/
     └── schema.prisma              # 30 models, 17 enums
+
+# Root files
+├── Dockerfile                     # Multi-stage Docker build (Node 20-Alpine, standalone)
+├── cloudbuild.yaml                # Google Cloud Build → Cloud Run deployment
+├── next.config.ts                 # output: "standalone"
+└── public/
+    ├── manifest.json              # PWA manifest (standalone, theme #1E40AF)
+    ├── favicon.ico
+    ├── icon-192.png               # PWA icon 192x192
+    └── icon-512.png               # PWA icon 512x512
 ```
+
+## Auth & Approval System
+- **Supabase Auth** handles login/signup with email + password
+- **User approval gate:** new signups have `isApproved = false` by default
+- **Middleware flow:** authenticated but unapproved users → redirect to `/pending-approval`
+- **Public routes** (skip approval check): `/login`, `/signup`, `/auth/*`, `/pending-approval`, `/book/*`, `/`
+- Admin must set `isApproved = true` on User record to grant dashboard access
+
+## Mobile & PWA
+
+### PWA Setup
+- `manifest.json`: name="VettdRE CRM", display="standalone", theme="#1E40AF"
+- Root `layout.tsx` exports `viewport` (device-width, no scale, viewportFit="cover") and `metadata` (appleWebApp capable, black-translucent status bar, manifest link, apple-touch-icon)
+- `<meta name="theme-color" content="#1E40AF" />` in `<head>`
+
+### Mobile Navigation
+- **Bottom tab bar** (`mobile-nav.tsx`): fixed bottom, visible on phones (`md:hidden`)
+  - 5 tabs: Dashboard, Contacts, Pipeline, Messages (with unread badge), More
+  - "More" opens a slide-up sheet with: Properties, Tasks, Calendar, AI Insights, Analytics, Prospecting, Market Intel, Settings + Sign out
+  - Sheet has backdrop, drag handle, smooth enter/exit transitions
+- **Desktop sidebar** (`sidebar.tsx`): `hidden md:flex` — hidden on mobile
+- **Dashboard layout**: `<main className="pb-16 md:pb-0 md:pl-60">` — bottom padding for tab bar on mobile, left padding for sidebar on desktop
+
+### Mobile CSS Utilities (`globals.css`)
+- `pb-safe` / `pt-safe` — safe area insets for notched devices
+- `no-scrollbar` — hides scrollbars for horizontal pill scrolling
+- `@keyframes slide-up-sheet` — sheet animation
+
+### Mobile Optimizations Still Needed
+- Page-specific responsive layouts (contacts card view, messages pane adaptation, pipeline vertical stages, calendar agenda-first on mobile, market-intel full-screen building profiles)
+- Touch targets (44x44px minimum), input font-size (16px to prevent iOS zoom)
+- Service worker / offline support not yet implemented
 
 ## Routes & Pages
 
@@ -103,6 +149,7 @@ src/
 |-------|-------------|
 | `/login` | Email/password login |
 | `/signup` | Registration with email confirmation |
+| `/pending-approval` | Approval pending page (unapproved users) |
 | `/auth/callback` | Supabase OAuth callback |
 | `/book/[slug]` | Public showing booking (no auth required) |
 
@@ -113,7 +160,7 @@ src/
 | `/api/auth/gmail/callback` | GET | Gmail OAuth callback, stores tokens |
 | `/api/book` | POST | Public showing slot reservation |
 
-### Dashboard (Protected)
+### Dashboard (Protected — requires auth + approval)
 | Route | Status | Description |
 |-------|--------|-------------|
 | `/dashboard` | **Basic** | Welcome + placeholder stats (needs real data) |
@@ -128,7 +175,7 @@ src/
 | `/prospecting` | **Working** | Saved prospect lists from Market Intel, convert to contacts/deals, CSV export |
 | `/portfolios` | **Basic** | Schema + basic UI exists, not actively used |
 
-### Settings (13 sub-pages)
+### Settings (14 sub-pages)
 | Route | Status | Description |
 |-------|--------|-------------|
 | `/settings/profile` | **Working** | Name, phone, title, license, brokerage |
@@ -144,6 +191,14 @@ src/
 | `/settings/lead-rules` | **Working** | Lead assignment: manual, round robin, by source, by geography |
 | `/settings/ai` | **Working** | Auto-response mode/delay/tone, email parsing model selection |
 | `/settings/export` | **Working** | CSV export: contacts, deals, emails, full backup |
+| `/settings/templates` | **Working** | Email template CRUD (alternate location) |
+
+### Placeholder Routes (in sidebar nav, not yet built)
+| Route | Sidebar Label | Notes |
+|-------|---------------|-------|
+| `/tasks` | Tasks | Standalone task management page — not yet implemented |
+| `/insights` | AI Insights | AI-powered insights dashboard — not yet implemented |
+| `/analytics` | Analytics | Analytics/reporting dashboard — not yet implemented |
 
 ## Database Schema (30 Models)
 
@@ -151,7 +206,7 @@ src/
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
 | **Organization** | name, slug, tier (solo/pro/enterprise), aiLookupsUsed/Limit, settings JSON | Multi-tenant root |
-| **User** | email, role (UserRole enum), fullName, title, licenseNumber, brokerage | RBAC with 5 roles |
+| **User** | email, role (UserRole enum), fullName, title, licenseNumber, brokerage, **isApproved** | RBAC with 5 roles + approval gate |
 | **Contact** | firstName, lastName, email, phone, status (ContactStatus), source, qualificationScore, tags[], enrichmentStatus | Core CRM entity |
 | **EnrichmentProfile** | contactId, version, employer, jobTitle, linkedinUrl, ownsProperty, rawData JSON, dataSources[], confidenceLevel | PDL/Apollo/PLUTO data |
 | **QualificationScore** | contactId, totalScore, financialCapacity, intentSignals, identityVerification, engagementLevel, marketFit | AI scoring breakdown |
@@ -234,7 +289,7 @@ src/
 
 - Four views: month, week, day, agenda (with smooth fade transitions between views)
 - Month view: day grid with event pills, "+N more" pill, quick-create "+" button per day
-- Week view: time grid (6AM–10PM), overlapping event layout algorithm (Google Calendar style), all-day row
+- Week view: time grid (6AM-10PM), overlapping event layout algorithm (Google Calendar style), all-day row
 - Day view: expanded time grid (80px/hour) with event sidebar list
 - Agenda view: 2-week lookahead, grouped by day with staggered entrance animations
 - Current time indicator: red line + pulsing dot (week + day views)
@@ -261,13 +316,13 @@ src/
 - Activity timeline: notes, calls, emails, meetings
 - Task management with priority and due dates
 - Tag-based organization
-- Enrichment pipeline: PDL (2-pass strategy) → NYC PLUTO → scoring algorithm
+- Enrichment pipeline: PDL (2-pass strategy) -> NYC PLUTO -> scoring algorithm
 
 ### Pipeline (Working)
 **Files:** `pipeline/pipeline-board.tsx`, `pipeline/actions.ts`
 
 - Kanban board with drag-and-drop
-- Default 6 stages: New Lead → Contacted → Showing → Offer → Under Contract → Closed
+- Default 6 stages: New Lead -> Contacted -> Showing -> Offer -> Under Contract -> Closed
 - Customizable stages via settings
 - Deal values and commission tracking
 - Contact + property linking
@@ -344,10 +399,10 @@ src/
 - Visitor fills in name, email, phone, notes
 - Auto-creates Contact + CalendarEvent, marks slot as booked
 
-### Settings (Working — 13 Pages)
-**Files:** `settings/actions.ts` (all settings operations), 13 page files
+### Settings (Working — 14 Pages)
+**Files:** `settings/actions.ts` (all settings operations), 14 page files
 
-- Profile, Team, Gmail, Sync, API Keys, Pipeline, Branding, Signature, Notifications, Hours, Lead Rules, AI, Export
+- Profile, Team, Gmail, Sync, API Keys, Pipeline, Branding, Signature, Notifications, Hours, Lead Rules, AI, Export, Templates
 - All settings persisted to dedicated DB tables
 - API key test connections
 - CSV export for contacts/deals/emails
@@ -367,30 +422,33 @@ src/
   - Returns: verified email, direct phone, title, seniority, LinkedIn photo, company intel
 - **Tracerfy** — fallback skip trace, CSV upload/polling, $0.02/record
 
-### Shared Libraries (`src/lib/`)
-| File | Purpose |
-|------|---------|
-| `prisma.ts` | Prisma client singleton |
-| `gmail.ts` | Gmail token management, auto-refresh |
-| `gmail-sync.ts` | Initial full sync + incremental sync via historyId |
-| `gmail-send.ts` | Send new emails + reply via Gmail API |
-| `google-calendar.ts` | Full 2-way Google Calendar sync (16KB) |
-| `email-parser.ts` | Claude AI email parsing — extracts lead source, intent, budget, area, phone |
-| `email-categorizer.ts` | Email categorization (lead/personal/newsletter/transactional/spam) |
-| `email-scoring.ts` | Email engagement scoring algorithm |
-| `follow-up-checker.ts` | Follow-up reminder trigger logic |
-| `nyc-opendata.ts` | NYC Open Data API helpers |
-| `apollo.ts` | Apollo.io API: enrichPerson, enrichOrganization, findPeopleAtOrg, bulkEnrich, mergeEnrichmentData |
-| `zillow-data.ts` | Zillow rent/sale estimate data |
+## Deployment
+
+### Docker
+- Multi-stage Dockerfile: builder (Node 20-Alpine) -> runner (standalone)
+- Port: 8080
+- Non-root user: `nextjs`
+- Includes Prisma client, public assets, Zillow data directory
+
+### Google Cloud Run
+- `cloudbuild.yaml` configured for Cloud Build pipeline
+- Registry: `us-east1-docker.pkg.dev`
+- Instance: 1Gi memory, 1 CPU, 80 concurrency, 300s timeout
+- Scaling: 0-10 instances
+- 11 secrets via Cloud Secret Manager
 
 ## Pending / Incomplete Features
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Dashboard real stats | **Needs work** | Currently shows placeholder stats, needs real data queries |
+| Tasks page (`/tasks`) | **Not built** | Referenced in sidebar nav, no route exists yet |
+| AI Insights page (`/insights`) | **Not built** | Referenced in sidebar nav, no route exists yet |
+| Analytics page (`/analytics`) | **Not built** | Referenced in sidebar nav, no route exists yet |
 | Properties page | **Minimal** | Empty state only, needs full listing management |
 | Portfolios | **Basic** | Schema + basic UI exists, not actively used |
 | Automations | **Schema only** | Automation + AutomationRun models exist, no UI or engine |
-| Bulk enrichment | **Working** | Apollo bulk enrich via contact list checkbox + "Enrich Selected" button |
+| Mobile page layouts | **In progress** | Bottom nav done; individual pages need responsive adaptation |
+| Service worker | **Not started** | No offline support / true PWA installability |
 | SMS integration | **Not started** | Twilio/SendGrid |
 
 ## Known Issues / Tech Debt
@@ -406,9 +464,10 @@ src/
 - All exported functions in server files must be `async` (Next.js 16 requirement)
 - NYC API calls go through `actions.ts` in market-intel
 - Use `Array.isArray()` checks before spreading API response arrays (PDL returns non-arrays sometimes)
-- Serialize data with `JSON.parse(JSON.stringify(obj))` when passing Server → Client components (Dates, Decimals)
-- Tailwind for all styling; custom animations in `globals.css` (fade-in, modal-in, slide-up)
+- Serialize data with `JSON.parse(JSON.stringify(obj))` when passing Server -> Client components (Dates, Decimals)
+- Tailwind for all styling; custom animations in `globals.css` (fade-in, modal-in, slide-up, slide-up-sheet)
 - Use `circleMarker` not `Marker` for Leaflet map performance
 - Lucide React for SVG icons; emoji icons in some UI elements (folders, categories)
 - Modal pattern: `bg-black/30` backdrop + `modal-in` animation; use `entered` state for backdrop fade
 - Thread row selection uses inset box-shadow instead of border-left (avoids layout shift)
+- Mobile responsive: `md:` breakpoint splits mobile (bottom tab bar) vs desktop (sidebar); use `pb-safe` for notched devices
