@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { apolloBulkEnrich } from "@/lib/apollo";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -132,4 +133,69 @@ export async function exportListCSV(listId: string) {
   ]);
 
   return [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
+}
+
+export async function bulkEnrichProspects(listId: string) {
+  const user = await getAuthUser();
+  const items = await prisma.prospectingItem.findMany({
+    where: { listId, orgId: user.orgId },
+  });
+
+  // Filter to enrichable individuals (need first+last name, skip LLCs)
+  const enrichable = items.filter(item => {
+    const name = item.ownerName || "";
+    if (!name.trim() || name.length < 3) return false;
+    if (/LLC|CORP|INC|L\.P\.|TRUST|REALTY|ASSOC|HOUSING|AUTHORITY|DEPT/i.test(name)) return false;
+    const parts = name.trim().split(/\s+/);
+    return parts.length >= 2;
+  });
+
+  if (enrichable.length === 0) return { total: items.length, enriched: 0 };
+
+  let enrichedCount = 0;
+
+  // Process in batches of 10 (Apollo bulk limit)
+  for (let i = 0; i < enrichable.length; i += 10) {
+    const batch = enrichable.slice(i, i + 10);
+    const details = batch.map(item => {
+      const parts = (item.ownerName || "").trim().split(/\s+/);
+      return {
+        first_name: parts[0],
+        last_name: parts.slice(1).join(" "),
+      };
+    });
+
+    const matches = await apolloBulkEnrich(details);
+
+    // Update prospect items with enriched data
+    for (let j = 0; j < matches.length; j++) {
+      const match = matches[j];
+      if (!match) continue;
+      const item = batch[j];
+      if (!item) continue;
+
+      const enrichmentParts: string[] = [];
+      if (match.email) enrichmentParts.push(`Email: ${match.email}`);
+      if (match.phone) enrichmentParts.push(`Phone: ${match.phone}`);
+      if (match.title) enrichmentParts.push(`Title: ${match.title}`);
+      if (match.company) enrichmentParts.push(`Company: ${match.company}`);
+      if (match.linkedinUrl) enrichmentParts.push(`LinkedIn: ${match.linkedinUrl}`);
+
+      if (enrichmentParts.length > 0) {
+        const existingNotes = item.notes || "";
+        const newNotes = existingNotes
+          ? `${existingNotes}\n--- Apollo Enrichment ---\n${enrichmentParts.join("\n")}`
+          : `--- Apollo Enrichment ---\n${enrichmentParts.join("\n")}`;
+
+        await prisma.prospectingItem.update({
+          where: { id: item.id },
+          data: { notes: newNotes },
+        });
+        enrichedCount++;
+      }
+    }
+  }
+
+  revalidatePath("/prospecting");
+  return { total: enrichable.length, enriched: enrichedCount };
 }

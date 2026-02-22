@@ -13,6 +13,7 @@ import { togglePinThread, bulkArchive, bulkDelete } from "./bulk-actions";
 import { applyLabel, removeLabel, type LabelData } from "./label-actions";
 import { incrementTemplateUsage } from "./template-actions";
 import { getCRMContext, type CRMContext } from "./crm-actions";
+import { getContactEnrichmentForCompose } from "@/app/(dashboard)/contacts/[id]/actions";
 import BulkActionBar from "./components/bulk-action-bar";
 import SnoozePicker from "./components/snooze-picker";
 import LabelPicker from "./components/label-picker";
@@ -1069,6 +1070,7 @@ function ComposeModal({ templates, gmailEmail, onClose, onSent }: { templates: T
   const [contactId, setContactId] = useState<string | undefined>();
   const [suggestions, setSuggestions] = useState<Array<{ id: string; firstName: string; lastName: string; email: string | null }>>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [mergePills, setMergePills] = useState<{ title: string | null; company: string | null } | null>(null);
 
   const handleToChange = async (value: string) => {
     setTo(value);
@@ -1079,10 +1081,17 @@ function ComposeModal({ templates, gmailEmail, onClose, onSent }: { templates: T
     } else { setShowSuggestions(false); }
   };
 
-  const selectContact = (c: { id: string; firstName: string; lastName: string; email: string | null }) => {
+  const selectContact = async (c: { id: string; firstName: string; lastName: string; email: string | null }) => {
     setTo(c.email || "");
     setContactId(c.id);
     setShowSuggestions(false);
+    // Fetch enrichment data for merge pills
+    try {
+      const enrichment = await getContactEnrichmentForCompose(c.id);
+      if (enrichment && (enrichment.title || enrichment.company)) {
+        setMergePills({ title: enrichment.title, company: enrichment.company });
+      }
+    } catch {}
   };
 
   const handleTemplate = (t: Template) => {
@@ -1145,6 +1154,23 @@ function ComposeModal({ templates, gmailEmail, onClose, onSent }: { templates: T
             <input value={subject} onChange={e => setSubject(e.target.value)} placeholder="Subject"
               className="flex-1 text-sm focus:outline-none" />
           </div>
+          {mergePills && (mergePills.title || mergePills.company) && (
+            <div className="px-4 py-1.5 flex items-center gap-1.5 border-t border-slate-100">
+              <span className="text-[10px] text-slate-400 font-medium">Insert:</span>
+              {mergePills.title && (
+                <button onClick={() => setBody(prev => prev + mergePills.title)}
+                  className="px-2 py-0.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-medium rounded border border-indigo-200 transition-colors">
+                  Title: {mergePills.title}
+                </button>
+              )}
+              {mergePills.company && (
+                <button onClick={() => setBody(prev => prev + mergePills.company)}
+                  className="px-2 py-0.5 bg-violet-50 hover:bg-violet-100 text-violet-700 text-[10px] font-medium rounded border border-violet-200 transition-colors">
+                  Company: {mergePills.company}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Template pills */}

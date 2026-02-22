@@ -12,6 +12,7 @@ import {
   convertToContact,
   createDealFromItem,
   exportListCSV,
+  bulkEnrichProspects,
 } from "./actions";
 
 interface List {
@@ -79,6 +80,8 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
   const [convertModal, setConvertModal] = useState<string | null>(null);
   const [dealModal, setDealModal] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichResult, setEnrichResult] = useState<{ total: number; enriched: number } | null>(null);
 
   const loadItems = async (listId: string) => {
     setLoadingItems(true);
@@ -429,6 +432,32 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      if (!selectedList) return;
+                      setEnriching(true);
+                      setEnrichResult(null);
+                      try {
+                        const result = await bulkEnrichProspects(selectedList);
+                        setEnrichResult(result);
+                        loadItems(selectedList);
+                      } catch (err) { console.error("Bulk enrich error:", err); }
+                      setEnriching(false);
+                    }}
+                    disabled={enriching || items.length === 0}
+                    className="px-3 py-1.5 border border-indigo-300 bg-indigo-50 rounded-lg text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  >
+                    {enriching ? (
+                      <>
+                        <span className="animate-spin inline-block w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+                        Enriching...
+                      </>
+                    ) : enrichResult ? (
+                      `✓ ${enrichResult.enriched}/${enrichResult.total} enriched`
+                    ) : (
+                      "🔍 Enrich All"
+                    )}
+                  </button>
                   <button
                     onClick={() => handleExport(selectedList)}
                     className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"

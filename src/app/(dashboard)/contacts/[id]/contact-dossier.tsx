@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData } from "./actions";
+import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData, findPeopleAtCompany, addPersonAsContact } from "./actions";
 import { enrichContact } from "./enrich-actions";
 import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
 import { CONTACT_TYPE_META } from "@/lib/contact-types";
@@ -66,6 +66,11 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
   const [emailSending, setEmailSending] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [companyPeople, setCompanyPeople] = useState<any[]>([]);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [loadingPeople, setLoadingPeople] = useState(false);
+  const [addingPerson, setAddingPerson] = useState<string | null>(null);
+  const [addedPeople, setAddedPeople] = useState<Set<string>>(new Set());
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -451,6 +456,170 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
 
               {/* Type Profile */}
               <TypeProfileCard contact={contact} />
+
+              {/* People at Company — for landlord contacts with a company */}
+              {contact.contactType === "landlord" && (() => {
+                const typeData = contact.typeData as any;
+                const enrichment = contact.enrichmentProfiles[0];
+                const entityName = typeData?.entityName
+                  || (enrichment?.rawData as any)?.apolloPerson?.company
+                  || enrichment?.employer
+                  || null;
+                if (!entityName) return null;
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-slate-700">👥 People at {entityName}</h3>
+                      <button
+                        onClick={async () => {
+                          setLoadingPeople(true);
+                          try {
+                            const result = await findPeopleAtCompany(contact.id);
+                            setCompanyPeople(result.people);
+                            setCompanyName(result.companyName);
+                          } catch (err) { console.error("Find people error:", err); }
+                          setLoadingPeople(false);
+                        }}
+                        disabled={loadingPeople}
+                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 disabled:opacity-50 transition-colors"
+                      >
+                        {loadingPeople ? "Searching..." : companyPeople.length > 0 ? "Refresh" : "Find People"}
+                      </button>
+                    </div>
+                    {loadingPeople && (
+                      <div className="flex items-center gap-2 py-4 justify-center">
+                        <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-600 border-t-transparent"></div>
+                        <span className="text-xs text-slate-500">Searching Apollo (free)...</span>
+                      </div>
+                    )}
+                    {!loadingPeople && companyPeople.length > 0 && (
+                      <div className="space-y-2">
+                        {companyPeople.map((person: any, i: number) => (
+                          <div key={person.apolloId || i} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg">
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center flex-shrink-0">
+                              {(person.firstName?.[0] || "")}{(person.lastName?.[0] || "")}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-slate-900 truncate">{person.firstName} {person.lastName}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {person.title && <span className="text-xs text-slate-500 truncate">{person.title}</span>}
+                                {person.seniority && (
+                                  <span className={"text-[9px] px-1.5 py-0.5 rounded font-bold " + (
+                                    person.seniority === "c_suite" ? "bg-purple-100 text-purple-700" :
+                                    person.seniority === "vp" ? "bg-blue-100 text-blue-700" :
+                                    person.seniority === "director" ? "bg-cyan-100 text-cyan-700" :
+                                    "bg-slate-100 text-slate-600"
+                                  )}>{person.seniority.replace("_", " ")}</span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {person.hasEmail && <span className="text-[9px] text-emerald-600 font-medium">✉️ email</span>}
+                                {person.hasPhone && <span className="text-[9px] text-emerald-600 font-medium">📞 phone</span>}
+                              </div>
+                            </div>
+                            {addedPeople.has(person.apolloId) ? (
+                              <span className="text-[10px] text-emerald-600 font-bold">Added ✓</span>
+                            ) : (
+                              <button
+                                onClick={async () => {
+                                  setAddingPerson(person.apolloId);
+                                  try {
+                                    await addPersonAsContact(
+                                      { firstName: person.firstName, lastName: person.lastName, title: person.title, orgName: person.orgName },
+                                      contact.id,
+                                    );
+                                    setAddedPeople(prev => new Set([...prev, person.apolloId]));
+                                  } catch (err) { console.error("Add person error:", err); }
+                                  setAddingPerson(null);
+                                }}
+                                disabled={addingPerson === person.apolloId}
+                                className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded border border-blue-200 disabled:opacity-50 transition-colors"
+                              >
+                                {addingPerson === person.apolloId ? "..." : "+ Add"}
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <p className="text-[10px] text-slate-400 text-center mt-1">Apollo People Search (free, no credits used)</p>
+                      </div>
+                    )}
+                    {!loadingPeople && companyPeople.length === 0 && companyName && (
+                      <p className="text-xs text-slate-400 text-center py-2">No results yet. Click "Find People" to search.</p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Organization Intelligence — from Apollo Org enrichment */}
+              {contact.contactType === "landlord" && (() => {
+                const enrichment = contact.enrichmentProfiles[0];
+                const orgData = (enrichment?.rawData as any)?.apolloOrg;
+                if (!orgData) return null;
+                return (
+                  <div className="bg-white rounded-xl border border-slate-200 p-5">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-lg">🏢</span>
+                      <h3 className="text-sm font-semibold text-slate-700">Organization Intelligence</h3>
+                      <span className="text-[9px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-bold">Apollo</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      {orgData.logoUrl && (
+                        <img src={orgData.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-base font-bold text-slate-900">{orgData.name}</p>
+                        {orgData.shortDescription && (
+                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{orgData.shortDescription}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                      {orgData.industry && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Industry</p>
+                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.industry}</p>
+                        </div>
+                      )}
+                      {orgData.employeeCount && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Employees</p>
+                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.employeeCount.toLocaleString()}</p>
+                        </div>
+                      )}
+                      {orgData.revenue && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Revenue</p>
+                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.revenue}</p>
+                        </div>
+                      )}
+                      {orgData.foundedYear && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Founded</p>
+                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.foundedYear}</p>
+                        </div>
+                      )}
+                      {orgData.phone && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Phone</p>
+                          <a href={"tel:" + orgData.phone} className="text-xs font-medium text-blue-600 mt-0.5 hover:underline">{orgData.phone}</a>
+                        </div>
+                      )}
+                      {orgData.website && (
+                        <div className="bg-slate-50 rounded-lg p-2.5">
+                          <p className="text-[10px] text-slate-400 uppercase">Website</p>
+                          <a href={orgData.website.startsWith("http") ? orgData.website : "https://" + orgData.website} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 mt-0.5 hover:underline truncate block">{orgData.website.replace(/^https?:\/\//, "")}</a>
+                        </div>
+                      )}
+                    </div>
+                    {orgData.address && (
+                      <p className="text-xs text-slate-500 mt-2">📍 {orgData.address}{orgData.city ? `, ${orgData.city}` : ""}{orgData.state ? `, ${orgData.state}` : ""}</p>
+                    )}
+                    {orgData.linkedinUrl && (
+                      <a href={orgData.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">🔗 LinkedIn</a>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Quick Note */}
               <div className="bg-white rounded-xl border border-slate-200 p-5">
