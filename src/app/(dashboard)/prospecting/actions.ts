@@ -77,10 +77,28 @@ export async function convertToContact(itemId: string, firstName: string, lastNa
   const item = await prisma.prospectingItem.findFirst({ where: { id: itemId, orgId: user.orgId } });
   if (!item) throw new Error("Item not found");
 
+  // Parse new development metadata from notes if available
+  let ndMeta: any = null;
+  if (item.notes?.startsWith("{")) {
+    try { ndMeta = JSON.parse(item.notes); } catch {}
+  }
+
   const contact = await prisma.contact.create({
     data: {
       orgId: user.orgId, assignedTo: user.id, firstName, lastName,
-      email: email || null, phone: phone || null, source: "market_intel", status: "lead",
+      email: email || null, phone: phone || null,
+      source: item.source === "new_development" ? "new_development" : "market_intel",
+      status: "lead",
+      contactType: "landlord",
+      typeData: {
+        prospectSource: item.source || "manual",
+        ...(item.address ? { prospectAddress: item.address } : {}),
+        ...(ndMeta ? {
+          proposedUnits: ndMeta.proposedUnits,
+          estimatedCost: ndMeta.estimatedCost,
+          filingStatus: ndMeta.filingStatus,
+        } : {}),
+      },
       notes: `From prospecting: ${item.address}${item.ownerName ? ` (Owner: ${item.ownerName})` : ""}`,
       city: item.borough || null, state: "NY", zip: item.zip || null,
     },
@@ -135,45 +153,68 @@ export async function exportListCSV(listId: string) {
   return [headers.join(","), ...rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(","))].join("\n");
 }
 
-export async function bulkEnrichProspects(listId: string) {
+export async function getEnrichableProspectCount(listId: string): Promise<{ total: number; enrichable: number }> {
   const user = await getAuthUser();
   const items = await prisma.prospectingItem.findMany({
     where: { listId, orgId: user.orgId },
+    select: { ownerName: true, notes: true },
   });
 
-  // Filter to enrichable individuals (need first+last name, skip LLCs)
   const enrichable = items.filter(item => {
     const name = item.ownerName || "";
     if (!name.trim() || name.length < 3) return false;
     if (/LLC|CORP|INC|L\.P\.|TRUST|REALTY|ASSOC|HOUSING|AUTHORITY|DEPT/i.test(name)) return false;
+    if (item.notes?.includes("--- Apollo Enrichment ---")) return false;
     const parts = name.trim().split(/\s+/);
     return parts.length >= 2;
   });
 
-  if (enrichable.length === 0) return { total: items.length, enriched: 0 };
+  return { total: items.length, enrichable: enrichable.length };
+}
 
-  let enrichedCount = 0;
+export async function bulkEnrichProspectsBatch(
+  listId: string,
+  batchIndex: number,
+): Promise<{ totalEnrichable: number; totalBatches: number; batchCompleted: number; matched: number; noMatch: number; done: boolean }> {
+  const user = await getAuthUser();
+  const BATCH_SIZE = 10;
 
-  // Process in batches of 10 (Apollo bulk limit)
-  for (let i = 0; i < enrichable.length; i += 10) {
-    const batch = enrichable.slice(i, i + 10);
-    const details = batch.map(item => {
-      const parts = (item.ownerName || "").trim().split(/\s+/);
-      return {
-        first_name: parts[0],
-        last_name: parts.slice(1).join(" "),
-      };
-    });
+  const items = await prisma.prospectingItem.findMany({
+    where: { listId, orgId: user.orgId },
+  });
 
-    const matches = await apolloBulkEnrich(details);
+  // Filter to enrichable individuals (need first+last name, skip LLCs, skip already enriched)
+  const enrichable = items.filter(item => {
+    const name = item.ownerName || "";
+    if (!name.trim() || name.length < 3) return false;
+    if (/LLC|CORP|INC|L\.P\.|TRUST|REALTY|ASSOC|HOUSING|AUTHORITY|DEPT/i.test(name)) return false;
+    if (item.notes?.includes("--- Apollo Enrichment ---")) return false;
+    const parts = name.trim().split(/\s+/);
+    return parts.length >= 2;
+  });
 
-    // Update prospect items with enriched data
-    for (let j = 0; j < matches.length; j++) {
-      const match = matches[j];
-      if (!match) continue;
-      const item = batch[j];
-      if (!item) continue;
+  const totalBatches = Math.ceil(enrichable.length / BATCH_SIZE);
+  if (batchIndex >= totalBatches) {
+    revalidatePath("/prospecting");
+    return { totalEnrichable: enrichable.length, totalBatches, batchCompleted: batchIndex, matched: 0, noMatch: 0, done: true };
+  }
 
+  const batch = enrichable.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+  const details = batch.map(item => {
+    const parts = (item.ownerName || "").trim().split(/\s+/);
+    return { first_name: parts[0], last_name: parts.slice(1).join(" ") };
+  });
+
+  const matches = await apolloBulkEnrich(details);
+  let matched = 0;
+  let noMatch = 0;
+
+  for (let j = 0; j < batch.length; j++) {
+    const match = matches[j];
+    const item = batch[j];
+    if (!item) continue;
+
+    if (match) {
       const enrichmentParts: string[] = [];
       if (match.email) enrichmentParts.push(`Email: ${match.email}`);
       if (match.phone) enrichmentParts.push(`Phone: ${match.phone}`);
@@ -186,18 +227,20 @@ export async function bulkEnrichProspects(listId: string) {
         const newNotes = existingNotes
           ? `${existingNotes}\n--- Apollo Enrichment ---\n${enrichmentParts.join("\n")}`
           : `--- Apollo Enrichment ---\n${enrichmentParts.join("\n")}`;
-
-        await prisma.prospectingItem.update({
-          where: { id: item.id },
-          data: { notes: newNotes },
-        });
-        enrichedCount++;
+        await prisma.prospectingItem.update({ where: { id: item.id }, data: { notes: newNotes } });
+        matched++;
+      } else {
+        noMatch++;
       }
+    } else {
+      noMatch++;
     }
   }
 
-  revalidatePath("/prospecting");
-  return { total: enrichable.length, enriched: enrichedCount };
+  const done = batchIndex + 1 >= totalBatches;
+  if (done) revalidatePath("/prospecting");
+
+  return { totalEnrichable: enrichable.length, totalBatches, batchCompleted: batchIndex + 1, matched, noMatch, done };
 }
 
 // ============================================================

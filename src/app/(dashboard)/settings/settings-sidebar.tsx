@@ -37,6 +37,12 @@ const NAV = [
     ],
   },
   {
+    group: "Billing",
+    items: [
+      { href: "/settings/billing", icon: "💳", label: "Billing" },
+    ],
+  },
+  {
     group: "Data",
     items: [
       { href: "/settings/api-keys", icon: "🔑", label: "API Keys" },

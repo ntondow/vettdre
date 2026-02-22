@@ -169,6 +169,13 @@ enum AutomationTrigger {
   custom
 }
 
+enum UserPlan {
+  free
+  pro
+  team
+  enterprise
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -231,6 +238,10 @@ model User {
   title            String?
   licenseNumber    String?   @map("license_number")
   brokerage        String?
+  plan             UserPlan  @default(free)
+  stripeCustomerId String?   @map("stripe_customer_id")
+  usageCounters    Json      @default("{}") @map("usage_counters")
+  usageResetDate   DateTime? @map("usage_reset_date")
   invitedBy        String?   @map("invited_by")
   isActive         Boolean   @default(true) @map("is_active")
   isApproved       Boolean   @default(false) @map("is_approved")
