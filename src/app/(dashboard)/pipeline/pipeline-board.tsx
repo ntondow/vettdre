@@ -113,14 +113,14 @@ export default function PipelineBoard({ pipeline, deals, stages, contacts, prope
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5">
+      <div className="bg-white border-b border-slate-200 px-4 md:px-8 py-4 md:py-5">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">Pipeline</h1>
-            <div className="flex items-center gap-6 mt-1">
-              <span className="text-sm text-slate-500">{openDeals} open deal{openDeals !== 1 ? "s" : ""}</span>
-              <span className="text-sm text-slate-500">Pipeline value: <span className="font-semibold text-slate-900">${totalValue.toLocaleString()}</span></span>
-              <span className="text-sm text-slate-500">{wonDeals} won</span>
+            <h1 className="text-lg md:text-xl font-bold text-slate-900">Pipeline</h1>
+            <div className="flex items-center gap-3 md:gap-6 mt-1 flex-wrap">
+              <span className="text-xs md:text-sm text-slate-500">{openDeals} open</span>
+              <span className="text-xs md:text-sm text-slate-500">Value: <span className="font-semibold text-slate-900">${totalValue.toLocaleString()}</span></span>
+              <span className="text-xs md:text-sm text-slate-500">{wonDeals} won</span>
             </div>
           </div>
           <button onClick={() => setShowNewDeal(true)} className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors">+ New Deal</button>
@@ -177,8 +177,50 @@ export default function PipelineBoard({ pipeline, deals, stages, contacts, prope
         </div>
       )}
 
-      {/* Kanban Board */}
-      <div className="px-8 py-6">
+      {/* Mobile Vertical Stages */}
+      <div className="md:hidden px-4 py-4 space-y-3">
+        {stages.map(stage => {
+          const stageDeals = dealsByStage[stage.id] || [];
+          const stageValue = stageDeals.reduce((s, d) => s + (Number(d.dealValue) || 0), 0);
+          return (
+            <details key={stage.id} open={stageDeals.length > 0} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+              <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer">
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
+                <span className="text-sm font-semibold text-slate-700 flex-1">{stage.name}</span>
+                {stageValue > 0 && <span className="text-xs text-slate-400 mr-2">${stageValue.toLocaleString()}</span>}
+                <span className="text-xs font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{stageDeals.length}</span>
+              </summary>
+              <div className="px-3 pb-3 space-y-2 border-t border-slate-100">
+                {stageDeals.map(deal => (
+                  <div key={deal.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 mt-2">
+                    <div className="flex items-start justify-between">
+                      <Link href={`/contacts/${deal.contact.id}`} className="text-sm font-medium text-slate-900">
+                        {deal.contact.firstName} {deal.contact.lastName}
+                      </Link>
+                      {deal.dealValue && <span className="text-xs font-semibold text-slate-700">${Number(deal.dealValue).toLocaleString()}</span>}
+                    </div>
+                    {deal.name && <p className="text-xs text-slate-500 mt-1">{deal.name}</p>}
+                    {deal.property && <p className="text-xs text-slate-400 mt-0.5">🏠 {deal.property.address}</p>}
+                    <div className="flex items-center gap-1 mt-2 flex-wrap">
+                      {stages.filter(s => s.id !== deal.stageId).map(s => (
+                        <button key={s.id} onClick={() => handleMoveDeal(deal.id, s.id)} disabled={moving}
+                          className="text-[10px] px-2 py-1 rounded-md border border-slate-200 text-slate-600 active:bg-blue-50 active:text-blue-700 active:border-blue-200 transition-colors disabled:opacity-50">
+                          → {s.name}
+                        </button>
+                      ))}
+                      <button onClick={() => handleMarkLost(deal.id)} className="text-[10px] px-2 py-1 rounded-md border border-red-200 text-red-500 active:bg-red-50 ml-auto">Lost</button>
+                    </div>
+                  </div>
+                ))}
+                {stageDeals.length === 0 && <p className="text-xs text-slate-400 text-center py-4 mt-2">No deals in this stage</p>}
+              </div>
+            </details>
+          );
+        })}
+      </div>
+
+      {/* Desktop Kanban Board */}
+      <div className="hidden md:block px-8 py-6">
         <div className="flex gap-4 overflow-x-auto pb-4">
           {stages.map(stage => {
             const stageDeals = dealsByStage[stage.id] || [];
@@ -265,7 +307,7 @@ export default function PipelineBoard({ pipeline, deals, stages, contacts, prope
 
       {/* Lost Deals Section */}
       {deals.filter(d => d.status === "lost").length > 0 && (
-        <div className="px-8 pb-8">
+        <div className="px-4 md:px-8 pb-8">
           <details className="bg-white rounded-xl border border-slate-200">
             <summary className="px-5 py-3 cursor-pointer text-sm font-medium text-slate-500 hover:text-slate-700">
               Lost deals ({deals.filter(d => d.status === "lost").length})

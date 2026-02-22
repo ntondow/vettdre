@@ -123,7 +123,50 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
           <button onClick={() => setSelected(new Set())} className="text-xs text-blue-600 hover:text-blue-800 font-medium">Clear</button>
         </div>
       )}
-      <table className="w-full">
+
+      {/* Mobile Card View */}
+      <div className="md:hidden divide-y divide-slate-100">
+        {contacts.map((contact) => (
+          <Link key={contact.id} href={`/contacts/${contact.id}`} className="flex items-center gap-3 px-4 py-3 active:bg-slate-50 transition-colors">
+            <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 text-sm font-bold flex items-center justify-center flex-shrink-0">
+              {contact.firstName[0]}{contact.lastName[0]}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium text-slate-900 truncate">{contact.firstName} {contact.lastName}</span>
+                {contact.qualificationScore !== null && (
+                  <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                    contact.qualificationScore >= 80 ? "bg-emerald-50 text-emerald-700" :
+                    contact.qualificationScore >= 60 ? "bg-amber-50 text-amber-700" :
+                    "bg-slate-100 text-slate-600"
+                  }`}>{contact.qualificationScore}</span>
+                )}
+                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 capitalize">{contact.status}</span>
+              </div>
+              <p className="text-xs text-slate-500 truncate mt-0.5">
+                {contact.email || contact.phone || "No contact info"}
+              </p>
+            </div>
+            <div className="flex items-center gap-1 flex-shrink-0">
+              {contact.phone && (
+                <a href={`tel:${contact.phone}`} onClick={(e) => e.stopPropagation()}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-emerald-50 text-emerald-600 active:bg-emerald-100">
+                  <span className="text-lg">📞</span>
+                </a>
+              )}
+              {contact.email && (
+                <a href={`mailto:${contact.email}`} onClick={(e) => e.stopPropagation()}
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-blue-50 text-blue-600 active:bg-blue-100">
+                  <span className="text-lg">✉️</span>
+                </a>
+              )}
+            </div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <table className="w-full hidden md:table">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50">
             <th className="w-10 px-3 py-3">
