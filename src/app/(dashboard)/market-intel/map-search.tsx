@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { fetchPropertiesInBounds, geocodeAddress } from "./map-actions";
+import { fetchPropertiesInBounds, geocodeAddress, fetchNewDevelopmentsInBounds } from "./map-actions";
+import type { MapNewDevelopment } from "./map-actions";
 import { buildOwnershipGraph } from "./graph-engine";
 import BuildingProfile from "./building-profile";
 
@@ -38,6 +39,11 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   const [portfolioMarkers, setPortfolioMarkers] = useState<MapProperty[]>([]);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [showNewDevs, setShowNewDevs] = useState(false);
+  const [newDevs, setNewDevs] = useState<MapNewDevelopment[]>([]);
+  const [selectedNewDev, setSelectedNewDev] = useState<MapNewDevelopment | null>(null);
+  const [loadingNewDevs, setLoadingNewDevs] = useState(false);
+  const newDevMarkersRef = useRef<any>(null);
   const fetchTimeoutRef = useRef<any>(null);
   const searchHighlightRef = useRef<any>(null);
 
@@ -112,6 +118,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
     }).addTo(map);
 
     markersRef.current = L.layerGroup().addTo(map);
+    newDevMarkersRef.current = L.layerGroup().addTo(map);
     leafletMapRef.current = map;
 
     // Fetch on map move (debounced)
@@ -361,6 +368,77 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
     loadProperties();
   }, [filters]);
 
+  // Load new developments when toggle enabled
+  const loadNewDevelopments = useCallback(async () => {
+    const map = leafletMapRef.current;
+    const L = (window as any).L;
+    if (!map || !L || !newDevMarkersRef.current) return;
+
+    const zoom = map.getZoom();
+    if (zoom < 13) {
+      newDevMarkersRef.current.clearLayers();
+      setNewDevs([]);
+      return;
+    }
+
+    setLoadingNewDevs(true);
+    try {
+      const bounds = map.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      const devs = await fetchNewDevelopmentsInBounds(sw.lat, sw.lng, ne.lat, ne.lng);
+      setNewDevs(devs);
+
+      newDevMarkersRef.current.clearLayers();
+      devs.forEach((d: MapNewDevelopment) => {
+        const radius = d.units >= 50 ? 10 : d.units >= 20 ? 8 : 6;
+        const marker = L.circleMarker([d.lat, d.lng], {
+          radius,
+          fillColor: "#f59e0b",
+          color: "#fff",
+          weight: 2,
+          opacity: 1,
+          fillOpacity: 0.85,
+        });
+        marker.bindTooltip(
+          `<div style="font-family:system-ui;font-size:12px;line-height:1.4;">
+            <span style="background:#f59e0b;color:#fff;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;">NEW DEV</span><br/>
+            <strong>${d.address}</strong><br/>
+            ${d.units} new units · ${d.jobType === "NB" ? "New Building" : "Major Alteration"}
+          </div>`,
+          { direction: "top", offset: [0, -radius] }
+        );
+        marker.on("click", () => {
+          setSelectedNewDev(d);
+          setSelectedProperty(null);
+        });
+        newDevMarkersRef.current.addLayer(marker);
+      });
+    } catch (err) { console.error("New dev load error:", err); }
+    setLoadingNewDevs(false);
+  }, []);
+
+  useEffect(() => {
+    if (showNewDevs) {
+      loadNewDevelopments();
+    } else {
+      if (newDevMarkersRef.current) newDevMarkersRef.current.clearLayers();
+      setNewDevs([]);
+      setSelectedNewDev(null);
+    }
+  }, [showNewDevs]);
+
+  // Re-load new developments on map move if toggle is on
+  useEffect(() => {
+    const map = leafletMapRef.current;
+    if (!map || !showNewDevs) return;
+    const handler = () => {
+      setTimeout(() => loadNewDevelopments(), 900);
+    };
+    map.on("moveend", handler);
+    return () => { map.off("moveend", handler); };
+  }, [showNewDevs, loadNewDevelopments]);
+
   const updateMarkers = (props: MapProperty[]) => {
     const L = (window as any).L;
     if (!markersRef.current || !L) return;
@@ -454,13 +532,22 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
             </button>
           </div>
 
-          {/* Quick toggle */}
-          <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-3 h-3"
-              checked={filters.excludePublic || false}
-              onChange={e => setFilters(prev => ({ ...prev, excludePublic: e.target.checked }))} />
-            <span className="text-[10px] text-slate-500">Hide public</span>
-          </label>
+          {/* Quick toggles */}
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-3 h-3"
+                checked={filters.excludePublic || false}
+                onChange={e => setFilters(prev => ({ ...prev, excludePublic: e.target.checked }))} />
+              <span className="text-[10px] text-slate-500">Hide public</span>
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" className="rounded border-amber-300 text-amber-600 w-3 h-3"
+                checked={showNewDevs}
+                onChange={e => setShowNewDevs(e.target.checked)} />
+              <span className="text-[10px] text-amber-700 font-medium">New developments</span>
+              {loadingNewDevs && <span className="animate-spin inline-block w-2.5 h-2.5 border border-amber-600 border-t-transparent rounded-full"></span>}
+            </label>
+          </div>
 
           {/* Sort */}
           <div className="flex items-center gap-0.5 text-[10px]">
@@ -683,6 +770,68 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                 )}
               </div>
             </div>
+          ) : selectedNewDev ? (
+            <div className="p-3">
+              <button onClick={() => setSelectedNewDev(null)}
+                className="text-xs text-blue-600 hover:underline mb-2 flex items-center gap-1">
+                ← Back to list
+              </button>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[9px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded">
+                      {selectedNewDev.jobType === "NB" ? "NEW BUILDING" : "MAJOR ALTERATION"}
+                    </span>
+                  </div>
+                  <h3 className="text-sm font-bold text-slate-900 leading-tight">{selectedNewDev.address}</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">{selectedNewDev.borough} · Blk {selectedNewDev.block}, Lot {selectedNewDev.lot}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <div className="bg-amber-50 rounded px-2 py-1.5 text-center">
+                    <p className="text-[10px] text-amber-600 uppercase">New Units</p>
+                    <p className="text-lg font-bold text-amber-900">{selectedNewDev.units}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded px-2 py-1.5 text-center">
+                    <p className="text-[10px] text-slate-400 uppercase">Stories</p>
+                    <p className="text-lg font-bold text-slate-900">{selectedNewDev.stories || "—"}</p>
+                  </div>
+                </div>
+                <div className="text-xs space-y-1.5 text-slate-600">
+                  {selectedNewDev.ownerName && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Developer</span>
+                      <span className="font-medium text-right max-w-[200px] truncate">{selectedNewDev.ownerName}</span>
+                    </div>
+                  )}
+                  {selectedNewDev.filingDate && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Filing Date</span>
+                      <span className="font-medium">{new Date(selectedNewDev.filingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Status</span>
+                    <span className="font-medium">{selectedNewDev.jobStatus || "—"}</span>
+                  </div>
+                  {selectedNewDev.estimatedCost && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">Est. Cost</span>
+                      <span className="font-medium">${parseFloat(selectedNewDev.estimatedCost).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-400">Boro Code</span>
+                    <span className="font-medium">{selectedNewDev.boroCode}</span>
+                  </div>
+                </div>
+                {selectedNewDev.ownerName && onNameClick && (
+                  <button onClick={() => onNameClick(selectedNewDev.ownerName)}
+                    className="w-full px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-semibold rounded-lg transition-colors">
+                    Search Developer Name
+                  </button>
+                )}
+              </div>
+            </div>
           ) : (
             <div>
               {sortedProperties.map((p, i) => {
@@ -798,6 +947,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-600"></span>10-19</span>
             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-600"></span>20-49</span>
             <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-purple-600"></span>50+</span>
+            {showNewDevs && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500"></span>New Dev</span>}
           </div>
         </div>
 
@@ -825,6 +975,12 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                 <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-5 h-5"
                   checked={filters.excludePublic || false}
                   onChange={e => setFilters(prev => ({ ...prev, excludePublic: e.target.checked }))} />
+              </label>
+              <label className="flex items-center justify-between">
+                <span className="text-sm font-medium text-amber-700">Show new developments</span>
+                <input type="checkbox" className="rounded border-amber-300 text-amber-600 w-5 h-5"
+                  checked={showNewDevs}
+                  onChange={e => setShowNewDevs(e.target.checked)} />
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <div>

@@ -136,3 +136,83 @@ export async function fetchPropertiesInBounds(
     return { properties: [], total: 0 };
   }
 }
+
+// ============================================================
+// New Developments — DOB Job Applications (NB = New Building, A1 = Major Alteration)
+// ============================================================
+const DOB_JOBS = "ic3t-wcy2";
+
+export interface MapNewDevelopment {
+  address: string;
+  borough: string;
+  units: number;
+  stories: number;
+  jobType: string;
+  jobStatus: string;
+  estimatedCost: string;
+  ownerName: string;
+  filingDate: string;
+  lat: number;
+  lng: number;
+  block: string;
+  lot: string;
+  boroCode: string;
+}
+
+export async function fetchNewDevelopmentsInBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+): Promise<MapNewDevelopment[]> {
+  try {
+    const url = new URL(NYC + "/" + DOB_JOBS + ".json");
+    url.searchParams.set("$where", [
+      `latitude > '${swLat}'`,
+      `latitude < '${neLat}'`,
+      `longitude > '${swLng}'`,
+      `longitude < '${neLng}'`,
+      `job_type in('NB','A1')`,
+      `existing_dwelling_units IS NOT NULL`,
+    ].join(" AND "));
+    url.searchParams.set("$select", "house__,street_name,borough,proposed_dwelling_units,existing_dwelling_units,proposed_no_of_stories,job_type,job_status,total_est__fee,owner_s_business_name,owner_s_first_name,owner_s_last_name,latest_action_date,latitude,longitude,block,lot,community___board");
+    url.searchParams.set("$limit", "200");
+    url.searchParams.set("$order", "latest_action_date DESC");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const boroNames: Record<string, string> = { MANHATTAN: "Manhattan", BRONX: "Bronx", BROOKLYN: "Brooklyn", QUEENS: "Queens", "STATEN ISLAND": "Staten Island" };
+    const boroCodeMap: Record<string, string> = { MANHATTAN: "1", BRONX: "2", BROOKLYN: "3", QUEENS: "4", "STATEN ISLAND": "5" };
+
+    return data
+      .map((d: any) => {
+        const proposed = parseInt(d.proposed_dwelling_units || "0");
+        const existing = parseInt(d.existing_dwelling_units || "0");
+        const netNewUnits = proposed - existing;
+        if (netNewUnits <= 0) return null;
+
+        const ownerBiz = d.owner_s_business_name || "";
+        const ownerPerson = [d.owner_s_first_name, d.owner_s_last_name].filter(Boolean).join(" ").trim();
+
+        return {
+          address: [d.house__, d.street_name].filter(Boolean).join(" ").trim(),
+          borough: boroNames[d.borough] || d.borough || "",
+          units: netNewUnits,
+          stories: parseInt(d.proposed_no_of_stories || "0"),
+          jobType: d.job_type || "",
+          jobStatus: d.job_status || "",
+          estimatedCost: d.total_est__fee || "",
+          ownerName: ownerBiz || ownerPerson || "",
+          filingDate: d.latest_action_date || "",
+          lat: parseFloat(d.latitude || "0"),
+          lng: parseFloat(d.longitude || "0"),
+          block: (d.block || "").replace(/^0+/, ""),
+          lot: (d.lot || "").replace(/^0+/, ""),
+          boroCode: boroCodeMap[d.borough] || "",
+        };
+      })
+      .filter((d: MapNewDevelopment | null): d is MapNewDevelopment => d !== null && d.lat !== 0 && d.lng !== 0);
+  } catch (err) {
+    console.error("New developments fetch error:", err);
+    return [];
+  }
+}

@@ -3,6 +3,9 @@ import { skipTrace } from "./tracerfy";
 import { verifyLead } from "./lead-verification";
 import { getZillowDataForZip, getNYCAverages } from "@/lib/zillow-data";
 import { apolloEnrichPerson, apolloEnrichOrganization, apolloFindPeopleAtOrg } from "@/lib/apollo";
+import prisma from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
+import { revalidatePath } from "next/cache";
 
 const NYC = "https://data.cityofnewyork.us/resource";
 
@@ -1071,4 +1074,138 @@ export async function fetchRelatedProperties(ownerNames: string[], boroCode: str
   // Sort by units descending
   related.sort((a, b) => b.units - a.units);
   return related;
+}
+
+// ============================================================
+// Create Contact from Building Profile + Auto-Enrich
+// ============================================================
+export async function createContactFromBuilding(
+  data: {
+    firstName: string;
+    lastName: string;
+    company?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    borough?: string;
+    boroCode?: string;
+    block?: string;
+    lot?: string;
+  }
+) {
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) throw new Error("Not authenticated");
+  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  if (!user) throw new Error("User not found");
+
+  // Create landlord contact
+  const contact = await prisma.contact.create({
+    data: {
+      orgId: user.orgId,
+      assignedTo: user.id,
+      firstName: data.firstName,
+      lastName: data.lastName,
+      phone: data.phone || null,
+      email: data.email || null,
+      address: data.address || null,
+      city: data.borough || null,
+      state: "NY",
+      source: "market_intel",
+      status: "lead",
+      contactType: "landlord",
+      typeData: {
+        entityName: data.company || null,
+        boroCode: data.boroCode || null,
+        block: data.block || null,
+        lot: data.lot || null,
+      },
+      notes: `Created from building profile: ${data.address || ""}${data.company ? ` (${data.company})` : ""}`,
+    },
+  });
+
+  // Auto-enrich with Apollo
+  let enriched = false;
+  let apolloPerson = null;
+  let apolloOrg = null;
+
+  const hasName = data.firstName && data.lastName;
+  const enrichPromises: Promise<void>[] = [];
+
+  if (hasName) {
+    enrichPromises.push((async () => {
+      const result = await apolloEnrichPerson(
+        `${data.firstName} ${data.lastName}`,
+        data.borough || undefined,
+        data.company || undefined,
+        data.email || undefined,
+      );
+      if (result) {
+        apolloPerson = result;
+        enriched = true;
+        // Update contact with enriched data
+        const updates: any = {};
+        if (result.email && !data.email) updates.email = result.email;
+        if (result.phone && !data.phone) updates.phone = result.phone;
+        if (Object.keys(updates).length > 0) {
+          await prisma.contact.update({ where: { id: contact.id }, data: updates });
+        }
+        // Save enrichment profile
+        await prisma.enrichmentProfile.create({
+          data: {
+            contactId: contact.id,
+            employer: result.company || data.company || null,
+            jobTitle: result.title || null,
+            industry: result.companyIndustry || null,
+            linkedinUrl: result.linkedinUrl || null,
+            profilePhotoUrl: result.photoUrl || null,
+            rawData: JSON.parse(JSON.stringify({ apolloPerson: result })),
+            dataSources: ["apollo"],
+            confidenceLevel: result.email && result.phone ? "high" : result.email || result.phone ? "medium" : "low",
+          },
+        });
+      }
+    })());
+  }
+
+  if (data.company && !data.company.match(/^\d/)) {
+    enrichPromises.push((async () => {
+      const result = await apolloEnrichOrganization(data.company!);
+      if (result) {
+        apolloOrg = result;
+        enriched = true;
+        // Update enrichment profile with org data if it exists
+        const existing = await prisma.enrichmentProfile.findFirst({
+          where: { contactId: contact.id },
+        });
+        if (existing) {
+          await prisma.enrichmentProfile.update({
+            where: { id: existing.id },
+            data: {
+              rawData: JSON.parse(JSON.stringify({ ...(existing.rawData as any), apolloOrg: result })),
+              dataSources: [...(existing.dataSources || []), "apollo_org"],
+            },
+          });
+        } else {
+          await prisma.enrichmentProfile.create({
+            data: {
+              contactId: contact.id,
+              employer: data.company || null,
+              industry: result.industry || null,
+              rawData: JSON.parse(JSON.stringify({ apolloOrg: result })),
+              dataSources: ["apollo_org"],
+              confidenceLevel: "low",
+            },
+          });
+        }
+      }
+    })());
+  }
+
+  if (enrichPromises.length > 0) {
+    await Promise.all(enrichPromises);
+  }
+
+  revalidatePath("/contacts");
+  return { contactId: contact.id, enriched, apolloPerson, apolloOrg };
 }

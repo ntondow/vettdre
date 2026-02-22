@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { apolloFindPeopleAtOrg, apolloEnrichPerson } from "@/lib/apollo";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -144,4 +145,79 @@ export async function deleteContact(contactId: string) {
   });
   revalidatePath("/contacts");
   return { success: true };
+}
+
+export async function findPeopleAtCompany(contactId: string) {
+  const user = await getAuthUser();
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, orgId: user.orgId },
+    include: { enrichmentProfiles: { take: 1, orderBy: { enrichedAt: "desc" } } },
+  });
+  if (!contact) throw new Error("Contact not found");
+
+  // Determine company name from typeData or enrichment
+  const typeData = contact.typeData as any;
+  const enrichment = contact.enrichmentProfiles[0];
+  const companyName = typeData?.entityName
+    || (enrichment?.rawData as any)?.apolloPerson?.company
+    || enrichment?.employer
+    || null;
+
+  if (!companyName) return { people: [], companyName: null };
+
+  const people = await apolloFindPeopleAtOrg(companyName);
+  return { people, companyName };
+}
+
+export async function addPersonAsContact(
+  person: { firstName: string; lastName: string; title: string | null; orgName: string | null },
+  sourceContactId: string,
+) {
+  const user = await getAuthUser();
+  const existing = await prisma.contact.findFirst({
+    where: {
+      orgId: user.orgId,
+      firstName: { equals: person.firstName, mode: "insensitive" },
+      lastName: { equals: person.lastName, mode: "insensitive" },
+    },
+  });
+  if (existing) return { contactId: existing.id, alreadyExists: true };
+
+  const contact = await prisma.contact.create({
+    data: {
+      orgId: user.orgId,
+      assignedTo: user.id,
+      firstName: person.firstName,
+      lastName: person.lastName,
+      source: "apollo_search",
+      status: "lead",
+      contactType: "landlord",
+      typeData: { entityName: person.orgName || null },
+      notes: `Found via Apollo People Search at ${person.orgName || "company"}. Title: ${person.title || "N/A"}. Source contact: ${sourceContactId}`,
+    },
+  });
+
+  revalidatePath("/contacts");
+  revalidatePath(`/contacts/${sourceContactId}`);
+  return { contactId: contact.id, alreadyExists: false };
+}
+
+export async function getContactEnrichmentForCompose(contactId: string) {
+  const user = await getAuthUser();
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, orgId: user.orgId },
+    include: { enrichmentProfiles: { take: 1, orderBy: { enrichedAt: "desc" } } },
+  });
+  if (!contact) return null;
+
+  const enrichment = contact.enrichmentProfiles[0];
+  const rawData = enrichment?.rawData as any;
+  const apolloPerson = rawData?.apolloPerson;
+
+  return {
+    title: apolloPerson?.title || enrichment?.jobTitle || null,
+    company: apolloPerson?.company || enrichment?.employer || null,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+  };
 }

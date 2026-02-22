@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { fetchBuildingProfile, fetchRelatedProperties } from "./building-profile-actions";
+import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding } from "./building-profile-actions";
 import { skipTrace } from "./tracerfy";
 
 interface Props {
@@ -57,6 +57,8 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [relatedDone, setRelatedDone] = useState(false);
   const [skipTraceResult, setSkipTraceResult] = useState<any>(null);
   const [skipTracing, setSkipTracing] = useState(false);
+  const [addingToCRM, setAddingToCRM] = useState(false);
+  const [crmResult, setCrmResult] = useState<{ contactId: string; enriched: boolean } | null>(null);
   // Smart defaults: collapse lower-priority sections
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     permits: true,
@@ -169,8 +171,65 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
         <>
           {/* Building Header — always visible */}
           <div className="bg-white rounded-xl border border-slate-200 p-6">
-            <h2 className="text-xl font-bold text-slate-900">{displayAddr}</h2>
-            <p className="text-sm text-slate-500 mt-1">{displayBorough} • Block {block}, Lot {lot}</p>
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-slate-900">{displayAddr}</h2>
+                <p className="text-sm text-slate-500 mt-1">{displayBorough} • Block {block}, Lot {lot}</p>
+              </div>
+              {data && !crmResult && (
+                <button
+                  onClick={async () => {
+                    if (!data) return;
+                    setAddingToCRM(true);
+                    try {
+                      const topIndividual = data.rankedContacts?.find((r: any) =>
+                        !r.name.toUpperCase().match(/LLC|CORP|INC|L\.P\.|TRUST/) && r.name.includes(" ")
+                      );
+                      const topCorp = data.hpdContacts?.find((c: any) => c.type === "CorporateOwner");
+                      const name = topIndividual?.name || data.pluto?.ownerName || "";
+                      const parts = name.trim().split(/\s+/);
+                      const firstName = parts[0] || "Unknown";
+                      const lastName = parts.slice(1).join(" ") || "Owner";
+                      const result = await createContactFromBuilding({
+                        firstName,
+                        lastName,
+                        company: topCorp?.corporateName || undefined,
+                        phone: topIndividual?.phone || undefined,
+                        email: topIndividual?.email || undefined,
+                        address: data.pluto?.address || address,
+                        borough: displayBorough,
+                        boroCode,
+                        block,
+                        lot,
+                      });
+                      setCrmResult({ contactId: result.contactId, enriched: result.enriched });
+                    } catch (err) {
+                      console.error("Add to CRM error:", err);
+                    }
+                    setAddingToCRM(false);
+                  }}
+                  disabled={addingToCRM}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  {addingToCRM ? (
+                    <>
+                      <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
+                      Adding...
+                    </>
+                  ) : (
+                    "Add to CRM"
+                  )}
+                </button>
+              )}
+              {crmResult && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg">
+                    {crmResult.enriched ? "Contact added & enriched via Apollo!" : "Contact added to CRM!"}
+                  </span>
+                  <a href={`/contacts/${crmResult.contactId}`} className="text-xs text-blue-600 hover:underline font-medium">View →</a>
+                </div>
+              )}
+            </div>
             {connectedVia && connectedVia.length > 0 && (
               <div className="mt-2 flex items-center gap-2">
                 <span className="text-xs text-slate-400">Connected via:</span>
