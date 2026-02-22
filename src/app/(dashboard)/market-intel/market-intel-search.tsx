@@ -1,13 +1,15 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { lookupProperty, searchOwnership, searchByName } from "./actions";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { lookupProperty, lookupPropertyByBBL, searchAddresses, searchOwnership, searchByName } from "./actions";
+import type { AddressSuggestion } from "./actions";
 import { searchNewDevelopments, NewDevelopment } from "./new-development-actions";
 import { createContactFromBuilding } from "./building-profile-actions";
 import BuildingDetail from "./building-detail";
 import BuildingProfile from "./building-profile";
 import { getLists, addBuildingToList } from "../prospecting/actions";
-import { getNeighborhoodsByBorough, getNeighborhoodNameByZip, getZipCodesForNeighborhoods } from "@/lib/neighborhoods";
+import { getNeighborhoodsByBorough, getNeighborhoodNameByZip, getNeighborhoodByZip, getZipCodesForNeighborhoods } from "@/lib/neighborhoods";
+import NeighborhoodDropdown from "./neighborhood-dropdown";
 import dynamic from "next/dynamic";
 const MapSearch = dynamic(() => import("./map-search"), { ssr: false, loading: () => <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div></div> });
 
@@ -59,12 +61,28 @@ export default function MarketIntelSearch() {
   const [pitchSubject, setPitchSubject] = useState("");
   const [pitchBody, setPitchBody] = useState("");
 
-  // Neighborhood filter
+  // Property search — address typeahead
+  const [propQuery, setPropQuery] = useState("");
+  const [propSuggestions, setPropSuggestions] = useState<AddressSuggestion[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+  const [selectedSuggestion, setSelectedSuggestion] = useState<AddressSuggestion | null>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Property search neighborhood
+  const [propBorough, setPropBorough] = useState("");
+  const [propNeighborhoods, setPropNeighborhoods] = useState<string[]>([]);
+
+  // Ownership neighborhood filter
   const [ownerBorough, setOwnerBorough] = useState("");
   const [selectedNeighborhoods, setSelectedNeighborhoods] = useState<string[]>([]);
   const [neighborhoodSearch, setNeighborhoodSearch] = useState("");
   const [showNeighborhoodDropdown, setShowNeighborhoodDropdown] = useState(false);
   const neighborhoodRef = useRef<HTMLDivElement>(null);
+
+  // New development neighborhood
+  const [ndNeighborhoods, setNdNeighborhoods] = useState<string[]>([]);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
   const fmtDate = (d: string | null) => {
@@ -75,6 +93,42 @@ export default function MarketIntelSearch() {
       return d;
     }
   };
+
+  // Debounced address search
+  const handleAddressInput = useCallback((value: string) => {
+    setPropQuery(value);
+    setSelectedSuggestion(null);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length < 3) {
+      setPropSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    setSuggestionsLoading(true);
+    setShowSuggestions(true);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchAddresses(value);
+        setPropSuggestions(results);
+        setShowSuggestions(true);
+      } catch {
+        setPropSuggestions([]);
+      } finally {
+        setSuggestionsLoading(false);
+      }
+    }, 300);
+  }, []);
+
+  // Close suggestions on click outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const loadLists = async () => {
     try { const lists = await getLists(); setProspectLists(JSON.parse(JSON.stringify(lists))); } catch {}
@@ -156,8 +210,49 @@ export default function MarketIntelSearch() {
     setError(null);
     setView("results");
     setSelectedBuilding(null);
+    setShowSuggestions(false);
     try {
-      setPropResults(await lookupProperty(new FormData(e.currentTarget)));
+      let results;
+      if (selectedSuggestion) {
+        // User selected a typeahead suggestion — lookup by BBL for precise results
+        results = await lookupPropertyByBBL(selectedSuggestion.boroCode, selectedSuggestion.block, selectedSuggestion.lot);
+      } else {
+        // Fallback: use the typed query + optional borough
+        const fd = new FormData(e.currentTarget);
+        const address = propQuery.trim();
+        const borough = propBorough;
+        if (!address) { setError("Please enter an address or BBL"); setLoading(false); return; }
+
+        // Detect BBL pattern
+        const bblMatch = address.match(/^(\d)[\s-]?(\d{1,5})[\s-]?(\d{1,4})$/);
+        const bbl10 = address.match(/^(\d)(\d{5})(\d{4})$/);
+        if (bblMatch || bbl10) {
+          const m = (bblMatch || bbl10)!;
+          results = await lookupPropertyByBBL(m[1], m[2].replace(/^0+/, ""), m[3].replace(/^0+/, ""));
+        } else if (borough) {
+          // Use legacy lookup with borough
+          fd.set("address", address);
+          fd.set("borough", borough);
+          results = await lookupProperty(fd);
+        } else {
+          // No borough selected — try typeahead first to find matching properties, then do lookup on best match
+          const suggestions = await searchAddresses(address);
+          if (suggestions.length > 0) {
+            const best = suggestions[0];
+            results = await lookupPropertyByBBL(best.boroCode, best.block, best.lot);
+          } else {
+            setError("No properties found. Try a more specific address or select a borough.");
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      // Client-side filter by neighborhood zips if selected
+      if (propNeighborhoods.length > 0 && results?.buildings) {
+        const allZips = new Set(getZipCodesForNeighborhoods(propNeighborhoods));
+        results.buildings = results.buildings.filter((b: any) => !b.zipCode || allZips.has(b.zipCode));
+      }
+      setPropResults(results);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -392,16 +487,68 @@ export default function MarketIntelSearch() {
         {mainTab === "property" && (
           <>
             <form onSubmit={handlePropertySearch} className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
-              <div className="flex flex-col md:flex-row gap-3 md:gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Street address *</label>
-                  <input name="address" required placeholder="e.g., 350 Park Avenue"
-                    className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+                <div className="sm:col-span-2" ref={suggestionsRef}>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Address or BBL</label>
+                  <div className="relative">
+                    <input
+                      value={propQuery}
+                      onChange={(e) => handleAddressInput(e.target.value)}
+                      onFocus={() => propSuggestions.length > 0 && setShowSuggestions(true)}
+                      placeholder="e.g., 350 Park Ave, 1-634-1, or 1006340001"
+                      className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    {suggestionsLoading && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full" />
+                      </div>
+                    )}
+                    {showSuggestions && propSuggestions.length > 0 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+                        {propSuggestions.map((s, i) => (
+                          <button
+                            key={`${s.boroCode}-${s.block}-${s.lot}-${i}`}
+                            type="button"
+                            onClick={() => {
+                              setSelectedSuggestion(s);
+                              setPropQuery(`${s.address}, ${s.borough}`);
+                              setPropBorough(s.borough);
+                              setShowSuggestions(false);
+                            }}
+                            className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-slate-100 last:border-b-0 transition-colors"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium text-slate-900">{s.address}</p>
+                                <p className="text-xs text-slate-500 mt-0.5">{s.borough}{s.zip ? ` ${s.zip}` : ""}</p>
+                              </div>
+                              <div className="text-right flex-shrink-0">
+                                {s.unitsRes > 0 && <span className="text-xs text-blue-600 font-medium">{s.unitsRes} units</span>}
+                                {s.yearBuilt > 0 && <p className="text-[10px] text-slate-400">Built {s.yearBuilt}</p>}
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {showSuggestions && !suggestionsLoading && propSuggestions.length === 0 && propQuery.trim().length >= 3 && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 px-4 py-3">
+                        <p className="text-sm text-slate-400">No matches found</p>
+                      </div>
+                    )}
+                  </div>
+                  {selectedSuggestion && (
+                    <p className="text-xs text-green-600 mt-1">
+                      {selectedSuggestion.borough} — Block {selectedSuggestion.block}, Lot {selectedSuggestion.lot}
+                      {selectedSuggestion.ownerName && ` — ${selectedSuggestion.ownerName}`}
+                    </p>
+                  )}
                 </div>
-                <div className="md:w-48">
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Borough *</label>
-                  <select name="borough" required className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm bg-white">
-                    <option value="">Select...</option>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Borough <span className="text-slate-400 font-normal">(optional)</span></label>
+                  <select value={propBorough} onChange={(e) => { setPropBorough(e.target.value); setPropNeighborhoods([]); }}
+                    className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm bg-white">
+                    <option value="">Any</option>
                     <option value="Manhattan">Manhattan</option>
                     <option value="Brooklyn">Brooklyn</option>
                     <option value="Queens">Queens</option>
@@ -410,11 +557,18 @@ export default function MarketIntelSearch() {
                   </select>
                 </div>
                 <div className="flex items-end">
-                  <button type="submit" disabled={loading} className="w-full md:w-auto h-12 md:h-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
-                    {loading ? "..." : "Search"}
+                  <button type="submit" disabled={loading || !propQuery.trim()} className="w-full md:w-auto h-12 md:h-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
+                    {loading ? "Searching..." : "Search"}
                   </button>
                 </div>
               </div>
+              {propBorough && (
+                <div className="mt-3 pt-3 border-t border-slate-100">
+                  <div className="max-w-xs">
+                    <NeighborhoodDropdown borough={propBorough} selected={propNeighborhoods} onChange={setPropNeighborhoods} />
+                  </div>
+                </div>
+              )}
             </form>
 
             {propResults && view === "results" && (
@@ -862,7 +1016,7 @@ export default function MarketIntelSearch() {
                   <label className="block text-sm font-medium text-slate-700 mb-1">Borough</label>
                   <select
                     value={ndFilters.borough}
-                    onChange={(e) => setNdFilters((f) => ({ ...f, borough: e.target.value }))}
+                    onChange={(e) => { setNdFilters((f) => ({ ...f, borough: e.target.value })); setNdNeighborhoods([]); }}
                     className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white"
                   >
                     <option value="">All Boroughs</option>
@@ -872,6 +1026,13 @@ export default function MarketIntelSearch() {
                     <option value="QUEENS">Queens</option>
                     <option value="STATEN ISLAND">Staten Island</option>
                   </select>
+                </div>
+                <div>
+                  <NeighborhoodDropdown
+                    borough={{ MANHATTAN: "Manhattan", BRONX: "Bronx", BROOKLYN: "Brooklyn", QUEENS: "Queens", "STATEN ISLAND": "Staten Island" }[ndFilters.borough] || ""}
+                    selected={ndNeighborhoods}
+                    onChange={setNdNeighborhoods}
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Min Units</label>
@@ -945,6 +1106,7 @@ export default function MarketIntelSearch() {
                     setNdLoading(true);
                     setNdSelected(null);
                     try {
+                      const ndZipCodes = ndNeighborhoods.length > 0 ? getZipCodesForNeighborhoods(ndNeighborhoods) : undefined;
                       const results = await searchNewDevelopments({
                         borough: ndFilters.borough || undefined,
                         minUnits: ndFilters.minUnits || undefined,
@@ -952,6 +1114,7 @@ export default function MarketIntelSearch() {
                         status: ndFilters.status || undefined,
                         minCost: ndFilters.minCost || undefined,
                         filedAfter: ndFilters.filedAfter || undefined,
+                        zipCodes: ndZipCodes,
                       });
                       setNdResults(results);
                     } catch (err) {
@@ -983,14 +1146,14 @@ export default function MarketIntelSearch() {
                   <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
                     <div>
                       <h2 className="text-sm font-bold text-slate-900">{ndSelected.address || "No Address"}</h2>
-                      <p className="text-xs text-slate-500">{ndSelected.borough}</p>
+                      <p className="text-xs text-slate-500">{ndSelected.zip ? (() => { const nh = getNeighborhoodNameByZip(ndSelected.zip); return nh ? `${nh}, ${ndSelected.borough}` : ndSelected.borough; })() : ndSelected.borough}</p>
                     </div>
                     <button onClick={() => setNdSelected(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg">&times;</button>
                   </div>
                   <div className="p-5 space-y-6">
                     {/* Address + badges */}
                     <div>
-                      <h3 className="text-lg font-bold text-slate-900">{ndSelected.address || "No Address"}, {ndSelected.borough}</h3>
+                      <h3 className="text-lg font-bold text-slate-900">{ndSelected.address || "No Address"}, {ndSelected.zip ? (() => { const nh = getNeighborhoodNameByZip(ndSelected.zip); return nh ? `${nh}, ${ndSelected.borough}` : ndSelected.borough; })() : ndSelected.borough}</h3>
                       <div className="flex items-center gap-2 mt-2">
                         <span className={`text-xs font-semibold px-2 py-0.5 rounded ${ndSelected.jobType === "NB" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                           {ndSelected.jobType === "NB" ? "New Building" : "Major Alteration"}
@@ -1153,7 +1316,7 @@ export default function MarketIntelSearch() {
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <h3 className="text-base font-semibold text-slate-900">{nd.address || "No Address"}</h3>
-                          <p className="text-sm text-slate-500 mt-0.5">{nd.borough} &bull; Block {nd.block}, Lot {nd.lot}</p>
+                          <p className="text-sm text-slate-500 mt-0.5">{nd.zip ? (() => { const nh = getNeighborhoodNameByZip(nd.zip); return nh ? `${nh}, ${nd.borough}` : nd.borough; })() : nd.borough} &bull; Block {nd.block}, Lot {nd.lot}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-semibold px-2.5 py-1 rounded-lg ${nd.jobType === "NB" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>

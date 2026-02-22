@@ -6,6 +6,7 @@ export interface NewDevelopment {
   borough: string;
   block: string;
   lot: string;
+  zip: string;
   jobType: string;
   proposedUnits: number;
   proposedStories: number;
@@ -30,6 +31,7 @@ export async function searchNewDevelopments(filters: {
   status?: string;
   minCost?: number;
   filedAfter?: string;
+  zipCodes?: string[];
 }): Promise<NewDevelopment[]> {
   const conditions: string[] = [];
 
@@ -67,6 +69,12 @@ export async function searchNewDevelopments(filters: {
     conditions.push(`filing_date >= '${filters.filedAfter}'`);
   }
 
+  // Zip code filter (for neighborhood filtering)
+  if (filters.zipCodes && filters.zipCodes.length > 0) {
+    const zipList = filters.zipCodes.map(z => `'${z}'`).join(",");
+    conditions.push(`zip_code IN(${zipList})`);
+  }
+
   const whereClause = conditions.join(" AND ");
   const url = `https://data.cityofnewyork.us/resource/ic3t-wcy2.json?$where=${encodeURIComponent(whereClause)}&$order=proposed_dwelling_units DESC&$limit=200`;
 
@@ -84,6 +92,7 @@ export async function searchNewDevelopments(filters: {
       borough: d.borough || "",
       block: d.block || "",
       lot: d.lot || "",
+      zip: d.zip_code || "",
       jobType: d.job_type || "",
       proposedUnits: parseInt(d.proposed_dwelling_units || "0"),
       proposedStories: parseInt(d.proposed_no_of_stories || "0"),
