@@ -12,7 +12,8 @@ import {
   convertToContact,
   createDealFromItem,
   exportListCSV,
-  bulkEnrichProspects,
+  bulkEnrichProspectsBatch,
+  getEnrichableProspectCount,
   bulkEnrichProspectContacts,
   getUnenrichedContactCount,
 } from "./actions";
@@ -84,11 +85,13 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
   const [dealModal, setDealModal] = useState<string | null>(null);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
-  const [enrichResult, setEnrichResult] = useState<{ total: number; enriched: number } | null>(null);
+  const [enrichProgress, setEnrichProgress] = useState<{ total: number; processed: number; matched: number; noMatch: number } | null>(null);
+  const [enrichableCount, setEnrichableCount] = useState<number | null>(null);
   const [sourceFilter, setSourceFilter] = useState("all");
   const [contactEnriching, setContactEnriching] = useState(false);
   const [contactEnrichProgress, setContactEnrichProgress] = useState<{ total: number; completed: number; enriched: number } | null>(null);
   const [unenrichedCount, setUnenrichedCount] = useState<number | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const loadItems = async (listId: string) => {
     setLoadingItems(true);
@@ -105,6 +108,7 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
     if (selectedList) {
       loadItems(selectedList);
       getUnenrichedContactCount(selectedList).then(setUnenrichedCount).catch(() => setUnenrichedCount(null));
+      getEnrichableProspectCount(selectedList).then(r => setEnrichableCount(r.enrichable)).catch(() => setEnrichableCount(null));
     }
   }, [selectedList]);
 
@@ -460,24 +464,43 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                     onClick={async () => {
                       if (!selectedList) return;
                       setEnriching(true);
-                      setEnrichResult(null);
+                      setEnrichProgress(null);
                       try {
-                        const result = await bulkEnrichProspects(selectedList);
-                        setEnrichResult(result);
+                        let batchIndex = 0;
+                        let totalMatched = 0;
+                        let totalNoMatch = 0;
+                        while (true) {
+                          const result = await bulkEnrichProspectsBatch(selectedList, batchIndex);
+                          totalMatched += result.matched;
+                          totalNoMatch += result.noMatch;
+                          setEnrichProgress({
+                            total: result.totalEnrichable,
+                            processed: Math.min(result.batchCompleted * 10, result.totalEnrichable),
+                            matched: totalMatched,
+                            noMatch: totalNoMatch,
+                          });
+                          if (result.done) break;
+                          batchIndex++;
+                        }
+                        setToast(`${totalMatched + totalNoMatch} prospects enriched. ${totalMatched} matched, ${totalNoMatch} no match.`);
+                        setTimeout(() => setToast(null), 5000);
                         loadItems(selectedList);
+                        getEnrichableProspectCount(selectedList).then(r => setEnrichableCount(r.enrichable));
                       } catch (err) { console.error("Bulk enrich error:", err); }
                       setEnriching(false);
                     }}
-                    disabled={enriching || items.length === 0}
+                    disabled={enriching || !enrichableCount}
                     className="px-3 py-1.5 border border-indigo-300 bg-indigo-50 rounded-lg text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                   >
                     {enriching ? (
                       <>
                         <span className="animate-spin inline-block w-3 h-3 border-2 border-indigo-600 border-t-transparent rounded-full"></span>
-                        Enriching...
+                        {enrichProgress ? `Enriching ${enrichProgress.processed}/${enrichProgress.total}...` : "Enriching..."}
                       </>
-                    ) : enrichResult ? (
-                      `✓ ${enrichResult.enriched}/${enrichResult.total} enriched`
+                    ) : enrichProgress ? (
+                      `✓ ${enrichProgress.matched}/${enrichProgress.total} matched`
+                    ) : enrichableCount ? (
+                      `🔍 Enrich ${enrichableCount} Prospects`
                     ) : (
                       "🔍 Enrich All"
                     )}
@@ -536,6 +559,30 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                   </button>
                 </div>
               </div>
+
+              {/* Prospect Enrichment Progress Bar */}
+              {enriching && enrichProgress && (
+                <div className="mb-4 bg-white rounded-lg border border-indigo-200 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-indigo-600 border-t-transparent rounded-full"></span>
+                      <span className="text-sm font-medium text-indigo-700">Enriching prospects via Apollo...</span>
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {enrichProgress.processed}/{enrichProgress.total} processed
+                    </span>
+                  </div>
+                  <div className="w-full bg-indigo-100 rounded-full h-2">
+                    <div
+                      className="bg-indigo-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (enrichProgress.processed / Math.max(1, enrichProgress.total)) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">
+                    {enrichProgress.matched} matched, {enrichProgress.noMatch} no match
+                  </p>
+                </div>
+              )}
 
               {/* Contact Enrichment Progress Bar */}
               {contactEnriching && contactEnrichProgress && (
@@ -655,8 +702,37 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                       </div>
 
                       {/* Expanded */}
-                      {expandedItem === item.id && (
+                      {expandedItem === item.id && (() => {
+                        // Parse new dev metadata from notes JSON
+                        let ndMeta: any = null;
+                        if (item.source === "new_development" && item.notes?.startsWith("{")) {
+                          try { ndMeta = JSON.parse(item.notes); } catch {}
+                        }
+                        return (
                         <div className="border-t border-slate-100 p-4 bg-slate-50/50">
+                          {/* New Development-specific columns */}
+                          {item.source === "new_development" && ndMeta && (
+                            <div className="grid grid-cols-4 gap-3 mb-4">
+                              <div>
+                                <p className="text-xs text-slate-400">Proposed Units</p>
+                                <p className="text-sm font-semibold">{ndMeta.proposedUnits || item.totalUnits || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400">Est. Cost</p>
+                                <p className="text-sm font-semibold">{ndMeta.estimatedCost ? fmtPrice(ndMeta.estimatedCost) : "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400">Filing Status</p>
+                                <p className="text-sm font-semibold">{ndMeta.filingStatus || "—"}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs text-slate-400">Developer</p>
+                                <p className="text-sm font-semibold truncate">{ndMeta.developerName || item.ownerName || "—"}</p>
+                              </div>
+                            </div>
+                          )}
+                          {/* Standard building details */}
+                          {(item.source !== "new_development" || !ndMeta) && (
                           <div className="grid grid-cols-4 gap-3 mb-4">
                             <div>
                               <p className="text-xs text-slate-400">Units</p>
@@ -677,6 +753,7 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                               <p className="text-sm font-semibold">{item.zoning || "—"}</p>
                             </div>
                           </div>
+                          )}
                           {item.ownerAddress && (
                             <p className="text-sm text-slate-600 mb-3">📍 Owner: {item.ownerAddress}</p>
                           )}
@@ -713,7 +790,8 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                             </button>
                           </div>
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -744,6 +822,15 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
           )}
         </div>
       </div>
+
+      {/* Summary Toast */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-[fade-in_0.3s]">
+          <span className="text-lg">✅</span>
+          <span className="text-sm font-medium">{toast}</span>
+          <button onClick={() => setToast(null)} className="ml-2 text-white/80 hover:text-white">&times;</button>
+        </div>
+      )}
     </div>
   );
 }

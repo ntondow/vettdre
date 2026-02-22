@@ -53,6 +53,10 @@ export default function MarketIntelSearch() {
   const [addingCrmId, setAddingCrmId] = useState<string | null>(null);
   const [crmResult, setCrmResult] = useState<{ id: string; message: string } | null>(null);
   const [copiedPitch, setCopiedPitch] = useState(false);
+  const [pitchModal, setPitchModal] = useState<NewDevelopment | null>(null);
+  const [pitchTo, setPitchTo] = useState("");
+  const [pitchSubject, setPitchSubject] = useState("");
+  const [pitchBody, setPitchBody] = useState("");
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
   const fmtDate = (d: string | null) => {
@@ -96,10 +100,12 @@ export default function MarketIntelSearch() {
   };
 
   const handleDraftPitch = (nd: NewDevelopment) => {
-    const pitch = `Hi ${nd.ownerName || "there"},\n\nI noticed your new ${nd.proposedUnits}-unit development at ${nd.address || "your property"} in ${nd.borough} recently received ${nd.filingStatus}.\n\nI specialize in lease-up services for new developments in ${nd.borough} and would love to discuss how I can help fill your building quickly and at optimal rents.\n\nMy recent lease-up track record includes:\n- [Your track record here]\n\nWould you have 15 minutes this week to discuss?\n\nBest,\n[Your name]`;
-    navigator.clipboard.writeText(pitch);
-    setCopiedPitch(true);
-    setTimeout(() => setCopiedPitch(false), 2000);
+    const subject = `Leasing Services for ${nd.address || "Your New Development"}`;
+    const body = `Hi ${nd.ownerName || "there"},\n\nI noticed your new ${nd.proposedUnits}-unit development at ${nd.address || "your property"} in ${nd.borough} recently received ${nd.filingStatus}.\n\nI specialize in lease-up services for new developments in ${nd.borough} and would love to discuss how I can help fill your building quickly and at optimal rents.\n\nMy recent lease-up track record includes:\n- [Your track record here]\n\nWould you have 15 minutes this week to discuss?\n\nBest,\n[Your name]`;
+    setPitchSubject(subject);
+    setPitchBody(body);
+    setPitchTo("");
+    setPitchModal(nd);
   };
 
   const handleSaveToList = async (listId: string, building: any) => {
@@ -126,6 +132,7 @@ export default function MarketIntelSearch() {
         lastSalePrice: building.lastSalePrice || null,
         lastSaleDate: building.lastSaleDate || null,
         source: building.source || "market_intel",
+        ...(building.notes ? { notes: building.notes } : {}),
       });
       setSavedMsg("Saved!");
       setTimeout(() => setSavedMsg(null), 2000);
@@ -274,6 +281,72 @@ export default function MarketIntelSearch() {
             {crmResult.id && (
               <a href={`/contacts/${crmResult.id}`} className="ml-2 underline">View</a>
             )}
+          </div>
+        )}
+
+        {/* Pitch Compose Modal */}
+        {pitchModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between p-5 border-b border-slate-200">
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-900">Draft Leasing Pitch</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">{pitchModal.address}</p>
+                </div>
+                <button onClick={() => setPitchModal(null)} className="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+              </div>
+              <div className="p-5 space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">To (email)</label>
+                  <input
+                    value={pitchTo}
+                    onChange={(e) => setPitchTo(e.target.value)}
+                    placeholder="developer@example.com"
+                    type="email"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Subject</label>
+                  <input
+                    value={pitchSubject}
+                    onChange={(e) => setPitchSubject(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Message</label>
+                  <textarea
+                    value={pitchBody}
+                    onChange={(e) => setPitchBody(e.target.value)}
+                    rows={12}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none font-mono"
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(pitchBody);
+                      setCopiedPitch(true);
+                      setTimeout(() => setCopiedPitch(false), 2000);
+                    }}
+                    className="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    {copiedPitch ? "Copied!" : "Copy to Clipboard"}
+                  </button>
+                  {pitchTo && (
+                    <button
+                      onClick={() => {
+                        window.open(`mailto:${pitchTo}?subject=${encodeURIComponent(pitchSubject)}&body=${encodeURIComponent(pitchBody)}`, "_blank");
+                      }}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg text-sm"
+                    >
+                      Open in Email Client
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         )}
 
@@ -931,6 +1004,14 @@ export default function MarketIntelSearch() {
                               numFloors: ndSelected.proposedStories,
                               zoning: ndSelected.zoningDistrict,
                               source: "new_development",
+                              notes: JSON.stringify({
+                                proposedUnits: ndSelected.proposedUnits,
+                                estimatedCost: ndSelected.estimatedCost,
+                                filingStatus: ndSelected.filingStatus,
+                                developerName: ndSelected.ownerName || ndSelected.ownerBusiness,
+                                filingDate: ndSelected.filingDate,
+                                jobType: ndSelected.jobType,
+                              }),
                             });
                           }}
                           className="flex-1 px-4 py-2.5 border border-blue-600 text-blue-600 hover:bg-blue-50 text-sm font-medium rounded-lg"
@@ -1041,6 +1122,14 @@ export default function MarketIntelSearch() {
                               numFloors: nd.proposedStories,
                               zoning: nd.zoningDistrict,
                               source: "new_development",
+                              notes: JSON.stringify({
+                                proposedUnits: nd.proposedUnits,
+                                estimatedCost: nd.estimatedCost,
+                                filingStatus: nd.filingStatus,
+                                developerName: nd.ownerName || nd.ownerBusiness,
+                                filingDate: nd.filingDate,
+                                jobType: nd.jobType,
+                              }),
                             });
                           }}
                           className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
