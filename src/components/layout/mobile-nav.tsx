@@ -27,7 +27,6 @@ const moreItems = [
 export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
   const [unread, setUnread] = useState(0);
   const [showMore, setShowMore] = useState(false);
   const [entered, setEntered] = useState(false);
@@ -53,6 +52,7 @@ export default function MobileNav() {
   }, []);
 
   const handleSignOut = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();

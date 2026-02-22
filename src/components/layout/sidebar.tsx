@@ -33,7 +33,6 @@ const nav = [
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
   const { collapsed, toggle } = useSidebar();
   const [unread, setUnread] = useState(0);
   const [followUps, setFollowUps] = useState(0);
@@ -43,7 +42,7 @@ export default function Sidebar() {
     getFollowUpCount().then(n => setFollowUps(n)).catch(() => {});
   }, [pathname]);
 
-  const handleSignOut = async () => { await supabase.auth.signOut(); router.push("/login"); router.refresh(); };
+  const handleSignOut = async () => { const supabase = createClient(); await supabase.auth.signOut(); router.push("/login"); router.refresh(); };
 
   return (
     <aside className={`fixed inset-y-0 left-0 bg-white border-r border-slate-200 hidden md:flex flex-col z-40 transition-all duration-200 ${collapsed ? "w-[60px]" : "w-60"}`}>
