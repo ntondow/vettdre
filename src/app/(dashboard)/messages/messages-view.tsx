@@ -422,7 +422,7 @@ export default function MessagesView({
   return (
     <div className="flex h-[calc(100vh-57px)]">
       {/* ==================== LEFT: Thread List ==================== */}
-      <div className="w-[380px] flex-shrink-0 border-r border-slate-200 flex flex-col bg-white">
+      <div className={`w-full md:w-[380px] flex-shrink-0 border-r border-slate-200 flex flex-col bg-white ${selectedThreadId ? "hidden md:flex" : "flex"}`}>
         <BulkActionBar
           selectedThreadIds={Array.from(selectedThreadIds)}
           labels={labels}
@@ -608,7 +608,14 @@ export default function MessagesView({
       </div>
 
       {/* ==================== CENTER: Thread Detail ==================== */}
-      <div className="flex-1 min-w-0 flex flex-col bg-slate-50 overflow-hidden">
+      <div className={`flex-1 min-w-0 flex-col bg-slate-50 overflow-hidden ${selectedThreadId ? "flex" : "hidden md:flex"}`}>
+        {/* Mobile back button */}
+        {selectedThread && (
+          <button onClick={() => setSelectedThreadId(null)}
+            className="md:hidden flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-blue-600 bg-white border-b border-slate-200">
+            ← Back to inbox
+          </button>
+        )}
         {selectedThread && threadMessages.length > 0 ? (
           <ThreadDetail
             thread={selectedThread} messages={threadMessages} gmailEmail={gmailEmail}

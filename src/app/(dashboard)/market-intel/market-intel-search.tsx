@@ -151,14 +151,14 @@ export default function MarketIntelSearch() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <div className="bg-white border-b border-slate-200">
-        <div className="px-8 py-5 flex items-center gap-3">
+        <div className="px-4 md:px-8 py-5 flex items-center gap-3">
           <span className="text-2xl">🔍</span>
           <div>
             <h1 className="text-xl font-bold text-slate-900">Market Intelligence</h1>
             <p className="text-sm text-slate-500">NYC property records, ownership & portfolio data</p>
           </div>
         </div>
-        <div className="px-8 flex gap-0">
+        <div className="px-4 md:px-8 flex gap-0 overflow-x-auto no-scrollbar">
           {([
             { key: "property" as const, label: "🏠 Property Search" },
             { key: "ownership" as const, label: "👤 Ownership Lookup" },
@@ -180,7 +180,7 @@ export default function MarketIntelSearch() {
         </div>
       </div>
 
-      <div className="px-8 py-6">
+      <div className="px-4 md:px-8 py-6">
         {/* Save to List Modal */}
         {saveModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -226,15 +226,16 @@ export default function MarketIntelSearch() {
         {/* ======================== PROPERTY TAB ======================== */}
         {mainTab === "property" && (
           <>
-            <form onSubmit={handlePropertySearch} className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
-              <div className="flex gap-4">
+            <form onSubmit={handlePropertySearch} className="bg-white rounded-xl border border-slate-200 p-4 md:p-5 mb-6">
+              <div className="flex flex-col md:flex-row gap-3 md:gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Street address *</label>
-                  <input name="address" required placeholder="e.g., 350 Park Avenue" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input name="address" required placeholder="e.g., 350 Park Avenue"
+                    className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div className="w-48">
+                <div className="md:w-48">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Borough *</label>
-                  <select name="borough" required className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white">
+                  <select name="borough" required className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm bg-white">
                     <option value="">Select...</option>
                     <option value="Manhattan">Manhattan</option>
                     <option value="Brooklyn">Brooklyn</option>
@@ -244,7 +245,7 @@ export default function MarketIntelSearch() {
                   </select>
                 </div>
                 <div className="flex items-end">
-                  <button type="submit" disabled={loading} className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
+                  <button type="submit" disabled={loading} className="w-full md:w-auto h-12 md:h-auto px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50">
                     {loading ? "..." : "Search"}
                   </button>
                 </div>
@@ -253,7 +254,7 @@ export default function MarketIntelSearch() {
 
             {propResults && view === "results" && (
               <>
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   {[
                     { label: "Buildings", val: propResults.buildings.length },
                     { label: "Sales", val: propResults.sales.length },
@@ -300,7 +301,7 @@ export default function MarketIntelSearch() {
                 <div className="bg-white rounded-xl border border-slate-200 p-6 mb-6">
                   <h2 className="text-2xl font-bold text-slate-900">{selectedBuilding.address}</h2>
                   <p className="text-base text-slate-500 mt-1">{selectedBuilding.neighborhood}, {selectedBuilding.borough}</p>
-                  <div className="grid grid-cols-5 gap-4 mt-5 pt-5 border-t border-slate-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mt-5 pt-5 border-t border-slate-100">
                     <div><p className="text-xs text-slate-400 uppercase">Last Sale</p><p className="text-lg font-semibold">{fmtPrice(selectedBuilding.lastSalePrice)}</p></div>
                     <div><p className="text-xs text-slate-400 uppercase">Year Built</p><p className="text-lg font-semibold">{selectedBuilding.yearBuilt || "—"}</p></div>
                     <div><p className="text-xs text-slate-400 uppercase">Units</p><p className="text-lg font-semibold">{selectedBuilding.totalUnits || "—"}</p></div>
@@ -368,7 +369,7 @@ export default function MarketIntelSearch() {
               <>
                 <form onSubmit={handleOwnershipSearch} className="bg-white rounded-xl border border-slate-200 p-5 mb-6">
                   <p className="text-sm text-slate-500 mb-4">Search HPD-registered buildings. Click any building for AI owner analysis.</p>
-                  <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Borough</label>
                       <select name="borough" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm bg-white">
                         <option value="">Any</option><option value="Manhattan">Manhattan</option><option value="Brooklyn">Brooklyn</option>
@@ -376,16 +377,16 @@ export default function MarketIntelSearch() {
                       </select>
                     </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">ZIP code</label>
-                      <input name="zip" placeholder="e.g., 11211" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input name="zip" placeholder="e.g., 11211" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Street name</label>
-                      <input name="street" placeholder="e.g., Bedford Ave" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input name="street" placeholder="e.g., Bedford Ave" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">House #</label>
-                      <input name="houseNumber" placeholder="e.g., 143" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input name="houseNumber" placeholder="e.g., 143" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">Owner name</label>
-                      <input name="ownerName" placeholder="e.g., Smith" className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      <input name="ownerName" placeholder="e.g., Smith" className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                     </div>
                   </div>
                   <div className="flex items-end gap-4 mt-4">
@@ -403,7 +404,7 @@ export default function MarketIntelSearch() {
 
                 {ownerResults && (
                   <>
-                    <div className="grid grid-cols-3 gap-4 mb-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
                       <div className="bg-white rounded-xl border border-slate-200 p-5"><p className="text-sm text-slate-500">Buildings</p><p className="text-2xl font-bold text-slate-900 mt-1">{ownerResults.buildings.length}</p></div>
                       <div className="bg-white rounded-xl border border-slate-200 p-5"><p className="text-sm text-slate-500">Owner Records</p><p className="text-2xl font-bold text-slate-900 mt-1">{ownerResults.totalContacts}</p></div>
                       <div className="bg-white rounded-xl border border-slate-200 p-5"><p className="text-sm text-slate-500">Registrations</p><p className="text-2xl font-bold text-slate-900 mt-1">{ownerResults.totalRegistrations}</p></div>
@@ -480,7 +481,7 @@ export default function MarketIntelSearch() {
                     required
                     defaultValue={nameQuery}
                     placeholder="e.g., John Smith or ABC Realty LLC"
-                    className="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full h-12 md:h-auto px-4 md:px-3 py-2.5 border border-slate-300 rounded-lg text-base md:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div className="flex items-end">
@@ -589,7 +590,7 @@ export default function MarketIntelSearch() {
             {nameDetailBuilding && (
               <div className="fixed inset-0 z-[2000] flex">
                 <div className="absolute inset-0 bg-black/40" onClick={() => setNameDetailBuilding(null)} />
-                <div className="relative ml-auto w-full max-w-3xl bg-white shadow-2xl overflow-y-auto">
+                <div className="relative ml-auto w-full md:max-w-3xl bg-white shadow-2xl overflow-y-auto">
                   <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
                     <div>
                       <h2 className="text-sm font-bold text-slate-900">{nameDetailBuilding.address}</h2>

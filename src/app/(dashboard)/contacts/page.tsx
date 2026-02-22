@@ -9,7 +9,7 @@ export default async function ContactsPage() {
   return (
     <>
       <Header title="Contacts" subtitle={`${contacts.length} contact${contacts.length !== 1 ? "s" : ""}`} />
-      <div className="p-8">
+      <div className="p-4 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div />
           <ContactForm />

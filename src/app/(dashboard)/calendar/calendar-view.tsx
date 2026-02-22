@@ -346,14 +346,14 @@ export default function CalendarView({ gmailConnected }: { gmailConnected: boole
   return (
     <div className="flex flex-col h-[calc(100vh-57px)]">
       {/* ---- HEADER ---- */}
-      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-slate-200">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 md:px-4 py-2 bg-white border-b border-slate-200">
         {/* Left: actions */}
         <div className="flex items-center gap-2">
           <button
             onClick={handleCreateEvent}
-            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
+            className="flex items-center gap-1.5 px-3 md:px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-colors"
           >
-            <Plus className="w-4 h-4" /> New Event
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New Event</span><span className="sm:hidden">New</span>
           </button>
           {gmailConnected && (
             <button
@@ -373,7 +373,7 @@ export default function CalendarView({ gmailConnected }: { gmailConnected: boole
           )}
           <button
             onClick={() => setShowingCreatorOpen(true)}
-            className="px-3 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
+            className="hidden md:flex px-3 py-2 border border-slate-200 text-slate-600 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
           >
             Showings
           </button>
@@ -387,8 +387,8 @@ export default function CalendarView({ gmailConnected }: { gmailConnected: boole
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <div className="min-w-[240px] text-center">
-            <h2 className="text-xl font-bold text-slate-900 leading-tight">{titleLabel}</h2>
+          <div className="min-w-[140px] md:min-w-[240px] text-center">
+            <h2 className="text-base md:text-xl font-bold text-slate-900 leading-tight">{titleLabel}</h2>
             <span className="text-[11px] text-slate-400 font-medium">
               {eventCount} event{eventCount !== 1 ? "s" : ""}
             </span>
@@ -463,7 +463,9 @@ export default function CalendarView({ gmailConnected }: { gmailConnected: boole
               <button
                 key={m}
                 onClick={() => setView(m)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all capitalize ${
+                className={`px-2 md:px-3 py-1.5 text-xs font-medium rounded-md transition-all capitalize ${
+                  m === "week" ? "hidden md:block" : ""
+                } ${
                   view === m ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                 }`}
               >

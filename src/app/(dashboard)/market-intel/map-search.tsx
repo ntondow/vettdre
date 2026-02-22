@@ -431,10 +431,13 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   // If a building profile is selected to view in detail
   const [viewProfile, setViewProfile] = useState(false);
 
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [bottomSheetExpanded, setBottomSheetExpanded] = useState(false);
+
   return (
-    <div className="flex h-[calc(100vh-200px)] min-h-[600px] rounded-xl overflow-hidden border border-slate-200 bg-white">
-      {/* Left Panel: List + Filters */}
-      <div className="w-[340px] flex-shrink-0 flex flex-col border-r border-slate-200">
+    <div className="flex h-[calc(100vh-200px)] md:min-h-[600px] min-h-[400px] rounded-xl overflow-hidden border border-slate-200 bg-white relative">
+      {/* Left Panel: List + Filters (desktop only) */}
+      <div className="hidden md:flex w-[340px] flex-shrink-0 flex-col border-r border-slate-200">
         {/* Header */}
         <div className="px-3 py-2.5 border-b border-slate-200 bg-slate-50">
           <div className="flex items-center justify-between mb-1.5">
@@ -731,13 +734,19 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
 
       {/* Map */}
       <div className="flex-1 relative">
-        {/* Address Search Bar */}
-        <div className="absolute top-3 left-3 z-[1000]">
+        {/* Address Search Bar — floating on mobile, positioned on desktop */}
+        <div className="absolute top-3 left-3 right-3 md:right-auto z-[1000]">
           <form onSubmit={handleAddressSearch} className="flex">
             <input type="text" value={addressSearch} onChange={e => setAddressSearch(e.target.value)}
               placeholder="Search address..."
-              className="w-56 px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-l-lg shadow-lg focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400" />
-            <button type="submit" className="px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-r-lg shadow-lg transition-colors">Go</button>
+              className="flex-1 md:w-56 h-12 md:h-auto px-4 md:px-3 py-1.5 text-base md:text-xs bg-white border border-slate-200 rounded-l-lg shadow-lg focus:outline-none focus:ring-1 focus:ring-blue-500 placeholder:text-slate-400" />
+            {addressSearch && (
+              <button type="button" onClick={() => { setAddressSearch(""); setSearchMsg(null); setPinnedSearch(""); }}
+                className="flex items-center justify-center w-10 bg-white border-y border-slate-200 text-slate-400 text-lg">
+                &times;
+              </button>
+            )}
+            <button type="submit" className="px-4 md:px-2.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm md:text-xs font-medium rounded-r-lg shadow-lg transition-colors">Go</button>
           </form>
           {searchMsg && (
             <div className={"mt-1.5 px-3 py-1.5 rounded-lg shadow-lg text-xs font-medium " + (
@@ -747,6 +756,24 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
             </div>
           )}
         </div>
+
+        {/* Mobile: floating filter button */}
+        <button onClick={() => setMobileFiltersOpen(true)}
+          className={"md:hidden absolute top-[72px] left-3 z-[1000] px-3 py-2 rounded-lg shadow-lg text-xs font-medium transition-colors " + (
+            activeFilterCount > 0
+              ? "bg-blue-600 text-white"
+              : "bg-white text-slate-600 border border-slate-200"
+          )}>
+          Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+        </button>
+
+        {/* Mobile: property count pill */}
+        <div className="md:hidden absolute top-[72px] right-3 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-2 z-[1000]">
+          <p className="text-[10px] font-medium text-slate-600">
+            {loading ? "..." : `${properties.length} props`}
+          </p>
+        </div>
+
         <div ref={mapRef} className="w-full h-full" />
 
         {/* Save success toast */}
@@ -758,7 +785,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
 
         {/* Loading overlay */}
         {loading && (
-          <div className="absolute top-3 left-3 bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 z-[1000]">
+          <div className="absolute top-16 md:top-3 left-3 bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 z-[1000]">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
             <span className="text-xs text-slate-600">Loading properties...</span>
           </div>
@@ -774,19 +801,182 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
           </div>
         </div>
 
-        {/* Property count */}
-        <div className="absolute top-3 right-14 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-1.5 z-[1000]">
+        {/* Property count - desktop */}
+        <div className="hidden md:block absolute top-3 right-14 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-1.5 z-[1000]">
           <p className="text-[10px] font-medium text-slate-600">
             {total > properties.length ? `Showing top ${properties.length} of ${total.toLocaleString()}` : `${properties.length} properties`}
           </p>
         </div>
       </div>
-      {/* Building Profile Modal */}
+
+      {/* Mobile: Full-screen filter modal */}
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-[2000] md:hidden">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileFiltersOpen(false)} />
+          <div className="absolute bottom-0 left-0 right-0 bg-white rounded-t-2xl max-h-[80vh] overflow-y-auto pb-safe"
+            style={{ animation: "slide-up-sheet 200ms ease-out" }}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+              <h3 className="text-sm font-bold text-slate-900">Map Filters</h3>
+              <button onClick={() => setMobileFiltersOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 text-lg">&times;</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <label className="flex items-center justify-between">
+                <span className="text-sm font-medium text-slate-700">Hide public housing</span>
+                <input type="checkbox" className="rounded border-slate-300 text-blue-600 w-5 h-5"
+                  checked={filters.excludePublic || false}
+                  onChange={e => setFilters(prev => ({ ...prev, excludePublic: e.target.checked }))} />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Min Units</label>
+                  <input type="number" placeholder="Any" value={filters.minUnits || ""}
+                    onChange={e => handleFilterChange("minUnits", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Max Units</label>
+                  <input type="number" placeholder="Any" value={filters.maxUnits || ""}
+                    onChange={e => handleFilterChange("maxUnits", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Min Value ($)</label>
+                  <input type="number" placeholder="Any" value={filters.minValue || ""}
+                    onChange={e => handleFilterChange("minValue", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Max Value ($)</label>
+                  <input type="number" placeholder="Any" value={filters.maxValue || ""}
+                    onChange={e => handleFilterChange("maxValue", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Built After</label>
+                  <input type="number" placeholder="e.g. 1980" value={filters.minYearBuilt || ""}
+                    onChange={e => handleFilterChange("minYearBuilt", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Built Before</label>
+                  <input type="number" placeholder="Any" value={filters.maxYearBuilt || ""}
+                    onChange={e => handleFilterChange("maxYearBuilt", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Min Floors</label>
+                  <input type="number" placeholder="Any" value={filters.minFloors || ""}
+                    onChange={e => handleFilterChange("minFloors", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium">Zoning</label>
+                  <select value={filters.zoneDist || ""}
+                    onChange={e => handleStringFilterChange("zoneDist", e.target.value)}
+                    className="w-full mt-1 px-3 py-2.5 text-base border border-slate-200 rounded-lg bg-white">
+                    <option value="">Any</option>
+                    <option value="R">Residential</option>
+                    <option value="C">Commercial</option>
+                    <option value="M">Manufacturing</option>
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                {activeFilterCount > 0 && (
+                  <button onClick={() => { clearFilters(); setMobileFiltersOpen(false); }}
+                    className="flex-1 px-4 py-3 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl">
+                    Clear
+                  </button>
+                )}
+                <button onClick={() => { loadProperties(); setMobileFiltersOpen(false); }}
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl">
+                  Apply Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile: Bottom sheet for selected property */}
+      {selectedProperty && !viewProfile && (
+        <div className={`md:hidden fixed bottom-0 left-0 right-0 z-[1500] bg-white rounded-t-2xl shadow-2xl transition-all duration-200 pb-safe ${
+          bottomSheetExpanded ? "max-h-[85vh]" : "max-h-[45vh]"
+        } overflow-y-auto`}
+          style={{ animation: "slide-up-sheet 200ms ease-out" }}>
+          {/* Drag handle */}
+          <div className="flex justify-center py-2 sticky top-0 bg-white rounded-t-2xl z-10"
+            onClick={() => setBottomSheetExpanded(!bottomSheetExpanded)}>
+            <div className="w-10 h-1 bg-slate-300 rounded-full" />
+          </div>
+          <div className="px-4 pb-4">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">{selectedProperty.address}</h3>
+                <p className="text-xs text-slate-400">{selectedProperty.borough} · Blk {selectedProperty.block}, Lot {selectedProperty.lot}</p>
+              </div>
+              <button onClick={() => { setSelectedProperty(null); setBottomSheetExpanded(false); }}
+                className="w-8 h-8 flex items-center justify-center text-slate-400 text-lg">&times;</button>
+            </div>
+            <div className="grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                <p className="text-[10px] text-slate-400">Units</p>
+                <p className="text-lg font-bold text-slate-900">{selectedProperty.unitsRes}</p>
+              </div>
+              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                <p className="text-[10px] text-slate-400">Floors</p>
+                <p className="text-lg font-bold text-slate-900">{selectedProperty.numFloors}</p>
+              </div>
+              <div className="bg-blue-50 rounded-lg px-2 py-2 text-center">
+                <p className="text-[10px] text-blue-500">Value</p>
+                <p className="text-sm font-bold text-blue-900">{fmtPrice(selectedProperty.assessTotal)}</p>
+              </div>
+            </div>
+            {selectedProperty.ownerName && (
+              <p className="text-xs text-slate-500 mb-3">Owner: <span className="font-medium text-slate-700">{selectedProperty.ownerName}</span></p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={() => { setViewProfile(true); setBottomSheetExpanded(false); }}
+                className="flex-1 px-3 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl">
+                Full Profile
+              </button>
+              <button onClick={() => handleSaveToList(selectedProperty)}
+                className="flex-1 px-3 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl">
+                {saveSuccess === selectedProperty.address ? "✓ Saved!" : "Save"}
+              </button>
+            </div>
+            {bottomSheetExpanded && (
+              <div className="mt-3 space-y-2">
+                <div className="flex gap-2">
+                  {onNameClick && selectedProperty.ownerName && (
+                    <button onClick={() => onNameClick(selectedProperty.ownerName)}
+                      className="flex-1 px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl">
+                      Name Search
+                    </button>
+                  )}
+                  <button onClick={() => handleShowPortfolio(selectedProperty)} disabled={loadingPortfolio}
+                    className="flex-1 px-3 py-2.5 bg-amber-50 border border-amber-200 text-amber-800 text-sm font-medium rounded-xl disabled:opacity-50">
+                    {loadingPortfolio ? "Finding..." : "Portfolio"}
+                  </button>
+                </div>
+                <div className="text-xs space-y-1 text-slate-600 pt-2 border-t border-slate-100">
+                  <div className="flex justify-between"><span className="text-slate-400">Year Built</span><span className="font-medium">{selectedProperty.yearBuilt || "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Zoning</span><span className="font-medium">{selectedProperty.zoneDist || "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Class</span><span className="font-medium">{selectedProperty.bldgClass || "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Bldg Area</span><span className="font-medium">{selectedProperty.bldgArea > 0 ? selectedProperty.bldgArea.toLocaleString() + " sf" : "—"}</span></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Building Profile Modal — full-screen on mobile, side panel on desktop */}
       {selectedProperty && viewProfile && (
         <div className="fixed inset-0 z-[2000] flex">
           <div className="absolute inset-0 bg-black/40" onClick={() => setViewProfile(false)} />
-          <div className="relative ml-auto w-full max-w-3xl bg-white shadow-2xl overflow-y-auto animate-in slide-in-from-right">
-            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
+          <div className="relative ml-auto w-full md:max-w-3xl bg-white shadow-2xl overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 md:px-5 py-3 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-slate-900">{selectedProperty.address}</h2>
                 <p className="text-xs text-slate-500">{selectedProperty.borough}</p>
@@ -796,7 +986,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                 &times;
               </button>
             </div>
-            <div className="p-5">
+            <div className="p-4 md:p-5">
               <BuildingProfile
                 boroCode={selectedProperty.boroCode}
                 block={selectedProperty.block}
