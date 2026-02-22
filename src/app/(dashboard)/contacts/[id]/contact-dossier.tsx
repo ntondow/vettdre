@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData, findPeopleAtCompany, addPersonAsContact } from "./actions";
+import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData, findPeopleAtCompany, findMorePeopleAtCompany, addPersonAsContact, enrichCompanyOnDemand } from "./actions";
 import { enrichContact } from "./enrich-actions";
 import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
 import { CONTACT_TYPE_META } from "@/lib/contact-types";
@@ -71,6 +71,9 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
   const [loadingPeople, setLoadingPeople] = useState(false);
   const [addingPerson, setAddingPerson] = useState<string | null>(null);
   const [addedPeople, setAddedPeople] = useState<Set<string>>(new Set());
+  const [enrichingCompany, setEnrichingCompany] = useState(false);
+  const [companyEnrichResult, setCompanyEnrichResult] = useState<any>(null);
+  const [broadSearch, setBroadSearch] = useState(false);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -457,7 +460,7 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
               {/* Type Profile */}
               <TypeProfileCard contact={contact} />
 
-              {/* People at Company — for landlord contacts with a company */}
+              {/* People at Company — Find Decision Makers */}
               {contact.contactType === "landlord" && (() => {
                 const typeData = contact.typeData as any;
                 const enrichment = contact.enrichmentProfiles[0];
@@ -470,21 +473,42 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                   <div className="bg-white rounded-xl border border-slate-200 p-5">
                     <div className="flex items-center justify-between mb-3">
                       <h3 className="text-sm font-semibold text-slate-700">👥 People at {entityName}</h3>
-                      <button
-                        onClick={async () => {
-                          setLoadingPeople(true);
-                          try {
-                            const result = await findPeopleAtCompany(contact.id);
-                            setCompanyPeople(result.people);
-                            setCompanyName(result.companyName);
-                          } catch (err) { console.error("Find people error:", err); }
-                          setLoadingPeople(false);
-                        }}
-                        disabled={loadingPeople}
-                        className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 disabled:opacity-50 transition-colors"
-                      >
-                        {loadingPeople ? "Searching..." : companyPeople.length > 0 ? "Refresh" : "Find People"}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {companyPeople.length > 0 && !broadSearch && (
+                          <button
+                            onClick={async () => {
+                              setBroadSearch(true);
+                              setLoadingPeople(true);
+                              try {
+                                const result = await findMorePeopleAtCompany(contact.id);
+                                setCompanyPeople(result.people);
+                                setCompanyName(result.companyName);
+                              } catch (err) { console.error("Broad search error:", err); }
+                              setLoadingPeople(false);
+                            }}
+                            disabled={loadingPeople}
+                            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium rounded-lg border border-slate-200 disabled:opacity-50 transition-colors"
+                          >
+                            Find More People
+                          </button>
+                        )}
+                        <button
+                          onClick={async () => {
+                            setBroadSearch(false);
+                            setLoadingPeople(true);
+                            try {
+                              const result = await findPeopleAtCompany(contact.id);
+                              setCompanyPeople(result.people);
+                              setCompanyName(result.companyName);
+                            } catch (err) { console.error("Find people error:", err); }
+                            setLoadingPeople(false);
+                          }}
+                          disabled={loadingPeople}
+                          className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium rounded-lg border border-indigo-200 disabled:opacity-50 transition-colors"
+                        >
+                          {loadingPeople ? "Searching..." : companyPeople.length > 0 ? "Refresh" : "Find Decision Makers"}
+                        </button>
+                      </div>
                     </div>
                     {loadingPeople && (
                       <div className="flex items-center gap-2 py-4 justify-center">
@@ -513,8 +537,16 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                                 )}
                               </div>
                               <div className="flex items-center gap-2 mt-0.5">
-                                {person.hasEmail && <span className="text-[9px] text-emerald-600 font-medium">✉️ email</span>}
-                                {person.hasPhone && <span className="text-[9px] text-emerald-600 font-medium">📞 phone</span>}
+                                {person.email ? (
+                                  <a href={"mailto:" + person.email} className="text-[10px] text-blue-600 hover:underline">✉️ {person.email}</a>
+                                ) : person.hasEmail ? (
+                                  <span className="text-[9px] text-emerald-600 font-medium">✉️ email available</span>
+                                ) : null}
+                                {person.phone ? (
+                                  <a href={"tel:" + person.phone} className="text-[10px] text-emerald-700 font-bold hover:underline">📞 {person.phone}</a>
+                                ) : person.hasPhone ? (
+                                  <span className="text-[9px] text-emerald-600 font-medium">📞 phone available</span>
+                                ) : null}
                               </div>
                             </div>
                             {addedPeople.has(person.apolloId) ? (
@@ -535,87 +567,149 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                                 disabled={addingPerson === person.apolloId}
                                 className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded border border-blue-200 disabled:opacity-50 transition-colors"
                               >
-                                {addingPerson === person.apolloId ? "..." : "+ Add"}
+                                {addingPerson === person.apolloId ? "..." : "+ Add to CRM"}
                               </button>
                             )}
                           </div>
                         ))}
-                        <p className="text-[10px] text-slate-400 text-center mt-1">Apollo People Search (free, no credits used)</p>
+                        <p className="text-[10px] text-slate-400 text-center mt-1">
+                          Apollo People Search (free, no credits used){broadSearch ? " — Broad search" : " — Decision makers only"}
+                        </p>
                       </div>
                     )}
+                    {!loadingPeople && companyPeople.length === 0 && !companyName && (
+                      <p className="text-xs text-slate-400 text-center py-2">Click "Find Decision Makers" to search for key contacts at this company.</p>
+                    )}
                     {!loadingPeople && companyPeople.length === 0 && companyName && (
-                      <p className="text-xs text-slate-400 text-center py-2">No results yet. Click "Find People" to search.</p>
+                      <p className="text-xs text-slate-400 text-center py-2">No decision makers found. Try "Find More People" for a broader search.</p>
                     )}
                   </div>
                 );
               })()}
 
-              {/* Organization Intelligence — from Apollo Org enrichment */}
+              {/* Organization Intelligence — from Apollo Org enrichment or typeData */}
               {contact.contactType === "landlord" && (() => {
                 const enrichment = contact.enrichmentProfiles[0];
-                const orgData = (enrichment?.rawData as any)?.apolloOrg;
-                if (!orgData) return null;
+                const apolloOrg = (enrichment?.rawData as any)?.apolloOrg;
+                const typeData = contact.typeData as any;
+
+                // Merge org data from both sources (apolloOrg takes priority, then typeData)
+                const orgData = {
+                  name: apolloOrg?.name || typeData?.orgName || typeData?.entityName || null,
+                  industry: apolloOrg?.industry || typeData?.orgIndustry || null,
+                  employeeCount: apolloOrg?.employeeCount || typeData?.orgEmployees || null,
+                  revenue: apolloOrg?.revenue || typeData?.orgRevenue || null,
+                  foundedYear: apolloOrg?.foundedYear || typeData?.orgFounded || null,
+                  phone: apolloOrg?.phone || typeData?.orgPhone || null,
+                  website: apolloOrg?.website || typeData?.orgWebsite || null,
+                  logoUrl: apolloOrg?.logoUrl || typeData?.orgLogo || null,
+                  shortDescription: apolloOrg?.shortDescription || typeData?.orgDescription || null,
+                  address: apolloOrg?.address || typeData?.orgAddress || null,
+                  city: apolloOrg?.city || typeData?.orgCity || null,
+                  state: apolloOrg?.state || typeData?.orgState || null,
+                  linkedinUrl: apolloOrg?.linkedinUrl || typeData?.orgLinkedin || null,
+                };
+
+                const hasOrgData = orgData.industry || orgData.employeeCount || orgData.revenue || orgData.website || orgData.phone || orgData.foundedYear;
+                const entityName = typeData?.entityName || (enrichment?.rawData as any)?.apolloPerson?.company || enrichment?.employer;
+
+                // Show card if we have org data OR if there's an entity name (to offer enrichment)
+                if (!hasOrgData && !entityName) return null;
+
                 return (
                   <div className="bg-white rounded-xl border border-slate-200 p-5">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-lg">🏢</span>
-                      <h3 className="text-sm font-semibold text-slate-700">Organization Intelligence</h3>
-                      <span className="text-[9px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-bold">Apollo</span>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      {orgData.logoUrl && (
-                        <img src={orgData.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg">🏢</span>
+                        <h3 className="text-sm font-semibold text-slate-700">Organization Intelligence</h3>
+                        {apolloOrg && <span className="text-[9px] bg-violet-100 text-violet-700 px-1.5 py-0.5 rounded font-bold">Apollo</span>}
+                      </div>
+                      {!hasOrgData && entityName && (
+                        <button
+                          onClick={async () => {
+                            setEnrichingCompany(true);
+                            setCompanyEnrichResult(null);
+                            try {
+                              const result = await enrichCompanyOnDemand(contact.id);
+                              setCompanyEnrichResult(result);
+                              if (result.success) router.refresh();
+                            } catch (err) { console.error("Company enrich error:", err); }
+                            setEnrichingCompany(false);
+                          }}
+                          disabled={enrichingCompany}
+                          className="px-3 py-1.5 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors"
+                        >
+                          {enrichingCompany ? "Enriching..." : "Enrich Company"}
+                        </button>
                       )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-base font-bold text-slate-900">{orgData.name}</p>
-                        {orgData.shortDescription && (
-                          <p className="text-xs text-slate-500 mt-1 line-clamp-2">{orgData.shortDescription}</p>
+                    </div>
+
+                    {hasOrgData ? (
+                      <>
+                        <div className="flex items-start gap-3">
+                          {orgData.logoUrl && (
+                            <img src={orgData.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-base font-bold text-slate-900">{orgData.name}</p>
+                            {orgData.shortDescription && (
+                              <p className="text-xs text-slate-500 mt-1 line-clamp-2">{orgData.shortDescription}</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                          {orgData.industry && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Industry</p>
+                              <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.industry}</p>
+                            </div>
+                          )}
+                          {orgData.employeeCount && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Employees</p>
+                              <p className="text-xs font-medium text-slate-900 mt-0.5">{Number(orgData.employeeCount).toLocaleString()}</p>
+                            </div>
+                          )}
+                          {orgData.revenue && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Revenue</p>
+                              <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.revenue}</p>
+                            </div>
+                          )}
+                          {orgData.foundedYear && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Founded</p>
+                              <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.foundedYear}</p>
+                            </div>
+                          )}
+                          {orgData.phone && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Phone</p>
+                              <a href={"tel:" + orgData.phone} className="text-xs font-medium text-blue-600 mt-0.5 hover:underline">{orgData.phone}</a>
+                            </div>
+                          )}
+                          {orgData.website && (
+                            <div className="bg-slate-50 rounded-lg p-2.5">
+                              <p className="text-[10px] text-slate-400 uppercase">Website</p>
+                              <a href={orgData.website.startsWith("http") ? orgData.website : "https://" + orgData.website} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 mt-0.5 hover:underline truncate block">{orgData.website.replace(/^https?:\/\//, "")}</a>
+                            </div>
+                          )}
+                        </div>
+                        {orgData.address && (
+                          <p className="text-xs text-slate-500 mt-2">📍 {orgData.address}{orgData.city ? `, ${orgData.city}` : ""}{orgData.state ? `, ${orgData.state}` : ""}</p>
+                        )}
+                        {orgData.linkedinUrl && (
+                          <a href={orgData.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">🔗 LinkedIn</a>
+                        )}
+                      </>
+                    ) : (
+                      <div className="bg-slate-50 rounded-lg p-4 text-center">
+                        <p className="text-sm text-slate-500">No organization data yet for <strong>{entityName}</strong>.</p>
+                        <p className="text-xs text-slate-400 mt-1">Click "Enrich Company" to look up industry, revenue, employees, and more via Apollo.</p>
+                        {companyEnrichResult?.error && (
+                          <p className="text-xs text-red-500 mt-2">{companyEnrichResult.error}</p>
                         )}
                       </div>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
-                      {orgData.industry && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Industry</p>
-                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.industry}</p>
-                        </div>
-                      )}
-                      {orgData.employeeCount && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Employees</p>
-                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.employeeCount.toLocaleString()}</p>
-                        </div>
-                      )}
-                      {orgData.revenue && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Revenue</p>
-                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.revenue}</p>
-                        </div>
-                      )}
-                      {orgData.foundedYear && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Founded</p>
-                          <p className="text-xs font-medium text-slate-900 mt-0.5">{orgData.foundedYear}</p>
-                        </div>
-                      )}
-                      {orgData.phone && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Phone</p>
-                          <a href={"tel:" + orgData.phone} className="text-xs font-medium text-blue-600 mt-0.5 hover:underline">{orgData.phone}</a>
-                        </div>
-                      )}
-                      {orgData.website && (
-                        <div className="bg-slate-50 rounded-lg p-2.5">
-                          <p className="text-[10px] text-slate-400 uppercase">Website</p>
-                          <a href={orgData.website.startsWith("http") ? orgData.website : "https://" + orgData.website} target="_blank" rel="noopener noreferrer" className="text-xs font-medium text-blue-600 mt-0.5 hover:underline truncate block">{orgData.website.replace(/^https?:\/\//, "")}</a>
-                        </div>
-                      )}
-                    </div>
-                    {orgData.address && (
-                      <p className="text-xs text-slate-500 mt-2">📍 {orgData.address}{orgData.city ? `, ${orgData.city}` : ""}{orgData.state ? `, ${orgData.state}` : ""}</p>
-                    )}
-                    {orgData.linkedinUrl && (
-                      <a href={orgData.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline mt-1 inline-block">🔗 LinkedIn</a>
                     )}
                   </div>
                 );

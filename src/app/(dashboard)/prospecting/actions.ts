@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { apolloBulkEnrich } from "@/lib/apollo";
+import { apolloBulkEnrich, apolloEnrichPerson } from "@/lib/apollo";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -198,4 +198,122 @@ export async function bulkEnrichProspects(listId: string) {
 
   revalidatePath("/prospecting");
   return { total: enrichable.length, enriched: enrichedCount };
+}
+
+// ============================================================
+// Bulk Enrich Prospect Contacts (Apollo People Enrichment)
+// ============================================================
+
+export async function getUnenrichedContactCount(listId: string): Promise<number> {
+  const user = await getAuthUser();
+  const items = await prisma.prospectingItem.findMany({
+    where: { listId, orgId: user.orgId, contactId: { not: null } },
+    select: { contactId: true },
+  });
+
+  const contactIds = items.map(i => i.contactId).filter(Boolean) as string[];
+  if (contactIds.length === 0) return 0;
+
+  const contacts = await prisma.contact.findMany({
+    where: { id: { in: contactIds }, orgId: user.orgId },
+    select: { id: true, typeData: true },
+  });
+
+  return contacts.filter(c => {
+    const td = c.typeData as any;
+    return !td?.apolloEnriched;
+  }).length;
+}
+
+export async function bulkEnrichProspectContacts(
+  listId: string,
+  batchIndex: number,
+): Promise<{ totalContacts: number; totalBatches: number; batchCompleted: number; enrichedInBatch: number; done: boolean }> {
+  const user = await getAuthUser();
+  const BATCH_SIZE = 10;
+
+  // Get all prospect items with linked contacts
+  const items = await prisma.prospectingItem.findMany({
+    where: { listId, orgId: user.orgId, contactId: { not: null } },
+    select: { contactId: true },
+  });
+
+  const contactIds = items.map(i => i.contactId).filter(Boolean) as string[];
+  if (contactIds.length === 0) {
+    return { totalContacts: 0, totalBatches: 0, batchCompleted: 0, enrichedInBatch: 0, done: true };
+  }
+
+  // Get contacts that haven't been Apollo-enriched
+  const contacts = await prisma.contact.findMany({
+    where: { id: { in: contactIds }, orgId: user.orgId },
+    select: { id: true, firstName: true, lastName: true, email: true, phone: true, typeData: true },
+  });
+
+  const unenriched = contacts.filter(c => {
+    const td = c.typeData as any;
+    return !td?.apolloEnriched;
+  });
+
+  const totalBatches = Math.ceil(unenriched.length / BATCH_SIZE);
+  if (batchIndex >= totalBatches) {
+    revalidatePath("/prospecting");
+    return { totalContacts: unenriched.length, totalBatches, batchCompleted: batchIndex, enrichedInBatch: 0, done: true };
+  }
+
+  // Process current batch
+  const batch = unenriched.slice(batchIndex * BATCH_SIZE, (batchIndex + 1) * BATCH_SIZE);
+  let enrichedInBatch = 0;
+
+  const details = batch.map(c => ({
+    first_name: c.firstName,
+    last_name: c.lastName,
+    ...(c.email ? { email: c.email } : {}),
+  }));
+
+  const matches = await apolloBulkEnrich(details);
+
+  for (let j = 0; j < batch.length; j++) {
+    const contact = batch[j];
+    const match = matches[j];
+    const existingTypeData = (contact.typeData as any) || {};
+
+    const updatedTypeData: any = {
+      ...existingTypeData,
+      apolloEnriched: true,
+      apolloEnrichedAt: new Date().toISOString(),
+    };
+
+    if (match) {
+      if (match.email) updatedTypeData.apolloEmail = match.email;
+      if (match.phone) updatedTypeData.apolloPhone = match.phone;
+      if (match.title) updatedTypeData.apolloTitle = match.title;
+      if (match.company) updatedTypeData.apolloCompany = match.company;
+      if (match.linkedinUrl) updatedTypeData.apolloLinkedin = match.linkedinUrl;
+      if (match.seniority) updatedTypeData.apolloSeniority = match.seniority;
+      enrichedInBatch++;
+
+      // Also update contact's primary fields if empty
+      const updates: any = { typeData: updatedTypeData };
+      if (!contact.email && match.email) updates.email = match.email;
+      if (!contact.phone && match.phone) updates.phone = match.phone;
+
+      await prisma.contact.update({ where: { id: contact.id }, data: updates });
+    } else {
+      await prisma.contact.update({
+        where: { id: contact.id },
+        data: { typeData: updatedTypeData },
+      });
+    }
+  }
+
+  const done = batchIndex + 1 >= totalBatches;
+  if (done) revalidatePath("/prospecting");
+
+  return {
+    totalContacts: unenriched.length,
+    totalBatches,
+    batchCompleted: batchIndex + 1,
+    enrichedInBatch,
+    done,
+  };
 }
