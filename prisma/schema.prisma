@@ -707,6 +707,7 @@ model ProspectingItem {
   lastSalePrice    Int?     @map("last_sale_price")
   lastSaleDate     String?  @map("last_sale_date")
   status           String   @default("new")
+  source           String?  @default("manual")
   notes            String?
   contactId        String?  @map("contact_id")
   dealId           String?  @map("deal_id")

@@ -13,6 +13,8 @@ import {
   createDealFromItem,
   exportListCSV,
   bulkEnrichProspects,
+  bulkEnrichProspectContacts,
+  getUnenrichedContactCount,
 } from "./actions";
 
 interface List {
@@ -44,6 +46,7 @@ interface Item {
   lastSalePrice: number | null;
   lastSaleDate: string | null;
   status: string;
+  source: string | null;
   notes: string | null;
   contactId: string | null;
   dealId: string | null;
@@ -82,6 +85,10 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
   const [enrichResult, setEnrichResult] = useState<{ total: number; enriched: number } | null>(null);
+  const [sourceFilter, setSourceFilter] = useState("all");
+  const [contactEnriching, setContactEnriching] = useState(false);
+  const [contactEnrichProgress, setContactEnrichProgress] = useState<{ total: number; completed: number; enriched: number } | null>(null);
+  const [unenrichedCount, setUnenrichedCount] = useState<number | null>(null);
 
   const loadItems = async (listId: string) => {
     setLoadingItems(true);
@@ -95,7 +102,10 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
   };
 
   useEffect(() => {
-    if (selectedList) loadItems(selectedList);
+    if (selectedList) {
+      loadItems(selectedList);
+      getUnenrichedContactCount(selectedList).then(setUnenrichedCount).catch(() => setUnenrichedCount(null));
+    }
   }, [selectedList]);
 
   const handleCreateList = async () => {
@@ -166,6 +176,10 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
     a.click();
     URL.revokeObjectURL(url);
   };
+
+  const filteredItems = sourceFilter === "all"
+    ? items
+    : items.filter((i) => (i.source || "manual") === sourceFilter);
 
   const selectedListData = lists.find((l) => l.id === selectedList);
 
@@ -431,7 +445,17 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                     {selectedListData._count.items} buildings • Created by {selectedListData.creator.fullName}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                  <select
+                    value={sourceFilter}
+                    onChange={(e) => setSourceFilter(e.target.value)}
+                    className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white text-slate-700"
+                  >
+                    <option value="all">All Sources</option>
+                    <option value="market_intel">Market Intel</option>
+                    <option value="new_development">New Development</option>
+                    <option value="manual">Manual</option>
+                  </select>
                   <button
                     onClick={async () => {
                       if (!selectedList) return;
@@ -459,6 +483,46 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                     )}
                   </button>
                   <button
+                    onClick={async () => {
+                      if (!selectedList) return;
+                      setContactEnriching(true);
+                      setContactEnrichProgress(null);
+                      try {
+                        let batchIndex = 0;
+                        let totalEnriched = 0;
+                        while (true) {
+                          const result = await bulkEnrichProspectContacts(selectedList, batchIndex);
+                          totalEnriched += result.enrichedInBatch;
+                          setContactEnrichProgress({
+                            total: result.totalContacts,
+                            completed: result.batchCompleted * 10,
+                            enriched: totalEnriched,
+                          });
+                          if (result.done) break;
+                          batchIndex++;
+                        }
+                        loadItems(selectedList);
+                        getUnenrichedContactCount(selectedList).then(setUnenrichedCount);
+                      } catch (err) { console.error("Contact enrich error:", err); }
+                      setContactEnriching(false);
+                    }}
+                    disabled={contactEnriching || !unenrichedCount}
+                    className="px-3 py-1.5 border border-violet-300 bg-violet-50 rounded-lg text-sm font-medium text-violet-700 hover:bg-violet-100 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                  >
+                    {contactEnriching ? (
+                      <>
+                        <span className="animate-spin inline-block w-3 h-3 border-2 border-violet-600 border-t-transparent rounded-full"></span>
+                        Enriching Contacts...
+                      </>
+                    ) : contactEnrichProgress ? (
+                      `✓ ${contactEnrichProgress.enriched}/${contactEnrichProgress.total} contacts enriched`
+                    ) : unenrichedCount ? (
+                      `🧠 Enrich ${unenrichedCount} Contacts`
+                    ) : (
+                      "🧠 Enrich Contacts"
+                    )}
+                  </button>
+                  <button
                     onClick={() => handleExport(selectedList)}
                     className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50"
                   >
@@ -473,6 +537,30 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                 </div>
               </div>
 
+              {/* Contact Enrichment Progress Bar */}
+              {contactEnriching && contactEnrichProgress && (
+                <div className="mb-4 bg-white rounded-lg border border-violet-200 p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-violet-600 border-t-transparent rounded-full"></span>
+                      <span className="text-sm font-medium text-violet-700">Enriching contacts via Apollo...</span>
+                    </div>
+                    <span className="text-xs text-slate-500">
+                      {Math.min(contactEnrichProgress.completed, contactEnrichProgress.total)}/{contactEnrichProgress.total} processed
+                    </span>
+                  </div>
+                  <div className="w-full bg-violet-100 rounded-full h-2">
+                    <div
+                      className="bg-violet-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(100, (contactEnrichProgress.completed / Math.max(1, contactEnrichProgress.total)) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400 mt-1.5">
+                    {contactEnrichProgress.enriched} contacts enriched with new data so far
+                  </p>
+                </div>
+              )}
+
               {/* Status Summary */}
               <div className="grid grid-cols-5 gap-3 mb-6">
                 {["new", "contacted", "qualified", "converted", "skipped"].map((s) => (
@@ -486,9 +574,9 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
               {/* Items */}
               {loadingItems ? (
                 <p className="text-sm text-slate-400 text-center py-8">Loading...</p>
-              ) : items.length > 0 ? (
+              ) : filteredItems.length > 0 ? (
                 <div className="space-y-3">
-                  {items.map((item) => (
+                  {filteredItems.map((item) => (
                     <div
                       key={item.id}
                       className={`bg-white rounded-xl border transition-all ${
@@ -507,6 +595,16 @@ export default function ProspectingDashboard({ lists }: { lists: List[] }) {
                             </p>
                           </div>
                           <div className="flex items-center gap-2">
+                            {item.source === "new_development" && (
+                              <span className="text-xs font-semibold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded">
+                                New Dev
+                              </span>
+                            )}
+                            {item.source === "market_intel" && (
+                              <span className="text-xs font-semibold bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded">
+                                Market Intel
+                              </span>
+                            )}
                             {item.totalUnits && (
                               <span className="text-xs font-semibold bg-blue-50 text-blue-700 px-2 py-0.5 rounded">
                                 {item.totalUnits} units

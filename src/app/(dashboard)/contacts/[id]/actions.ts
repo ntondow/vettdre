@@ -3,7 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
-import { apolloFindPeopleAtOrg, apolloEnrichPerson } from "@/lib/apollo";
+import { apolloFindPeopleAtOrg, apolloFindMorePeopleAtOrg, apolloEnrichPerson, apolloEnrichOrganization } from "@/lib/apollo";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -200,6 +200,85 @@ export async function addPersonAsContact(
   revalidatePath("/contacts");
   revalidatePath(`/contacts/${sourceContactId}`);
   return { contactId: contact.id, alreadyExists: false };
+}
+
+export async function enrichCompanyOnDemand(contactId: string) {
+  const user = await getAuthUser();
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, orgId: user.orgId },
+    include: { enrichmentProfiles: { take: 1, orderBy: { enrichedAt: "desc" } } },
+  });
+  if (!contact) throw new Error("Contact not found");
+
+  const typeData = (contact.typeData as any) || {};
+  const enrichment = contact.enrichmentProfiles[0];
+  const companyName = typeData.entityName
+    || (enrichment?.rawData as any)?.apolloPerson?.company
+    || enrichment?.employer
+    || null;
+
+  if (!companyName) return { error: "No company name found" };
+
+  const orgResult = await apolloEnrichOrganization(companyName);
+  if (!orgResult) return { error: "No organization data found" };
+
+  // Save org data to contact's typeData
+  const updatedTypeData = {
+    ...typeData,
+    orgIndustry: orgResult.industry,
+    orgRevenue: orgResult.revenue,
+    orgEmployees: orgResult.employeeCount,
+    orgWebsite: orgResult.website,
+    orgPhone: orgResult.phone,
+    orgFounded: orgResult.foundedYear,
+    orgLogo: orgResult.logoUrl,
+    orgDescription: orgResult.shortDescription,
+    orgLinkedin: orgResult.linkedinUrl,
+    orgAddress: orgResult.address,
+    orgCity: orgResult.city,
+    orgState: orgResult.state,
+    orgName: orgResult.name,
+  };
+
+  await prisma.contact.updateMany({
+    where: { id: contactId, orgId: user.orgId },
+    data: { typeData: updatedTypeData },
+  });
+
+  // Also update enrichment profile rawData if it exists
+  if (enrichment) {
+    const rawData = (enrichment.rawData as any) || {};
+    await prisma.enrichmentProfile.update({
+      where: { id: enrichment.id },
+      data: {
+        rawData: { ...rawData, apolloOrg: orgResult },
+      },
+    });
+  }
+
+  revalidatePath(`/contacts/${contactId}`);
+  return { success: true, orgData: orgResult };
+}
+
+export async function findMorePeopleAtCompany(contactId: string) {
+  const user = await getAuthUser();
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, orgId: user.orgId },
+    include: { enrichmentProfiles: { take: 1, orderBy: { enrichedAt: "desc" } } },
+  });
+  if (!contact) throw new Error("Contact not found");
+
+  const typeData = (contact.typeData as any) || {};
+  const enrichment = contact.enrichmentProfiles[0];
+  const companyName = typeData.entityName
+    || (enrichment?.rawData as any)?.apolloPerson?.company
+    || enrichment?.employer
+    || null;
+
+  if (!companyName) return { people: [], companyName: null };
+
+  const people = await apolloFindMorePeopleAtOrg(companyName);
+  return { people, companyName };
 }
 
 export async function getContactEnrichmentForCompose(contactId: string) {

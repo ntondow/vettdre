@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { lookupProperty, searchOwnership, searchByName } from "./actions";
 import { searchNewDevelopments, NewDevelopment } from "./new-development-actions";
+import { createContactFromBuilding } from "./building-profile-actions";
 import BuildingDetail from "./building-detail";
 import BuildingProfile from "./building-profile";
-import { getLists } from "../prospecting/actions";
+import { getLists, addBuildingToList } from "../prospecting/actions";
 import dynamic from "next/dynamic";
 const MapSearch = dynamic(() => import("./map-search"), { ssr: false, loading: () => <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div></div> });
 
@@ -49,6 +50,9 @@ export default function MarketIntelSearch() {
     filedAfter: string;
   }>({ borough: "", minUnits: 10, jobType: "both", status: "", minCost: 0, filedAfter: "" });
   const [ndSelected, setNdSelected] = useState<NewDevelopment | null>(null);
+  const [addingCrmId, setAddingCrmId] = useState<string | null>(null);
+  const [crmResult, setCrmResult] = useState<{ id: string; message: string } | null>(null);
+  const [copiedPitch, setCopiedPitch] = useState(false);
 
   const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
   const fmtDate = (d: string | null) => {
@@ -64,33 +68,64 @@ export default function MarketIntelSearch() {
     try { const lists = await getLists(); setProspectLists(JSON.parse(JSON.stringify(lists))); } catch {}
   };
 
+  const handleAddDevToCRM = async (nd: NewDevelopment) => {
+    const key = nd.jobFilingNumber || nd.address;
+    setAddingCrmId(key);
+    setCrmResult(null);
+    try {
+      const ownerName = nd.ownerName || nd.ownerBusiness || "";
+      const parts = ownerName.trim().split(/\s+/);
+      const firstName = parts[0] || "Owner";
+      const lastName = parts.slice(1).join(" ") || nd.address;
+      const result = await createContactFromBuilding({
+        firstName,
+        lastName,
+        company: nd.ownerBusiness || undefined,
+        phone: nd.ownerPhone || undefined,
+        address: nd.address || undefined,
+        borough: nd.borough || undefined,
+      });
+      setCrmResult({ id: result.contactId, message: result.enriched ? "Contact created + enriched" : "Contact created" });
+      setTimeout(() => setCrmResult(null), 4000);
+    } catch (err: any) {
+      setCrmResult({ id: "", message: "Error: " + (err.message || "Failed") });
+      setTimeout(() => setCrmResult(null), 4000);
+    } finally {
+      setAddingCrmId(null);
+    }
+  };
+
+  const handleDraftPitch = (nd: NewDevelopment) => {
+    const pitch = `Hi ${nd.ownerName || "there"},\n\nI noticed your new ${nd.proposedUnits}-unit development at ${nd.address || "your property"} in ${nd.borough} recently received ${nd.filingStatus}.\n\nI specialize in lease-up services for new developments in ${nd.borough} and would love to discuss how I can help fill your building quickly and at optimal rents.\n\nMy recent lease-up track record includes:\n- [Your track record here]\n\nWould you have 15 minutes this week to discuss?\n\nBest,\n[Your name]`;
+    navigator.clipboard.writeText(pitch);
+    setCopiedPitch(true);
+    setTimeout(() => setCopiedPitch(false), 2000);
+  };
+
   const handleSaveToList = async (listId: string, building: any) => {
     setSaving(true);
     try {
-      await fetch("/api/lists/" + listId + "/items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          address: building.address || building.streetAddress || "",
-          borough: building.borough || building.boro || null,
-          zip: building.zip || building.zipCode || null,
-          block: building.block || null,
-          lot: building.lot || null,
-          bin: building.bin || null,
-          totalUnits: building.totalUnits || null,
-          residentialUnits: building.residentialUnits || null,
-          yearBuilt: building.yearBuilt || null,
-          numFloors: building.numFloors || null,
-          buildingArea: building.bldgArea || building.buildingArea || null,
-          lotArea: building.lotArea || null,
-          buildingClass: building.buildingClass || null,
-          zoning: building.zoneDist || building.zoning || null,
-          assessedValue: building.assessedValue || null,
-          ownerName: building.ownerNamePluto || building.ownerName || (building.owners?.length > 0 ? (building.owners[0].corporateName || building.owners[0].firstName + " " + building.owners[0].lastName).trim() : null),
-          ownerAddress: building.owners?.length > 0 ? [building.owners[0].businessAddress, building.owners[0].businessCity, building.owners[0].businessState].filter(Boolean).join(", ") : null,
-          lastSalePrice: building.lastSalePrice || null,
-          lastSaleDate: building.lastSaleDate || null,
-        }),
+      await addBuildingToList(listId, {
+        address: building.address || building.streetAddress || "",
+        borough: building.borough || building.boro || null,
+        zip: building.zip || building.zipCode || null,
+        block: building.block || null,
+        lot: building.lot || null,
+        bin: building.bin || null,
+        totalUnits: building.totalUnits || null,
+        residentialUnits: building.residentialUnits || null,
+        yearBuilt: building.yearBuilt || null,
+        numFloors: building.numFloors || null,
+        buildingArea: building.bldgArea || building.buildingArea || null,
+        lotArea: building.lotArea || null,
+        buildingClass: building.buildingClass || null,
+        zoning: building.zoneDist || building.zoning || null,
+        assessedValue: building.assessedValue || null,
+        ownerName: building.ownerNamePluto || building.ownerName || (building.owners?.length > 0 ? (building.owners[0].corporateName || building.owners[0].firstName + " " + building.owners[0].lastName).trim() : null),
+        ownerAddress: building.owners?.length > 0 ? [building.owners[0].businessAddress, building.owners[0].businessCity, building.owners[0].businessState].filter(Boolean).join(", ") : null,
+        lastSalePrice: building.lastSalePrice || null,
+        lastSaleDate: building.lastSaleDate || null,
+        source: building.source || "market_intel",
       });
       setSavedMsg("Saved!");
       setTimeout(() => setSavedMsg(null), 2000);
@@ -229,6 +264,16 @@ export default function MarketIntelSearch() {
         {savedMsg && (
           <div className="fixed top-4 right-4 bg-emerald-600 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg z-50">
             {savedMsg}
+          </div>
+        )}
+
+        {/* CRM Result Toast */}
+        {crmResult && (
+          <div className={`fixed top-4 right-4 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg z-50 ${crmResult.id ? "bg-emerald-600" : "bg-red-600"}`}>
+            {crmResult.message}
+            {crmResult.id && (
+              <a href={`/contacts/${crmResult.id}`} className="ml-2 underline">View</a>
+            )}
           </div>
         )}
 
@@ -858,28 +903,46 @@ export default function MarketIntelSearch() {
                       </div>
                     </div>
 
-                    {/* Placeholder action buttons */}
-                    <div className="flex gap-3 pt-2">
-                      <button className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg">
-                        + Add to CRM
-                      </button>
+                    {/* Action buttons */}
+                    <div className="flex flex-col gap-2 pt-2">
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleAddDevToCRM(ndSelected)}
+                          disabled={addingCrmId === (ndSelected.jobFilingNumber || ndSelected.address)}
+                          className="flex-1 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg disabled:opacity-50"
+                        >
+                          {addingCrmId === (ndSelected.jobFilingNumber || ndSelected.address) ? (
+                            <span className="flex items-center justify-center gap-2">
+                              <span className="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                              Adding...
+                            </span>
+                          ) : "+ Add to CRM"}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            await loadLists();
+                            setSaveModal({
+                              address: ndSelected.address || "New Development",
+                              borough: ndSelected.borough,
+                              block: ndSelected.block,
+                              lot: ndSelected.lot,
+                              totalUnits: ndSelected.proposedUnits,
+                              ownerName: ndSelected.ownerName || ndSelected.ownerBusiness,
+                              numFloors: ndSelected.proposedStories,
+                              zoning: ndSelected.zoningDistrict,
+                              source: "new_development",
+                            });
+                          }}
+                          className="flex-1 px-4 py-2.5 border border-blue-600 text-blue-600 hover:bg-blue-50 text-sm font-medium rounded-lg"
+                        >
+                          Add to Prospects
+                        </button>
+                      </div>
                       <button
-                        onClick={async () => {
-                          await loadLists();
-                          setSaveModal({
-                            address: ndSelected.address || "New Development",
-                            borough: ndSelected.borough,
-                            block: ndSelected.block,
-                            lot: ndSelected.lot,
-                            totalUnits: ndSelected.proposedUnits,
-                            ownerName: ndSelected.ownerName || ndSelected.ownerBusiness,
-                            numFloors: ndSelected.proposedStories,
-                            zoning: ndSelected.zoningDistrict,
-                          });
-                        }}
-                        className="flex-1 px-4 py-2.5 border border-blue-600 text-blue-600 hover:bg-blue-50 text-sm font-medium rounded-lg"
+                        onClick={() => handleDraftPitch(ndSelected)}
+                        className="w-full px-4 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm font-medium rounded-lg"
                       >
-                        Add to Prospects
+                        {copiedPitch ? "Copied to clipboard!" : "Draft Pitch Email"}
                       </button>
                     </div>
                   </div>
@@ -958,8 +1021,12 @@ export default function MarketIntelSearch() {
                         >
                           View Details
                         </button>
-                        <button className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors">
-                          + Add to CRM
+                        <button
+                          onClick={() => handleAddDevToCRM(nd)}
+                          disabled={addingCrmId === (nd.jobFilingNumber || nd.address)}
+                          className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                          {addingCrmId === (nd.jobFilingNumber || nd.address) ? "Adding..." : "+ Add to CRM"}
                         </button>
                         <button
                           onClick={async () => {
@@ -973,6 +1040,7 @@ export default function MarketIntelSearch() {
                               ownerName: nd.ownerName || nd.ownerBusiness,
                               numFloors: nd.proposedStories,
                               zoning: nd.zoningDistrict,
+                              source: "new_development",
                             });
                           }}
                           className="px-3 py-1.5 text-xs font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"

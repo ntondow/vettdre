@@ -233,6 +233,8 @@ export interface ApolloSearchPerson {
   lastName: string;
   title: string | null;
   seniority: string | null;
+  email: string | null;
+  phone: string | null;
   hasEmail: boolean;
   hasPhone: boolean;
   orgName: string | null;
@@ -248,9 +250,8 @@ export async function apolloFindPeopleAtOrg(orgName: string): Promise<ApolloSear
       body: JSON.stringify({
         organization_name: [orgName],
         person_titles: [
-          "Owner", "Principal", "Managing Director", "CEO", "President",
-          "Property Manager", "Director of Operations", "VP of Real Estate",
-          "Managing Partner", "Founder",
+          "Owner", "Principal", "CEO", "Property Manager",
+          "Managing Director", "VP Operations", "Leasing Director",
         ],
         person_locations: ["New York, New York, United States"],
         per_page: 5,
@@ -269,6 +270,8 @@ export async function apolloFindPeopleAtOrg(orgName: string): Promise<ApolloSear
       lastName: p.last_name || "",
       title: p.title || null,
       seniority: p.seniority || null,
+      email: p.email || null,
+      phone: p.phone_numbers?.[0]?.sanitized_number || null,
       hasEmail: !!p.email || p.email_status === "verified",
       hasPhone: p.phone_numbers?.length > 0,
       orgName: p.organization?.name || null,
@@ -278,6 +281,50 @@ export async function apolloFindPeopleAtOrg(orgName: string): Promise<ApolloSear
     return people;
   } catch (err) {
     console.error("[APOLLO] People search error:", err);
+    return [];
+  }
+}
+
+// ============================================================
+// People Search — Broader (no title filter, more results)
+// ============================================================
+export async function apolloFindMorePeopleAtOrg(orgName: string): Promise<ApolloSearchPerson[]> {
+  if (!process.env.APOLLO_API_KEY) return [];
+
+  try {
+    const res = await apolloFetch(APOLLO_BASE + "/mixed_people/search", {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({
+        organization_name: [orgName],
+        person_locations: ["New York, New York, United States"],
+        per_page: 10,
+      }),
+    });
+
+    if (!res.ok) {
+      console.error("[APOLLO] Broader people search failed:", res.status);
+      return [];
+    }
+
+    const data = await res.json();
+    const people = (data.people || []).map((p: any) => ({
+      apolloId: p.id,
+      firstName: p.first_name || "",
+      lastName: p.last_name || "",
+      title: p.title || null,
+      seniority: p.seniority || null,
+      email: p.email || null,
+      phone: p.phone_numbers?.[0]?.sanitized_number || null,
+      hasEmail: !!p.email || p.email_status === "verified",
+      hasPhone: p.phone_numbers?.length > 0,
+      orgName: p.organization?.name || null,
+    }));
+
+    console.log(`[APOLLO] Broader search found ${people.length} people at ${orgName}`);
+    return people;
+  } catch (err) {
+    console.error("[APOLLO] Broader people search error:", err);
     return [];
   }
 }

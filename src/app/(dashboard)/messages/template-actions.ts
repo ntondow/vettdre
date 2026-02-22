@@ -73,6 +73,13 @@ const DEFAULT_TEMPLATES = [
     body: "Hi {{first_name}},<br><br>My name is {{agent_name}} and I work with property owners in your area. I noticed your building at {{property_address}} and wanted to reach out.<br><br>I have qualified tenants actively looking in your neighborhood. Would you be open to a brief conversation about your property?<br><br>Best,<br>{{agent_name}}<br>{{agent_phone}}",
     mergeFields: ["first_name", "property_address", "agent_name", "agent_phone"],
   },
+  {
+    name: "Leasing Pitch — New Development",
+    category: "cold_outreach",
+    subject: "Leasing Services for {{property_address}}",
+    body: "Hi {{first_name}},<br><br>I noticed your new {{units}}-unit development at {{property_address}} in {{neighborhood}} recently received {{filing_status}}.<br><br>I specialize in lease-up services for new developments in {{borough}} and would love to discuss how I can help fill your building quickly and at optimal rents.<br><br>My recent lease-up track record includes:<br>- [Your track record here]<br><br>Would you have 15 minutes this week to discuss?<br><br>Best,<br>{{agent_name}}",
+    mergeFields: ["first_name", "units", "property_address", "neighborhood", "filing_status", "borough", "agent_name"],
+  },
 ];
 
 // ============================================================
@@ -185,12 +192,40 @@ export async function seedDefaultTemplates(): Promise<void> {
   if (!user) return;
 
   const count = await prisma.emailTemplate.count({ where: { orgId: user.orgId } });
-  if (count > 0) return;
+  if (count > 0) {
+    // Existing org — ensure new templates are added
+    await ensureNewTemplates(user.orgId, user.id);
+    return;
+  }
 
   await prisma.emailTemplate.createMany({
     data: DEFAULT_TEMPLATES.map(t => ({
       orgId: user.orgId,
       createdBy: user.id,
+      name: t.name,
+      subject: t.subject,
+      body: t.body,
+      category: t.category,
+      mergeFields: t.mergeFields,
+      channel: "email" as const,
+    })),
+  });
+}
+
+async function ensureNewTemplates(orgId: string, userId: string): Promise<void> {
+  const existing = await prisma.emailTemplate.findMany({
+    where: { orgId },
+    select: { name: true },
+  });
+  const existingNames = new Set(existing.map(t => t.name));
+
+  const missing = DEFAULT_TEMPLATES.filter(t => !existingNames.has(t.name));
+  if (missing.length === 0) return;
+
+  await prisma.emailTemplate.createMany({
+    data: missing.map(t => ({
+      orgId,
+      createdBy: userId,
       name: t.name,
       subject: t.subject,
       body: t.body,
