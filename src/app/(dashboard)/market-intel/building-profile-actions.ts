@@ -16,6 +16,7 @@ const HPD_REG = "tesw-yqqr";
 const HPD_CONTACTS = "feu5-w2e2";
 const HPD_LITIGATION = "59kj-x8nc";
 const DOB_ECB = "6bgk-3dad";
+const DOB_NOW = "w9ak-ipjd";
 const RENT_STAB = "35ss-ekc5";
 const SPECULATION = "adax-9x2w";
 
@@ -59,6 +60,7 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
     apolloEnrichment: null as any,
     apolloOrgEnrichment: null as any,
     apolloKeyPeople: [] as any[],
+    dobFilings: [] as { jobType: string; filingDate: string; ownerName: string; ownerBusiness: string; ownerPhone: string; permittee: string; permitteePhone: string; units: number; stories: number; status: string; cost: string; description: string; source: string }[],
   };
 
   // Raw phone entries collected during fetches, scored after all complete
@@ -454,6 +456,22 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
             seen.add(key);
             results.ownerContacts.push({ name, phone, address: addr, source: "DOB Job Filing" });
           }
+          // Store structured filing data for AI analysis
+          results.dobFilings.push({
+            jobType: d.job_type || "",
+            filingDate,
+            ownerName: [d.owner_s_first_name, d.owner_s_last_name].filter(Boolean).join(" ").trim(),
+            ownerBusiness: d.owner_s_business_name || "",
+            ownerPhone: phone,
+            permittee: "",
+            permitteePhone: "",
+            units: 0,
+            stories: 0,
+            status: "",
+            cost: "",
+            description: "",
+            source: "DOB BIS",
+          });
           // Track for phone ranking (DOB Jobs are always owner phones)
           if (phone) {
             rawPhoneEntries.push({ phone, name, isOwnerPhone: true, filingDate, source: "DOB Job Filing" });
@@ -465,6 +483,70 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
         console.log("  [DOB JOBS] Error:", errText.slice(0, 200));
       }
     } catch (err) { console.error("DOB Jobs error:", err); }
+  })());
+
+  // 11. DOB NOW: Build – Job Application Filings (w9ak-ipjd — additional owner phones + filing data)
+  fetches.push((async () => {
+    try {
+      const boroMap: Record<string, string> = { "1": "MANHATTAN", "2": "BRONX", "3": "BROOKLYN", "4": "QUEENS", "5": "STATEN ISLAND" };
+      const nowBorough = boroMap[boroCode] || "";
+      const nowBlock = block.padStart(5, "0");
+      const nowLot = lot.padStart(5, "0");
+      const url = new URL(NYC + "/" + DOB_NOW + ".json");
+      url.searchParams.set("$where", "borough='" + nowBorough + "' AND block='" + nowBlock + "' AND lot='" + nowLot + "'");
+      url.searchParams.set("$select", "job_filing_number,job_type,filing_date,filing_status,owner_first_name,owner_last_name,owner_business_name,owner_phone,permittee_first_name,permittee_last_name,permittee_business_name,permittee_phone,proposed_dwelling_units,proposed_no_of_stories,estimated_job_costs,job_description");
+      url.searchParams.set("$limit", "15");
+      url.searchParams.set("$order", "filing_date DESC");
+      const res = await fetchWithTimeout(url.toString());
+      if (res.ok) {
+        const data = await res.json();
+        console.log("  [DOB NOW] Found", data.length, "filings for", nowBorough, "block", nowBlock, "lot", nowLot);
+        const seen = new Set();
+        data.forEach((d: any) => {
+          const ownerName = (d.owner_business_name && d.owner_business_name !== "N/A")
+            ? d.owner_business_name
+            : [d.owner_first_name, d.owner_last_name].filter(Boolean).join(" ").trim();
+          const ownerPhone = (d.owner_phone || "").trim();
+          const permittee = (d.permittee_business_name && d.permittee_business_name !== "N/A")
+            ? d.permittee_business_name
+            : [d.permittee_first_name, d.permittee_last_name].filter(Boolean).join(" ").trim();
+          const permitteePhone = (d.permittee_phone || "").trim();
+          const filingDate = d.filing_date || "";
+
+          // Store structured filing data for AI analysis
+          results.dobFilings.push({
+            jobType: d.job_type || "",
+            filingDate,
+            ownerName,
+            ownerBusiness: d.owner_business_name || "",
+            ownerPhone,
+            permittee,
+            permitteePhone,
+            units: parseInt(d.proposed_dwelling_units || "0"),
+            stories: parseInt(d.proposed_no_of_stories || "0"),
+            status: d.filing_status || "",
+            cost: d.estimated_job_costs || "",
+            description: d.job_description || "",
+            source: "DOB NOW",
+          });
+
+          // Feed into owner contacts
+          const key = ownerName + ownerPhone;
+          if (key.length > 3 && !seen.has(key)) {
+            seen.add(key);
+            results.ownerContacts.push({ name: ownerName, phone: ownerPhone, address: "", source: "DOB NOW Filing" });
+          }
+
+          // Feed into phone rankings
+          if (ownerPhone) {
+            rawPhoneEntries.push({ phone: ownerPhone, name: ownerName, isOwnerPhone: true, filingDate, source: "DOB NOW (Owner)" });
+          }
+          if (permitteePhone && permitteePhone !== ownerPhone) {
+            rawPhoneEntries.push({ phone: permitteePhone, name: permittee, isOwnerPhone: false, filingDate, source: "DOB NOW (Permittee)" });
+          }
+        });
+      }
+    } catch (err) { console.error("DOB NOW error:", err); }
   })());
 
   await Promise.all(fetches);

@@ -3,15 +3,18 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact } from "./actions";
+import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData } from "./actions";
 import { enrichContact } from "./enrich-actions";
 import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
+import { CONTACT_TYPE_META } from "@/lib/contact-types";
+import type { ContactType } from "@/lib/contact-types";
 
 // ---- TYPES ----
 interface Contact {
   id: string; firstName: string; lastName: string; email: string | null; phone: string | null;
   secondaryPhone: string | null; address: string | null; city: string | null; state: string | null;
   zip: string | null; status: string; source: string | null; tags: string[]; qualificationScore: number | null;
+  contactType: string; typeData: any;
   notes: string | null; lastContactedAt: Date | null; lastActivityAt: Date | null; totalActivities: number;
   createdAt: Date; updatedAt: Date;
   assignedAgent: { fullName: string; email: string } | null;
@@ -169,6 +172,14 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
               <div>
                 <div className="flex items-center gap-3">
                   <h1 className="text-xl font-bold text-slate-900">{contact.firstName} {contact.lastName}</h1>
+                  {(() => {
+                    const typeMeta = CONTACT_TYPE_META[contact.contactType as ContactType] || CONTACT_TYPE_META.renter;
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${typeMeta.bgColor} ${typeMeta.color}`}>
+                        {typeMeta.icon} {typeMeta.label}
+                      </span>
+                    );
+                  })()}
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${statusColors[contact.status] || "bg-slate-100 text-slate-600"}`}>
                     {contact.status.replace("_", " ")}
                   </span>
@@ -437,6 +448,9 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                   </div>
                 )}
               </div>
+
+              {/* Type Profile */}
+              <TypeProfileCard contact={contact} />
 
               {/* Quick Note */}
               <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -838,6 +852,295 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── Type Profile Card ──
+
+function TypeProfileCard({ contact }: { contact: Contact }) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [localData, setLocalData] = useState<Record<string, any>>(contact.typeData || {});
+  const router = useRouter();
+  const typeMeta = CONTACT_TYPE_META[contact.contactType as ContactType] || CONTACT_TYPE_META.renter;
+
+  const update = (key: string, value: any) => setLocalData(prev => ({ ...prev, [key]: value }));
+
+  const handleSave = async () => {
+    setSaving(true);
+    const cleaned: Record<string, any> = {};
+    for (const [k, v] of Object.entries(localData)) {
+      if (v !== "" && v !== undefined && v !== null) cleaned[k] = v;
+    }
+    await updateContactTypeData(contact.id, Object.keys(cleaned).length > 0 ? cleaned : null);
+    setEditing(false);
+    setSaving(false);
+    router.refresh();
+  };
+
+  const data = contact.typeData || {};
+  const inputCls = "w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+  const selectCls = `${inputCls} bg-white`;
+  const valCls = "text-sm text-slate-900";
+  const lblCls = "text-xs font-medium text-slate-400 uppercase tracking-wider";
+
+  return (
+    <div className={`rounded-xl border p-5 ${typeMeta.bgColor} border-slate-200`}>
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-lg">{typeMeta.icon}</span>
+          <h3 className={`text-sm font-bold ${typeMeta.color}`}>{typeMeta.label} Profile</h3>
+        </div>
+        {editing ? (
+          <div className="flex gap-2">
+            <button onClick={() => { setEditing(false); setLocalData(contact.typeData || {}); }} className="px-3 py-1 text-xs font-medium text-slate-600 border border-slate-300 rounded-lg hover:bg-white/60">Cancel</button>
+            <button onClick={handleSave} disabled={saving} className="px-3 py-1 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50">{saving ? "..." : "Save"}</button>
+          </div>
+        ) : (
+          <button onClick={() => { setEditing(true); setLocalData(contact.typeData || {}); }} className="text-xs text-blue-600 font-medium hover:text-blue-700">Edit</button>
+        )}
+      </div>
+
+      {contact.contactType === "landlord" && (
+        editing ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lblCls}>Entity Name</label><input className={inputCls} value={localData.entityName || ""} onChange={e => update("entityName", e.target.value)} placeholder="Smith Holdings LLC" /></div>
+            <div><label className={lblCls}>Entity Type</label>
+              <select className={selectCls} value={localData.entityType || ""} onChange={e => update("entityType", e.target.value)}>
+                <option value="">Select...</option><option value="individual">Individual</option><option value="llc">LLC</option><option value="corp">Corporation</option><option value="trust">Trust</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Role</label>
+              <select className={selectCls} value={localData.role || ""} onChange={e => update("role", e.target.value)}>
+                <option value="">Select...</option><option value="Owner">Owner</option><option value="Manager">Manager</option><option value="Agent">Agent</option><option value="Super">Super</option><option value="Principal">Principal</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Portfolio Size</label><input type="number" className={inputCls} value={localData.portfolioSize || ""} onChange={e => update("portfolioSize", e.target.value ? Number(e.target.value) : undefined)} placeholder="# buildings" /></div>
+            <div><label className={lblCls}>Total Units</label><input type="number" className={inputCls} value={localData.totalUnits || ""} onChange={e => update("totalUnits", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Preferred Contact</label>
+              <select className={selectCls} value={localData.preferredContact || ""} onChange={e => update("preferredContact", e.target.value)}>
+                <option value="">Select...</option><option value="phone">Phone</option><option value="email">Email</option><option value="in-person">In-Person</option><option value="mail">Mail</option>
+              </select>
+            </div>
+            <div className="col-span-2"><label className={lblCls}>Mailing Address</label><input className={inputCls} value={localData.mailingAddress || ""} onChange={e => update("mailingAddress", e.target.value)} /></div>
+            <div><label className={lblCls}>Exclusive Status</label>
+              <select className={selectCls} value={localData.exclusiveStatus || ""} onChange={e => update("exclusiveStatus", e.target.value)}>
+                <option value="">None</option><option value="verbal">Verbal</option><option value="written">Written</option><option value="expired">Expired</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Decision Maker?</label>
+              <select className={selectCls} value={localData.decisionMaker === true ? "yes" : localData.decisionMaker === false ? "no" : ""} onChange={e => update("decisionMaker", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Commission Terms</label><input className={inputCls} value={localData.commissionTerms || ""} onChange={e => update("commissionTerms", e.target.value)} /></div>
+            <div><label className={lblCls}>Management Co.</label><input className={inputCls} value={localData.managementCompany || ""} onChange={e => update("managementCompany", e.target.value)} /></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+            {data.entityName && <div><p className={lblCls}>Entity</p><p className={valCls}>{data.entityName}</p></div>}
+            {data.entityType && <div><p className={lblCls}>Type</p><p className={`${valCls} capitalize`}>{data.entityType}</p></div>}
+            {data.role && <div><p className={lblCls}>Role</p><p className={valCls}>{data.role}</p></div>}
+            {data.portfolioSize && <div><p className={lblCls}>Portfolio</p><p className={valCls}>{data.portfolioSize} buildings</p></div>}
+            {data.totalUnits && <div><p className={lblCls}>Total Units</p><p className={valCls}>{data.totalUnits}</p></div>}
+            {data.preferredContact && <div><p className={lblCls}>Preferred Contact</p><p className={`${valCls} capitalize`}>{data.preferredContact}</p></div>}
+            {data.mailingAddress && <div className="col-span-2"><p className={lblCls}>Mailing Address</p><p className={valCls}>{data.mailingAddress}</p></div>}
+            {data.managementCompany && <div><p className={lblCls}>Management Co.</p><p className={valCls}>{data.managementCompany}</p></div>}
+            {data.exclusiveStatus && data.exclusiveStatus !== "none" && (
+              <div><p className={lblCls}>Exclusive</p><p className={`${valCls} capitalize font-medium ${data.exclusiveStatus === "written" ? "text-emerald-700" : data.exclusiveStatus === "verbal" ? "text-amber-700" : "text-slate-500"}`}>{data.exclusiveStatus}</p></div>
+            )}
+            {data.decisionMaker !== undefined && <div><p className={lblCls}>Decision Maker</p><p className={valCls}>{data.decisionMaker ? "Yes" : "No"}</p></div>}
+            {data.commissionTerms && <div><p className={lblCls}>Commission</p><p className={valCls}>{data.commissionTerms}</p></div>}
+            {data.distressScore !== undefined && <div><p className={lblCls}>Distress Score</p><p className={`${valCls} font-bold ${data.distressScore >= 70 ? "text-red-600" : data.distressScore >= 40 ? "text-amber-600" : "text-emerald-600"}`}>{data.distressScore}/100</p></div>}
+            {data.violationCount !== undefined && <div><p className={lblCls}>Violations</p><p className={`${valCls} ${data.violationCount > 0 ? "text-red-600 font-medium" : ""}`}>{data.violationCount}</p></div>}
+            {!Object.keys(data).length && <p className="text-sm text-slate-400 col-span-3">No landlord details yet. Click Edit to add.</p>}
+          </div>
+        )
+      )}
+
+      {contact.contactType === "buyer" && (
+        editing ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lblCls}>Buyer Type</label>
+              <select className={selectCls} value={localData.buyerType || ""} onChange={e => update("buyerType", e.target.value)}>
+                <option value="">Select...</option><option value="first-time">First-Time</option><option value="investor">Investor</option><option value="upgrade">Upgrade</option><option value="downsize">Downsize</option><option value="pied-a-terre">Pied-a-terre</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Property Type</label>
+              <select className={selectCls} value={localData.propertyType || ""} onChange={e => update("propertyType", e.target.value)}>
+                <option value="">Select...</option><option value="Condo">Condo</option><option value="Co-op">Co-op</option><option value="Townhouse">Townhouse</option><option value="Multi-family">Multi-family</option><option value="Land">Land</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Budget Min ($)</label><input type="number" className={inputCls} value={localData.budgetMin || ""} onChange={e => update("budgetMin", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Budget Max ($)</label><input type="number" className={inputCls} value={localData.budgetMax || ""} onChange={e => update("budgetMax", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Bedrooms (min)</label><input type="number" className={inputCls} value={localData.bedroomsMin || ""} onChange={e => update("bedroomsMin", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Bedrooms (max)</label><input type="number" className={inputCls} value={localData.bedroomsMax || ""} onChange={e => update("bedroomsMax", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Pre-Approved?</label>
+              <select className={selectCls} value={localData.preApproved === true ? "yes" : localData.preApproved === false ? "no" : ""} onChange={e => update("preApproved", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Cash Buyer?</label>
+              <select className={selectCls} value={localData.cashBuyer === true ? "yes" : localData.cashBuyer === false ? "no" : ""} onChange={e => update("cashBuyer", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </div>
+            <div className="col-span-2"><label className={lblCls}>Target Neighborhoods</label><input className={inputCls} value={localData.targetNeighborhoods?.join(", ") || ""} onChange={e => update("targetNeighborhoods", e.target.value ? e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined)} placeholder="Upper West Side, Park Slope" /></div>
+            <div><label className={lblCls}>Move Timeline</label>
+              <select className={selectCls} value={localData.moveTimeline || ""} onChange={e => update("moveTimeline", e.target.value)}>
+                <option value="">Select...</option><option value="Immediately">Immediately</option><option value="1-3 months">1-3 months</option><option value="3-6 months">3-6 months</option><option value="6-12 months">6-12 months</option><option value="Flexible">Flexible</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Reason for Buying</label>
+              <select className={selectCls} value={localData.reasonForBuying || ""} onChange={e => update("reasonForBuying", e.target.value)}>
+                <option value="">Select...</option><option value="Investment">Investment</option><option value="Primary residence">Primary Residence</option><option value="Rental income">Rental Income</option><option value="Flip">Flip</option>
+              </select>
+            </div>
+            {localData.preApproved && <div><label className={lblCls}>Pre-Approval Amt ($)</label><input type="number" className={inputCls} value={localData.preApprovalAmount || ""} onChange={e => update("preApprovalAmount", e.target.value ? Number(e.target.value) : undefined)} /></div>}
+            {localData.preApproved && <div><label className={lblCls}>Lender</label><input className={inputCls} value={localData.lender || ""} onChange={e => update("lender", e.target.value)} /></div>}
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+            {data.buyerType && <div><p className={lblCls}>Buyer Type</p><p className={`${valCls} capitalize`}>{data.buyerType.replace("-", " ")}</p></div>}
+            {data.propertyType && <div><p className={lblCls}>Property Type</p><p className={valCls}>{data.propertyType}</p></div>}
+            {(data.budgetMin || data.budgetMax) && (
+              <div><p className={lblCls}>Budget</p><p className={valCls}>{data.budgetMin ? `$${Number(data.budgetMin).toLocaleString()}` : "?"} – {data.budgetMax ? `$${Number(data.budgetMax).toLocaleString()}` : "?"}</p></div>
+            )}
+            {(data.bedroomsMin || data.bedroomsMax) && <div><p className={lblCls}>Bedrooms</p><p className={valCls}>{data.bedroomsMin || "?"} – {data.bedroomsMax || "?"}</p></div>}
+            {data.preApproved !== undefined && <div><p className={lblCls}>Pre-Approved</p><p className={`${valCls} font-medium ${data.preApproved ? "text-emerald-700" : "text-slate-500"}`}>{data.preApproved ? "Yes" : "No"}{data.preApprovalAmount ? ` ($${Number(data.preApprovalAmount).toLocaleString()})` : ""}</p></div>}
+            {data.cashBuyer && <div><p className={lblCls}>Cash Buyer</p><p className={`${valCls} font-medium text-emerald-700`}>Yes</p></div>}
+            {data.targetNeighborhoods?.length > 0 && <div className="col-span-2"><p className={lblCls}>Target Areas</p><p className={valCls}>{data.targetNeighborhoods.join(", ")}</p></div>}
+            {data.moveTimeline && <div><p className={lblCls}>Timeline</p><p className={valCls}>{data.moveTimeline}</p></div>}
+            {data.reasonForBuying && <div><p className={lblCls}>Reason</p><p className={valCls}>{data.reasonForBuying}</p></div>}
+            {data.lender && <div><p className={lblCls}>Lender</p><p className={valCls}>{data.lender}</p></div>}
+            {!Object.keys(data).length && <p className="text-sm text-slate-400 col-span-3">No buyer details yet. Click Edit to add.</p>}
+          </div>
+        )
+      )}
+
+      {contact.contactType === "seller" && (
+        editing ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2"><label className={lblCls}>Property Address</label><input className={inputCls} value={localData.propertyAddress || ""} onChange={e => update("propertyAddress", e.target.value)} placeholder="123 Broadway, Apt 4A" /></div>
+            <div><label className={lblCls}>Property Type</label>
+              <select className={selectCls} value={localData.propertyType || ""} onChange={e => update("propertyType", e.target.value)}>
+                <option value="">Select...</option><option value="Condo">Condo</option><option value="Co-op">Co-op</option><option value="Townhouse">Townhouse</option><option value="Multi-family">Multi-family</option><option value="Land">Land</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Condition</label>
+              <select className={selectCls} value={localData.condition || ""} onChange={e => update("condition", e.target.value)}>
+                <option value="">Select...</option><option value="Excellent">Excellent</option><option value="Good">Good</option><option value="Fair">Fair</option><option value="Needs work">Needs Work</option><option value="Gut renovation">Gut Renovation</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Asking Price ($)</label><input type="number" className={inputCls} value={localData.askingPrice || ""} onChange={e => update("askingPrice", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Mortgage Balance ($)</label><input type="number" className={inputCls} value={localData.mortgageBalance || ""} onChange={e => update("mortgageBalance", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Reason for Selling</label>
+              <select className={selectCls} value={localData.reasonForSelling || ""} onChange={e => update("reasonForSelling", e.target.value)}>
+                <option value="">Select...</option><option value="Relocating">Relocating</option><option value="Downsizing">Downsizing</option><option value="Divorce">Divorce</option><option value="Estate">Estate</option><option value="Investment exit">Investment Exit</option><option value="Distress">Distress</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Sell Timeline</label>
+              <select className={selectCls} value={localData.sellTimeline || ""} onChange={e => update("sellTimeline", e.target.value)}>
+                <option value="">Select...</option><option value="ASAP">ASAP</option><option value="1-3 months">1-3 months</option><option value="3-6 months">3-6 months</option><option value="Flexible">Flexible</option><option value="Testing the market">Testing the Market</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Owner Occupied?</label>
+              <select className={selectCls} value={localData.ownerOccupied === true ? "yes" : localData.ownerOccupied === false ? "no" : ""} onChange={e => update("ownerOccupied", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No (Tenant-Occupied)</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Tenant Situation</label><input className={inputCls} value={localData.tenantSituation || ""} onChange={e => update("tenantSituation", e.target.value)} placeholder="Vacant, Month-to-month..." /></div>
+            <div><label className={lblCls}>Exclusive Agreement?</label>
+              <select className={selectCls} value={localData.exclusiveAgreement === true ? "yes" : localData.exclusiveAgreement === false ? "no" : ""} onChange={e => update("exclusiveAgreement", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Commission (%)</label><input type="number" step="0.5" className={inputCls} value={localData.commissionRate || ""} onChange={e => update("commissionRate", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Co-Broke (%)</label><input type="number" step="0.5" className={inputCls} value={localData.cobrokeRate || ""} onChange={e => update("cobrokeRate", e.target.value ? Number(e.target.value) : undefined)} /></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+            {data.propertyAddress && <div className="col-span-2"><p className={lblCls}>Property</p><p className={valCls}>{data.propertyAddress}</p></div>}
+            {data.propertyType && <div><p className={lblCls}>Type</p><p className={valCls}>{data.propertyType}</p></div>}
+            {data.askingPrice && <div><p className={lblCls}>Asking Price</p><p className={`${valCls} font-medium`}>${Number(data.askingPrice).toLocaleString()}</p></div>}
+            {data.mortgageBalance && <div><p className={lblCls}>Mortgage</p><p className={valCls}>${Number(data.mortgageBalance).toLocaleString()}</p></div>}
+            {data.askingPrice && data.mortgageBalance && <div><p className={lblCls}>Est. Equity</p><p className={`${valCls} font-medium ${(data.askingPrice - data.mortgageBalance) > 0 ? "text-emerald-700" : "text-red-600"}`}>${(data.askingPrice - data.mortgageBalance).toLocaleString()}</p></div>}
+            {data.condition && <div><p className={lblCls}>Condition</p><p className={valCls}>{data.condition}</p></div>}
+            {data.reasonForSelling && <div><p className={lblCls}>Reason</p><p className={valCls}>{data.reasonForSelling}</p></div>}
+            {data.sellTimeline && <div><p className={lblCls}>Timeline</p><p className={`${valCls} ${data.sellTimeline === "ASAP" ? "text-red-600 font-medium" : ""}`}>{data.sellTimeline}</p></div>}
+            {data.ownerOccupied !== undefined && <div><p className={lblCls}>Owner Occupied</p><p className={valCls}>{data.ownerOccupied ? "Yes" : "No"}</p></div>}
+            {data.tenantSituation && <div><p className={lblCls}>Tenants</p><p className={valCls}>{data.tenantSituation}</p></div>}
+            {data.exclusiveAgreement !== undefined && <div><p className={lblCls}>Exclusive</p><p className={`${valCls} font-medium ${data.exclusiveAgreement ? "text-emerald-700" : "text-slate-500"}`}>{data.exclusiveAgreement ? "Yes" : "No"}</p></div>}
+            {data.commissionRate && <div><p className={lblCls}>Commission</p><p className={valCls}>{data.commissionRate}%{data.cobrokeRate ? ` (${data.cobrokeRate}% co-broke)` : ""}</p></div>}
+            {data.listingStatus && <div><p className={lblCls}>Listing</p><p className={valCls}>{data.listingStatus}</p></div>}
+            {!Object.keys(data).length && <p className="text-sm text-slate-400 col-span-3">No seller details yet. Click Edit to add.</p>}
+          </div>
+        )
+      )}
+
+      {contact.contactType === "renter" && (
+        editing ? (
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className={lblCls}>Budget Min ($/mo)</label><input type="number" className={inputCls} value={localData.budgetMin || ""} onChange={e => update("budgetMin", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Budget Max ($/mo)</label><input type="number" className={inputCls} value={localData.budgetMax || ""} onChange={e => update("budgetMax", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Bedrooms</label>
+              <select className={selectCls} value={localData.bedrooms || ""} onChange={e => update("bedrooms", e.target.value)}>
+                <option value="">Select...</option><option value="Studio">Studio</option><option value="1BR">1BR</option><option value="2BR">2BR</option><option value="3BR">3BR</option><option value="4BR+">4BR+</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Move-In Date</label><input type="date" className={inputCls} value={localData.moveInDate || ""} onChange={e => update("moveInDate", e.target.value)} /></div>
+            <div className="col-span-2"><label className={lblCls}>Target Neighborhoods</label><input className={inputCls} value={localData.targetNeighborhoods?.join(", ") || ""} onChange={e => update("targetNeighborhoods", e.target.value ? e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean) : undefined)} placeholder="East Village, LES, Williamsburg" /></div>
+            <div><label className={lblCls}>Annual Income ($)</label><input type="number" className={inputCls} value={localData.annualIncome || ""} onChange={e => update("annualIncome", e.target.value ? Number(e.target.value) : undefined)} /></div>
+            <div><label className={lblCls}>Credit Score</label>
+              <select className={selectCls} value={localData.creditScore || ""} onChange={e => update("creditScore", e.target.value)}>
+                <option value="">Unknown</option><option value="Excellent (750+)">Excellent (750+)</option><option value="Good (700-749)">Good (700-749)</option><option value="Fair (650-699)">Fair (650-699)</option><option value="Poor (<650)">Poor (&lt;650)</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Employment</label>
+              <select className={selectCls} value={localData.employmentStatus || ""} onChange={e => update("employmentStatus", e.target.value)}>
+                <option value="">Select...</option><option value="Employed">Employed</option><option value="Self-employed">Self-Employed</option><option value="Student">Student</option><option value="Retired">Retired</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Employer</label><input className={inputCls} value={localData.employer || ""} onChange={e => update("employer", e.target.value)} /></div>
+            <div><label className={lblCls}>Guarantor</label>
+              <select className={selectCls} value={localData.guarantor || ""} onChange={e => update("guarantor", e.target.value)}>
+                <option value="">Select...</option><option value="Not needed">Not Needed</option><option value="Has guarantor">Has Guarantor</option><option value="Using service">Using Service</option><option value="Needs one">Needs One</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Pets</label><input className={inputCls} value={localData.pets || ""} onChange={e => update("pets", e.target.value)} placeholder="Dog (small), Cat" /></div>
+            <div><label className={lblCls}>Broker Fee OK?</label>
+              <select className={selectCls} value={localData.brokerFee === true ? "yes" : localData.brokerFee === false ? "no" : ""} onChange={e => update("brokerFee", e.target.value === "yes" ? true : e.target.value === "no" ? false : undefined)}>
+                <option value="">Unknown</option><option value="yes">Yes</option><option value="no">No (Owner-Pay Only)</option>
+              </select>
+            </div>
+            <div><label className={lblCls}>Urgency</label>
+              <select className={selectCls} value={localData.urgency || ""} onChange={e => update("urgency", e.target.value)}>
+                <option value="">Select...</option><option value="Immediate">Immediate</option><option value="Soon">Soon (1-2 months)</option><option value="Flexible">Flexible</option>
+              </select>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+            {(data.budgetMin || data.budgetMax) && <div><p className={lblCls}>Budget</p><p className={valCls}>{data.budgetMin ? `$${Number(data.budgetMin).toLocaleString()}` : "?"} – {data.budgetMax ? `$${Number(data.budgetMax).toLocaleString()}` : "?"}/mo</p></div>}
+            {data.bedrooms && <div><p className={lblCls}>Bedrooms</p><p className={valCls}>{data.bedrooms}</p></div>}
+            {data.moveInDate && <div><p className={lblCls}>Move-In</p><p className={valCls}>{new Date(data.moveInDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</p></div>}
+            {data.targetNeighborhoods?.length > 0 && <div className="col-span-2"><p className={lblCls}>Target Areas</p><p className={valCls}>{data.targetNeighborhoods.join(", ")}</p></div>}
+            {data.annualIncome && (
+              <div><p className={lblCls}>Income</p><p className={valCls}>${Number(data.annualIncome).toLocaleString()}/yr
+                {data.budgetMax && <span className={`ml-1 text-xs ${data.annualIncome >= data.budgetMax * 40 ? "text-emerald-600" : "text-red-600"}`}>({data.annualIncome >= data.budgetMax * 40 ? "passes" : "fails"} 40x)</span>}
+              </p></div>
+            )}
+            {data.creditScore && <div><p className={lblCls}>Credit</p><p className={valCls}>{data.creditScore}</p></div>}
+            {data.employmentStatus && <div><p className={lblCls}>Employment</p><p className={valCls}>{data.employmentStatus}{data.employer ? ` at ${data.employer}` : ""}</p></div>}
+            {data.guarantor && <div><p className={lblCls}>Guarantor</p><p className={valCls}>{data.guarantor}</p></div>}
+            {data.pets && <div><p className={lblCls}>Pets</p><p className={valCls}>{data.pets}</p></div>}
+            {data.brokerFee !== undefined && <div><p className={lblCls}>Broker Fee</p><p className={`${valCls} ${data.brokerFee ? "text-emerald-700" : "text-red-600"} font-medium`}>{data.brokerFee ? "Yes" : "No"}</p></div>}
+            {data.urgency && <div><p className={lblCls}>Urgency</p><p className={`${valCls} ${data.urgency === "Immediate" ? "text-red-600 font-medium" : ""}`}>{data.urgency}</p></div>}
+            {!Object.keys(data).length && <p className="text-sm text-slate-400 col-span-3">No renter details yet. Click Edit to add.</p>}
+          </div>
+        )
       )}
     </div>
   );

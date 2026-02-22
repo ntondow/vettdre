@@ -39,7 +39,7 @@ export async function analyzeOwnership(building: {
   person?: any;
   org?: any;
   keyPeople?: any[];
-}): Promise<{ summary: OwnerSummary | null; error: string | null }> {
+}, dobFilings?: any[]): Promise<{ summary: OwnerSummary | null; error: string | null }> {
 
   const candidateSummary = candidates.slice(0, 8).map((c: any, i: number) => {
     return `#${i + 1} ${c.name} (${c.isEntity ? "Entity" : "Individual"}, confidence: ${c.confidence}%)
@@ -74,6 +74,28 @@ export async function analyzeOwnership(building: {
   ${apolloData.keyPeople.map((kp: any) => `${kp.firstName} ${kp.lastName} — ${kp.title || "?"} (${kp.seniority || "?"})`).join("\n  ")}`;
   }
 
+  // Build DOB filings section
+  let dobSection = "";
+  if (dobFilings && dobFilings.length > 0) {
+    const filingsSorted = [...dobFilings].sort((a, b) => (b.filingDate || "").localeCompare(a.filingDate || "")).slice(0, 10);
+    dobSection = `\nDOB JOB APPLICATION FILINGS (${dobFilings.length} total):
+  ${filingsSorted.map((f: any) => {
+    const owner = f.ownerBusiness || f.ownerName || "?";
+    const date = f.filingDate?.substring(0, 10) || "?";
+    const type = f.jobType || "?";
+    return `${type} ${date} — Owner: ${owner}${f.ownerPhone ? " Ph:" + f.ownerPhone : ""}${f.permittee ? " | Permittee: " + f.permittee : ""}${f.units > 0 ? " | " + f.units + " units" : ""}${f.cost ? " | Cost: $" + f.cost : ""}${f.status ? " | " + f.status : ""}`;
+  }).join("\n  ")}`;
+    // Check for owner name discrepancies
+    const uniqueOwners = [...new Set(dobFilings.map((f: any) => (f.ownerBusiness || f.ownerName || "").toUpperCase()).filter((n: string) => n.length > 2))];
+    if (uniqueOwners.length > 1) {
+      dobSection += `\n  NOTE: Multiple different owner names across filings: ${uniqueOwners.join(", ")}`;
+    }
+    const hasNB = dobFilings.some((f: any) => f.jobType === "NB");
+    if (hasNB) {
+      dobSection += `\n  NOTE: New Building (NB) permit found — this property has/had new construction`;
+    }
+  }
+
   const prompt = `You are analyzing NYC property ownership data. Return ONLY valid JSON, no markdown, no backticks, no preamble.
 
 PROPERTY: ${building.address}, ${building.boro} | Block ${building.block}, Lot ${building.lot}
@@ -88,10 +110,15 @@ ${txSummary || "None"}
 NYS ENTITIES:
 ${nysEntities.length > 0 ? nysEntities.map((e: any) => `${e.corpName} — ${e.nameStatus}`).join("; ") : "None"}
 ${apolloSection}
+${dobSection}
 
 PORTFOLIO: ${portfolio?.properties?.length || 0} other properties connected
 
-IMPORTANT: If Apollo data confirms a candidate's identity, title, or company — increase your confidence. If Apollo phone matches a DOB filing phone, that's very strong evidence.
+IMPORTANT:
+- If Apollo data confirms a candidate's identity, title, or company — increase your confidence.
+- If Apollo phone matches a DOB filing phone, that's very strong evidence.
+- DOB filings show who filed as the OWNER on building permits. If the same name appears across multiple filings, ownership is highly likely.
+- Flag any insights about permit activity: recent permits suggest active management, NB permits indicate development, multiple permits show ongoing investment, different owner names across filings may indicate ownership changes.
 
 Return this exact JSON structure:
 {
