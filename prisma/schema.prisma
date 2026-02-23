@@ -266,7 +266,8 @@ model User {
   licenseNumber    String?   @map("license_number")
   brokerage        String?
   plan             UserPlan  @default(free)
-  stripeCustomerId String?   @map("stripe_customer_id")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
   usageCounters    Json      @default("{}") @map("usage_counters")
   usageResetDate   DateTime? @map("usage_reset_date")
   trialEndsAt      DateTime? @map("trial_ends_at")

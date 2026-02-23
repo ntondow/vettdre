@@ -7,6 +7,13 @@ import { PLAN_DISPLAY } from "@/lib/feature-gate";
 import type { UserPlan } from "@/lib/feature-gate";
 import { startFreeTrial } from "@/lib/feature-gate-server";
 
+// Price IDs matching the billing page
+const PLAN_PRICE_IDS: Record<string, string> = {
+  explorer: "price_1T42zZCehWC3IMoULwifstPN",
+  pro: "price_1T431vCehWC3IMoUbAOPSLZX",
+  team: "price_1T433ACehWC3IMoUVtty6sv6",
+};
+
 interface PaywallProps {
   featureName: string;
   currentPlan: UserPlan;
@@ -29,6 +36,7 @@ export default function Paywall({ featureName, currentPlan, requiredPlan, onClos
   const router = useRouter();
   const { userId, isTrialing, trialDaysRemaining } = useUserPlan();
   const [starting, setStarting] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const required = PLAN_DISPLAY[requiredPlan];
   const current = PLAN_DISPLAY[currentPlan];
 
@@ -44,6 +52,39 @@ export default function Paywall({ featureName, currentPlan, requiredPlan, onClos
     }
     setStarting(false);
   };
+
+  const handleCheckout = async () => {
+    const priceId = PLAN_PRICE_IDS[requiredPlan];
+    if (!priceId) {
+      onClose?.();
+      router.push("/settings/billing");
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      const result = await res.json();
+      if (result.url) {
+        window.location.href = result.url;
+      } else {
+        // Fallback to billing page if checkout fails
+        onClose?.();
+        router.push("/settings/billing");
+      }
+    } catch {
+      onClose?.();
+      router.push("/settings/billing");
+    }
+  };
+
+  const btnColorClass = required.color === "emerald" ? "bg-emerald-600 hover:bg-emerald-700"
+    : required.color === "blue" ? "bg-blue-600 hover:bg-blue-700"
+    : required.color === "violet" ? "bg-violet-600 hover:bg-violet-700"
+    : "bg-blue-600 hover:bg-blue-700";
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center">
@@ -68,7 +109,7 @@ export default function Paywall({ featureName, currentPlan, requiredPlan, onClos
         <p className="text-slate-600 mb-4">
           <span className="font-semibold text-slate-800">{featureName}</span> requires the{" "}
           <span className={`font-semibold ${colorClass(required.color, "text")}`}>{required.name}</span>{" "}
-          plan or higher.
+          plan{required.monthlyPrice !== null ? ` ($${required.monthlyPrice}/mo)` : ""}.
         </p>
 
         {/* Trial banner for trialing users */}
@@ -101,20 +142,28 @@ export default function Paywall({ featureName, currentPlan, requiredPlan, onClos
             </button>
             <p className="text-xs text-slate-400 mt-2">No credit card required</p>
           </>
+        ) : requiredPlan === "enterprise" ? (
+          <a href="mailto:support@vettdre.com?subject=Enterprise%20Plan%20Inquiry"
+            className="block w-full bg-amber-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-amber-700 transition-colors shadow-sm text-center">
+            Contact Sales
+          </a>
         ) : (
           <button
-            onClick={() => { onClose?.(); router.push("/settings/billing"); }}
-            className="w-full bg-blue-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+            onClick={handleCheckout}
+            disabled={checkoutLoading}
+            className={`w-full text-white rounded-lg px-6 py-3 text-sm font-semibold transition-colors shadow-sm disabled:opacity-50 ${btnColorClass}`}
           >
-            View Plans & Upgrade
+            {checkoutLoading ? "Redirecting to checkout..." : `Upgrade to ${required.name}`}
           </button>
         )}
 
-        {onClose && (
-          <button onClick={onClose} className="mt-3 text-sm text-slate-500 hover:text-slate-700 transition-colors">
-            Maybe later
-          </button>
-        )}
+        {/* Secondary: see all plans */}
+        <button
+          onClick={() => { onClose?.(); router.push("/settings/billing"); }}
+          className="mt-3 text-sm text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          Compare all plans
+        </button>
       </div>
     </div>
   );

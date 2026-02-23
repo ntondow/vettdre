@@ -1,18 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import Stripe from "stripe";
+import { stripe, isValidPriceId } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-
-function getStripe() {
-  return new Stripe(process.env.STRIPE_SECRET_KEY!);
-}
 
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json({ error: "Stripe not configured" }, { status: 500 });
     }
-    const stripe = getStripe();
 
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -21,17 +16,9 @@ export async function POST(req: NextRequest) {
     const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-    const { plan } = await req.json();
-    if (!["pro", "team"].includes(plan)) {
-      return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
-    }
-
-    const priceId = plan === "pro"
-      ? process.env.STRIPE_PRO_PRICE_ID
-      : process.env.STRIPE_TEAM_PRICE_ID;
-
-    if (!priceId) {
-      return NextResponse.json({ error: "Price not configured" }, { status: 500 });
+    const { priceId } = await req.json();
+    if (!priceId || !isValidPriceId(priceId)) {
+      return NextResponse.json({ error: "Invalid price ID" }, { status: 400 });
     }
 
     // Get or create Stripe customer
@@ -49,7 +36,10 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const origin = req.headers.get("origin") || "http://localhost:3000";
+    const origin = req.headers.get("origin") || "https://app.vettdre.com";
+
+    // Grant 7-day Stripe trial only if user is on free plan AND has never had a trial
+    const grantTrial = user.plan === "free" && !user.trialEndsAt;
 
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -57,7 +47,9 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: `${origin}/settings/billing?success=true`,
       cancel_url: `${origin}/settings/billing?canceled=true`,
-      metadata: { userId: user.id, plan },
+      allow_promotion_codes: true,
+      metadata: { userId: user.id },
+      ...(grantTrial ? { subscription_data: { trial_period_days: 7 } } : {}),
     });
 
     return NextResponse.json({ url: session.url });
