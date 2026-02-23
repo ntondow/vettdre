@@ -6,13 +6,18 @@ import { useState, useEffect } from "react";
 import { getUnreadCount } from "@/app/(dashboard)/messages/actions";
 import { getFollowUpCount } from "@/app/(dashboard)/messages/follow-up-actions";
 import { useSidebar } from "./sidebar-context";
+import { useUserPlan } from "@/components/providers/user-plan-provider";
+import { hasPermission } from "@/lib/feature-gate";
+import type { Feature } from "@/lib/feature-gate";
+import Paywall from "@/components/ui/paywall";
+import { getRequiredPlan } from "@/lib/feature-gate";
 
 interface NavItem {
   name: string;
   href: string;
   icon: string;
   badge?: boolean;
-  locked?: boolean;
+  feature?: Feature;
 }
 
 const nav: { label: string; items: NavItem[] }[] = [
@@ -25,24 +30,24 @@ const nav: { label: string; items: NavItem[] }[] = [
   { label: "Deals", items: [
     { name: "Pipeline", href: "/pipeline", icon: "📋" },
     { name: "Deal Pipeline", href: "/deals", icon: "🏗️" },
-    { name: "Deal Modeler", href: "/deals/new", icon: "🧮" },
+    { name: "Deal Modeler", href: "/deals/new", icon: "🧮", feature: "nav_deal_modeler" },
     { name: "Properties", href: "/properties", icon: "🏠" },
   ]},
   { label: "Intelligence", items: [
-    { name: "Market Intel", href: "/market-intel", icon: "🔍" },
-    { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+    { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+    { name: "Prospecting", href: "/prospecting", icon: "🎯", feature: "nav_prospecting" },
   ]},
   { label: "Outreach", items: [
-    { name: "Campaigns", href: "/settings/billing", icon: "📣", locked: true },
-    { name: "Sequences", href: "/settings/billing", icon: "🔄", locked: true },
+    { name: "Campaigns", href: "/campaigns", icon: "📣", feature: "nav_campaigns" },
+    { name: "Sequences", href: "/sequences", icon: "🔄", feature: "nav_sequences" },
   ]},
   { label: "Assets", items: [
-    { name: "Portfolios", href: "/portfolios", icon: "🏢" },
-    { name: "Comp Analysis", href: "/settings/billing", icon: "📈", locked: true },
+    { name: "Portfolios", href: "/portfolios", icon: "🏢", feature: "nav_portfolios" },
+    { name: "Comp Analysis", href: "/comp-analysis", icon: "📈", feature: "nav_comp_analysis" },
   ]},
   { label: "Capital", items: [
-    { name: "Financing", href: "/settings/billing", icon: "💰", locked: true },
-    { name: "Investors", href: "/settings/billing", icon: "🤝", locked: true },
+    { name: "Financing", href: "/financing", icon: "💰", feature: "nav_financing" },
+    { name: "Investors", href: "/investors", icon: "🤝", feature: "nav_investors" },
   ]},
   { label: "Settings", items: [
     { name: "Settings", href: "/settings", icon: "⚙️" },
@@ -53,8 +58,10 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { collapsed, toggle } = useSidebar();
+  const { plan } = useUserPlan();
   const [unread, setUnread] = useState(0);
   const [followUps, setFollowUps] = useState(0);
+  const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
 
   useEffect(() => {
     getUnreadCount().then(n => setUnread(n)).catch(() => {});
@@ -83,20 +90,29 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
-                const isActive = !item.locked && pathname.startsWith(item.href);
+                const locked = item.feature ? !hasPermission(plan, item.feature) : false;
+                const isActive = !locked && pathname.startsWith(item.href);
                 return (
-                  <Link key={item.name} href={item.href} title={collapsed ? item.name : undefined}
-                    className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group ${
+                  <button key={item.name}
+                    onClick={() => {
+                      if (locked && item.feature) {
+                        setPaywallFeature(item.feature);
+                      } else {
+                        router.push(item.href);
+                      }
+                    }}
+                    title={collapsed ? item.name : undefined}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group text-left ${
                       collapsed ? "justify-center" : ""
-                    } ${item.locked
+                    } ${locked
                       ? "text-slate-400 hover:text-slate-500 hover:bg-slate-50"
                       : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                     }`}>
-                    <span className={`${collapsed ? "text-lg" : "text-base"} ${item.locked ? "opacity-50" : ""}`}>{item.icon}</span>
+                    <span className={`${collapsed ? "text-lg" : "text-base"} ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
                     {!collapsed && (
                       <>
                         <span className="flex-1">{item.name}</span>
-                        {item.locked && (
+                        {locked && (
                           <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                           </svg>
@@ -123,16 +139,16 @@ export default function Sidebar() {
                       <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
                     )}
                     {/* Collapsed lock dot */}
-                    {collapsed && item.locked && (
+                    {collapsed && locked && (
                       <span className="absolute top-1 right-1 w-2 h-2 bg-slate-300 rounded-full" />
                     )}
                     {/* Tooltip on hover when collapsed */}
                     {collapsed && (
                       <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-                        {item.name}{item.locked ? " (Coming Soon)" : ""}
+                        {item.name}{locked ? " (Locked)" : ""}
                       </span>
                     )}
-                  </Link>
+                  </button>
                 );
               })}
             </div>
@@ -153,6 +169,16 @@ export default function Sidebar() {
           {!collapsed && <span>Collapse</span>}
         </button>
       </div>
+
+      {/* Paywall Modal */}
+      {paywallFeature && (
+        <Paywall
+          featureName={nav.flatMap(g => g.items).find(i => i.feature === paywallFeature)?.name || "Feature"}
+          currentPlan={plan}
+          requiredPlan={getRequiredPlan(paywallFeature)}
+          onClose={() => setPaywallFeature(null)}
+        />
+      )}
     </aside>
   );
 }

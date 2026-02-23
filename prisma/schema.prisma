@@ -196,6 +196,7 @@ enum AutomationTrigger {
 
 enum UserPlan {
   free
+  explorer
   pro
   team
   enterprise
@@ -268,6 +269,7 @@ model User {
   stripeCustomerId String?   @map("stripe_customer_id")
   usageCounters    Json      @default("{}") @map("usage_counters")
   usageResetDate   DateTime? @map("usage_reset_date")
+  trialEndsAt      DateTime? @map("trial_ends_at")
   invitedBy        String?   @map("invited_by")
   isActive         Boolean   @default(true) @map("is_active")
   isApproved       Boolean   @default(false) @map("is_approved")

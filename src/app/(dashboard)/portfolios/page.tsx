@@ -1,5 +1,10 @@
 import PortfolioDashboard from "./portfolio-dashboard";
+import PortfolioGateWrapper from "./portfolio-gate-wrapper";
 
 export default function PortfoliosPage() {
-  return <PortfolioDashboard />;
+  return (
+    <PortfolioGateWrapper>
+      <PortfolioDashboard />
+    </PortfolioGateWrapper>
+  );
 }

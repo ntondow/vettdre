@@ -2,8 +2,8 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import type { PlanName } from "@/lib/feature-gate";
-import { PLAN_LIMITS } from "@/lib/feature-gate";
+import type { UserPlan } from "@/lib/feature-gate";
+import { FREE_DAILY_SEARCH_LIMIT } from "@/lib/feature-gate";
 
 async function getAuthUser() {
   const supabase = await createClient();
@@ -16,36 +16,16 @@ async function getAuthUser() {
 
 export async function getBillingData() {
   const user = await getAuthUser();
-  const plan = (user.plan || "free") as PlanName;
+  const plan = (user.plan || "free") as UserPlan;
   const counters = (user.usageCounters as any) || {};
-  const limits = PLAN_LIMITS[plan];
-
-  // Get real counts
-  const [contactCount, dealCount, prospectListCount, teamMemberCount] = await Promise.all([
-    prisma.contact.count({ where: { orgId: user.orgId } }),
-    prisma.deal.count({ where: { orgId: user.orgId, status: "open" } }),
-    prisma.prospectingList.count({ where: { orgId: user.orgId, status: "active" } }),
-    prisma.user.count({ where: { orgId: user.orgId, isActive: true } }),
-  ]);
+  const today = new Date().toISOString().slice(0, 10);
+  const searchesToday = counters.lastSearchDate === today ? (counters.searchesToday || 0) : 0;
 
   return {
     plan,
+    trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     stripeCustomerId: user.stripeCustomerId,
-    usage: {
-      searchesToday: counters.searchesToday || 0,
-      enrichmentsThisMonth: counters.enrichmentsThisMonth || 0,
-      contacts: contactCount,
-      deals: dealCount,
-      prospectLists: prospectListCount,
-      teamMembers: teamMemberCount,
-    },
-    limits: {
-      searchesPerDay: limits.searchesPerDay,
-      enrichmentsPerMonth: limits.enrichmentsPerMonth,
-      maxContacts: limits.maxContacts,
-      maxDeals: limits.maxDeals,
-      maxProspectLists: limits.maxProspectLists,
-      maxTeamMembers: limits.maxTeamMembers,
-    },
+    searchesToday,
+    searchLimit: plan === "free" ? FREE_DAILY_SEARCH_LIMIT : Infinity,
   };
 }
