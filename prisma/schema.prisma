@@ -90,6 +90,31 @@ enum DealStatus {
   lost
 }
 
+enum DealAnalysisStatus {
+  analyzing
+  prospecting
+  loi_sent
+  under_contract
+  closed
+  dead
+}
+
+enum DealType {
+  acquisition
+  value_add
+  new_development
+  mixed_use
+  ground_up
+}
+
+enum DealSource {
+  off_market
+  on_market
+  new_development
+  referral
+  other
+}
+
 enum PipelineType {
   sales
   rental
@@ -218,6 +243,7 @@ model Organization {
   followUpReminders    FollowUpReminder[]
   calendarEvents       CalendarEvent[]
   showingSlots         ShowingSlot[]
+  dealAnalyses         DealAnalysis[]
   leadAssignmentRule   LeadAssignmentRule?
   aiSettings           AiSettings?
   brandSettings        BrandSettings?
@@ -268,6 +294,7 @@ model User {
   syncSettings     SyncSettings?
   calendarEvents   CalendarEvent[]
   showingSlots     ShowingSlot[]
+  dealAnalyses     DealAnalysis[]
 
   @@unique([orgId, email])
   @@map("users")
@@ -1098,4 +1125,38 @@ model ShowingSlot {
 
   @@index([orgId, propertyAddress, startAt])
   @@map("showing_slots")
+}
+
+// ============================================================
+// DEAL ANALYSIS / MODELER
+// ============================================================
+model DealAnalysis {
+  id             String             @id @default(uuid())
+  orgId          String             @map("org_id")
+  userId         String             @map("user_id")
+  name           String?
+  address        String?
+  borough        String?
+  block          String?
+  lot            String?
+  bbl            String?
+  contactId      String?            @map("contact_id")
+  status         DealAnalysisStatus @default(analyzing)
+  dealType       DealType           @default(acquisition) @map("deal_type")
+  dealSource     DealSource         @default(off_market) @map("deal_source")
+  inputs         Json               @default("{}")
+  outputs        Json               @default("{}")
+  notes          String?
+  loiSent        Boolean            @default(false) @map("loi_sent")
+  loiSentDate    DateTime?          @map("loi_sent_date")
+  loiAccepted    Boolean            @default(false) @map("loi_accepted")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  organization   Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status])
+  @@index([userId])
+  @@map("deal_analyses")
 }

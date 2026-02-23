@@ -44,18 +44,28 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Check account approval for authenticated users on protected routes
+  // Check account approval + active status for authenticated users on protected routes
   if (user && !isPublicRoute) {
+    // Look up by email (reliable) — auth_provider_id may be NULL for admin-created users
     const { data: dbUser } = await supabase
       .from("users")
-      .select("is_approved")
-      .eq("auth_provider_id", user.id)
-      .single();
+      .select("is_approved, is_active, auth_provider_id")
+      .eq("email", user.email!)
+      .limit(1)
+      .maybeSingle();
 
-    if (!dbUser || !dbUser.is_approved) {
+    if (!dbUser || !dbUser.is_approved || dbUser.is_active === false) {
       const url = request.nextUrl.clone();
       url.pathname = "/pending-approval";
       return NextResponse.redirect(url);
+    }
+
+    // Link auth_provider_id if missing (admin-created users)
+    if (dbUser && !dbUser.auth_provider_id) {
+      await supabase
+        .from("users")
+        .update({ auth_provider_id: user.id })
+        .eq("email", user.email!);
     }
   }
 

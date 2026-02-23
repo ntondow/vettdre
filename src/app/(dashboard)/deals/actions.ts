@@ -1,0 +1,417 @@
+"use server";
+
+import prisma from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
+import { generateDealAssumptions } from "@/lib/ai-assumptions";
+import type { BuildingData } from "@/lib/ai-assumptions";
+import { calculateAll } from "@/lib/deal-calculator";
+
+async function getUser() {
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) throw new Error("Not authenticated");
+  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  if (!user) throw new Error("User not found");
+  return user;
+}
+
+export async function saveDealAnalysis(data: {
+  id?: string;
+  name: string;
+  address?: string;
+  borough?: string;
+  block?: string;
+  lot?: string;
+  bbl?: string;
+  contactId?: string;
+  status?: string;
+  dealType?: string;
+  dealSource?: string;
+  inputs: any;
+  outputs: any;
+  notes?: string;
+}) {
+  const user = await getUser();
+
+  if (data.id) {
+    const deal = await prisma.dealAnalysis.update({
+      where: { id: data.id },
+      data: {
+        name: data.name,
+        address: data.address || null,
+        borough: data.borough || null,
+        block: data.block || null,
+        lot: data.lot || null,
+        bbl: data.bbl || null,
+        status: (data.status as any) || undefined,
+        dealType: (data.dealType as any) || undefined,
+        dealSource: (data.dealSource as any) || undefined,
+        inputs: data.inputs,
+        outputs: data.outputs,
+        notes: data.notes || null,
+      },
+    });
+    return { id: deal.id, saved: true };
+  }
+
+  const deal = await prisma.dealAnalysis.create({
+    data: {
+      orgId: user.orgId,
+      userId: user.id,
+      name: data.name,
+      address: data.address || null,
+      borough: data.borough || null,
+      block: data.block || null,
+      lot: data.lot || null,
+      bbl: data.bbl || null,
+      contactId: data.contactId || null,
+      status: (data.status as any) || "analyzing",
+      dealType: (data.dealType as any) || "acquisition",
+      dealSource: (data.dealSource as any) || "off_market",
+      inputs: data.inputs,
+      outputs: data.outputs,
+      notes: data.notes || null,
+    },
+  });
+
+  return { id: deal.id, saved: true };
+}
+
+export async function getDealAnalyses() {
+  const user = await getUser();
+  const deals = await prisma.dealAnalysis.findMany({
+    where: { orgId: user.orgId },
+    orderBy: { updatedAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      borough: true,
+      status: true,
+      dealType: true,
+      dealSource: true,
+      inputs: true,
+      outputs: true,
+      updatedAt: true,
+    },
+  });
+  return deals.map(d => ({ ...d, updatedAt: d.updatedAt.toISOString() }));
+}
+
+export async function getDealAnalysis(id: string) {
+  const user = await getUser();
+  const deal = await prisma.dealAnalysis.findFirst({
+    where: { id, orgId: user.orgId },
+  });
+  if (!deal) throw new Error("Deal not found");
+  return {
+    ...deal,
+    createdAt: deal.createdAt.toISOString(),
+    updatedAt: deal.updatedAt.toISOString(),
+    loiSentDate: deal.loiSentDate?.toISOString() || null,
+  };
+}
+
+const NYC_BASE = "https://data.cityofnewyork.us/resource";
+const PLUTO_ID = "64uk-42ks";
+const SALES_ID = "usep-8jbt";
+const HPD_REG_ID = "tesw-yqqr";
+
+// Borough avg rents by unit type (rough estimates for pre-fill)
+const AVG_RENTS: Record<string, { studio: number; oneBr: number; twoBr: number; threeBr: number }> = {
+  Manhattan: { studio: 2800, oneBr: 3500, twoBr: 4500, threeBr: 5500 },
+  Brooklyn: { studio: 2200, oneBr: 2800, twoBr: 3500, threeBr: 4200 },
+  Queens: { studio: 1800, oneBr: 2200, twoBr: 2800, threeBr: 3200 },
+  Bronx: { studio: 1400, oneBr: 1700, twoBr: 2100, threeBr: 2500 },
+  "Staten Island": { studio: 1300, oneBr: 1600, twoBr: 2000, threeBr: 2400 },
+};
+
+export interface DealPrefillData {
+  // PLUTO
+  address: string;
+  borough: string;
+  block: string;
+  lot: string;
+  bbl: string;
+  unitsRes: number;
+  unitsTotal: number;
+  yearBuilt: number;
+  numFloors: number;
+  assessTotal: number;
+  bldgArea: number;
+  lotArea: number;
+  zoneDist: string;
+  ownerName: string;
+  bldgClass: string;
+  far: number;
+  residFar: number;
+  // ACRIS / Sales
+  lastSalePrice: number;
+  lastSaleDate: string;
+  // HPD
+  hpdUnits: number;
+  // DOF / Tax
+  annualTaxes: number;
+  // Estimated unit mix
+  suggestedUnitMix: { type: string; count: number; monthlyRent: number }[];
+}
+
+export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData | null> {
+  const match = bbl.match(/^(\d)(\d{5})(\d{4})$/);
+  if (!match) return null;
+
+  const [, boro, rawBlock, rawLot] = match;
+  const block = rawBlock.replace(/^0+/, "");
+  const lot = rawLot.replace(/^0+/, "");
+  const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
+  const borough = boroNames[parseInt(boro)] || "";
+
+  // Fetch PLUTO, ACRIS Sales, HPD in parallel
+  const [plutoResult, salesResult, hpdResult] = await Promise.allSettled([
+    // PLUTO
+    fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boro}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar,condession&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+    // ACRIS Rolling Sales
+    fetch(`${NYC_BASE}/${SALES_ID}.json?$where=borough='${boro}' AND block='${block}' AND lot='${lot}'&$order=sale_date DESC&$limit=5`)
+      .then(r => r.ok ? r.json() : []),
+    // HPD Registrations
+    fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boro}' AND block='${block}' AND lot='${lot}'&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+  ]);
+
+  const plutoData = plutoResult.status === "fulfilled" ? plutoResult.value : [];
+  const salesData = salesResult.status === "fulfilled" ? salesResult.value : [];
+  const hpdData = hpdResult.status === "fulfilled" ? hpdResult.value : [];
+
+  if (plutoData.length === 0) return null;
+  const p = plutoData[0];
+
+  // Parse PLUTO
+  const unitsRes = parseInt(p.unitsres || "0");
+  const unitsTotal = parseInt(p.unitstotal || "0");
+  const assessTotal = parseInt(p.assesstot || "0");
+  const bldgArea = parseInt(p.bldgarea || "0");
+  const lotArea = parseInt(p.lotarea || "0");
+
+  // Annual taxes: NYC tax rate ~10-12% of assessed value for multifamily
+  // More accurate: use assesstot * tax rate. NYC Class 2 effective rate ~12.3%
+  const annualTaxes = Math.round(assessTotal * 0.123);
+
+  // ACRIS last sale
+  let lastSalePrice = 0;
+  let lastSaleDate = "";
+  for (const s of salesData) {
+    const price = parseInt((s.sale_price || "0").replace(/,/g, ""));
+    if (price > 10000) {
+      lastSalePrice = price;
+      lastSaleDate = s.sale_date || "";
+      break;
+    }
+  }
+
+  // HPD unit count
+  const hpdUnits = hpdData.length > 0 ? parseInt(hpdData[0].unitsres || "0") : 0;
+
+  // Estimate unit mix based on total units and borough
+  const totalUnits = unitsRes || hpdUnits || unitsTotal;
+  const rents = AVG_RENTS[borough] || AVG_RENTS["Brooklyn"];
+  const suggestedUnitMix: { type: string; count: number; monthlyRent: number }[] = [];
+
+  if (totalUnits > 0) {
+    if (totalUnits <= 6) {
+      // Small building: mostly 1BR/2BR
+      const oneBr = Math.ceil(totalUnits * 0.5);
+      const twoBr = totalUnits - oneBr;
+      if (oneBr > 0) suggestedUnitMix.push({ type: "1BR", count: oneBr, monthlyRent: rents.oneBr });
+      if (twoBr > 0) suggestedUnitMix.push({ type: "2BR", count: twoBr, monthlyRent: rents.twoBr });
+    } else if (totalUnits <= 20) {
+      const studios = Math.round(totalUnits * 0.15);
+      const oneBr = Math.round(totalUnits * 0.45);
+      const twoBr = Math.round(totalUnits * 0.3);
+      const threeBr = totalUnits - studios - oneBr - twoBr;
+      if (studios > 0) suggestedUnitMix.push({ type: "Studio", count: studios, monthlyRent: rents.studio });
+      if (oneBr > 0) suggestedUnitMix.push({ type: "1BR", count: oneBr, monthlyRent: rents.oneBr });
+      if (twoBr > 0) suggestedUnitMix.push({ type: "2BR", count: twoBr, monthlyRent: rents.twoBr });
+      if (threeBr > 0) suggestedUnitMix.push({ type: "3BR", count: threeBr, monthlyRent: rents.threeBr });
+    } else {
+      // Large building: full mix
+      const studios = Math.round(totalUnits * 0.2);
+      const oneBr = Math.round(totalUnits * 0.4);
+      const twoBr = Math.round(totalUnits * 0.25);
+      const threeBr = totalUnits - studios - oneBr - twoBr;
+      if (studios > 0) suggestedUnitMix.push({ type: "Studio", count: studios, monthlyRent: rents.studio });
+      if (oneBr > 0) suggestedUnitMix.push({ type: "1BR", count: oneBr, monthlyRent: rents.oneBr });
+      if (twoBr > 0) suggestedUnitMix.push({ type: "2BR", count: twoBr, monthlyRent: rents.twoBr });
+      if (threeBr > 0) suggestedUnitMix.push({ type: "3BR", count: threeBr, monthlyRent: rents.threeBr });
+    }
+  }
+
+  return {
+    address: p.address || "",
+    borough,
+    block,
+    lot,
+    bbl,
+    unitsRes,
+    unitsTotal,
+    yearBuilt: parseInt(p.yearbuilt || "0"),
+    numFloors: parseInt(p.numfloors || "0"),
+    assessTotal,
+    bldgArea,
+    lotArea,
+    zoneDist: p.zonedist1 || "",
+    ownerName: p.ownername || "",
+    bldgClass: p.bldgclass || "",
+    far: parseFloat(p.builtfar || "0"),
+    residFar: parseFloat(p.residfar || "0"),
+    lastSalePrice,
+    lastSaleDate,
+    hpdUnits,
+    annualTaxes,
+    suggestedUnitMix,
+  };
+}
+
+// Keep backward compat alias
+export async function fetchPlutoForDeal(bbl: string) {
+  return fetchDealPrefillData(bbl);
+}
+
+export async function updateDealAnalysisStatus(id: string, status: string) {
+  const user = await getUser();
+  const deal = await prisma.dealAnalysis.findFirst({ where: { id, orgId: user.orgId } });
+  if (!deal) throw new Error("Deal not found");
+
+  const updateData: any = { status };
+  if (status === "loi_sent" && !deal.loiSent) {
+    updateData.loiSent = true;
+    updateData.loiSentDate = new Date();
+  }
+
+  await prisma.dealAnalysis.update({ where: { id }, data: updateData });
+  return { success: true };
+}
+
+export async function deleteDealAnalysis(id: string) {
+  const user = await getUser();
+  const deal = await prisma.dealAnalysis.findFirst({ where: { id, orgId: user.orgId } });
+  if (!deal) throw new Error("Deal not found");
+  await prisma.dealAnalysis.delete({ where: { id } });
+  return { success: true };
+}
+
+// ============================================================
+// One-Click Underwrite — fetch all data + AI assumptions + save
+// ============================================================
+export async function underwriteDeal(params: {
+  boroCode: string;
+  block: string;
+  lot: string;
+  address?: string;
+  borough?: string;
+}) {
+  const user = await getUser();
+  const { boroCode, block, lot } = params;
+  const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+  const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
+  const borough = params.borough || boroNames[parseInt(boroCode)] || "";
+
+  // Fetch all data sources in parallel
+  const [plutoResult, salesResult, hpdRegResult, hpdViolResult, rentStabResult] = await Promise.allSettled([
+    fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+    fetch(`${NYC_BASE}/${SALES_ID}.json?$where=borough='${boroCode}' AND block='${block}' AND lot='${lot}'&$order=sale_date DESC&$limit=5`)
+      .then(r => r.ok ? r.json() : []),
+    fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+    fetch(`${NYC_BASE}/wvxf-dwi5.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=count(*) as cnt`)
+      .then(r => r.ok ? r.json() : []),
+    fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+  ]);
+
+  const plutoData = plutoResult.status === "fulfilled" ? plutoResult.value : [];
+  const salesData = salesResult.status === "fulfilled" ? salesResult.value : [];
+  const hpdRegData = hpdRegResult.status === "fulfilled" ? hpdRegResult.value : [];
+  const hpdViolData = hpdViolResult.status === "fulfilled" ? hpdViolResult.value : [];
+  const rentStabData = rentStabResult.status === "fulfilled" ? rentStabResult.value : [];
+
+  const p = plutoData[0] || {};
+  const unitsRes = parseInt(p.unitsres || "0");
+  const unitsTotal = parseInt(p.unitstotal || "0");
+  const assessTotal = parseInt(p.assesstot || "0");
+  const hpdUnits = hpdRegData.length > 0 ? parseInt(hpdRegData[0].unitsres || "0") : 0;
+  const hpdViolationCount = hpdViolData.length > 0 ? parseInt(hpdViolData[0]?.cnt || "0") : 0;
+  const rentStabilizedUnits = rentStabData.length > 0 ? parseInt(rentStabData[0]?.uc2022rstab || rentStabData[0]?.uc2021rstab || "0") : 0;
+
+  // Parse last sale
+  let lastSalePrice = 0;
+  let lastSaleDate = "";
+  for (const s of salesData) {
+    const price = parseInt((s.sale_price || "0").replace(/,/g, ""));
+    if (price > 10000) {
+      lastSalePrice = price;
+      lastSaleDate = s.sale_date || "";
+      break;
+    }
+  }
+
+  const annualTaxes = Math.round(assessTotal * 0.123);
+  const address = params.address || p.address || "";
+
+  // Build the data object for AI assumptions
+  const buildingData: BuildingData = {
+    address,
+    borough,
+    boroCode,
+    block,
+    lot,
+    bbl,
+    unitsRes,
+    unitsTotal,
+    yearBuilt: parseInt(p.yearbuilt || "0"),
+    numFloors: parseInt(p.numfloors || "0"),
+    assessTotal,
+    bldgArea: parseInt(p.bldgarea || "0"),
+    lotArea: parseInt(p.lotarea || "0"),
+    zoneDist: p.zonedist1 || "",
+    bldgClass: p.bldgclass || "",
+    builtFar: parseFloat(p.builtfar || "0"),
+    residFar: parseFloat(p.residfar || "0"),
+    ownerName: p.ownername || "",
+    lastSalePrice,
+    lastSaleDate,
+    hpdUnits,
+    hpdViolationCount,
+    rentStabilizedUnits,
+    marketValue: assessTotal, // use assessed as proxy
+    annualTaxes,
+    hasElevator: parseInt(p.numfloors || "0") > 5,
+  };
+
+  // Generate AI assumptions
+  const inputs = generateDealAssumptions(buildingData);
+  const outputs = calculateAll(inputs);
+
+  // Save the deal
+  const deal = await prisma.dealAnalysis.create({
+    data: {
+      orgId: user.orgId,
+      userId: user.id,
+      name: address || "Untitled Deal",
+      address: address || null,
+      borough: borough || null,
+      block: block || null,
+      lot: lot || null,
+      bbl,
+      status: "analyzing" as any,
+      dealType: "acquisition" as any,
+      dealSource: "off_market" as any,
+      inputs: inputs as any,
+      outputs: outputs as any,
+      notes: `AI-generated underwriting assumptions based on ${unitsRes || unitsTotal} units at ${address}, ${borough}. Year built: ${buildingData.yearBuilt}. ${hpdViolationCount > 0 ? `HPD violations: ${hpdViolationCount}.` : ""} ${rentStabilizedUnits > 0 ? `Rent stabilized units: ${rentStabilizedUnits}.` : ""}`,
+    },
+  });
+
+  return { id: deal.id };
+}
