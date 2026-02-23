@@ -15,7 +15,19 @@ interface DealItem {
   dealSource: string;
   inputs: any;
   outputs: any;
+  loiSent: boolean;
+  loiSentDate: string | null;
   updatedAt: string;
+}
+
+function daysAgo(dateStr: string): number {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function isLoiFollowUpDue(dateStr: string): boolean {
+  return daysAgo(dateStr) > 5;
 }
 
 const STATUSES = [
@@ -173,6 +185,21 @@ export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[
             </span>
           )}
         </div>
+
+        {/* LOI Status Badge */}
+        {deal.loiSent && deal.loiSentDate && (
+          <div className="mt-2">
+            {isLoiFollowUpDue(deal.loiSentDate) && deal.status === "loi_sent" ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-50 text-red-700">
+                Follow up — LOI sent {daysAgo(deal.loiSentDate)}d ago
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-50 text-amber-700">
+                LOI sent {new Date(deal.loiSentDate).toLocaleDateString()}
+              </span>
+            )}
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center justify-between mt-2.5">

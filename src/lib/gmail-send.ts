@@ -3,6 +3,12 @@ import { getValidToken } from "@/lib/gmail";
 
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
+export interface Attachment {
+  filename: string;
+  mimeType: string;
+  base64Content: string;
+}
+
 interface SendEmailOptions {
   gmailAccountId: string;
   orgId: string;
@@ -11,6 +17,7 @@ interface SendEmailOptions {
   bodyHtml: string;
   replyToMessageId?: string;
   contactId?: string;
+  attachments?: Attachment[];
 }
 
 function buildRawEmail(
@@ -19,14 +26,17 @@ function buildRawEmail(
   subject: string,
   bodyHtml: string,
   replyToMessageId?: string,
+  attachments?: Attachment[],
 ): string {
-  const boundary = "boundary_" + Date.now();
+  const hasAttachments = attachments && attachments.length > 0;
+  const altBoundary = "boundary_alt_" + Date.now();
+  const mixedBoundary = "boundary_mixed_" + Date.now();
+
   const headers = [
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${subject}`,
     `MIME-Version: 1.0`,
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
   ];
 
   if (replyToMessageId) {
@@ -45,19 +55,50 @@ function buildRawEmail(
     .replace(/&gt;/g, ">")
     .trim();
 
-  const body = [
-    `--${boundary}`,
+  // Build the text/html alternative part
+  const altPart = [
+    `--${altBoundary}`,
     `Content-Type: text/plain; charset="UTF-8"`,
     ``,
     plainText,
-    `--${boundary}`,
+    `--${altBoundary}`,
     `Content-Type: text/html; charset="UTF-8"`,
     ``,
     bodyHtml,
-    `--${boundary}--`,
+    `--${altBoundary}--`,
   ].join("\r\n");
 
-  const raw = headers.join("\r\n") + "\r\n\r\n" + body;
+  if (!hasAttachments) {
+    // No attachments — simple multipart/alternative (backward compatible)
+    headers.push(`Content-Type: multipart/alternative; boundary="${altBoundary}"`);
+    const raw = headers.join("\r\n") + "\r\n\r\n" + altPart;
+    return Buffer.from(raw).toString("base64url");
+  }
+
+  // With attachments — wrap in multipart/mixed
+  headers.push(`Content-Type: multipart/mixed; boundary="${mixedBoundary}"`);
+
+  const parts = [
+    `--${mixedBoundary}`,
+    `Content-Type: multipart/alternative; boundary="${altBoundary}"`,
+    ``,
+    altPart,
+  ];
+
+  for (const att of attachments) {
+    parts.push(
+      `--${mixedBoundary}`,
+      `Content-Type: ${att.mimeType}; name="${att.filename}"`,
+      `Content-Disposition: attachment; filename="${att.filename}"`,
+      `Content-Transfer-Encoding: base64`,
+      ``,
+      att.base64Content,
+    );
+  }
+
+  parts.push(`--${mixedBoundary}--`);
+
+  const raw = headers.join("\r\n") + "\r\n\r\n" + parts.join("\r\n");
   return Buffer.from(raw).toString("base64url");
 }
 
@@ -75,13 +116,13 @@ export function applyTemplateVars(
 
 /** Send an email via Gmail API */
 export async function sendEmail(options: SendEmailOptions) {
-  const { gmailAccountId, orgId, to, subject, bodyHtml, replyToMessageId, contactId } = options;
+  const { gmailAccountId, orgId, to, subject, bodyHtml, replyToMessageId, contactId, attachments } = options;
 
   const account = await prisma.gmailAccount.findUnique({ where: { id: gmailAccountId } });
   if (!account) throw new Error("Gmail account not found");
 
   const token = await getValidToken(gmailAccountId);
-  const raw = buildRawEmail(account.email, to, subject, bodyHtml, replyToMessageId);
+  const raw = buildRawEmail(account.email, to, subject, bodyHtml, replyToMessageId, attachments);
 
   const sendBody: Record<string, string> = { raw };
   if (replyToMessageId) {

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { generateDealAssumptions } from "@/lib/ai-assumptions";
 import type { BuildingData } from "@/lib/ai-assumptions";
 import { calculateAll } from "@/lib/deal-calculator";
+import { sendEmail } from "@/lib/gmail-send";
 
 async function getUser() {
   const supabase = await createClient();
@@ -43,6 +44,7 @@ export async function saveDealAnalysis(data: {
         block: data.block || null,
         lot: data.lot || null,
         bbl: data.bbl || null,
+        contactId: data.contactId || null,
         status: (data.status as any) || undefined,
         dealType: (data.dealType as any) || undefined,
         dealSource: (data.dealSource as any) || undefined,
@@ -92,10 +94,16 @@ export async function getDealAnalyses() {
       dealSource: true,
       inputs: true,
       outputs: true,
+      loiSent: true,
+      loiSentDate: true,
       updatedAt: true,
     },
   });
-  return deals.map(d => ({ ...d, updatedAt: d.updatedAt.toISOString() }));
+  return deals.map(d => ({
+    ...d,
+    updatedAt: d.updatedAt.toISOString(),
+    loiSentDate: d.loiSentDate?.toISOString() || null,
+  }));
 }
 
 export async function getDealAnalysis(id: string) {
@@ -414,4 +422,173 @@ export async function underwriteDeal(params: {
   });
 
   return { id: deal.id };
+}
+
+// ============================================================
+// Contact Search — typeahead for LOI contact picker
+// ============================================================
+export async function searchContacts(query: string) {
+  const user = await getUser();
+  if (!query || query.length < 2) return [];
+
+  const contacts = await prisma.contact.findMany({
+    where: {
+      orgId: user.orgId,
+      OR: [
+        { firstName: { contains: query, mode: "insensitive" } },
+        { lastName: { contains: query, mode: "insensitive" } },
+        { email: { contains: query, mode: "insensitive" } },
+      ],
+    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+    },
+    take: 10,
+    orderBy: { lastName: "asc" },
+  });
+
+  return contacts;
+}
+
+// ============================================================
+// Get linked contact by ID
+// ============================================================
+export async function getContact(contactId: string) {
+  const user = await getUser();
+  const contact = await prisma.contact.findFirst({
+    where: { id: contactId, orgId: user.orgId },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
+      address: true,
+      city: true,
+      state: true,
+      zip: true,
+    },
+  });
+  return contact;
+}
+
+// ============================================================
+// User Profile — for LOI broker info
+// ============================================================
+export async function getUserProfile() {
+  const user = await getUser();
+  return {
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone || "",
+    brokerage: user.brokerage || "",
+    licenseNumber: user.licenseNumber || "",
+    title: user.title || "",
+  };
+}
+
+// ============================================================
+// Send LOI via Email — generates email with PDF attachment
+// ============================================================
+export async function sendLoiEmail(params: {
+  dealId: string;
+  recipientEmail: string;
+  recipientName: string;
+  subject: string;
+  bodyHtml: string;
+  pdfBase64: string;
+  propertyAddress: string;
+  contactId?: string;
+}) {
+  const user = await getUser();
+
+  // Find user's Gmail account
+  const gmailAccount = await prisma.gmailAccount.findFirst({
+    where: { userId: user.id, isActive: true },
+  });
+  if (!gmailAccount) throw new Error("No Gmail account connected. Please connect Gmail in Settings.");
+
+  const filename = `LOI-${(params.propertyAddress || "property").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-")}.pdf`;
+
+  // Send email with PDF attachment
+  await sendEmail({
+    gmailAccountId: gmailAccount.id,
+    orgId: user.orgId,
+    to: params.recipientEmail,
+    subject: params.subject,
+    bodyHtml: params.bodyHtml,
+    contactId: params.contactId,
+    attachments: [
+      {
+        filename,
+        mimeType: "application/pdf",
+        base64Content: params.pdfBase64,
+      },
+    ],
+  });
+
+  // Update deal status to loi_sent
+  await prisma.dealAnalysis.update({
+    where: { id: params.dealId },
+    data: {
+      status: "loi_sent" as any,
+      loiSent: true,
+      loiSentDate: new Date(),
+    },
+  });
+
+  return { success: true };
+}
+
+// ============================================================
+// LOI Follow-up Deals — for dashboard reminders
+// ============================================================
+export async function getLoiFollowUpDeals() {
+  const user = await getUser();
+  const fiveDaysAgo = new Date();
+  fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+  const deals = await prisma.dealAnalysis.findMany({
+    where: {
+      orgId: user.orgId,
+      status: "loi_sent" as any,
+      loiSent: true,
+      loiSentDate: { lt: fiveDaysAgo },
+    },
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      loiSentDate: true,
+    },
+    orderBy: { loiSentDate: "asc" },
+  });
+
+  return deals.map(d => ({
+    ...d,
+    loiSentDate: d.loiSentDate?.toISOString() || null,
+  }));
+}
+
+// ============================================================
+// Live Comps — search comparable sales from NYC DOF
+// ============================================================
+export async function fetchComps(params: {
+  zip: string;
+  radiusMiles?: number;
+  yearsBack?: number;
+  minUnits?: number;
+  minPrice?: number;
+  limit?: number;
+}) {
+  const { searchComps } = await import("@/lib/comps-engine");
+  return searchComps(params);
 }

@@ -4,7 +4,7 @@
 // ============================================================
 
 import jsPDF from "jspdf";
-import type { DealInputs, DealOutputs } from "./deal-calculator";
+import type { DealInputs, DealOutputs, ExpenseDetailRow } from "./deal-calculator";
 import type { DealPrefillData } from "@/app/(dashboard)/deals/actions";
 
 const fmt = (n: number) => n >= 0 ? `$${n.toLocaleString()}` : `-$${Math.abs(n).toLocaleString()}`;
@@ -144,15 +144,39 @@ export function generateDealPdf(options: DealPdfOptions) {
 
   // Pro Forma P&L
   y = sectionTitle("Pro Forma P&L (Year 1)", y);
-  const pnlRows = [
+  const pnlRows: { label: string; value: string; bold: boolean; indent: boolean }[] = [
     { label: "Gross Potential Residential Rent", value: fmt(outputs.grossPotentialResidentialRent), bold: false, indent: false },
     { label: "Less: Vacancy & Concessions", value: `(${fmt(outputs.residentialVacancyLoss + outputs.concessionsLoss)})`, bold: false, indent: true },
-    ...(outputs.grossPotentialCommercialRent > 0 ? [
-      { label: "Commercial Rent", value: fmt(outputs.grossPotentialCommercialRent), bold: false, indent: false },
-      { label: "Less: Commercial Vacancy", value: `(${fmt(outputs.commercialVacancyLoss)})`, bold: false, indent: true },
-    ] : []),
-    { label: "Net Rentable Income", value: fmt(outputs.netRentableIncome), bold: true, indent: false },
-    ...(outputs.totalOtherIncome > 0 ? [{ label: "Plus: Other Income", value: fmt(outputs.totalOtherIncome), bold: false, indent: true }] : []),
+  ];
+  // Commercial tenants breakdown
+  if (inputs.commercialTenants && inputs.commercialTenants.length > 0) {
+    inputs.commercialTenants.forEach(t => {
+      pnlRows.push({ label: `Commercial: ${t.name}`, value: fmt(t.rentAnnual), bold: false, indent: false });
+    });
+    if (outputs.commercialVacancyLoss > 0) {
+      pnlRows.push({ label: "Less: Commercial Vacancy", value: `(${fmt(outputs.commercialVacancyLoss)})`, bold: false, indent: true });
+    }
+  } else if (outputs.grossPotentialCommercialRent > 0) {
+    pnlRows.push({ label: "Commercial Rent", value: fmt(outputs.grossPotentialCommercialRent), bold: false, indent: false });
+    pnlRows.push({ label: "Less: Commercial Vacancy", value: `(${fmt(outputs.commercialVacancyLoss)})`, bold: false, indent: true });
+  }
+  pnlRows.push({ label: "Net Rentable Income", value: fmt(outputs.netRentableIncome), bold: true, indent: false });
+  // Other income breakdown
+  if (outputs.totalOtherIncome > 0) {
+    if (inputs.customIncomeItems && inputs.customIncomeItems.length > 0) {
+      inputs.customIncomeItems.forEach(item => {
+        pnlRows.push({ label: item.name, value: fmt(item.amount), bold: false, indent: true });
+      });
+    }
+    if (inputs.camRecoveries && inputs.camRecoveries > 0) {
+      pnlRows.push({ label: "CAM Recoveries", value: fmt(inputs.camRecoveries), bold: false, indent: true });
+    }
+    // Show aggregate other income if no custom breakdown
+    if ((!inputs.customIncomeItems || inputs.customIncomeItems.length === 0) && (!inputs.camRecoveries || inputs.camRecoveries === 0)) {
+      pnlRows.push({ label: "Plus: Other Income", value: fmt(outputs.totalOtherIncome), bold: false, indent: true });
+    }
+  }
+  pnlRows.push(
     { label: "TOTAL INCOME", value: fmt(outputs.totalIncome), bold: true, indent: false },
     { label: "Total Operating Expenses", value: `(${fmt(outputs.totalExpenses)})`, bold: false, indent: false },
     { label: "NET OPERATING INCOME", value: fmt(outputs.noi), bold: true, indent: false },
@@ -160,7 +184,7 @@ export function generateDealPdf(options: DealPdfOptions) {
     { label: "Net Income (IO)", value: fmt(outputs.netIncomeIO), bold: true, indent: false },
     { label: "Amort Debt Service (30yr)", value: `(${fmt(outputs.annualDebtService)})`, bold: false, indent: false },
     { label: "Net Income (Amort)", value: fmt(outputs.netIncomeAmort), bold: true, indent: false },
-  ];
+  );
 
   pnlRows.forEach((row, i) => {
     if (row.bold) {
@@ -447,35 +471,116 @@ export function generateDealPdf(options: DealPdfOptions) {
 
   y += 25;
 
-  // Expense Breakdown
-  y = sectionTitle("Operating Expenses", y);
-  const expItems: [string, string][] = [];
-  if (outputs.expenseDetails) {
-    outputs.expenseDetails.forEach((e) => expItems.push([e.label, fmt(e.amount)]));
-  } else {
-    expItems.push(
-      ["Real Estate Taxes", fmt(inputs.realEstateTaxes)],
-      ["Insurance", fmt(inputs.insurance)],
-      [`Management Fee (${inputs.managementFeePercent}%)`, fmt(outputs.managementFee || 0)],
-    );
-  }
-  expItems.push(["Total Operating Expenses", fmt(outputs.totalExpenses)]);
+  // Detailed Year 1 Budget P&L
+  y = sectionTitle("Year 1 Budget — Operating Expenses", y);
 
-  expItems.forEach((item, i) => {
-    const isTotal = i === expItems.length - 1;
-    if (isTotal) { drawLine(y - 4); y += 4; }
-    if (i % 2 === 0 && !isTotal) {
-      doc.setFillColor(...BG_LIGHT);
-      doc.rect(ML, y - 9, CW, 14, "F");
-    }
-    doc.setFontSize(9);
-    doc.setFont("helvetica", isTotal ? "bold" : "normal");
-    doc.setTextColor(...(isTotal ? DARK : GRAY));
-    doc.text(item[0], ML + 5, y);
-    doc.setTextColor(...DARK);
-    doc.text(item[1], W - MR - 5, y, { align: "right" });
+  // Check if we have the enhanced expense details with metadata
+  const hasDetailedExpenses = outputs.expenseDetails && outputs.expenseDetails.length > 0 && outputs.expenseDetails[0].perUnit !== undefined;
+
+  if (hasDetailedExpenses) {
+    // Enhanced 4-column table: Line Item | Year 1 Budget | Per Unit | Notes
+    const expCols = ["Line Item", "Year 1 Budget", "Per Unit", "Notes / Methodology"];
+    const expColW = [CW * 0.30, CW * 0.20, CW * 0.15, CW * 0.35];
+
+    // Header
+    doc.setFillColor(...BLUE);
+    doc.rect(ML, y - 10, CW, 16, "F");
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...WHITE);
+    let ex = ML;
+    expCols.forEach((col, i) => {
+      doc.text(col, i === 0 ? ex + 4 : i === 3 ? ex + 4 : ex + expColW[i] - 4, y, { align: i === 0 || i === 3 ? "left" : "right" });
+      ex += expColW[i];
+    });
     y += 14;
-  });
+
+    // Rows
+    const details = outputs.expenseDetails as ExpenseDetailRow[];
+    const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
+
+    details.forEach((row, i) => {
+      if (i % 2 === 0) {
+        doc.setFillColor(...BG_LIGHT);
+        doc.rect(ML, y - 9, CW, 14, "F");
+      }
+      // Flag indicator
+      const label = row.flagged ? `⚠ ${row.label}` : row.label;
+
+      ex = ML;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...(row.flagged ? AMBER : DARK));
+      doc.text(label, ex + 4, y);
+      ex += expColW[0];
+
+      doc.setTextColor(...DARK);
+      doc.setFont("helvetica", "bold");
+      doc.text(fmt(row.amount), ex + expColW[1] - 4, y, { align: "right" });
+      ex += expColW[1];
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...GRAY);
+      const perUnit = row.perUnit || (totalUnits > 0 ? Math.round(row.amount / totalUnits) : 0);
+      doc.text(perUnit > 0 ? fmt(perUnit) : "—", ex + expColW[2] - 4, y, { align: "right" });
+      ex += expColW[2];
+
+      // Methodology / Notes
+      const methodNote = row.methodology || (row.source === "t12" ? "T-12 Actuals" : row.source === "manual" ? "Manual Entry" : "");
+      doc.setFontSize(7);
+      doc.setTextColor(...GRAY);
+      const truncated = methodNote.length > 40 ? methodNote.substring(0, 37) + "..." : methodNote;
+      doc.text(truncated, ex + 4, y);
+
+      y += 14;
+    });
+
+    // Total row
+    drawLine(y - 4);
+    y += 4;
+    doc.setFillColor(219, 234, 254); // blue-100
+    doc.rect(ML, y - 9, CW, 16, "F");
+    ex = ML;
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...DARK);
+    doc.text("Total Operating Expenses", ex + 4, y);
+    ex += expColW[0];
+    doc.text(fmt(outputs.totalExpenses), ex + expColW[1] - 4, y, { align: "right" });
+    ex += expColW[1];
+    const totalPerUnit = totalUnits > 0 ? Math.round(outputs.totalExpenses / totalUnits) : 0;
+    doc.text(totalPerUnit > 0 ? fmt(totalPerUnit) : "—", ex + expColW[2] - 4, y, { align: "right" });
+    y += 18;
+  } else {
+    // Fallback: simple 2-column expense list
+    const expItems: [string, string][] = [];
+    if (outputs.expenseDetails) {
+      outputs.expenseDetails.forEach((e) => expItems.push([e.label, fmt(e.amount)]));
+    } else {
+      expItems.push(
+        ["Real Estate Taxes", fmt(inputs.realEstateTaxes)],
+        ["Insurance", fmt(inputs.insurance)],
+        [`Management Fee (${inputs.managementFeePercent}%)`, fmt(outputs.managementFee || 0)],
+      );
+    }
+    expItems.push(["Total Operating Expenses", fmt(outputs.totalExpenses)]);
+
+    expItems.forEach((item, i) => {
+      const isTotal = i === expItems.length - 1;
+      if (isTotal) { drawLine(y - 4); y += 4; }
+      if (i % 2 === 0 && !isTotal) {
+        doc.setFillColor(...BG_LIGHT);
+        doc.rect(ML, y - 9, CW, 14, "F");
+      }
+      doc.setFontSize(9);
+      doc.setFont("helvetica", isTotal ? "bold" : "normal");
+      doc.setTextColor(...(isTotal ? DARK : GRAY));
+      doc.text(item[0], ML + 5, y);
+      doc.setTextColor(...DARK);
+      doc.text(item[1], W - MR - 5, y, { align: "right" });
+      y += 14;
+    });
+  }
 
   addFooter(3);
 

@@ -536,7 +536,55 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   const [viewProfile, setViewProfile] = useState(false);
 
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
-  const [bottomSheetExpanded, setBottomSheetExpanded] = useState(false);
+  // Mobile results drawer: 'peek' (handle only), 'half' (50%), 'full' (90%)
+  const [mobileDrawer, setMobileDrawer] = useState<'peek' | 'half' | 'full'>('peek');
+  const drawerTouchRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+
+  const DRAWER_PEEK = 64;
+  const getDrawerHeight = (state: 'peek' | 'half' | 'full') => {
+    if (typeof window === 'undefined') return DRAWER_PEEK;
+    if (state === 'peek') return DRAWER_PEEK;
+    if (state === 'half') return window.innerHeight * 0.5;
+    return window.innerHeight * 0.9;
+  };
+
+  const handleDrawerTouchStart = (e: React.TouchEvent) => {
+    const el = drawerRef.current;
+    if (!el) return;
+    drawerTouchRef.current = { startY: e.touches[0].clientY, startHeight: el.offsetHeight };
+    el.style.transition = 'none';
+  };
+
+  const handleDrawerTouchMove = (e: React.TouchEvent) => {
+    const ref = drawerTouchRef.current;
+    const el = drawerRef.current;
+    if (!ref || !el) return;
+    const deltaY = ref.startY - e.touches[0].clientY;
+    const newH = Math.max(DRAWER_PEEK, Math.min(window.innerHeight * 0.92, ref.startHeight + deltaY));
+    el.style.height = `${newH}px`;
+  };
+
+  const handleDrawerTouchEnd = () => {
+    const el = drawerRef.current;
+    if (!el) return;
+    el.style.transition = 'height 0.25s ease';
+    const h = el.offsetHeight;
+    const vh = window.innerHeight;
+    // Snap to nearest state
+    if (h < vh * 0.25) {
+      setMobileDrawer('peek');
+    } else if (h < vh * 0.7) {
+      setMobileDrawer('half');
+    } else {
+      setMobileDrawer('full');
+    }
+    drawerTouchRef.current = null;
+  };
+
+  const toggleDrawer = () => {
+    setMobileDrawer(prev => prev === 'peek' ? 'half' : 'peek');
+  };
 
   return (
     <div className="flex h-[calc(100vh-200px)] md:min-h-[600px] min-h-[400px] rounded-xl overflow-hidden border border-slate-200 bg-white relative">
@@ -960,12 +1008,19 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
           Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
         </button>
 
-        {/* Mobile: property count pill */}
-        <div className="md:hidden absolute top-[72px] right-3 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-2 z-[1000]">
-          <p className="text-[10px] font-medium text-slate-600">
-            {loading ? "..." : `${properties.length} props`}
-          </p>
-        </div>
+        {/* Mobile: floating List button */}
+        <button onClick={toggleDrawer}
+          className="md:hidden absolute bottom-20 right-3 z-[1000] w-11 h-11 bg-white rounded-full shadow-lg border border-slate-200 flex items-center justify-center active:scale-95 transition-transform">
+          {mobileDrawer === 'peek' ? (
+            <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+            </svg>
+          )}
+        </button>
 
         <div ref={mapRef} className="w-full h-full" />
 
@@ -984,8 +1039,8 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
           </div>
         )}
 
-        {/* Legend */}
-        <div className="absolute bottom-3 left-3 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-1.5 z-[1000]">
+        {/* Legend — pushed up on mobile to sit above the drawer */}
+        <div className="absolute bottom-20 md:bottom-3 left-3 bg-white/90 backdrop-blur-sm rounded-lg shadow px-2.5 py-1.5 z-[1000]">
           <div className="flex items-center gap-2.5 text-[10px] text-slate-500">
             <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>1-9</span>
             <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-600"></span>10-19</span>
@@ -1114,56 +1169,78 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
         </div>
       )}
 
-      {/* Mobile: Bottom sheet for selected property */}
-      {selectedProperty && !viewProfile && (
-        <div className={`md:hidden fixed bottom-0 left-0 right-0 z-[1500] bg-white rounded-t-2xl shadow-2xl transition-all duration-200 pb-safe ${
-          bottomSheetExpanded ? "max-h-[85vh]" : "max-h-[45vh]"
-        } overflow-y-auto`}
-          style={{ animation: "slide-up-sheet 200ms ease-out" }}>
+      {/* Mobile: Results drawer — slides up from bottom like Google Maps */}
+      {!viewProfile && (
+        <div ref={drawerRef}
+          className="md:hidden fixed bottom-0 left-0 right-0 z-[1500] bg-white rounded-t-2xl shadow-2xl pb-safe flex flex-col"
+          style={{
+            height: `${getDrawerHeight(mobileDrawer)}px`,
+            transition: drawerTouchRef.current ? 'none' : 'height 0.25s ease',
+          }}>
           {/* Drag handle */}
-          <div className="flex justify-center py-2 sticky top-0 bg-white rounded-t-2xl z-10"
-            onClick={() => setBottomSheetExpanded(!bottomSheetExpanded)}>
+          <div className="flex-shrink-0 flex flex-col items-center pt-2 pb-1 cursor-grab active:cursor-grabbing"
+            onTouchStart={handleDrawerTouchStart}
+            onTouchMove={handleDrawerTouchMove}
+            onTouchEnd={handleDrawerTouchEnd}
+            onClick={() => setMobileDrawer(prev => prev === 'peek' ? 'half' : prev === 'half' ? 'full' : 'peek')}>
             <div className="w-10 h-1 bg-slate-300 rounded-full" />
+            {/* Collapsed summary line */}
+            <div className="flex items-center gap-2 mt-1 px-4 w-full">
+              <p className="text-xs font-semibold text-slate-700 flex-1">
+                {loading ? "Searching..." : selectedProperty
+                  ? selectedProperty.address
+                  : `${sortedProperties.length} result${sortedProperties.length !== 1 ? "s" : ""} found`
+                }
+              </p>
+              {selectedProperty && (
+                <button onClick={(e) => { e.stopPropagation(); setSelectedProperty(null); }}
+                  className="text-xs text-blue-600 font-medium">Back</button>
+              )}
+              <span className="text-[10px] text-slate-400">
+                {mobileDrawer === 'peek' ? '↑' : mobileDrawer === 'half' ? '↕' : '↓'}
+              </span>
+            </div>
           </div>
-          <div className="px-4 pb-4">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <h3 className="text-sm font-bold text-slate-900">{selectedProperty.address}</h3>
-                <p className="text-xs text-slate-400">{selectedProperty.borough} · Blk {selectedProperty.block}, Lot {selectedProperty.lot}</p>
-              </div>
-              <button onClick={() => { setSelectedProperty(null); setBottomSheetExpanded(false); }}
-                className="w-8 h-8 flex items-center justify-center text-slate-400 text-lg">&times;</button>
-            </div>
-            <div className="grid grid-cols-3 gap-2 mb-3">
-              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
-                <p className="text-[10px] text-slate-400">Units</p>
-                <p className="text-lg font-bold text-slate-900">{selectedProperty.unitsRes}</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
-                <p className="text-[10px] text-slate-400">Floors</p>
-                <p className="text-lg font-bold text-slate-900">{selectedProperty.numFloors}</p>
-              </div>
-              <div className="bg-blue-50 rounded-lg px-2 py-2 text-center">
-                <p className="text-[10px] text-blue-500">Value</p>
-                <p className="text-sm font-bold text-blue-900">{fmtPrice(selectedProperty.assessTotal)}</p>
-              </div>
-            </div>
-            {selectedProperty.ownerName && (
-              <p className="text-xs text-slate-500 mb-3">Owner: <span className="font-medium text-slate-700">{selectedProperty.ownerName}</span></p>
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => { setViewProfile(true); setBottomSheetExpanded(false); }}
-                className="flex-1 px-3 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl">
-                Full Profile
-              </button>
-              <button onClick={() => handleSaveToList(selectedProperty)}
-                className="flex-1 px-3 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl">
-                {saveSuccess === selectedProperty.address ? "✓ Saved!" : "Save"}
-              </button>
-            </div>
-            {bottomSheetExpanded && (
-              <div className="mt-3 space-y-2">
-                <div className="flex gap-2">
+
+          {/* Scrollable content */}
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {selectedProperty ? (
+              /* ---- Selected property detail ---- */
+              <div className="px-4 pb-4">
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">{selectedProperty.address}</h3>
+                    <p className="text-xs text-slate-400">{selectedProperty.zip ? (() => { const nh = getNeighborhoodByZip(selectedProperty.zip); return nh ? `${nh.name}, ${selectedProperty.borough}` : selectedProperty.borough; })() : selectedProperty.borough} · Blk {selectedProperty.block}, Lot {selectedProperty.lot}</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                    <p className="text-[10px] text-slate-400">Units</p>
+                    <p className="text-lg font-bold text-slate-900">{selectedProperty.unitsRes}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                    <p className="text-[10px] text-slate-400">Floors</p>
+                    <p className="text-lg font-bold text-slate-900">{selectedProperty.numFloors}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg px-2 py-2 text-center">
+                    <p className="text-[10px] text-blue-500">Value</p>
+                    <p className="text-sm font-bold text-blue-900">{fmtPrice(selectedProperty.assessTotal)}</p>
+                  </div>
+                </div>
+                {selectedProperty.ownerName && (
+                  <p className="text-xs text-slate-500 mb-3">Owner: <span className="font-medium text-slate-700">{selectedProperty.ownerName}</span></p>
+                )}
+                <div className="flex gap-2 mb-3">
+                  <button onClick={() => { setViewProfile(true); }}
+                    className="flex-1 px-3 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl">
+                    Full Profile
+                  </button>
+                  <button onClick={() => handleSaveToList(selectedProperty)}
+                    className="flex-1 px-3 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl">
+                    {saveSuccess === selectedProperty.address ? "✓ Saved!" : "Save"}
+                  </button>
+                </div>
+                <div className="flex gap-2 mb-3">
                   {onNameClick && selectedProperty.ownerName && (
                     <button onClick={() => onNameClick(selectedProperty.ownerName)}
                       className="flex-1 px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl">
@@ -1175,12 +1252,98 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
                     {loadingPortfolio ? "Finding..." : "Portfolio"}
                   </button>
                 </div>
-                <div className="text-xs space-y-1 text-slate-600 pt-2 border-t border-slate-100">
+                {portfolioMarkers.length > 0 && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-2 mb-3">
+                    <p className="text-[11px] font-semibold text-amber-800">{portfolioMarkers.length} portfolio properties shown</p>
+                    <button onClick={() => { setPortfolioMarkers([]); loadProperties(); }}
+                      className="text-[10px] text-amber-600 hover:underline mt-0.5">Clear</button>
+                  </div>
+                )}
+                <div className="text-xs space-y-1.5 text-slate-600 border-t border-slate-100 pt-3">
                   <div className="flex justify-between"><span className="text-slate-400">Year Built</span><span className="font-medium">{selectedProperty.yearBuilt || "—"}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Zoning</span><span className="font-medium">{selectedProperty.zoneDist || "—"}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Class</span><span className="font-medium">{selectedProperty.bldgClass || "—"}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">Bldg Area</span><span className="font-medium">{selectedProperty.bldgArea > 0 ? selectedProperty.bldgArea.toLocaleString() + " sf" : "—"}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Lot Area</span><span className="font-medium">{selectedProperty.lotArea > 0 ? selectedProperty.lotArea.toLocaleString() + " sf" : "—"}</span></div>
                 </div>
+              </div>
+            ) : selectedNewDev ? (
+              /* ---- Selected new development detail ---- */
+              <div className="px-4 pb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-[9px] font-bold bg-amber-500 text-white px-2 py-0.5 rounded">
+                    {selectedNewDev.jobType === "NB" ? "NEW BUILDING" : "MAJOR ALTERATION"}
+                  </span>
+                </div>
+                <h3 className="text-sm font-bold text-slate-900">{selectedNewDev.address}</h3>
+                <p className="text-xs text-slate-400 mb-3">{selectedNewDev.borough} · Blk {selectedNewDev.block}, Lot {selectedNewDev.lot}</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="bg-amber-50 rounded-lg px-2 py-2 text-center">
+                    <p className="text-[10px] text-amber-600">New Units</p>
+                    <p className="text-lg font-bold text-amber-900">{selectedNewDev.units}</p>
+                  </div>
+                  <div className="bg-slate-50 rounded-lg px-2 py-2 text-center">
+                    <p className="text-[10px] text-slate-400">Stories</p>
+                    <p className="text-lg font-bold text-slate-900">{selectedNewDev.stories || "—"}</p>
+                  </div>
+                </div>
+                <div className="text-xs space-y-1.5 text-slate-600">
+                  {selectedNewDev.ownerName && <div className="flex justify-between"><span className="text-slate-400">Developer</span><span className="font-medium truncate max-w-[200px]">{selectedNewDev.ownerName}</span></div>}
+                  {selectedNewDev.filingDate && <div className="flex justify-between"><span className="text-slate-400">Filed</span><span className="font-medium">{new Date(selectedNewDev.filingDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span></div>}
+                  <div className="flex justify-between"><span className="text-slate-400">Status</span><span className="font-medium">{selectedNewDev.jobStatus || "—"}</span></div>
+                  {selectedNewDev.estimatedCost && <div className="flex justify-between"><span className="text-slate-400">Est. Cost</span><span className="font-medium">${parseFloat(selectedNewDev.estimatedCost).toLocaleString()}</span></div>}
+                </div>
+                {selectedNewDev.ownerName && onNameClick && (
+                  <button onClick={() => onNameClick(selectedNewDev.ownerName)}
+                    className="w-full mt-3 px-3 py-2.5 bg-slate-100 text-slate-700 text-sm font-medium rounded-xl">
+                    Search Developer
+                  </button>
+                )}
+              </div>
+            ) : (
+              /* ---- Results list ---- */
+              <div>
+                {/* Sort pills */}
+                <div className="flex items-center gap-1 px-4 pb-2 pt-1">
+                  <span className="text-[10px] text-slate-400 mr-1">Sort:</span>
+                  {(["units", "value", "year", "floors"] as const).map(s => (
+                    <button key={s} onClick={() => setSortBy(s)}
+                      className={"text-[11px] px-2 py-0.5 rounded-full " + (sortBy === s ? "bg-slate-800 text-white" : "text-slate-500 bg-slate-100")}>
+                      {s === "units" ? "Units" : s === "value" ? "Value" : s === "year" ? "Year" : "Floors"}
+                    </button>
+                  ))}
+                </div>
+
+                {sortedProperties.length > 0 ? sortedProperties.map((p, i) => (
+                  <div key={i} onClick={() => {
+                    setSelectedProperty(p);
+                    setMobileDrawer(prev => prev === 'peek' ? 'half' : prev);
+                    if (leafletMapRef.current) leafletMapRef.current.panTo([p.lat, p.lng]);
+                  }}
+                    className="px-4 py-2.5 border-b border-slate-100 active:bg-blue-50 transition-colors">
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-sm font-semibold text-slate-900 truncate flex-1">{p.address}</h4>
+                      <span className={"text-[11px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 " + (
+                        p.unitsRes >= 50 ? "bg-purple-100 text-purple-700" :
+                        p.unitsRes >= 20 ? "bg-blue-100 text-blue-700" :
+                        p.unitsRes >= 10 ? "bg-cyan-100 text-cyan-700" :
+                        "bg-slate-100 text-slate-600"
+                      )}>{p.unitsRes}u</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-slate-500 mt-0.5">
+                      <span className="truncate">{p.ownerName || p.borough}</span>
+                      <span className="text-slate-300">·</span>
+                      <span>{p.numFloors}fl</span>
+                      <span className="text-slate-300">·</span>
+                      <span className="font-medium text-slate-600 ml-auto flex-shrink-0">{fmtPrice(p.assessTotal)}</span>
+                    </div>
+                  </div>
+                )) : (
+                  <div className="px-4 py-8 text-center">
+                    <p className="text-sm text-slate-400">Pan and zoom the map</p>
+                    <p className="text-xs text-slate-300 mt-1">Zoom to street level to see results</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
