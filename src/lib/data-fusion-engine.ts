@@ -159,6 +159,61 @@ export interface BuildingIntelligence {
     recentComps: any[];
   } | null;
 
+  liveListings: {
+    forSale: {
+      address: string;
+      price: number;
+      priceStr: string;
+      units?: number;
+      sqft?: number;
+      pricePerUnit?: number;
+      pricePerSqft?: number;
+      broker?: string;
+      brokerage?: string;
+      daysOnMarket?: number;
+      sourceUrl: string;
+      sourceDomain: string;
+      description: string;
+    }[];
+    forRent: {
+      address: string;
+      price: number;
+      priceStr: string;
+      beds?: number;
+      sourceUrl: string;
+      sourceDomain: string;
+      description: string;
+    }[];
+    webComps: {
+      address: string;
+      price: number;
+      priceStr: string;
+      units?: number;
+      pricePerUnit?: number;
+      sourceUrl: string;
+      type: string;
+    }[];
+    marketTrend: "rising" | "stable" | "declining" | "unknown";
+    marketInsight: string;
+  } | null;
+
+  webIntelligence: {
+    entityName: string;
+    newsCount: number;
+    courtFilingCount: number;
+    hasNegativeNews: boolean;
+    hasLawsuits: boolean;
+    topArticles: {
+      title: string;
+      url: string;
+      domain: string;
+      snippet: string;
+      category: string;
+      sentiment?: string;
+    }[];
+    aiSummary?: string;
+  } | null;
+
   contacts: {
     ownerContacts: ResolvedContact[];
     managingAgentContacts: ResolvedContact[];
@@ -965,6 +1020,108 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch {}
 
   // ============================================================
+  // PHASE 13.5: Brave Web Intelligence (parallel, non-blocking)
+  // ============================================================
+
+  let liveListings: BuildingIntelligence["liveListings"] = null;
+  let webIntelligence: BuildingIntelligence["webIntelligence"] = null;
+
+  try {
+    const { isBraveSearchAvailable } = await import("./brave-search");
+    const braveAvailable = await isBraveSearchAvailable();
+
+    if (braveAvailable && plutoData) {
+      const { searchPropertyListings, searchRentalListings } = await import("./brave-listings");
+      const { fetchWebComps, buildEnhancedCompSummary } = await import("./brave-comps");
+      const { quickEntityCheck } = await import("./brave-entity");
+
+      const propertyAddress = plutoData.address || primaryAddress.raw || "";
+      const ownerEntity = resolvedOwnership.entityName || plutoData.ownerName || "";
+
+      // Run all Brave searches in parallel (non-blocking — don't slow down main pipeline)
+      const [saleListings, rentalListings, webCompsResult, entityCheckResult] = await Promise.all([
+        searchPropertyListings(propertyAddress, boroName).catch(() => ({ listings: [], totalFound: 0, query: "", market: "nyc" as const, searchedAt: "" })),
+        searchRentalListings(propertyAddress, boroName).catch(() => []),
+        fetchWebComps(propertyAddress, boroName, plutoData.zipCode, plutoData.unitsRes).catch(() => []),
+        ownerEntity.length > 3 ? quickEntityCheck(ownerEntity).catch(() => null) : Promise.resolve(null),
+      ]);
+
+      // Build enhanced comp summary
+      const dofComps = rollingSales.map(s => ({
+        pricePerUnit: s.units > 0 ? Math.round(s.price / s.units) : 0,
+        pricePerSqft: s.sqft > 0 ? Math.round(s.price / s.sqft) : 0,
+      }));
+      const enhancedComps = await buildEnhancedCompSummary(webCompsResult, dofComps).catch(() => null);
+
+      if (saleListings.listings.length > 0 || rentalListings.length > 0 || webCompsResult.length > 0) {
+        liveListings = {
+          forSale: saleListings.listings.map(l => ({
+            address: l.address,
+            price: l.price,
+            priceStr: l.priceStr,
+            units: l.units,
+            sqft: l.sqft,
+            pricePerUnit: l.pricePerUnit,
+            pricePerSqft: l.pricePerSqft,
+            broker: l.broker,
+            brokerage: l.brokerage,
+            daysOnMarket: l.daysOnMarket,
+            sourceUrl: l.sourceUrl,
+            sourceDomain: l.sourceDomain,
+            description: l.description,
+          })),
+          forRent: rentalListings.map(l => ({
+            address: l.address,
+            price: l.price,
+            priceStr: l.priceStr,
+            beds: l.beds,
+            sourceUrl: l.sourceUrl,
+            sourceDomain: l.sourceDomain,
+            description: l.description,
+          })),
+          webComps: webCompsResult.map(c => ({
+            address: c.address,
+            price: c.price,
+            priceStr: c.priceStr,
+            units: c.units,
+            pricePerUnit: c.pricePerUnit,
+            sourceUrl: c.sourceUrl,
+            type: c.type,
+          })),
+          marketTrend: enhancedComps?.marketTrend || "unknown",
+          marketInsight: enhancedComps?.marketInsight || "",
+        };
+        dataSources.push("Brave Web Search");
+        dataFreshness["Brave Web Search"] = "Live";
+      }
+
+      if (entityCheckResult && (entityCheckResult.articleCount > 0)) {
+        webIntelligence = {
+          entityName: ownerEntity,
+          newsCount: entityCheckResult.articleCount,
+          courtFilingCount: entityCheckResult.hasLawsuits ? 1 : 0,
+          hasNegativeNews: entityCheckResult.hasNegativeNews,
+          hasLawsuits: entityCheckResult.hasLawsuits,
+          topArticles: [],
+          aiSummary: undefined,
+        };
+        if (entityCheckResult.topIssue) {
+          webIntelligence.topArticles.push({
+            title: "Entity check result",
+            url: "",
+            domain: "",
+            snippet: entityCheckResult.topIssue,
+            category: entityCheckResult.hasLawsuits ? "court" : "news",
+            sentiment: entityCheckResult.hasNegativeNews ? "negative" : "neutral",
+          });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Brave integration skipped:", err);
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1039,6 +1196,8 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     distressSignals,
     investmentSignals,
     comps: null,
+    liveListings,
+    webIntelligence,
 
     contacts: {
       ownerContacts: ownerContactsResolved,

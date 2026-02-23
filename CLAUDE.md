@@ -29,6 +29,7 @@ ANTHROPIC_API_KEY=               # Claude AI for ownership analysis + email pars
 PDL_API_KEY=                     # People Data Labs skip tracing
 APOLLO_API_KEY=                  # Apollo.io (used in market-intel/lead-verification.ts)
 TRACERFY_API_KEY=                # Tracerfy skip trace (fallback, CSV-based)
+BRAVE_SEARCH_API_KEY=            # Brave Web Search API (on-market listings, web comps, entity research)
 GOOGLE_CLIENT_ID=                # Gmail + Calendar OAuth
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
@@ -89,6 +90,12 @@ src/
 │   ├── nyc-opendata.ts            # NYC Open Data API helpers
 │   ├── apollo.ts                  # Apollo.io API: enrich person/org, search people, bulk enrich, merge logic
 │   ├── zillow-data.ts             # Zillow rent/sale estimates
+│   ├── entity-resolver.ts         # Fuzzy matching, address normalization, owner resolution across sources
+│   ├── data-fusion-engine.ts      # Central aggregation: 14 NYC APIs + Brave + scoring + caching
+│   ├── brave-search.ts            # Brave Search API wrapper (Web Search + Summarizer)
+│   ├── brave-listings.ts          # Live listings search via Brave, listing parser, dedup
+│   ├── brave-comps.ts             # Web comps: merge Brave results with DOF Rolling Sales
+│   ├── brave-entity.ts            # Owner/entity web research: news, courts, corporate records
 │   └── supabase/
 │       ├── client.ts              # Supabase browser client
 │       ├── server.ts              # Supabase server client
