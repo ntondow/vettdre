@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import Header from "@/components/layout/header";
+import Link from "next/link";
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -14,6 +15,7 @@ export default async function DashboardPage() {
   let aiLookupsLeft = 50;
   let recentActivity: { type: string; subject: string | null; occurredAt: Date; contactName: string }[] = [];
   let upcomingTasks: { id: string; title: string; priority: string; dueAt: Date | null; contactName: string }[] = [];
+  let loiFollowUps: { id: string; name: string | null; address: string | null; loiSentDate: Date | null }[] = [];
 
   if (authUser) {
     const user = await prisma.user.findUnique({
@@ -24,7 +26,10 @@ export default async function DashboardPage() {
     if (user) {
       const orgId = user.orgId;
 
-      const [contactCount, dealStats, orgData, activities, tasks] = await Promise.all([
+      const fiveDaysAgo = new Date();
+      fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
+
+      const [contactCount, dealStats, orgData, activities, tasks, loiDeals] = await Promise.all([
         prisma.contact.count({ where: { orgId } }),
         prisma.deal.aggregate({
           where: { orgId, status: "open" },
@@ -47,6 +52,17 @@ export default async function DashboardPage() {
           take: 5,
           include: { contact: { select: { firstName: true, lastName: true } } },
         }),
+        prisma.dealAnalysis.findMany({
+          where: {
+            orgId,
+            status: "loi_sent" as any,
+            loiSent: true,
+            loiSentDate: { lt: fiveDaysAgo },
+          },
+          select: { id: true, name: true, address: true, loiSentDate: true },
+          orderBy: { loiSentDate: "asc" },
+          take: 10,
+        }),
       ]);
 
       totalContacts = contactCount;
@@ -68,6 +84,13 @@ export default async function DashboardPage() {
         dueAt: t.dueAt,
         contactName: t.contact ? `${t.contact.firstName} ${t.contact.lastName}`.trim() : "",
       }));
+
+      loiFollowUps = loiDeals.map(d => ({
+        id: d.id,
+        name: d.name,
+        address: d.address,
+        loiSentDate: d.loiSentDate,
+      }));
     }
   }
 
@@ -86,7 +109,12 @@ export default async function DashboardPage() {
     { label: "AI Lookups Left", value: aiLookupsLeft.toLocaleString(), icon: "🧠" },
   ];
 
-  const hasActivity = recentActivity.length > 0 || upcomingTasks.length > 0;
+  const hasActivity = recentActivity.length > 0 || upcomingTasks.length > 0 || loiFollowUps.length > 0;
+
+  const daysAgo = (d: Date) => {
+    const now = new Date();
+    return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+  };
 
   return (
     <>
@@ -136,6 +164,27 @@ export default async function DashboardPage() {
                         <p className="text-sm text-slate-900 truncate">{t.title}</p>
                         <p className="text-xs text-slate-400">{t.contactName ? t.contactName + " · " : ""}{t.dueAt ? fmtDate(t.dueAt) : "No due date"}</p>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* LOI Follow-ups */}
+            {loiFollowUps.length > 0 && (
+              <div className="bg-amber-50 rounded-xl border border-amber-200 p-6">
+                <h3 className="text-sm font-bold text-amber-900 mb-4">LOI Follow-ups Needed</h3>
+                <div className="space-y-3">
+                  {loiFollowUps.map((d) => (
+                    <div key={d.id} className="flex items-center gap-3">
+                      <span className="text-base">📨</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-900 truncate">{d.name || d.address || "Untitled"}</p>
+                        <p className="text-xs text-amber-700">{d.address ? d.address + " · " : ""}LOI sent {d.loiSentDate ? daysAgo(d.loiSentDate) : "?"} days ago</p>
+                      </div>
+                      <Link href={`/deals/new?id=${d.id}`} className="text-xs font-medium text-amber-700 hover:text-amber-900 whitespace-nowrap">
+                        Follow up →
+                      </Link>
                     </div>
                   ))}
                 </div>

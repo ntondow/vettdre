@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding } from "./building-profile-actions";
+import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps } from "./building-profile-actions";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
+import type { CompSale, CompSummary } from "@/lib/comps-engine";
 
 interface Props {
   boroCode: string;
@@ -64,6 +65,14 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [addingToCRM, setAddingToCRM] = useState(false);
   const [crmResult, setCrmResult] = useState<{ contactId: string; enriched: boolean } | null>(null);
   const [underwriting, setUnderwriting] = useState(false);
+  // Comps state
+  const [comps, setComps] = useState<CompSale[]>([]);
+  const [compSummary, setCompSummary] = useState<CompSummary | null>(null);
+  const [compsLoading, setCompsLoading] = useState(false);
+  const [compsLoaded, setCompsLoaded] = useState(false);
+  const [compRadius, setCompRadius] = useState(2);
+  const [compYears, setCompYears] = useState(5);
+  const [compMinUnits, setCompMinUnits] = useState(5);
   // Smart defaults: collapse lower-priority sections
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     permits: true,
@@ -72,6 +81,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     complaints: true,
     litigation: true,
     listings: true,
+    comps: false,
   });
 
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -122,6 +132,31 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .catch(err => console.error("Related properties error:", err))
       .finally(() => { setLoadingRelated(false); setRelatedDone(true); });
   }, [data]);
+
+  // Auto-load comps when building data is available
+  useEffect(() => {
+    if (compsLoaded || !data?.pluto) return;
+    const zip = data.pluto.zipCode || data.registrations?.[0]?.zip;
+    if (!zip || data.pluto.unitsTot < 5) return;
+    setCompsLoaded(true);
+    setCompsLoading(true);
+    fetchBuildingComps({ zip, radiusMiles: compRadius, yearsBack: compYears, minUnits: compMinUnits, limit: 50 })
+      .then(result => { setComps(result.comps); setCompSummary(result.summary); })
+      .catch(err => console.error("Comps error:", err))
+      .finally(() => setCompsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  const refreshComps = () => {
+    if (!data?.pluto) return;
+    const zip = data.pluto.zipCode || data.registrations?.[0]?.zip;
+    if (!zip) return;
+    setCompsLoading(true);
+    fetchBuildingComps({ zip, radiusMiles: compRadius, yearsBack: compYears, minUnits: compMinUnits, limit: 50 })
+      .then(result => { setComps(result.comps); setCompSummary(result.summary); })
+      .catch(err => console.error("Comps error:", err))
+      .finally(() => setCompsLoading(false));
+  };
 
   const handleSkipTrace = async () => {
     if (!data?.pluto) return;
@@ -1445,6 +1480,132 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
             ) : relatedDone ? (
               <p className="text-xs text-slate-400 py-2">No related properties found — this owner appears to have a single-property portfolio.</p>
             ) : null}
+          </Section>
+
+          {/* ============================================================ */}
+          {/* LIVE COMPS — Comparable Sales */}
+          {/* ============================================================ */}
+          <Section id="comps" title="Live Comps" icon="📊"
+            badge={
+              <>
+                {compSummary && compSummary.count > 0 && (
+                  <span className="text-xs text-slate-400">{compSummary.count} sales</span>
+                )}
+                {compSummary && compSummary.avgPricePerUnit > 0 && (
+                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                    Avg ${compSummary.avgPricePerUnit.toLocaleString()}/unit
+                  </span>
+                )}
+              </>
+            }
+            collapsed={isCollapsed("comps")} onToggle={() => toggle("comps")}>
+            {compsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-slate-500 py-4">
+                <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full" />
+                Searching comparable sales...
+              </div>
+            ) : comps.length > 0 && compSummary ? (
+              <>
+                {/* Summary cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Comp Count</p>
+                    <p className="text-lg font-bold text-blue-800">{compSummary.count}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Avg $/Unit</p>
+                    <p className="text-lg font-bold text-blue-800">${compSummary.avgPricePerUnit.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Median $/Unit</p>
+                    <p className="text-lg font-bold text-blue-800">${compSummary.medianPricePerUnit.toLocaleString()}</p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Avg $/SqFt</p>
+                    <p className="text-lg font-bold text-blue-800">{compSummary.avgPricePerSqft > 0 ? `$${compSummary.avgPricePerSqft.toLocaleString()}` : "—"}</p>
+                  </div>
+                </div>
+
+                {/* Filter controls */}
+                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                  <label className="text-[10px] text-slate-500 flex items-center gap-1">
+                    Radius:
+                    <select value={compRadius} onChange={e => { setCompRadius(parseFloat(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                      <option value="0.5">0.5 mi</option>
+                      <option value="1">1 mi</option>
+                      <option value="2">2 mi</option>
+                      <option value="5">5 mi</option>
+                      <option value="10">10 mi</option>
+                    </select>
+                  </label>
+                  <label className="text-[10px] text-slate-500 flex items-center gap-1">
+                    Years:
+                    <select value={compYears} onChange={e => { setCompYears(parseInt(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                      <option value="1">1 yr</option>
+                      <option value="2">2 yr</option>
+                      <option value="3">3 yr</option>
+                      <option value="5">5 yr</option>
+                    </select>
+                  </label>
+                  <label className="text-[10px] text-slate-500 flex items-center gap-1">
+                    Min Units:
+                    <select value={compMinUnits} onChange={e => { setCompMinUnits(parseInt(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                      <option value="3">3+</option>
+                      <option value="5">5+</option>
+                      <option value="10">10+</option>
+                      <option value="20">20+</option>
+                    </select>
+                  </label>
+                  <button onClick={refreshComps} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    Refresh
+                  </button>
+                </div>
+
+                {/* Comps table */}
+                <div className="overflow-x-auto -mx-5 px-5">
+                  <table className="w-full text-xs min-w-[700px]">
+                    <thead className="bg-slate-50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-slate-500">Address</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Borough</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Units</th>
+                        <th className="text-right px-2 py-2 font-medium text-slate-500">SqFt</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Built</th>
+                        <th className="text-right px-3 py-2 font-medium text-slate-500">Sale Price</th>
+                        <th className="text-right px-2 py-2 font-medium text-slate-500">$/Unit</th>
+                        <th className="text-right px-2 py-2 font-medium text-slate-500">$/SqFt</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Date</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Dist</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comps.slice(0, 25).map((c, i) => (
+                        <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
+                          <td className="px-3 py-1.5 text-slate-700 max-w-[200px] truncate" title={c.address}>{c.address}</td>
+                          <td className="text-center px-2 py-1.5 text-slate-500">{c.borough.substring(0, 3)}</td>
+                          <td className="text-center px-2 py-1.5">{c.totalUnits}</td>
+                          <td className="text-right px-2 py-1.5 text-slate-500">{c.grossSqft > 0 ? c.grossSqft.toLocaleString() : "—"}</td>
+                          <td className="text-center px-2 py-1.5 text-slate-500">{c.yearBuilt || "—"}</td>
+                          <td className="text-right px-3 py-1.5 font-medium">{fmtPrice(c.salePrice)}</td>
+                          <td className="text-right px-2 py-1.5">{c.pricePerUnit > 0 ? fmtPrice(c.pricePerUnit) : "—"}</td>
+                          <td className="text-right px-2 py-1.5 text-slate-500">{c.pricePerSqft > 0 ? `$${c.pricePerSqft}` : "—"}</td>
+                          <td className="text-center px-2 py-1.5 text-slate-500">
+                            {c.saleDate ? new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(new Date(c.saleDate)) : "—"}
+                          </td>
+                          <td className="text-center px-2 py-1.5 text-slate-400">{c.distance} mi</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-slate-400">
+                {data?.pluto?.unitsTot >= 5
+                  ? "No comparable sales found in this area. Try expanding the search radius."
+                  : "Comps are available for buildings with 5+ units."}
+              </p>
+            )}
           </Section>
 
           {/* ============================================================ */}

@@ -11,6 +11,32 @@ export interface UnitMixRow {
 }
 
 // ============================================================
+// Expense Line Item Metadata
+// ============================================================
+export type ExpenseSource = 'ai_estimate' | 't12' | 'manual' | 'market_benchmark';
+
+export interface ExpenseLineMeta {
+  source: ExpenseSource;
+  methodology: string;  // e.g., "T-12 + 3%", "$1,200/unit", "3% of income"
+  t12Actual?: number;   // trailing 12-month actual
+  growthFactor?: number; // e.g., 1.03 for 3% growth
+}
+
+export interface CustomLineItem {
+  id: string;
+  name: string;
+  amount: number;       // annual
+  source?: ExpenseSource;
+  methodology?: string;
+}
+
+export interface CommercialTenant {
+  id: string;
+  name: string;
+  rentAnnual: number;
+}
+
+// ============================================================
 // Detailed Income/Expense Inputs
 // ============================================================
 export interface DealInputs {
@@ -37,6 +63,9 @@ export interface DealInputs {
   commercialVacancyRate: number;    // default 10%
   commercialConcessions: number;
 
+  // Income — Commercial Tenants (optional, overrides commercialRentAnnual if present)
+  commercialTenants?: CommercialTenant[];
+
   // Income — Other
   lateFees: number;
   parkingIncome: number;
@@ -46,7 +75,12 @@ export interface DealInputs {
   evCharging: number;
   trashRubs: number;
   waterRubs: number;
+  camRecoveries?: number;
   otherMiscIncome: number;
+
+  // Custom line items (user-added)
+  customIncomeItems?: CustomLineItem[];
+  customExpenseItems?: CustomLineItem[];
 
   // Growth
   annualRentGrowth: number;         // e.g., 3 for 3%
@@ -92,6 +126,13 @@ export interface DealInputs {
   exitCapRate: number;              // e.g., 5.5 for 5.5%
   sellingCostPercent: number;       // e.g., 5 for 5%
 
+  // T-12 Actuals — keyed by expense field name
+  t12Actuals?: Record<string, number>;
+  t12GrowthFactors?: Record<string, number>;  // per-field growth factor (default 1.03)
+
+  // Expense metadata — keyed by expense field name
+  expenseMeta?: Record<string, ExpenseLineMeta>;
+
   // Metadata — tracks which fields were AI-generated
   _assumptions?: Record<string, boolean>;
 }
@@ -107,6 +148,18 @@ export interface CashFlowYear {
   debtService: number;
   cashFlow: number;
   cumulativeCashFlow: number;
+}
+
+export interface ExpenseDetailRow {
+  label: string;
+  amount: number;
+  category: string;
+  field?: string;           // original field key for linking
+  perUnit?: number;         // auto-calc: amount / total units
+  source?: ExpenseSource;
+  methodology?: string;
+  flagged?: boolean;
+  flagReason?: string;
 }
 
 export interface DealOutputs {
@@ -128,8 +181,8 @@ export interface DealOutputs {
   vacancyLoss: number;
   effectiveGrossIncome: number;
 
-  // Expense Breakdown
-  expenseDetails: { label: string; amount: number; category: string }[];
+  // Expense Breakdown (with metadata)
+  expenseDetails: ExpenseDetailRow[];
   totalExpenses: number;
   managementFee: number;
 
@@ -259,14 +312,17 @@ export function calculateIncome(inputs: DealInputs) {
   const concessionsLoss = inputs.concessions;
   const netResidentialIncome = grossPotentialResidentialRent - residentialVacancyLoss - concessionsLoss;
 
-  const grossPotentialCommercialRent = inputs.commercialRentAnnual;
+  // Commercial: use tenants array if present, otherwise flat annual amount
+  const grossPotentialCommercialRent = inputs.commercialTenants && inputs.commercialTenants.length > 0
+    ? inputs.commercialTenants.reduce((sum, t) => sum + t.rentAnnual, 0)
+    : inputs.commercialRentAnnual;
   const commercialVacancyLoss = grossPotentialCommercialRent * (inputs.commercialVacancyRate / 100);
   const commercialConcessionsLoss = inputs.commercialConcessions;
   const netCommercialIncome = grossPotentialCommercialRent - commercialVacancyLoss - commercialConcessionsLoss;
 
   const netRentableIncome = netResidentialIncome + netCommercialIncome;
 
-  const totalOtherIncome =
+  let totalOtherIncome =
     inputs.lateFees +
     inputs.parkingIncome +
     inputs.storageIncome +
@@ -275,7 +331,13 @@ export function calculateIncome(inputs: DealInputs) {
     inputs.evCharging +
     inputs.trashRubs +
     inputs.waterRubs +
+    (inputs.camRecoveries || 0) +
     inputs.otherMiscIncome;
+
+  // Add custom income items
+  if (inputs.customIncomeItems) {
+    totalOtherIncome += inputs.customIncomeItems.reduce((sum, item) => sum + item.amount, 0);
+  }
 
   const totalIncome = netRentableIncome + totalOtherIncome;
 
@@ -303,32 +365,65 @@ export function calculateIncome(inputs: DealInputs) {
 // ============================================================
 export function calculateExpenses(inputs: DealInputs, totalIncome: number) {
   const managementFee = totalIncome * (inputs.managementFeePercent / 100);
+  const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
+  const meta = inputs.expenseMeta || {};
 
-  const details: { label: string; amount: number; category: string }[] = [
-    { label: "Real Estate Taxes", amount: inputs.realEstateTaxes, category: "fixed" },
-    { label: "Property Insurance", amount: inputs.insurance, category: "fixed" },
-    { label: "License/Permit/Inspection", amount: inputs.licenseFees, category: "fixed" },
-    { label: "Fire Meter Service", amount: inputs.fireMeter, category: "fixed" },
-    { label: "Electricity + Gas", amount: inputs.electricityGas, category: "utilities" },
-    { label: "Water / Sewer", amount: inputs.waterSewer, category: "utilities" },
-    { label: "Management Fee", amount: managementFee, category: "management" },
-    { label: "Payroll", amount: inputs.payroll, category: "management" },
-    { label: "Accounting", amount: inputs.accounting, category: "professional" },
-    { label: "Legal", amount: inputs.legal, category: "professional" },
-    { label: "Marketing / Leasing", amount: inputs.marketing, category: "professional" },
-    { label: "R&M General", amount: inputs.rmGeneral, category: "maintenance" },
-    { label: "R&M CapEx/Reserve", amount: inputs.rmCapexReserve, category: "maintenance" },
-    { label: "General Admin", amount: inputs.generalAdmin, category: "admin" },
-    { label: "Exterminating", amount: inputs.exterminating, category: "contract" },
-    { label: "Landscaping", amount: inputs.landscaping, category: "contract" },
-    { label: "Snow Removal", amount: inputs.snowRemoval, category: "contract" },
-    { label: "Elevator", amount: inputs.elevator, category: "contract" },
-    { label: "Alarm Monitoring", amount: inputs.alarmMonitoring, category: "contract" },
-    { label: "Telephone/Internet", amount: inputs.telephoneInternet, category: "contract" },
-    { label: "Cleaning", amount: inputs.cleaning, category: "contract" },
-    { label: "Trash Removal", amount: inputs.trashRemoval, category: "contract" },
-    { label: "Other Contract Services", amount: inputs.otherContractServices, category: "contract" },
+  // Helper to build a row with metadata
+  const row = (label: string, field: string, amount: number, category: string): ExpenseDetailRow => {
+    const m = meta[field];
+    return {
+      label,
+      amount,
+      category,
+      field,
+      perUnit: totalUnits > 0 ? Math.round(amount / totalUnits) : undefined,
+      source: m?.source,
+      methodology: m?.methodology,
+    };
+  };
+
+  const details: ExpenseDetailRow[] = [
+    row("Real Estate Taxes", "realEstateTaxes", inputs.realEstateTaxes, "fixed"),
+    row("Property Insurance", "insurance", inputs.insurance, "fixed"),
+    row("License/Permit/Inspection", "licenseFees", inputs.licenseFees, "fixed"),
+    row("Fire Meter Service", "fireMeter", inputs.fireMeter, "fixed"),
+    row("Electricity + Gas", "electricityGas", inputs.electricityGas, "utilities"),
+    row("Water / Sewer", "waterSewer", inputs.waterSewer, "utilities"),
+    { label: "Management Fee", amount: managementFee, category: "management", field: "managementFee",
+      perUnit: totalUnits > 0 ? Math.round(managementFee / totalUnits) : undefined,
+      methodology: `${inputs.managementFeePercent}% of income` },
+    row("Payroll", "payroll", inputs.payroll, "management"),
+    row("Accounting", "accounting", inputs.accounting, "professional"),
+    row("Legal", "legal", inputs.legal, "professional"),
+    row("Marketing / Leasing", "marketing", inputs.marketing, "professional"),
+    row("R&M General", "rmGeneral", inputs.rmGeneral, "maintenance"),
+    row("R&M CapEx/Reserve", "rmCapexReserve", inputs.rmCapexReserve, "maintenance"),
+    row("General Admin", "generalAdmin", inputs.generalAdmin, "admin"),
+    row("Exterminating", "exterminating", inputs.exterminating, "contract"),
+    row("Landscaping", "landscaping", inputs.landscaping, "contract"),
+    row("Snow Removal", "snowRemoval", inputs.snowRemoval, "contract"),
+    row("Elevator", "elevator", inputs.elevator, "contract"),
+    row("Alarm Monitoring", "alarmMonitoring", inputs.alarmMonitoring, "contract"),
+    row("Telephone/Internet", "telephoneInternet", inputs.telephoneInternet, "contract"),
+    row("Cleaning", "cleaning", inputs.cleaning, "contract"),
+    row("Trash Removal", "trashRemoval", inputs.trashRemoval, "contract"),
+    row("Other Contract Services", "otherContractServices", inputs.otherContractServices, "contract"),
   ];
+
+  // Add custom expense items
+  if (inputs.customExpenseItems) {
+    for (const item of inputs.customExpenseItems) {
+      details.push({
+        label: item.name,
+        amount: item.amount,
+        category: "custom",
+        field: `custom_${item.id}`,
+        perUnit: totalUnits > 0 ? Math.round(item.amount / totalUnits) : undefined,
+        source: item.source,
+        methodology: item.methodology,
+      });
+    }
+  }
 
   const totalExpenses = details.reduce((sum, d) => sum + d.amount, 0);
 
@@ -620,7 +715,11 @@ export function calculateAll(inputs: DealInputs): DealOutputs {
     vacancyLoss: Math.round(noiResult.vacancyLoss),
     effectiveGrossIncome: Math.round(noiResult.effectiveGrossIncome),
 
-    expenseDetails: noiResult.expenseDetails.map(d => ({ ...d, amount: Math.round(d.amount) })),
+    expenseDetails: noiResult.expenseDetails.map(d => ({
+      ...d,
+      amount: Math.round(d.amount),
+      perUnit: d.perUnit != null ? Math.round(d.perUnit) : undefined,
+    })),
     totalExpenses: Math.round(noiResult.totalExpenses),
     managementFee: Math.round(noiResult.managementFee),
 

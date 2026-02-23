@@ -1209,3 +1209,18 @@ export async function createContactFromBuilding(
   revalidatePath("/contacts");
   return { contactId: contact.id, enriched, apolloPerson, apolloOrg };
 }
+
+// ============================================================
+// Live Comps — search comparable sales from NYC DOF
+// ============================================================
+export async function fetchBuildingComps(params: {
+  zip: string;
+  radiusMiles?: number;
+  yearsBack?: number;
+  minUnits?: number;
+  minPrice?: number;
+  limit?: number;
+}) {
+  const { searchComps } = await import("@/lib/comps-engine");
+  return searchComps(params);
+}
