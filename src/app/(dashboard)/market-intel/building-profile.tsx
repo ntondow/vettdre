@@ -10,6 +10,7 @@ import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
 import type { CompSale, CompSummary } from "@/lib/comps-engine";
+import FeatureGate from "@/components/ui/feature-gate";
 
 interface Props {
   boroCode: string;
@@ -501,6 +502,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 </div>
 
                 {/* Investment Score */}
+                <FeatureGate feature="bp_investment_score" blur>
                 <div className={`rounded-lg p-3 border ${
                   intel.investmentSignals.score >= 60 ? "bg-blue-50 border-blue-200" :
                   intel.investmentSignals.score >= 30 ? "bg-slate-50 border-slate-200" :
@@ -530,10 +532,12 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     </div>
                   )}
                 </div>
+                </FeatureGate>
               </div>
 
               {/* Resolved Ownership */}
               {intel.ownership.likelyOwner.entityName && (
+                <FeatureGate feature="bp_owner_name" blur>
                 <div className="mt-3 p-3 bg-slate-50 rounded-lg">
                   <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">Resolved Owner</p>
                   <p className="text-sm font-bold text-slate-900">{intel.ownership.likelyOwner.entityName}</p>
@@ -551,6 +555,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     <p className="text-[10px] text-slate-400 mt-1">Also seen as: {intel.ownership.likelyOwner.alternateNames.slice(0, 3).join(", ")}</p>
                   )}
                 </div>
+                </FeatureGate>
               )}
 
               {/* Owner Portfolio */}
@@ -592,6 +597,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
           {/* ============================================================ */}
           {/* ACTIVE LISTINGS (from Brave Web Search) */}
           {/* ============================================================ */}
+          <FeatureGate feature="bp_live_listings" blur>
           {intel?.liveListings && (intel.liveListings.forSale.length > 0 || intel.liveListings.forRent.length > 0) && (
             <Section id="listings" title="Active Listings" icon="🏷️"
               badge={<span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase">Live</span>}
@@ -704,10 +710,12 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               )}
             </Section>
           )}
+          </FeatureGate>
 
           {/* ============================================================ */}
           {/* WEB INTELLIGENCE (from Brave Entity Research) */}
           {/* ============================================================ */}
+          <FeatureGate feature="bp_web_intel" blur>
           {intel?.webIntelligence && intel.webIntelligence.newsCount > 0 && (
             <div className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex items-center gap-2 mb-3">
@@ -746,6 +754,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               )}
             </div>
           )}
+          </FeatureGate>
 
           {/* ============================================================ */}
           {/* 1. PROPERTY OVERVIEW */}
@@ -873,6 +882,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 </div>
 
                 {/* RPIE Non-Compliance Banner */}
+                <FeatureGate feature="bp_rpie" blur>
                 {rpieRecords.length > 0 && (
                   <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
                     <div className="flex items-start gap-2">
@@ -889,8 +899,10 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     </div>
                   </div>
                 )}
+                </FeatureGate>
 
-                {/* Distress Score — always visible */}
+                {/* Distress Score */}
+                <FeatureGate feature="bp_distress_score" blur>
                 {data && (
                   <div className={"mt-4 rounded-lg border p-4 " + (
                     data.distressScore >= 50 ? "bg-red-50 border-red-200" :
@@ -927,6 +939,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     )}
                   </div>
                 )}
+                </FeatureGate>
               </>
             )}
           </Section>
@@ -1309,6 +1322,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               .slice(0, 2);
 
             return (
+              <FeatureGate feature="bp_owner_contact" blur>
               <Section id="contacts" title="Contact Intelligence" icon="📞"
                 badge={<span className="text-xs text-blue-600 bg-blue-100 px-2 py-0.5 rounded-full font-medium">{phoneGroups.size} unique phone{phoneGroups.size !== 1 ? "s" : ""}</span>}
                 className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200"
@@ -1624,6 +1638,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                   </div>
                 )}
               </Section>
+              </FeatureGate>
             );
           })()}
 

@@ -4,6 +4,10 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect, useCallback } from "react";
 import { getUnreadCount } from "@/app/(dashboard)/messages/actions";
+import { useUserPlan } from "@/components/providers/user-plan-provider";
+import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
+import type { Feature } from "@/lib/feature-gate";
+import Paywall from "@/components/ui/paywall";
 
 const tabs = [
   { name: "Dashboard", href: "/dashboard", icon: "📊" },
@@ -17,28 +21,30 @@ interface MoreItem {
   name: string;
   href: string;
   icon: string;
-  locked?: boolean;
+  feature?: Feature;
 }
 
 const moreItems: MoreItem[] = [
   { name: "Calendar", href: "/calendar", icon: "📅" },
   { name: "Properties", href: "/properties", icon: "🏠" },
   { name: "Deal Pipeline", href: "/deals", icon: "🏗️" },
-  { name: "Deal Modeler", href: "/deals/new", icon: "🧮" },
-  { name: "Market Intel", href: "/market-intel", icon: "🔍" },
-  { name: "Prospecting", href: "/prospecting", icon: "🎯" },
-  { name: "Portfolios", href: "/portfolios", icon: "🏢" },
-  { name: "Campaigns", href: "/settings/billing", icon: "📣", locked: true },
-  { name: "Financing", href: "/settings/billing", icon: "💰", locked: true },
+  { name: "Deal Modeler", href: "/deals/new", icon: "🧮", feature: "nav_deal_modeler" },
+  { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+  { name: "Prospecting", href: "/prospecting", icon: "🎯", feature: "nav_prospecting" },
+  { name: "Portfolios", href: "/portfolios", icon: "🏢", feature: "nav_portfolios" },
+  { name: "Campaigns", href: "/campaigns", icon: "📣", feature: "nav_campaigns" },
+  { name: "Financing", href: "/financing", icon: "💰", feature: "nav_financing" },
   { name: "Settings", href: "/settings", icon: "⚙️" },
 ];
 
 export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const { plan } = useUserPlan();
   const [unread, setUnread] = useState(0);
   const [showMore, setShowMore] = useState(false);
   const [entered, setEntered] = useState(false);
+  const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
 
   useEffect(() => {
     getUnreadCount().then(n => setUnread(n)).catch(() => {});
@@ -67,7 +73,10 @@ export default function MobileNav() {
     router.refresh();
   };
 
-  const isMoreActive = moreItems.some(item => !item.locked && pathname.startsWith(item.href));
+  const isMoreActive = moreItems.some(item => {
+    const locked = item.feature ? !hasPermission(plan, item.feature) : false;
+    return !locked && pathname.startsWith(item.href);
+  });
 
   return (
     <>
@@ -128,27 +137,35 @@ export default function MobileNav() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-2 mb-2">Navigate</p>
               <div className="grid grid-cols-4 gap-1">
                 {moreItems.map((item) => {
-                  const isActive = !item.locked && pathname.startsWith(item.href);
+                  const locked = item.feature ? !hasPermission(plan, item.feature) : false;
+                  const isActive = !locked && pathname.startsWith(item.href);
                   return (
-                    <Link
+                    <button
                       key={item.name}
-                      href={item.href}
+                      onClick={() => {
+                        if (locked && item.feature) {
+                          closeMore();
+                          setPaywallFeature(item.feature);
+                        } else {
+                          router.push(item.href);
+                        }
+                      }}
                       className={`flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors relative ${
-                        item.locked
+                        locked
                           ? "text-slate-400 active:bg-slate-100"
                           : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 active:bg-slate-100"
                       }`}
                     >
-                      <span className={`text-2xl ${item.locked ? "opacity-50" : ""}`}>{item.icon}</span>
+                      <span className={`text-2xl ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
                       <span>{item.name}</span>
-                      {item.locked && (
+                      {locked && (
                         <span className="absolute top-2 right-2">
                           <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                           </svg>
                         </span>
                       )}
-                    </Link>
+                    </button>
                   );
                 })}
               </div>
@@ -163,6 +180,16 @@ export default function MobileNav() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Paywall Modal */}
+      {paywallFeature && (
+        <Paywall
+          featureName={moreItems.find(i => i.feature === paywallFeature)?.name || "Feature"}
+          currentPlan={plan}
+          requiredPlan={getRequiredPlan(paywallFeature)}
+          onClose={() => setPaywallFeature(null)}
+        />
       )}
     </>
   );

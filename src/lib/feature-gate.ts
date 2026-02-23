@@ -1,204 +1,163 @@
-import prisma from "@/lib/prisma";
+// Feature gating — NO "use server" so client components can import types & helpers
 
-export type PlanName = "free" | "pro" | "team" | "enterprise";
+export type Feature =
+  // Nav
+  | "nav_market_intel"
+  | "nav_deal_modeler"
+  | "nav_prospecting"
+  | "nav_portfolios"
+  | "nav_campaigns"
+  | "nav_sequences"
+  | "nav_financing"
+  | "nav_investors"
+  | "nav_comp_analysis"
+  // Market Intel
+  | "market_nyc"
+  | "market_nys"
+  | "market_nj"
+  | "search_unlimited"
+  // Building Profile
+  | "bp_owner_name"
+  | "bp_owner_contact"
+  | "bp_distress_score"
+  | "bp_investment_score"
+  | "bp_rpie"
+  | "bp_live_listings"
+  | "bp_web_intel"
+  | "bp_apollo_enrichment"
+  // Map
+  | "map_search"
+  // Other
+  | "deal_modeler"
+  | "prospecting"
+  | "portfolios"
+  | "comp_analysis"
+  | "campaigns"
+  | "sequences"
+  | "financing"
+  | "investors"
+  | "api_access";
 
-export interface FeatureLimits {
-  maxContacts: number;
-  maxDeals: number;
-  searchesPerDay: number;
-  enrichmentsPerMonth: number;
-  maxProspectLists: number;
-  maxTeamMembers: number;
-  aiAnalysis: boolean;
-  bulkEnrich: boolean;
-  csvExport: boolean;
-  emailTemplates: boolean;
-  apiAccess: boolean;
-  customPipelines: boolean;
-}
+export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
-export const PLAN_LIMITS: Record<PlanName, FeatureLimits> = {
-  free: {
-    maxContacts: 50,
-    maxDeals: 10,
-    searchesPerDay: 10,
-    enrichmentsPerMonth: 5,
-    maxProspectLists: 1,
-    maxTeamMembers: 1,
-    aiAnalysis: false,
-    bulkEnrich: false,
-    csvExport: false,
-    emailTemplates: true,
-    apiAccess: false,
-    customPipelines: false,
-  },
-  pro: {
-    maxContacts: 1000,
-    maxDeals: 100,
-    searchesPerDay: 100,
-    enrichmentsPerMonth: 50,
-    maxProspectLists: 10,
-    maxTeamMembers: 1,
-    aiAnalysis: true,
-    bulkEnrich: true,
-    csvExport: true,
-    emailTemplates: true,
-    apiAccess: false,
-    customPipelines: true,
-  },
-  team: {
-    maxContacts: 10000,
-    maxDeals: 500,
-    searchesPerDay: 500,
-    enrichmentsPerMonth: 200,
-    maxProspectLists: 50,
-    maxTeamMembers: 10,
-    aiAnalysis: true,
-    bulkEnrich: true,
-    csvExport: true,
-    emailTemplates: true,
-    apiAccess: true,
-    customPipelines: true,
-  },
-  enterprise: {
-    maxContacts: Infinity,
-    maxDeals: Infinity,
-    searchesPerDay: Infinity,
-    enrichmentsPerMonth: Infinity,
-    maxProspectLists: Infinity,
-    maxTeamMembers: Infinity,
-    aiAnalysis: true,
-    bulkEnrich: true,
-    csvExport: true,
-    emailTemplates: true,
-    apiAccess: true,
-    customPipelines: true,
-  },
+const FREE_FEATURES: Feature[] = [
+  "nav_market_intel",
+  "market_nyc",
+];
+
+const EXPLORER_FEATURES: Feature[] = [
+  ...FREE_FEATURES,
+  "market_nys",
+  "market_nj",
+  "map_search",
+  "search_unlimited",
+  "bp_owner_name",
+  "bp_distress_score",
+  "bp_investment_score",
+  "bp_rpie",
+  "bp_live_listings",
+  "bp_web_intel",
+];
+
+const PRO_FEATURES: Feature[] = [
+  ...EXPLORER_FEATURES,
+  "nav_deal_modeler",
+  "nav_prospecting",
+  "nav_portfolios",
+  "nav_campaigns",
+  "nav_sequences",
+  "nav_financing",
+  "nav_comp_analysis",
+  "bp_owner_contact",
+  "bp_apollo_enrichment",
+  "deal_modeler",
+  "prospecting",
+  "portfolios",
+  "comp_analysis",
+  "campaigns",
+  "sequences",
+  "financing",
+  "api_access",
+];
+
+const TEAM_FEATURES: Feature[] = [
+  ...PRO_FEATURES,
+  "nav_investors",
+  "investors",
+];
+
+// Enterprise gets everything
+const ENTERPRISE_FEATURES: Feature[] = [...TEAM_FEATURES];
+
+export const TIER_PERMISSIONS: Record<UserPlan, Set<Feature>> = {
+  free: new Set(FREE_FEATURES),
+  explorer: new Set(EXPLORER_FEATURES),
+  pro: new Set(PRO_FEATURES),
+  team: new Set(TEAM_FEATURES),
+  enterprise: new Set(ENTERPRISE_FEATURES),
 };
 
-export const PLAN_DISPLAY: Record<PlanName, { label: string; price: number | null; color: string }> = {
-  free: { label: "Free", price: 0, color: "slate" },
-  pro: { label: "Pro", price: 79, color: "blue" },
-  team: { label: "Team", price: 149, color: "violet" },
-  enterprise: { label: "Enterprise", price: null, color: "amber" },
-};
-
-type CounterKey = "searchesToday" | "enrichmentsThisMonth" | "dealsThisMonth";
-
-interface UsageCounters {
-  searchesToday?: number;
-  enrichmentsThisMonth?: number;
-  dealsThisMonth?: number;
+export function hasPermission(plan: UserPlan, feature: Feature): boolean {
+  if (plan === "team" || plan === "enterprise") return true;
+  return TIER_PERMISSIONS[plan].has(feature);
 }
 
-export async function checkFeatureAccess(
-  userId: string,
-  feature: keyof FeatureLimits,
-): Promise<{ allowed: boolean; currentPlan: PlanName; requiredPlan: PlanName | null; currentValue?: number; limit?: number }> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { plan: true, usageCounters: true, usageResetDate: true, orgId: true },
-  });
-  if (!user) return { allowed: false, currentPlan: "free", requiredPlan: "pro" };
+const PLAN_ORDER: UserPlan[] = ["free", "explorer", "pro", "team", "enterprise"];
 
-  const plan = (user.plan || "free") as PlanName;
-  const limits = PLAN_LIMITS[plan];
-
-  // Boolean features
-  if (typeof limits[feature] === "boolean") {
-    if (limits[feature]) return { allowed: true, currentPlan: plan, requiredPlan: null };
-    const required = findMinPlan(feature);
-    return { allowed: false, currentPlan: plan, requiredPlan: required };
-  }
-
-  // Numeric limits — check against usage counters
-  const counters = resetCountersIfNeeded(user.usageCounters as UsageCounters, user.usageResetDate);
-  const limit = limits[feature] as number;
-
-  let current = 0;
-  if (feature === "searchesPerDay") current = counters.searchesToday || 0;
-  else if (feature === "enrichmentsPerMonth") current = counters.enrichmentsThisMonth || 0;
-  else if (feature === "maxDeals") {
-    current = await prisma.deal.count({ where: { orgId: user.orgId, status: "open" } });
-  } else if (feature === "maxContacts") {
-    current = await prisma.contact.count({ where: { orgId: user.orgId } });
-  } else if (feature === "maxProspectLists") {
-    current = await prisma.prospectingList.count({ where: { orgId: user.orgId, status: "active" } });
-  } else if (feature === "maxTeamMembers") {
-    current = await prisma.user.count({ where: { orgId: user.orgId, isActive: true } });
-  }
-
-  if (current < limit) return { allowed: true, currentPlan: plan, requiredPlan: null, currentValue: current, limit };
-  const required = findMinPlanForLimit(feature, current + 1);
-  return { allowed: false, currentPlan: plan, requiredPlan: required, currentValue: current, limit };
-}
-
-export async function incrementUsage(userId: string, counter: CounterKey, amount = 1): Promise<void> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { usageCounters: true, usageResetDate: true },
-  });
-  if (!user) return;
-
-  const counters = resetCountersIfNeeded(user.usageCounters as UsageCounters, user.usageResetDate);
-  counters[counter] = (counters[counter] || 0) + amount;
-
-  const now = new Date();
-  let resetDate = user.usageResetDate;
-  if (!resetDate || resetDate < now) {
-    // Set reset date: daily counters reset at midnight, monthly at 1st of next month
-    resetDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  }
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { usageCounters: counters as any, usageResetDate: resetDate },
-  });
-}
-
-export async function getUsageStats(userId: string): Promise<{
-  plan: PlanName;
-  counters: UsageCounters;
-  limits: FeatureLimits;
-}> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { plan: true, usageCounters: true, usageResetDate: true },
-  });
-  if (!user) return { plan: "free", counters: {}, limits: PLAN_LIMITS.free };
-
-  const plan = (user.plan || "free") as PlanName;
-  const counters = resetCountersIfNeeded(user.usageCounters as UsageCounters, user.usageResetDate);
-  return { plan, counters, limits: PLAN_LIMITS[plan] };
-}
-
-function resetCountersIfNeeded(counters: UsageCounters | null, resetDate: Date | null): UsageCounters {
-  const c = counters || {};
-  const now = new Date();
-
-  // Reset daily counter if past midnight
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  // We store the last reset check — if reset date is past, clear monthly
-  if (resetDate && resetDate < now) {
-    return { searchesToday: 0, enrichmentsThisMonth: 0, dealsThisMonth: 0 };
-  }
-
-  return { ...c };
-}
-
-function findMinPlan(feature: keyof FeatureLimits): PlanName {
-  const order: PlanName[] = ["free", "pro", "team", "enterprise"];
-  for (const p of order) {
-    if (PLAN_LIMITS[p][feature] === true) return p;
+export function getRequiredPlan(feature: Feature): UserPlan {
+  for (const plan of PLAN_ORDER) {
+    if (TIER_PERMISSIONS[plan].has(feature)) return plan;
   }
   return "enterprise";
 }
 
-function findMinPlanForLimit(feature: keyof FeatureLimits, needed: number): PlanName {
-  const order: PlanName[] = ["free", "pro", "team", "enterprise"];
-  for (const p of order) {
-    const limit = PLAN_LIMITS[p][feature];
-    if (typeof limit === "number" && needed <= limit) return p;
-  }
-  return "enterprise";
+const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
+  market_nys: "Upgrade to Explorer to unlock NYS & NJ markets",
+  market_nj: "Upgrade to Explorer to unlock NYS & NJ markets",
+  map_search: "Upgrade to Explorer to unlock Map Search",
+  bp_owner_name: "Upgrade to Explorer to see owner names",
+  bp_owner_contact: "Upgrade to Pro to access owner contact info",
+  bp_distress_score: "Upgrade to Explorer to see distress scores",
+  bp_investment_score: "Upgrade to Explorer to see investment scores",
+  bp_rpie: "Upgrade to Explorer to see RPIE status",
+  bp_live_listings: "Upgrade to Explorer to see live listings",
+  bp_web_intel: "Upgrade to Explorer to see web intelligence",
+  bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
+  deal_modeler: "Upgrade to Pro to access the Deal Modeler",
+  nav_deal_modeler: "Upgrade to Pro to access the Deal Modeler",
+  prospecting: "Upgrade to Pro to access Prospecting",
+  nav_prospecting: "Upgrade to Pro to access Prospecting",
+  portfolios: "Upgrade to Pro to access Portfolios",
+  nav_portfolios: "Upgrade to Pro to access Portfolios",
+  comp_analysis: "Upgrade to Pro to access Comp Analysis",
+  nav_comp_analysis: "Upgrade to Pro to access Comp Analysis",
+  campaigns: "Upgrade to Pro to access Campaigns",
+  nav_campaigns: "Upgrade to Pro to access Campaigns",
+  sequences: "Upgrade to Pro to access Sequences",
+  nav_sequences: "Upgrade to Pro to access Sequences",
+  financing: "Upgrade to Pro to access Financing",
+  nav_financing: "Upgrade to Pro to access Financing",
+  investors: "Upgrade to Team to access Investors",
+  nav_investors: "Upgrade to Team to access Investors",
+};
+
+export function getUpgradeMessage(feature: Feature): string {
+  return UPGRADE_MESSAGES[feature] || `Upgrade to ${PLAN_DISPLAY[getRequiredPlan(feature)].name} to unlock this feature`;
 }
+
+export interface PlanDisplayInfo {
+  name: string;
+  monthlyPrice: number | null;
+  annualPrice: number | null;
+  color: string;
+}
+
+export const PLAN_DISPLAY: Record<UserPlan, PlanDisplayInfo> = {
+  free: { name: "Free", monthlyPrice: 0, annualPrice: 0, color: "slate" },
+  explorer: { name: "Explorer", monthlyPrice: 59, annualPrice: 49, color: "emerald" },
+  pro: { name: "Pro", monthlyPrice: 219, annualPrice: 199, color: "blue" },
+  team: { name: "Team", monthlyPrice: 399, annualPrice: null, color: "violet" },
+  enterprise: { name: "Enterprise", monthlyPrice: null, annualPrice: null, color: "amber" },
+};
+
+export const FREE_DAILY_SEARCH_LIMIT = 5;

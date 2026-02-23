@@ -1,5 +1,10 @@
 import DealModeler from "./deal-modeler";
+import FullPageGateWrapper from "./full-page-gate-wrapper";
 
 export default function NewDealPage() {
-  return <DealModeler />;
+  return (
+    <FullPageGateWrapper>
+      <DealModeler />
+    </FullPageGateWrapper>
+  );
 }

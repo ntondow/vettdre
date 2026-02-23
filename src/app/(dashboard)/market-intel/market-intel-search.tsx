@@ -22,6 +22,10 @@ import NJBuildingProfile from "./nj-building-profile";
 import { searchAreaListings, type ParsedListing } from "@/lib/brave-listings";
 import { isBraveSearchAvailable } from "@/lib/brave-search";
 import NeighborhoodDropdown from "./neighborhood-dropdown";
+import { useUserPlan } from "@/components/providers/user-plan-provider";
+import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
+import { incrementSearchCount } from "@/lib/feature-gate-server";
+import Paywall from "@/components/ui/paywall";
 import dynamic from "next/dynamic";
 const MapSearch = dynamic(() => import("./map-search"), { ssr: false, loading: () => <div className="flex items-center justify-center h-96"><div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-600 border-t-transparent"></div></div> });
 
@@ -30,6 +34,9 @@ type View = "results" | "building";
 
 export default function MarketIntelSearch() {
   const router = useRouter();
+  const { plan, userId, searchesRemaining } = useUserPlan();
+  const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
+  const [searchLimitModal, setSearchLimitModal] = useState(false);
   const [market, setMarket] = useState<"nyc" | "nys" | "nj">("nyc");
   const [mainTab, setMainTab] = useState<MainTab>("property");
   const [loading, setLoading] = useState(false);
@@ -337,6 +344,11 @@ export default function MarketIntelSearch() {
 
   const handlePropertySearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Check search limit for free users
+    if (plan === "free") {
+      const result = await incrementSearchCount(userId);
+      if (!result.allowed) { setSearchLimitModal(true); return; }
+    }
     setLoading(true);
     setError(null);
     setView("results");
@@ -404,6 +416,10 @@ export default function MarketIntelSearch() {
 
   const handleOwnershipSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (plan === "free") {
+      const result = await incrementSearchCount(userId);
+      if (!result.allowed) { setSearchLimitModal(true); return; }
+    }
     setLoading(true);
     setError(null);
     setOwnerDetailBuilding(null);
@@ -431,6 +447,10 @@ export default function MarketIntelSearch() {
 
   const handleNameSearch = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    if (plan === "free") {
+      const result = await incrementSearchCount(userId);
+      if (!result.allowed) { setSearchLimitModal(true); return; }
+    }
     setLoading(true);
     setError(null);
     const fd = new FormData(e.currentTarget);
@@ -483,17 +503,25 @@ export default function MarketIntelSearch() {
               }`}>
               NYC
             </button>
-            <button onClick={() => { setMarket("nys"); setMainTab("property"); }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            <button onClick={() => {
+                if (!hasPermission(plan, "market_nys")) { setPaywallFeature("market_nys"); return; }
+                setMarket("nys"); setMainTab("property");
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors relative ${
                 market === "nys" ? "bg-white text-blue-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}>
+              } ${!hasPermission(plan, "market_nys") ? "opacity-60" : ""}`}>
               NY State
+              {!hasPermission(plan, "market_nys") && <svg className="inline-block w-3 h-3 ml-1 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>}
             </button>
-            <button onClick={() => { setMarket("nj"); setMainTab("property"); }}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+            <button onClick={() => {
+                if (!hasPermission(plan, "market_nj")) { setPaywallFeature("market_nj"); return; }
+                setMarket("nj"); setMainTab("property");
+              }}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors relative ${
                 market === "nj" ? "bg-white text-green-700 shadow-sm" : "text-slate-500 hover:text-slate-700"
-              }`}>
+              } ${!hasPermission(plan, "market_nj") ? "opacity-60" : ""}`}>
               New Jersey
+              {!hasPermission(plan, "market_nj") && <svg className="inline-block w-3 h-3 ml-1 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>}
             </button>
           </div>
         </div>
@@ -513,19 +541,26 @@ export default function MarketIntelSearch() {
               { key: "property" as const, label: "🏠 Property Search" },
               { key: "on-market" as const, label: "🏷️ On-Market" },
             ]
-          ).map((t) => (
+          ).map((t) => {
+            const isMapLocked = t.key === "map" && !hasPermission(plan, "map_search");
+            return (
             <button
               key={t.key}
-              onClick={() => setMainTab(t.key)}
+              onClick={() => {
+                if (isMapLocked) { setPaywallFeature("map_search"); return; }
+                setMainTab(t.key);
+              }}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 mainTab === t.key
                   ? "border-blue-600 text-blue-700"
                   : "border-transparent text-slate-500 hover:text-slate-700"
-              }`}
+              } ${isMapLocked ? "opacity-60" : ""}`}
             >
               {t.label}
+              {isMapLocked && <svg className="inline-block w-3 h-3 ml-1 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>}
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -2100,6 +2135,41 @@ export default function MarketIntelSearch() {
             : "Data: NYS Open Data • Assessment Rolls • Municipal Tax Rates • Brave Web Search"}
         </p>
       </div>
+
+      {/* Paywall Modal for gated features */}
+      {paywallFeature && (
+        <Paywall
+          featureName={paywallFeature === "market_nys" ? "NY State Market" : paywallFeature === "market_nj" ? "New Jersey Market" : "Map Search"}
+          currentPlan={plan}
+          requiredPlan={getRequiredPlan(paywallFeature as any)}
+          onClose={() => setPaywallFeature(null)}
+        />
+      )}
+
+      {/* Search Limit Modal */}
+      {searchLimitModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSearchLimitModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl max-w-sm w-full mx-4 p-8 text-center animate-in fade-in zoom-in-95">
+            <div className="w-16 h-16 mx-auto mb-4 bg-amber-50 rounded-full flex items-center justify-center">
+              <span className="text-3xl">⚡</span>
+            </div>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Daily Search Limit Reached</h2>
+            <p className="text-sm text-slate-600 mb-6">
+              Free accounts are limited to 5 searches per day. Upgrade to Explorer for unlimited searches.
+            </p>
+            <button
+              onClick={() => { setSearchLimitModal(false); setPaywallFeature("search_unlimited"); }}
+              className="w-full bg-emerald-600 text-white rounded-lg px-6 py-3 text-sm font-semibold hover:bg-emerald-700 transition-colors"
+            >
+              Upgrade for Unlimited Searches
+            </button>
+            <button onClick={() => setSearchLimitModal(false)} className="mt-3 text-sm text-slate-500 hover:text-slate-700 transition-colors">
+              Maybe later
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
