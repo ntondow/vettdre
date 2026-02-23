@@ -21,8 +21,7 @@ import {
   resolveValue,
 } from "./entity-resolver";
 
-// Re-export for consumers
-export type { NormalizedAddress, ResolvedEntity, ResolvedContact, ConfidentValue };
+// Types available from entity-resolver.ts directly if needed by consumers
 
 // ---- BuildingIntelligence Types ----
 
