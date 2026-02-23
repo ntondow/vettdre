@@ -77,21 +77,23 @@ export async function fetchPropertiesInBounds(
 ) {
   console.log("=== MAP FETCH ===", swLat, swLng, "to", neLat, neLng);
 
+  // IMPORTANT: Do NOT quote numeric values — Socrata SODA does string comparison
+  // on quoted values, which breaks negative longitude comparisons entirely.
   const conditions: string[] = [
-    `latitude > '${swLat}'`,
-    `latitude < '${neLat}'`,
-    `longitude > '${swLng}'`,
-    `longitude < '${neLng}'`,
-    `unitsres > '0'`,
+    `latitude > ${swLat}`,
+    `latitude < ${neLat}`,
+    `longitude > ${swLng}`,
+    `longitude < ${neLng}`,
+    `unitsres > 0`,
   ];
 
-  if (filters?.minUnits) conditions.push(`unitsres >= '${filters.minUnits}'`);
-  if (filters?.maxUnits) conditions.push(`unitsres <= '${filters.maxUnits}'`);
-  if (filters?.minValue) conditions.push(`assesstot >= '${filters.minValue}'`);
-  if (filters?.maxValue) conditions.push(`assesstot <= '${filters.maxValue}'`);
-  if (filters?.minYearBuilt) conditions.push(`yearbuilt >= '${filters.minYearBuilt}'`);
-  if (filters?.maxYearBuilt) conditions.push(`yearbuilt <= '${filters.maxYearBuilt}'`);
-  if (filters?.minFloors) conditions.push(`numfloors >= '${filters.minFloors}'`);
+  if (filters?.minUnits) conditions.push(`unitsres >= ${filters.minUnits}`);
+  if (filters?.maxUnits) conditions.push(`unitsres <= ${filters.maxUnits}`);
+  if (filters?.minValue) conditions.push(`assesstot >= ${filters.minValue}`);
+  if (filters?.maxValue) conditions.push(`assesstot <= ${filters.maxValue}`);
+  if (filters?.minYearBuilt) conditions.push(`yearbuilt >= ${filters.minYearBuilt}`);
+  if (filters?.maxYearBuilt) conditions.push(`yearbuilt <= ${filters.maxYearBuilt}`);
+  if (filters?.minFloors) conditions.push(`numfloors >= ${filters.minFloors}`);
   if (filters?.bldgClass) conditions.push(`bldgclass like '${filters.bldgClass}%'`);
   if (filters?.zoneDist) conditions.push(`zonedist1 like '${filters.zoneDist}%'`);
 
@@ -166,10 +168,10 @@ export async function fetchNewDevelopmentsInBounds(
   try {
     const url = new URL(NYC + "/" + DOB_JOBS + ".json");
     url.searchParams.set("$where", [
-      `latitude > '${swLat}'`,
-      `latitude < '${neLat}'`,
-      `longitude > '${swLng}'`,
-      `longitude < '${neLng}'`,
+      `latitude > ${swLat}`,
+      `latitude < ${neLat}`,
+      `longitude > ${swLng}`,
+      `longitude < ${neLng}`,
       `job_type in('NB','A1')`,
       `existing_dwelling_units IS NOT NULL`,
     ].join(" AND "));
