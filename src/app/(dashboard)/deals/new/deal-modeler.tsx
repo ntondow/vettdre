@@ -204,6 +204,28 @@ export default function DealModeler() {
         setPrefillLoading(false);
       }).catch(() => setPrefillLoading(false));
     }
+
+    // NYS prefill from sessionStorage (set by NYS building profile)
+    const nysSource = searchParams.get("source");
+    if (nysSource === "nys") {
+      try {
+        const raw = sessionStorage.getItem("vettdre-nys-prefill");
+        if (raw) {
+          const p = JSON.parse(raw);
+          sessionStorage.removeItem("vettdre-nys-prefill");
+          if (p.address) { setAddress(p.address); setDealName(p.address); }
+          if (p.county) setBorough(`${p.municipality || ""}, ${p.county} County`);
+          setInputs(prev => ({
+            ...prev,
+            purchasePrice: p.lastSalePrice > 100000 ? p.lastSalePrice : (p.fullMarketValue > 0 ? p.fullMarketValue : prev.purchasePrice),
+            realEstateTaxes: p.annualTaxes > 0 ? p.annualTaxes : prev.realEstateTaxes,
+            insurance: p.unitsRes > 0 ? p.unitsRes * 1200 : prev.insurance,
+            unitMix: p.suggestedUnitMix?.length > 0 ? p.suggestedUnitMix : prev.unitMix,
+          }));
+        }
+      } catch {}
+    }
+
     setPrefilled(true);
   }, [searchParams, prefilled]);
 

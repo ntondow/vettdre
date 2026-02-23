@@ -44,7 +44,7 @@ export interface BuildingData {
 }
 
 // ============================================================
-// Rent estimates by borough + unit type (monthly)
+// Rent estimates by borough + unit type (monthly) — NYC
 // ============================================================
 const MARKET_RENTS: Record<string, Record<string, number>> = {
   Manhattan: { Studio: 2800, "1BR": 3500, "2BR": 4800, "3BR": 6500 },
@@ -53,6 +53,27 @@ const MARKET_RENTS: Record<string, Record<string, number>> = {
   Bronx: { Studio: 1400, "1BR": 1700, "2BR": 2100, "3BR": 2500 },
   "Staten Island": { Studio: 1300, "1BR": 1600, "2BR": 2000, "3BR": 2400 },
 };
+
+// ============================================================
+// Rent estimates by county — NYS (outside NYC)
+// ============================================================
+const NYS_MARKET_RENTS: Record<string, Record<string, number>> = {
+  Westchester: { Studio: 1800, "1BR": 2200, "2BR": 2800, "3BR": 3500 },
+  Nassau: { Studio: 1700, "1BR": 2100, "2BR": 2700, "3BR": 3300 },
+  Suffolk: { Studio: 1500, "1BR": 1900, "2BR": 2400, "3BR": 3000 },
+  Rockland: { Studio: 1400, "1BR": 1800, "2BR": 2300, "3BR": 2800 },
+  Orange: { Studio: 1200, "1BR": 1500, "2BR": 1900, "3BR": 2300 },
+  Dutchess: { Studio: 1100, "1BR": 1400, "2BR": 1800, "3BR": 2200 },
+  Albany: { Studio: 900, "1BR": 1100, "2BR": 1400, "3BR": 1700 },
+  Erie: { Studio: 700, "1BR": 900, "2BR": 1200, "3BR": 1500 },
+  Monroe: { Studio: 800, "1BR": 1000, "2BR": 1300, "3BR": 1600 },
+  Onondaga: { Studio: 700, "1BR": 900, "2BR": 1200, "3BR": 1500 },
+  _default: { Studio: 800, "1BR": 1000, "2BR": 1300, "3BR": 1600 },
+};
+
+export function getNYSMarketRents(county: string): Record<string, number> {
+  return NYS_MARKET_RENTS[county] || NYS_MARKET_RENTS._default;
+}
 
 // ============================================================
 // Generate full deal assumptions from building data
@@ -291,4 +312,214 @@ function estimateUnitMix(totalUnits: number, rents: Record<string, number>, mult
   }
 
   return mix;
+}
+
+// ============================================================
+// NYS Building Data (assessment rolls, no PLUTO/HPD/DOB)
+// ============================================================
+export interface NYSBuildingData {
+  address: string;
+  municipality: string;
+  county: string;
+  swisCode: string;
+  printKey: string;
+  ownerName: string;
+  unitsRes: number;
+  yearBuilt: number;
+  numFloors: number;
+  bldgArea: number;
+  fullMarketValue: number;
+  totalAssessedValue: number;
+  landValue: number;
+  lastSalePrice: number;
+  lastSaleDate: string;
+  annualTaxes: number;
+  propertyClass: string;
+}
+
+// ============================================================
+// Generate Deal Assumptions for NYS Properties
+// No rent stabilization, no HPD violations — simpler model
+// ============================================================
+export function generateNYSDealAssumptions(building: NYSBuildingData): DealInputs {
+  const units = building.unitsRes || 1;
+  const county = building.county || "Westchester";
+  const rents = NYS_MARKET_RENTS[county] || NYS_MARKET_RENTS._default;
+  const assumptions: Record<string, boolean> = {};
+
+  // -- OFFER PRICE --
+  let purchasePrice = 0;
+  if (building.lastSalePrice > 100000 && building.lastSaleDate) {
+    const saleDate = new Date(building.lastSaleDate);
+    const yearsAgo = Math.max(0, (Date.now() - saleDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (yearsAgo < 3) {
+      purchasePrice = Math.round(building.lastSalePrice * 1.15);
+    } else {
+      purchasePrice = Math.round(building.lastSalePrice * (1 + yearsAgo * 0.04));
+    }
+    assumptions.purchasePrice = true;
+  } else if (building.fullMarketValue > 0) {
+    purchasePrice = building.fullMarketValue;
+    assumptions.purchasePrice = true;
+  } else if (building.totalAssessedValue > 0) {
+    purchasePrice = Math.round(building.totalAssessedValue * 1.4);
+    assumptions.purchasePrice = true;
+  }
+  if (purchasePrice === 0) purchasePrice = 2000000;
+
+  // -- RENT ADJUSTMENTS --
+  let rentMultiplier = 1.0;
+  if (building.yearBuilt > 0 && building.yearBuilt < 1950) rentMultiplier *= 0.90;
+  if (building.yearBuilt >= 2000) rentMultiplier *= 1.10;
+  // No rent stabilization outside NYC
+
+  // -- UNIT MIX --
+  const unitMix = estimateUnitMix(units, rents, rentMultiplier);
+  assumptions.unitMix = true;
+
+  // -- VACANCY --
+  const residentialVacancyRate = 5;
+  assumptions.residentialVacancyRate = true;
+
+  // -- EXPENSES (NYS generally lower per-unit than NYC) --
+  const realEstateTaxes = building.annualTaxes > 0 ? building.annualTaxes : Math.round(building.fullMarketValue * 0.025);
+  if (building.annualTaxes <= 0) assumptions.realEstateTaxes = true;
+
+  const insurance = Math.round(1200 * units);
+  assumptions.insurance = true;
+  const licenseFees = Math.round(300 * units);
+  assumptions.licenseFees = true;
+  const fireMeter = Math.round(150 * units);
+  assumptions.fireMeter = true;
+  const electricityGas = Math.round(500 * units);
+  assumptions.electricityGas = true;
+  const waterSewer = Math.round(600 * units);
+  assumptions.waterSewer = true;
+  const payroll = Math.round(900 * units);
+  assumptions.payroll = true;
+  const rmGeneral = Math.round(1500 * units);
+  assumptions.rmGeneral = true;
+  const rmCapexReserve = Math.round(300 * units);
+  assumptions.rmCapexReserve = true;
+  const exterminating = Math.round(100 * units);
+  assumptions.exterminating = true;
+  const landscaping = Math.min(Math.round(800 * units), 20000);
+  assumptions.landscaping = true;
+  const elevator = building.numFloors > 3 ? 8000 : 0;
+  assumptions.elevator = true;
+  const cleaning = Math.round(400 * units);
+  assumptions.cleaning = true;
+  const trashRemoval = Math.round(700 * units);
+  assumptions.trashRemoval = true;
+
+  const accounting = 3500;
+  assumptions.accounting = true;
+  const legal = 1500;
+  assumptions.legal = true;
+  const marketing = 10000;
+  assumptions.marketing = true;
+  const generalAdmin = 2500;
+  assumptions.generalAdmin = true;
+  const snowRemoval = 8000;
+  assumptions.snowRemoval = true;
+  const alarmMonitoring = 3500;
+  assumptions.alarmMonitoring = true;
+  const telephoneInternet = 6000;
+  assumptions.telephoneInternet = true;
+
+  const closingCosts = 100000;
+  assumptions.closingCosts = true;
+
+  assumptions.exitCapRate = true;
+  assumptions.sellingCostPercent = true;
+  assumptions.holdPeriodYears = true;
+  assumptions.annualRentGrowth = true;
+  assumptions.annualExpenseGrowth = true;
+  assumptions.ltvPercent = true;
+  assumptions.interestRate = true;
+  assumptions.managementFeePercent = true;
+  assumptions.originationFeePercent = true;
+  assumptions.commercialVacancyRate = true;
+  assumptions.concessions = true;
+  assumptions.commercialRentAnnual = true;
+
+  const inputs: DealInputs = {
+    purchasePrice,
+    closingCosts,
+    renovationBudget: 0,
+
+    ltvPercent: 65,
+    interestRate: 7.0,
+    amortizationYears: 30,
+    loanTermYears: 30,
+    interestOnly: false,
+    originationFeePercent: 1,
+
+    unitMix,
+    residentialVacancyRate,
+    concessions: 0,
+
+    commercialRentAnnual: 0,
+    commercialVacancyRate: 10,
+    commercialConcessions: 0,
+
+    lateFees: 0,
+    parkingIncome: 0,
+    storageIncome: 0,
+    petDeposits: 0,
+    petRent: 0,
+    evCharging: 0,
+    trashRubs: 0,
+    waterRubs: 0,
+    otherMiscIncome: 0,
+
+    annualRentGrowth: 3,
+    annualExpenseGrowth: 2,
+
+    realEstateTaxes,
+    insurance,
+    licenseFees,
+    fireMeter,
+    electricityGas,
+    waterSewer,
+    managementFeePercent: 4,
+    payroll,
+    accounting,
+    legal,
+    marketing,
+    rmGeneral,
+    rmCapexReserve,
+    generalAdmin,
+    exterminating,
+    landscaping,
+    snowRemoval,
+    elevator,
+    alarmMonitoring,
+    telephoneInternet,
+    cleaning,
+    trashRemoval,
+    otherContractServices: 0,
+
+    holdPeriodYears: 5,
+    exitCapRate: 0,
+    sellingCostPercent: 5,
+
+    _assumptions: assumptions,
+  };
+
+  // Calculate exit cap
+  const gpr = unitMix.reduce((s, u) => s + u.count * u.monthlyRent * 12, 0);
+  const vacLoss = gpr * (residentialVacancyRate / 100);
+  const totalIncome = gpr - vacLoss;
+  const mgmtFee = totalIncome * 0.04;
+  const totalExp = realEstateTaxes + insurance + licenseFees + fireMeter +
+    electricityGas + waterSewer + mgmtFee + payroll + accounting + legal +
+    marketing + rmGeneral + rmCapexReserve + generalAdmin + exterminating +
+    landscaping + snowRemoval + elevator + alarmMonitoring + telephoneInternet +
+    cleaning + trashRemoval;
+  const estNoi = totalIncome - totalExp;
+  const goingInCap = purchasePrice > 0 ? (estNoi / purchasePrice) * 100 : 6.0;
+  inputs.exitCapRate = Math.max(3, Math.round((goingInCap - 0.25) * 100) / 100);
+
+  return inputs;
 }
