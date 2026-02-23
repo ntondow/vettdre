@@ -2,8 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps, checkRPIENonCompliance, fetchLL84Data, calculateLL97Risk, estimateLL84Utilities } from "./building-profile-actions";
+import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps } from "./building-profile-actions";
 import type { RPIERecord, LL84Data, LL97Risk, LL84UtilityEstimate } from "./building-profile-actions";
+import { fetchBuildingIntelligence, findOwnerPortfolio } from "@/lib/data-fusion-engine";
+import type { BuildingIntelligence } from "@/lib/data-fusion-engine";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
@@ -56,11 +58,14 @@ function Section({ id, title, icon, badge, className, collapsed, onToggle, child
 export default function BuildingProfile({ boroCode, block, lot, address, borough, ownerName, onClose, onNameClick, connectedVia }: Props) {
   const router = useRouter();
   const [data, setData] = useState<any>(null);
+  const [intel, setIntel] = useState<BuildingIntelligence | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [relatedProperties, setRelatedProperties] = useState<any[]>([]);
   const [loadingRelated, setLoadingRelated] = useState(false);
   const [relatedDone, setRelatedDone] = useState(false);
+  const [ownerPortfolio, setOwnerPortfolio] = useState<{ bbl: string; address: string; units: number; borough: string; assessedValue: number }[]>([]);
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   const [skipTraceResult, setSkipTraceResult] = useState<any>(null);
   const [skipTracing, setSkipTracing] = useState(false);
   const [addingToCRM, setAddingToCRM] = useState(false);
@@ -74,7 +79,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [compRadius, setCompRadius] = useState(2);
   const [compYears, setCompYears] = useState(5);
   const [compMinUnits, setCompMinUnits] = useState(5);
-  // RPIE + LL84 state
+  // RPIE + LL84 state (populated from BuildingIntelligence)
   const [rpieRecords, setRpieRecords] = useState<RPIERecord[]>([]);
   const [ll84Data, setLl84Data] = useState<LL84Data | null>(null);
   const [ll97Risk, setLl97Risk] = useState<LL97Risk | null>(null);
@@ -95,15 +100,103 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
   const isCollapsed = (key: string) => !!collapsed[key];
 
-  // Fetch main profile data
+  // ============================================================
+  // UNIFIED DATA FETCH — Data Fusion Engine
+  // Queries ALL sources in parallel, resolves entities, scores
+  // ============================================================
   useEffect(() => {
     setLoading(true);
     setFetchError(null);
-    fetchBuildingProfile(boroCode, block, lot)
-      .then(setData)
-      .catch(err => {
-        console.error(err);
-        setFetchError("Failed to load building profile. The NYC data APIs may be slow or unavailable.");
+    const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+
+    // Run both the fusion engine AND the legacy profile fetch in parallel
+    // Fusion engine provides the unified intelligence layer
+    // Legacy fetch provides the raw data the UI still directly references
+    Promise.all([
+      fetchBuildingIntelligence(bbl).catch(err => { console.error("Fusion engine error:", err); return null; }),
+      fetchBuildingProfile(boroCode, block, lot).catch(err => { console.error("Legacy profile error:", err); return null; }),
+    ])
+      .then(([intelResult, legacyData]) => {
+        if (intelResult) {
+          setIntel(intelResult);
+          // Populate RPIE/LL84 from fusion engine (already fetched in parallel)
+          if (intelResult.compliance.rpieStatus === "non_compliant") {
+            setRpieRecords(intelResult.compliance.rpieYearsMissed.map(y => ({
+              bbl: intelResult.bbl, borough: "", address: "", block: "", lot: "",
+              ownerName: "", neighborhood: "", buildingClass: "", assessedValue: 0,
+              filingYear: y, units: 0,
+            })));
+          }
+          if (intelResult.energy) {
+            const e = intelResult.energy;
+            setLl84Data({
+              bbl: intelResult.bbl, propertyName: "", address: intelResult.address.raw,
+              primaryUse: "", grossFloorArea: intelResult.property.grossSqft?.value || 0,
+              yearBuilt: intelResult.property.yearBuilt?.value || 0,
+              energyStarScore: e.energyStarScore, energyStarGrade: e.energyStarGrade,
+              siteEui: e.siteEUI, sourceEui: e.sourceEUI,
+              electricityUse: e.electricityKwh, naturalGasUse: e.gasTherms,
+              waterUse: e.waterKgal, fuelOilUse: e.fuelOilGal,
+              ghgEmissions: e.ghgEmissions, ghgIntensity: 0, reportingYear: e.reportingYear,
+            });
+            setLl84Utilities({
+              electricityCost: Math.round(e.electricityKwh * 0.20),
+              gasCost: Math.round(e.gasTherms * 1.20),
+              waterCost: Math.round(e.waterKgal * 12.00),
+              fuelOilCost: Math.round(e.fuelOilGal * 3.50),
+              totalAnnualUtility: e.estimatedUtilityCost,
+              source: "ll84_actual",
+            });
+            if (e.ll97Status !== "compliant") {
+              const ll97s = e.ll97Status as string;
+              setLl97Risk({
+                compliant2024: false,
+                compliant2030: ll97s !== "at_risk_2030" && ll97s !== "non_compliant",
+                currentEmissionsPerSqft: 0, limit2024: 0, limit2030: 0,
+                excessTons2024: 0, excessTons2030: 0,
+                penalty2024: ll97s === "non_compliant" ? e.ll97PenaltyEstimate : 0,
+                penalty2030: e.ll97PenaltyEstimate,
+                buildingType: "",
+              });
+            }
+          }
+        }
+        // Set legacy data for the existing UI sections
+        if (legacyData) {
+          setData(legacyData);
+        } else if (intelResult) {
+          // Fallback: construct minimal legacy data from fusion engine
+          setData({
+            pluto: intelResult.raw.pluto,
+            violations: intelResult.raw.violations,
+            violationSummary: intelResult.raw.violationSummary,
+            complaints: intelResult.raw.complaints,
+            complaintSummary: intelResult.raw.complaintSummary,
+            permits: intelResult.raw.permits,
+            hpdContacts: intelResult.raw.hpdContacts,
+            registrations: intelResult.raw.registrations,
+            litigation: intelResult.raw.litigation,
+            litigationSummary: intelResult.raw.litigationSummary,
+            ecbViolations: intelResult.raw.ecbViolations,
+            ecbSummary: intelResult.raw.ecbSummary,
+            rentStabilized: intelResult.raw.rentStabilized,
+            speculation: intelResult.raw.speculation,
+            dobFilings: intelResult.raw.dobFilings,
+            phoneRankings: intelResult.raw.phoneRankings,
+            neighborhoodData: intelResult.raw.neighborhoodData,
+            pdlEnrichment: intelResult.raw.pdlEnrichment,
+            apolloEnrichment: intelResult.raw.apolloEnrichment,
+            apolloOrgEnrichment: intelResult.raw.apolloOrgEnrichment,
+            apolloKeyPeople: intelResult.raw.apolloKeyPeople,
+            leadVerification: intelResult.raw.leadVerification,
+            rankedContacts: intelResult.raw.rankedContacts,
+            ownerContacts: intelResult.raw.ownerContacts,
+            distressScore: intelResult.distressSignals.score,
+            distressSignals: intelResult.distressSignals.signals.map(s => s.description),
+          });
+        } else {
+          setFetchError("Failed to load building profile. The NYC data APIs may be slow or unavailable.");
+        }
       })
       .finally(() => setLoading(false));
   }, [boroCode, block, lot]);
@@ -119,7 +212,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .finally(() => { setLoadingRelated(false); setRelatedDone(true); });
   }, [boroCode, block, lot, ownerName]);
 
-  // When data loads, refetch with full owner names if HPD reveals additional names
+  // When data loads, refetch related properties with expanded HPD names
   useEffect(() => {
     if (!data?.pluto) return;
     const allNames: string[] = [];
@@ -131,7 +224,6 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     });
     const unique = [...new Set(allNames.filter(n => n.length > 3))];
     if (unique.length === 0) { setRelatedDone(true); return; }
-    // Skip if we already fetched with ownerName prop and no new names were discovered
     if (ownerName && ownerName.length > 3 && !unique.some(n => n.toUpperCase() !== ownerName.toUpperCase())) return;
     setLoadingRelated(true);
     const currentBBL = data.pluto.boroCode + (data.pluto.block || "").padStart(5, "0") + (data.pluto.lot || "").padStart(4, "0");
@@ -140,6 +232,16 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .catch(err => console.error("Related properties error:", err))
       .finally(() => { setLoadingRelated(false); setRelatedDone(true); });
   }, [data]);
+
+  // Load owner portfolio via fusion engine
+  useEffect(() => {
+    if (!intel || !intel.ownership.likelyOwner.entityName) return;
+    setPortfolioLoading(true);
+    findOwnerPortfolio(intel.ownership.likelyOwner.entityName, intel.bbl)
+      .then(setOwnerPortfolio)
+      .catch(() => {})
+      .finally(() => setPortfolioLoading(false));
+  }, [intel]);
 
   // Auto-load comps when building data is available
   useEffect(() => {
@@ -153,31 +255,6 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .catch(err => console.error("Comps error:", err))
       .finally(() => setCompsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
-
-  // Load RPIE + LL84 data when building data is available
-  useEffect(() => {
-    if (!data?.pluto) return;
-    const bbl = data.pluto.boroCode + (data.pluto.block || "").padStart(5, "0") + (data.pluto.lot || "").padStart(4, "0");
-    // RPIE check
-    checkRPIENonCompliance(data.pluto.boroCode, data.pluto.block, data.pluto.lot)
-      .then(records => setRpieRecords(records))
-      .catch(() => {});
-    // LL84 energy data
-    fetchLL84Data(bbl)
-      .then(async (ll84) => {
-        if (!ll84) return;
-        setLl84Data(ll84);
-        const utils = await estimateLL84Utilities(ll84);
-        setLl84Utilities(utils);
-        if (ll84.ghgEmissions > 0 && (ll84.grossFloorArea > 0 || data.pluto.bldgArea > 0)) {
-          const area = ll84.grossFloorArea || data.pluto.bldgArea;
-          const primaryUse = ll84.primaryUse || (data.pluto.unitsRes > 0 ? "Multifamily Housing" : "Office");
-          const risk = await calculateLL97Risk(ll84.ghgEmissions, area, primaryUse);
-          setLl97Risk(risk);
-        }
-      })
-      .catch(() => {});
   }, [data]);
 
   const refreshComps = () => {
@@ -232,10 +309,15 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
             onClick={() => {
               setFetchError(null);
               setLoading(true);
-              fetchBuildingProfile(boroCode, block, lot)
-                .then(setData)
-                .catch(err => { console.error(err); setFetchError("Failed to load building profile. The NYC data APIs may be slow or unavailable."); })
-                .finally(() => setLoading(false));
+              const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+              Promise.all([
+                fetchBuildingIntelligence(bbl).catch(() => null),
+                fetchBuildingProfile(boroCode, block, lot).catch(() => null),
+              ]).then(([intelResult, legacyData]) => {
+                if (intelResult) setIntel(intelResult);
+                if (legacyData) setData(legacyData);
+                else if (!intelResult) setFetchError("Failed to load building profile. The NYC data APIs may be slow or unavailable.");
+              }).finally(() => setLoading(false));
             }}
             className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
           >
@@ -359,6 +441,153 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </div>
             )}
           </div>
+
+          {/* ============================================================ */}
+          {/* INTELLIGENCE SCORES — Distress + Investment + Data Sources */}
+          {/* ============================================================ */}
+          {intel && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <h3 className="text-sm font-bold text-slate-900">Intelligence Scores</h3>
+                <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium">
+                  {intel.dataSources.length} data sources
+                </span>
+                <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">
+                  Confidence: {intel.overallConfidence}%
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {/* Distress Score */}
+                <div className={`rounded-lg p-3 border ${
+                  intel.distressSignals.score >= 61 ? "bg-red-50 border-red-200" :
+                  intel.distressSignals.score >= 41 ? "bg-orange-50 border-orange-200" :
+                  intel.distressSignals.score >= 21 ? "bg-amber-50 border-amber-200" :
+                  "bg-emerald-50 border-emerald-200"
+                }`}>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-1">Distress Score</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl font-black ${
+                      intel.distressSignals.score >= 61 ? "text-red-700" :
+                      intel.distressSignals.score >= 41 ? "text-orange-700" :
+                      intel.distressSignals.score >= 21 ? "text-amber-700" :
+                      "text-emerald-700"
+                    }`}>{intel.distressSignals.score}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      intel.distressSignals.score >= 81 ? "bg-red-200 text-red-800" :
+                      intel.distressSignals.score >= 61 ? "bg-red-100 text-red-700" :
+                      intel.distressSignals.score >= 41 ? "bg-orange-100 text-orange-700" :
+                      intel.distressSignals.score >= 21 ? "bg-amber-100 text-amber-700" :
+                      "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      {intel.distressSignals.score >= 81 ? "Very High" :
+                       intel.distressSignals.score >= 61 ? "High" :
+                       intel.distressSignals.score >= 41 ? "Elevated" :
+                       intel.distressSignals.score >= 21 ? "Moderate" : "Low"}
+                    </span>
+                  </div>
+                  {intel.distressSignals.signals.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {intel.distressSignals.signals.slice(0, 3).map((s, i) => (
+                        <p key={i} className="text-[11px] text-slate-600 flex items-start gap-1">
+                          <span className={s.severity === "high" ? "text-red-500" : s.severity === "medium" ? "text-amber-500" : "text-slate-400"}>&#x25CF;</span>
+                          {s.description}
+                        </p>
+                      ))}
+                      {intel.distressSignals.signals.length > 3 && (
+                        <p className="text-[10px] text-slate-400">+{intel.distressSignals.signals.length - 3} more signals</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Investment Score */}
+                <div className={`rounded-lg p-3 border ${
+                  intel.investmentSignals.score >= 60 ? "bg-blue-50 border-blue-200" :
+                  intel.investmentSignals.score >= 30 ? "bg-slate-50 border-slate-200" :
+                  "bg-slate-50 border-slate-200"
+                }`}>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 mb-1">Investment Score</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-2xl font-black ${
+                      intel.investmentSignals.score >= 60 ? "text-blue-700" :
+                      intel.investmentSignals.score >= 30 ? "text-blue-500" :
+                      "text-slate-400"
+                    }`}>{intel.investmentSignals.score}</span>
+                    <div className="flex gap-0.5">
+                      {[1,2,3,4,5].map(star => (
+                        <span key={star} className={`text-sm ${intel.investmentSignals.score >= star * 20 ? "text-amber-400" : "text-slate-200"}`}>&#x2605;</span>
+                      ))}
+                    </div>
+                  </div>
+                  {intel.investmentSignals.signals.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {intel.investmentSignals.signals.slice(0, 3).map((s, i) => (
+                        <p key={i} className="text-[11px] text-slate-600 flex items-start gap-1">
+                          <span className="text-blue-400">&#x25CF;</span>
+                          {s.description}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Resolved Ownership */}
+              {intel.ownership.likelyOwner.entityName && (
+                <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">Resolved Owner</p>
+                  <p className="text-sm font-bold text-slate-900">{intel.ownership.likelyOwner.entityName}</p>
+                  {intel.ownership.likelyOwner.likelyPerson && intel.ownership.likelyOwner.likelyPerson !== intel.ownership.likelyOwner.entityName && (
+                    <p className="text-xs text-slate-600 mt-0.5">Likely individual: {intel.ownership.likelyOwner.likelyPerson}</p>
+                  )}
+                  {intel.ownership.likelyOwner.llcName && intel.ownership.likelyOwner.llcName !== intel.ownership.likelyOwner.entityName && (
+                    <p className="text-xs text-slate-500 mt-0.5">Entity: {intel.ownership.likelyOwner.llcName}</p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] text-slate-400">Sources: {intel.ownership.sources.join(", ")}</span>
+                    <span className="text-[10px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">{intel.ownership.confidence}% confidence</span>
+                  </div>
+                  {intel.ownership.likelyOwner.alternateNames.length > 0 && (
+                    <p className="text-[10px] text-slate-400 mt-1">Also seen as: {intel.ownership.likelyOwner.alternateNames.slice(0, 3).join(", ")}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Owner Portfolio */}
+              {(ownerPortfolio.length > 0 || portfolioLoading) && (
+                <div className="mt-3 p-3 bg-slate-50 rounded-lg">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">Owner Portfolio</p>
+                  {portfolioLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent" />
+                      <span className="text-xs text-slate-500">Discovering portfolio...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs text-slate-700 font-medium mb-2">
+                        This owner has {ownerPortfolio.length + 1} properties totaling {ownerPortfolio.reduce((sum, p) => sum + p.units, 0) + (intel.property.units?.value || 0)} units
+                      </p>
+                      <div className="space-y-1.5 max-h-32 overflow-y-auto">
+                        {ownerPortfolio.slice(0, 8).map((p, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs">
+                            <span className="text-slate-700 font-medium truncate max-w-[200px]">{p.address || p.bbl}</span>
+                            <div className="flex items-center gap-2 text-slate-500">
+                              <span>{p.units} units</span>
+                              <span className="text-slate-300">|</span>
+                              <span>{p.borough}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {ownerPortfolio.length > 8 && (
+                          <p className="text-[10px] text-slate-400">+{ownerPortfolio.length - 8} more properties</p>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ============================================================ */}
           {/* 1. PROPERTY OVERVIEW */}
@@ -1970,6 +2199,45 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </div>
             ) : <p className="text-sm text-slate-400">No complaints found.</p>}
           </Section>
+
+          {/* ============================================================ */}
+          {/* DATA QUALITY DASHBOARD */}
+          {/* ============================================================ */}
+          {intel && (
+            <div className="bg-slate-50 rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm">📊</span>
+                <h4 className="text-xs font-bold text-slate-700">Data Quality Dashboard</h4>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                {intel.dataSources.map((source, i) => (
+                  <span key={i} className="text-[10px] bg-white border border-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
+                    {source}
+                    {intel.dataFreshness[source] && (
+                      <span className="text-slate-400 ml-1">{intel.dataFreshness[source]}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <div className="flex items-center gap-4 text-[10px] text-slate-400">
+                <span>Aggregated from {intel.dataSources.length} sources</span>
+                <span>Overall confidence: {intel.overallConfidence}%</span>
+                <span>Updated: {new Date(intel.lastUpdated).toLocaleTimeString()}</span>
+              </div>
+              {/* Missing data indicators */}
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {!intel.energy && (intel.property.grossSqft?.value || 0) < 50000 && (
+                  <span className="text-[10px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">No LL84 data (building &lt; 50K sqft)</span>
+                )}
+                {!intel.energy && (intel.property.grossSqft?.value || 0) >= 50000 && (
+                  <span className="text-[10px] bg-amber-50 text-amber-500 px-2 py-0.5 rounded-full">Missing LL84 data (should be reporting)</span>
+                )}
+                {intel.compliance.rpieStatus === "unknown" && (
+                  <span className="text-[10px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">No RPIE data</span>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
