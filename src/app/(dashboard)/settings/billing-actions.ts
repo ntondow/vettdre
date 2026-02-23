@@ -25,6 +25,7 @@ export async function getBillingData() {
     plan,
     trialEndsAt: user.trialEndsAt?.toISOString() ?? null,
     stripeCustomerId: user.stripeCustomerId,
+    stripeSubscriptionId: user.stripeSubscriptionId,
     searchesToday,
     searchLimit: plan === "free" ? FREE_DAILY_SEARCH_LIMIT : Infinity,
   };
