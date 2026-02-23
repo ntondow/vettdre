@@ -49,6 +49,7 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
   const newDevMarkersRef = useRef<any>(null);
   const fetchTimeoutRef = useRef<any>(null);
   const searchHighlightRef = useRef<any>(null);
+  const loadPropertiesRef = useRef<() => void>(() => {});
   const [mapBorough, setMapBorough] = useState("");
   const [mapNeighborhoods, setMapNeighborhoods] = useState<string[]>([]);
 
@@ -141,12 +142,12 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
 
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchTimeoutRef.current = setTimeout(() => {
-        loadProperties();
+        loadPropertiesRef.current();
       }, 800);
     });
 
     // Initial load
-    setTimeout(() => loadProperties(), 100);
+    setTimeout(() => loadPropertiesRef.current(), 100);
 
     return () => {
       if (leafletMapRef.current) {
@@ -154,6 +155,20 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
         leafletMapRef.current = null;
       }
     };
+  }, [leafletLoaded]);
+
+  // Detect when map container becomes visible (e.g. tab switch) — fix tiles + reload data
+  useEffect(() => {
+    if (!mapRef.current || !leafletMapRef.current) return;
+    const mapEl = mapRef.current;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && leafletMapRef.current) {
+        leafletMapRef.current.invalidateSize();
+        loadPropertiesRef.current();
+      }
+    }, { threshold: 0.1 });
+    observer.observe(mapEl);
+    return () => observer.disconnect();
   }, [leafletLoaded]);
 
   const addSearchHighlight = (lat: number, lng: number, address: string) => {
@@ -368,6 +383,9 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
     }
     setLoading(false);
   }, [filters]);
+
+  // Keep ref pointing to latest loadProperties (avoids stale closures in event handlers)
+  loadPropertiesRef.current = loadProperties;
 
   // Reload when filters change
   useEffect(() => {
