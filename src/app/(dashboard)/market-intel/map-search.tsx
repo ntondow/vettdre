@@ -586,6 +586,13 @@ export default function MapSearch({ onNameClick }: { onNameClick?: (name: string
     setMobileDrawer(prev => prev === 'peek' ? 'half' : 'peek');
   };
 
+  // Auto-expand drawer when a property is selected (e.g. tapping a map marker)
+  useEffect(() => {
+    if (selectedProperty && mobileDrawer === 'peek') {
+      setMobileDrawer('half');
+    }
+  }, [selectedProperty]);
+
   return (
     <div className="flex h-[calc(100vh-200px)] md:min-h-[600px] min-h-[400px] rounded-xl overflow-hidden border border-slate-200 bg-white relative">
       {/* Left Panel: List + Filters (desktop only) */}
