@@ -1224,3 +1224,331 @@ export async function fetchBuildingComps(params: {
   const { searchComps } = await import("@/lib/comps-engine");
   return searchComps(params);
 }
+
+// ============================================================
+// RPIE Non-Compliance Check
+// Dataset: wvts-6tdf (DOF RPIE Non-Compliance List)
+// ============================================================
+const RPIE = "wvts-6tdf";
+
+export interface RPIERecord {
+  bbl: string;
+  borough: string;
+  address: string;
+  block: string;
+  lot: string;
+  ownerName: string;
+  neighborhood: string;
+  buildingClass: string;
+  assessedValue: number;
+  filingYear: string;
+  units: number;
+}
+
+export async function checkRPIENonCompliance(boro: string, block: string, lot: string): Promise<RPIERecord[]> {
+  try {
+    const blockPad = block.padStart(5, "0");
+    const lotPad = lot.padStart(4, "0");
+    const bbl = boro + blockPad + lotPad;
+    const url = new URL(NYC + "/" + RPIE + ".json");
+    url.searchParams.set("$where", `bbl='${bbl}'`);
+    url.searchParams.set("$limit", "10");
+    const res = await fetchWithTimeout(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+    return data.map((d: any) => ({
+      bbl: d.bbl || bbl,
+      borough: d.borough_name || d.borough || "",
+      address: d.address || d.street_address || "",
+      block: d.block || block,
+      lot: d.lot || lot,
+      ownerName: d.owner_name || d.ownername || "",
+      neighborhood: d.neighborhood || d.neighborhood_name || "",
+      buildingClass: d.building_class || d.bldg_class || "",
+      assessedValue: parseFloat(d.assessed_value || d.assessed_total || "0"),
+      filingYear: d.fiscal_year || d.filing_year || d.year || "",
+      units: parseInt(d.units || d.total_units || "0"),
+    }));
+  } catch (err) {
+    console.error("RPIE check error:", err);
+    return [];
+  }
+}
+
+export async function searchDistressedProperties(filters: {
+  borough?: string;
+  minUnits?: number;
+  minAssessedValue?: number;
+  limit?: number;
+  offset?: number;
+}): Promise<{ properties: RPIERecord[]; total: number }> {
+  try {
+    const conditions: string[] = [];
+    if (filters.borough) {
+      const boroMap: Record<string, string> = { Manhattan: "1", Bronx: "2", Brooklyn: "3", Queens: "4", "Staten Island": "5" };
+      const boroCode = boroMap[filters.borough] || filters.borough;
+      // Filter by first digit of BBL (boro code)
+      conditions.push(`starts_with(bbl, '${boroCode}')`);
+    }
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "bbl IS NOT NULL";
+    const limit = filters.limit || 100;
+    const offset = filters.offset || 0;
+
+    const url = new URL(NYC + "/" + RPIE + ".json");
+    url.searchParams.set("$where", where);
+    url.searchParams.set("$limit", String(limit));
+    url.searchParams.set("$offset", String(offset));
+    url.searchParams.set("$order", "assessed_value DESC,assessed_total DESC");
+
+    const res = await fetchWithTimeout(url.toString(), 12000);
+    if (!res.ok) return { properties: [], total: 0 };
+    const data = await res.json();
+    if (!Array.isArray(data)) return { properties: [], total: 0 };
+
+    let properties: RPIERecord[] = data.map((d: any) => ({
+      bbl: d.bbl || "",
+      borough: d.borough_name || d.borough || "",
+      address: d.address || d.street_address || "",
+      block: d.block || "",
+      lot: d.lot || "",
+      ownerName: d.owner_name || d.ownername || "",
+      neighborhood: d.neighborhood || d.neighborhood_name || "",
+      buildingClass: d.building_class || d.bldg_class || "",
+      assessedValue: parseFloat(d.assessed_value || d.assessed_total || "0"),
+      filingYear: d.fiscal_year || d.filing_year || d.year || "",
+      units: parseInt(d.units || d.total_units || "0"),
+    }));
+
+    // Client-side filters
+    if (filters.minUnits && filters.minUnits > 0) {
+      properties = properties.filter(p => p.units >= filters.minUnits!);
+    }
+    if (filters.minAssessedValue && filters.minAssessedValue > 0) {
+      properties = properties.filter(p => p.assessedValue >= filters.minAssessedValue!);
+    }
+
+    return { properties, total: properties.length };
+  } catch (err) {
+    console.error("Distressed search error:", err);
+    return { properties: [], total: 0 };
+  }
+}
+
+// ============================================================
+// LL84 Energy Benchmarking Data
+// Dataset: 5zyy-y8am (LL84 Energy & Water Performance)
+// ============================================================
+const LL84 = "5zyy-y8am";
+
+export interface LL84Data {
+  bbl: string;
+  propertyName: string;
+  address: string;
+  primaryUse: string;
+  grossFloorArea: number;
+  yearBuilt: number;
+  energyStarScore: number;
+  energyStarGrade: string;
+  siteEui: number;         // kBtu/sqft
+  sourceEui: number;
+  electricityUse: number;  // kWh
+  naturalGasUse: number;   // therms
+  waterUse: number;        // kGal
+  fuelOilUse: number;      // gallons
+  ghgEmissions: number;    // metric tons CO2e
+  ghgIntensity: number;    // kgCO2e/sqft
+  reportingYear: number;
+}
+
+export interface LL97Risk {
+  compliant2024: boolean;
+  compliant2030: boolean;
+  currentEmissionsPerSqft: number;
+  limit2024: number;
+  limit2030: number;
+  excessTons2024: number;
+  excessTons2030: number;
+  penalty2024: number;
+  penalty2030: number;
+  buildingType: string;
+}
+
+export interface LL84UtilityEstimate {
+  electricityCost: number;
+  gasCost: number;
+  waterCost: number;
+  fuelOilCost: number;
+  totalAnnualUtility: number;
+  source: "ll84_actual";
+}
+
+// Utility rates (NYC averages)
+const UTILITY_RATES = {
+  electricity: 0.20,  // $/kWh
+  gas: 1.20,          // $/therm
+  water: 12.00,       // $/kGal
+  fuelOil: 3.50,      // $/gal
+};
+
+// LL97 emission limits (metric tons CO2e per sqft)
+const LL97_LIMITS: Record<string, { limit2024: number; limit2030: number }> = {
+  multifamily: { limit2024: 0.00675, limit2030: 0.00407 },
+  office: { limit2024: 0.00846, limit2030: 0.00453 },
+  retail: { limit2024: 0.01074, limit2030: 0.00453 },
+  hotel: { limit2024: 0.00987, limit2030: 0.00526 },
+  _default: { limit2024: 0.00846, limit2030: 0.00453 },
+};
+
+const LL97_PENALTY_PER_TON = 268;
+
+export async function fetchLL84Data(bbl: string): Promise<LL84Data | null> {
+  try {
+    const bbl10 = bbl.replace(/\D/g, "").padEnd(10, "0").slice(0, 10);
+    const url = new URL(NYC + "/" + LL84 + ".json");
+    url.searchParams.set("$where", `bbl_10_digits='${bbl10}'`);
+    url.searchParams.set("$order", "year_ending DESC");
+    url.searchParams.set("$limit", "1");
+    const res = await fetchWithTimeout(url.toString());
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+
+    const d = data[0];
+    return {
+      bbl: bbl10,
+      propertyName: d.property_name || d.largest_property_use_type || "",
+      address: d.address_1_self_reported || d.street_address || "",
+      primaryUse: d.largest_property_use_type || d.primary_property_type_self_selected || "",
+      grossFloorArea: parseFloat(d.property_gfa_self_reported || d.largest_property_use_type_gross_floor_area || "0"),
+      yearBuilt: parseInt(d.year_built || "0"),
+      energyStarScore: parseInt(d.energy_star_score || "0"),
+      energyStarGrade: d.energy_star_certification || d.letter_grade || "",
+      siteEui: parseFloat(d.site_eui_kbtu_ft || d.weather_normalized_site_eui_kbtu_ft || "0"),
+      sourceEui: parseFloat(d.source_eui_kbtu_ft || d.weather_normalized_source_eui_kbtu_ft || "0"),
+      electricityUse: parseFloat(d.electricity_use_grid_purchase_kwh || "0"),
+      naturalGasUse: parseFloat(d.natural_gas_use_therms || "0"),
+      waterUse: parseFloat(d.water_use_all_water_sources_kgal || d.water_use_kgal || "0"),
+      fuelOilUse: parseFloat(d.fuel_oil_2_use_gallons || d.fuel_oil_4_use_gallons || "0"),
+      ghgEmissions: parseFloat(d.total_ghg_emissions_metric_tons_co2e || d.direct_ghg_emissions_metric_tons_co2e || "0"),
+      ghgIntensity: parseFloat(d.ghg_intensity_kgco2e_ft || "0"),
+      reportingYear: parseInt(d.year_ending || "0"),
+    };
+  } catch (err) {
+    console.error("LL84 fetch error:", err);
+    return null;
+  }
+}
+
+export async function calculateLL97Risk(ghgEmissions: number, buildingArea: number, buildingType: string): Promise<LL97Risk> {
+  const type = buildingType.toLowerCase().includes("multifamily") || buildingType.toLowerCase().includes("residential")
+    ? "multifamily"
+    : buildingType.toLowerCase().includes("office") ? "office"
+    : buildingType.toLowerCase().includes("retail") ? "retail"
+    : buildingType.toLowerCase().includes("hotel") ? "hotel"
+    : "_default";
+
+  const limits = LL97_LIMITS[type] || LL97_LIMITS._default;
+  const currentPerSqft = buildingArea > 0 ? ghgEmissions / buildingArea : 0;
+
+  const excess2024 = Math.max(0, ghgEmissions - (limits.limit2024 * buildingArea));
+  const excess2030 = Math.max(0, ghgEmissions - (limits.limit2030 * buildingArea));
+
+  return {
+    compliant2024: excess2024 === 0,
+    compliant2030: excess2030 === 0,
+    currentEmissionsPerSqft: currentPerSqft,
+    limit2024: limits.limit2024,
+    limit2030: limits.limit2030,
+    excessTons2024: excess2024,
+    excessTons2030: excess2030,
+    penalty2024: Math.round(excess2024 * LL97_PENALTY_PER_TON),
+    penalty2030: Math.round(excess2030 * LL97_PENALTY_PER_TON),
+    buildingType: type,
+  };
+}
+
+export async function estimateLL84Utilities(ll84: LL84Data): Promise<LL84UtilityEstimate> {
+  const electricityCost = Math.round(ll84.electricityUse * UTILITY_RATES.electricity);
+  const gasCost = Math.round(ll84.naturalGasUse * UTILITY_RATES.gas);
+  const waterCost = Math.round(ll84.waterUse * UTILITY_RATES.water);
+  const fuelOilCost = Math.round(ll84.fuelOilUse * UTILITY_RATES.fuelOil);
+  return {
+    electricityCost,
+    gasCost,
+    waterCost,
+    fuelOilCost,
+    totalAnnualUtility: electricityCost + gasCost + waterCost + fuelOilCost,
+    source: "ll84_actual",
+  };
+}
+
+export async function searchByEnergyGrade(filters: {
+  grade?: string;
+  poorOnly?: boolean;
+  ll97NonCompliant?: boolean;
+  borough?: string;
+  minScore?: number;
+  maxScore?: number;
+  limit?: number;
+}): Promise<LL84Data[]> {
+  try {
+    const conditions: string[] = [];
+
+    if (filters.grade) {
+      conditions.push(`letter_grade='${filters.grade}'`);
+    }
+    if (filters.poorOnly) {
+      conditions.push("(letter_grade='D' OR letter_grade='F')");
+    }
+    if (filters.minScore) {
+      conditions.push(`energy_star_score >= '${filters.minScore}'`);
+    }
+    if (filters.maxScore) {
+      conditions.push(`energy_star_score <= '${filters.maxScore}'`);
+    }
+    if (filters.borough) {
+      const boroMap: Record<string, string> = { Manhattan: "1", Bronx: "2", Brooklyn: "3", Queens: "4", "Staten Island": "5" };
+      const code = boroMap[filters.borough];
+      if (code) {
+        conditions.push(`starts_with(bbl_10_digits, '${code}')`);
+      }
+    }
+
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "bbl_10_digits IS NOT NULL";
+    const limit = filters.limit || 100;
+
+    const url = new URL(NYC + "/" + LL84 + ".json");
+    url.searchParams.set("$where", where);
+    url.searchParams.set("$order", "year_ending DESC, energy_star_score ASC");
+    url.searchParams.set("$limit", String(limit));
+
+    const res = await fetchWithTimeout(url.toString(), 12000);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    return data.map((d: any) => ({
+      bbl: d.bbl_10_digits || "",
+      propertyName: d.property_name || "",
+      address: d.address_1_self_reported || d.street_address || "",
+      primaryUse: d.largest_property_use_type || d.primary_property_type_self_selected || "",
+      grossFloorArea: parseFloat(d.property_gfa_self_reported || "0"),
+      yearBuilt: parseInt(d.year_built || "0"),
+      energyStarScore: parseInt(d.energy_star_score || "0"),
+      energyStarGrade: d.energy_star_certification || d.letter_grade || "",
+      siteEui: parseFloat(d.site_eui_kbtu_ft || "0"),
+      sourceEui: parseFloat(d.source_eui_kbtu_ft || "0"),
+      electricityUse: parseFloat(d.electricity_use_grid_purchase_kwh || "0"),
+      naturalGasUse: parseFloat(d.natural_gas_use_therms || "0"),
+      waterUse: parseFloat(d.water_use_all_water_sources_kgal || "0"),
+      fuelOilUse: parseFloat(d.fuel_oil_2_use_gallons || "0"),
+      ghgEmissions: parseFloat(d.total_ghg_emissions_metric_tons_co2e || "0"),
+      ghgIntensity: parseFloat(d.ghg_intensity_kgco2e_ft || "0"),
+      reportingYear: parseInt(d.year_ending || "0"),
+    }));
+  } catch (err) {
+    console.error("LL84 search error:", err);
+    return [];
+  }
+}

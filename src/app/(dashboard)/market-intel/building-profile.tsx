@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps } from "./building-profile-actions";
+import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps, checkRPIENonCompliance, fetchLL84Data, calculateLL97Risk, estimateLL84Utilities } from "./building-profile-actions";
+import type { RPIERecord, LL84Data, LL97Risk, LL84UtilityEstimate } from "./building-profile-actions";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
@@ -73,6 +74,12 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [compRadius, setCompRadius] = useState(2);
   const [compYears, setCompYears] = useState(5);
   const [compMinUnits, setCompMinUnits] = useState(5);
+  // RPIE + LL84 state
+  const [rpieRecords, setRpieRecords] = useState<RPIERecord[]>([]);
+  const [ll84Data, setLl84Data] = useState<LL84Data | null>(null);
+  const [ll97Risk, setLl97Risk] = useState<LL97Risk | null>(null);
+  const [ll84Utilities, setLl84Utilities] = useState<LL84UtilityEstimate | null>(null);
+
   // Smart defaults: collapse lower-priority sections
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     permits: true,
@@ -82,6 +89,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     litigation: true,
     listings: true,
     comps: false,
+    energy: true,
   });
 
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -145,6 +153,31 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .catch(err => console.error("Comps error:", err))
       .finally(() => setCompsLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // Load RPIE + LL84 data when building data is available
+  useEffect(() => {
+    if (!data?.pluto) return;
+    const bbl = data.pluto.boroCode + (data.pluto.block || "").padStart(5, "0") + (data.pluto.lot || "").padStart(4, "0");
+    // RPIE check
+    checkRPIENonCompliance(data.pluto.boroCode, data.pluto.block, data.pluto.lot)
+      .then(records => setRpieRecords(records))
+      .catch(() => {});
+    // LL84 energy data
+    fetchLL84Data(bbl)
+      .then(async (ll84) => {
+        if (!ll84) return;
+        setLl84Data(ll84);
+        const utils = await estimateLL84Utilities(ll84);
+        setLl84Utilities(utils);
+        if (ll84.ghgEmissions > 0 && (ll84.grossFloorArea > 0 || data.pluto.bldgArea > 0)) {
+          const area = ll84.grossFloorArea || data.pluto.bldgArea;
+          const primaryUse = ll84.primaryUse || (data.pluto.unitsRes > 0 ? "Multifamily Housing" : "Office");
+          const risk = await calculateLL97Risk(ll84.ghgEmissions, area, primaryUse);
+          setLl97Risk(risk);
+        }
+      })
+      .catch(() => {});
   }, [data]);
 
   const refreshComps = () => {
@@ -452,6 +485,24 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                   </div>
                 </div>
 
+                {/* RPIE Non-Compliance Banner */}
+                {rpieRecords.length > 0 && (
+                  <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xl">⚠️</span>
+                      <div>
+                        <p className="text-sm font-bold text-amber-800">RPIE Non-Compliant</p>
+                        <p className="text-xs text-amber-700 mt-1">
+                          Owner has not filed required income & expense reports. Non-filers face fines up to $100K and cannot contest their tax assessment.
+                        </p>
+                        <p className="text-xs text-amber-600 mt-1">
+                          Missing year{rpieRecords.length > 1 ? "s" : ""}: {rpieRecords.map(r => r.filingYear).filter(Boolean).join(", ") || "Unknown"}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Distress Score — always visible */}
                 {data && (
                   <div className={"mt-4 rounded-lg border p-4 " + (
@@ -492,6 +543,110 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </>
             )}
           </Section>
+
+          {/* ============================================================ */}
+          {/* ENERGY & WATER (LL84) */}
+          {/* ============================================================ */}
+          {ll84Data && (
+            <Section id="energy" title="Energy & Water (LL84)" icon="⚡" collapsed={isCollapsed("energy")} onToggle={() => toggle("energy")}
+              badge={ll84Data.energyStarGrade ? (
+                <span className={`ml-2 inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-black ${
+                  ll84Data.energyStarGrade === "A" ? "bg-emerald-100 text-emerald-700" :
+                  ll84Data.energyStarGrade === "B" ? "bg-green-100 text-green-700" :
+                  ll84Data.energyStarGrade === "C" ? "bg-yellow-100 text-yellow-700" :
+                  ll84Data.energyStarGrade === "D" ? "bg-orange-100 text-orange-700" :
+                  "bg-red-100 text-red-700"
+                }`}>{ll84Data.energyStarGrade}</span>
+              ) : undefined}>
+              <div className="space-y-4">
+                {/* Grade + Score row */}
+                <div className="flex items-center gap-4">
+                  <div className={`flex items-center justify-center w-16 h-16 rounded-xl text-2xl font-black ${
+                    ll84Data.energyStarGrade === "A" ? "bg-emerald-100 text-emerald-700" :
+                    ll84Data.energyStarGrade === "B" ? "bg-green-100 text-green-700" :
+                    ll84Data.energyStarGrade === "C" ? "bg-yellow-100 text-yellow-700" :
+                    ll84Data.energyStarGrade === "D" ? "bg-orange-100 text-orange-700" :
+                    ll84Data.energyStarGrade === "F" ? "bg-red-100 text-red-700" :
+                    "bg-slate-100 text-slate-500"
+                  }`}>{ll84Data.energyStarGrade || "?"}</div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">Energy Star Score: {ll84Data.energyStarScore > 0 ? `${ll84Data.energyStarScore}/100` : "N/A"}</p>
+                    <p className="text-xs text-slate-500">Site EUI: {ll84Data.siteEui > 0 ? `${ll84Data.siteEui.toFixed(1)} kBtu/sqft` : "N/A"}</p>
+                    <p className="text-xs text-slate-400">Reporting Year: {ll84Data.reportingYear || "—"}</p>
+                  </div>
+                </div>
+
+                {/* Utility breakdown */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-lg p-2.5">
+                    <p className="text-[10px] text-slate-400 uppercase">Electricity</p>
+                    <p className="text-sm font-semibold">{ll84Data.electricityUse > 0 ? `${Math.round(ll84Data.electricityUse).toLocaleString()} kWh` : "—"}</p>
+                    {ll84Utilities && ll84Utilities.electricityCost > 0 && <p className="text-xs text-slate-500">${ll84Utilities.electricityCost.toLocaleString()}/yr</p>}
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-2.5">
+                    <p className="text-[10px] text-slate-400 uppercase">Natural Gas</p>
+                    <p className="text-sm font-semibold">{ll84Data.naturalGasUse > 0 ? `${Math.round(ll84Data.naturalGasUse).toLocaleString()} therms` : "—"}</p>
+                    {ll84Utilities && ll84Utilities.gasCost > 0 && <p className="text-xs text-slate-500">${ll84Utilities.gasCost.toLocaleString()}/yr</p>}
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-2.5">
+                    <p className="text-[10px] text-slate-400 uppercase">Water</p>
+                    <p className="text-sm font-semibold">{ll84Data.waterUse > 0 ? `${Math.round(ll84Data.waterUse).toLocaleString()} kGal` : "—"}</p>
+                    {ll84Utilities && ll84Utilities.waterCost > 0 && <p className="text-xs text-slate-500">${ll84Utilities.waterCost.toLocaleString()}/yr</p>}
+                  </div>
+                  <div className="bg-slate-50 rounded-lg p-2.5">
+                    <p className="text-[10px] text-slate-400 uppercase">Fuel Oil</p>
+                    <p className="text-sm font-semibold">{ll84Data.fuelOilUse > 0 ? `${Math.round(ll84Data.fuelOilUse).toLocaleString()} gal` : "—"}</p>
+                    {ll84Utilities && ll84Utilities.fuelOilCost > 0 && <p className="text-xs text-slate-500">${ll84Utilities.fuelOilCost.toLocaleString()}/yr</p>}
+                  </div>
+                </div>
+
+                {ll84Utilities && ll84Utilities.totalAnnualUtility > 0 && (
+                  <div className="bg-blue-50 rounded-lg p-3 text-center">
+                    <p className="text-xs text-blue-600">Estimated Annual Utility Cost (LL84 Data)</p>
+                    <p className="text-lg font-bold text-blue-800">${ll84Utilities.totalAnnualUtility.toLocaleString()}</p>
+                    <p className="text-[10px] text-blue-500">Rates: $0.20/kWh, $1.20/therm, $12.00/kGal, $3.50/gal</p>
+                  </div>
+                )}
+
+                {/* GHG Emissions */}
+                {ll84Data.ghgEmissions > 0 && (
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-xs text-slate-500">GHG Emissions</p>
+                    <p className="text-sm font-semibold">{ll84Data.ghgEmissions.toFixed(1)} metric tons CO2e</p>
+                    {ll84Data.ghgIntensity > 0 && <p className="text-xs text-slate-400">{ll84Data.ghgIntensity.toFixed(2)} kgCO2e/sqft</p>}
+                  </div>
+                )}
+
+                {/* LL97 Compliance Risk */}
+                {ll97Risk && (
+                  <div className={`rounded-lg border p-3 ${
+                    !ll97Risk.compliant2024 ? "bg-red-50 border-red-200" :
+                    !ll97Risk.compliant2030 ? "bg-amber-50 border-amber-200" :
+                    "bg-emerald-50 border-emerald-200"
+                  }`}>
+                    <p className="text-xs font-bold text-slate-900 mb-2">LL97 Carbon Compliance</p>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <span className="text-slate-500">2024 Limit:</span>
+                        <span className={`ml-1 font-semibold ${ll97Risk.compliant2024 ? "text-emerald-700" : "text-red-700"}`}>
+                          {ll97Risk.compliant2024 ? "Compliant" : "Non-Compliant"}
+                        </span>
+                        {ll97Risk.penalty2024 > 0 && <p className="text-red-600 font-semibold mt-0.5">Penalty: ${ll97Risk.penalty2024.toLocaleString()}/yr</p>}
+                      </div>
+                      <div>
+                        <span className="text-slate-500">2030 Limit:</span>
+                        <span className={`ml-1 font-semibold ${ll97Risk.compliant2030 ? "text-emerald-700" : "text-amber-700"}`}>
+                          {ll97Risk.compliant2030 ? "On Track" : "At Risk"}
+                        </span>
+                        {ll97Risk.penalty2030 > 0 && <p className="text-amber-600 font-semibold mt-0.5">Est. Penalty: ${ll97Risk.penalty2030.toLocaleString()}/yr</p>}
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-2">LL97 penalty: $268/metric ton over limit</p>
+                  </div>
+                )}
+              </div>
+            </Section>
+          )}
 
           {/* ============================================================ */}
           {/* 2. AI OWNERSHIP ANALYSIS */}

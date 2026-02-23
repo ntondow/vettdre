@@ -7,6 +7,7 @@ import type { DealInputs, UnitMixRow, DealOutputs, CustomLineItem, CommercialTen
 import { analyzeExpenses } from "@/lib/expense-analyzer";
 import type { ExpenseFlag } from "@/lib/expense-analyzer";
 import { saveDealAnalysis, fetchDealPrefillData, getDealAnalysis, searchContacts, getContact, getUserProfile, sendLoiEmail, fetchComps } from "../actions";
+import { fetchLL84Data, calculateLL97Risk, estimateLL84Utilities } from "@/app/(dashboard)/market-intel/building-profile-actions";
 import type { DealPrefillData } from "../actions";
 import type { CompSale, CompSummary } from "@/lib/comps-engine";
 import { generateDealPdf } from "@/lib/deal-pdf";
@@ -203,6 +204,36 @@ export default function DealModeler() {
         }));
         setPrefillLoading(false);
       }).catch(() => setPrefillLoading(false));
+
+      // LL84/LL97: check for energy data and auto-add carbon penalty if applicable
+      fetchLL84Data(qBbl).then(async (ll84) => {
+        if (!ll84) return;
+        // Override utilities with LL84 actuals
+        const utils = await estimateLL84Utilities(ll84);
+        if (utils.totalAnnualUtility > 0) {
+          setInputs(prev => ({
+            ...prev,
+            electricityGas: utils.electricityCost + utils.gasCost + utils.fuelOilCost,
+            waterSewer: utils.waterCost,
+          }));
+          setAssumptions(prev => { const a = { ...prev }; delete a.electricityGas; delete a.waterSewer; return a; });
+        }
+        // Check LL97 compliance and add penalty expense
+        if (ll84.ghgEmissions > 0 && ll84.grossFloorArea > 0) {
+          const primaryUse = ll84.primaryUse || "Multifamily Housing";
+          const risk = await calculateLL97Risk(ll84.ghgEmissions, ll84.grossFloorArea, primaryUse);
+          if (risk.penalty2024 > 0 || risk.penalty2030 > 0) {
+            const penalty = risk.penalty2024 > 0 ? risk.penalty2024 : risk.penalty2030;
+            setInputs(prev => ({
+              ...prev,
+              customExpenseItems: [
+                ...(prev.customExpenseItems || []),
+                { id: "ll97_penalty", name: `LL97 Carbon Penalty (Est.${risk.penalty2024 > 0 ? "" : " 2030"})`, amount: penalty },
+              ],
+            }));
+          }
+        }
+      }).catch(() => {});
     }
 
     // NYS prefill from sessionStorage (set by NYS building profile)
@@ -221,6 +252,25 @@ export default function DealModeler() {
             realEstateTaxes: p.annualTaxes > 0 ? p.annualTaxes : prev.realEstateTaxes,
             insurance: p.unitsRes > 0 ? p.unitsRes * 1200 : prev.insurance,
             unitMix: p.suggestedUnitMix?.length > 0 ? p.suggestedUnitMix : prev.unitMix,
+          }));
+        }
+      } catch {}
+    }
+
+    // NJ prefill from sessionStorage (set by NJ building profile)
+    if (searchParams.get("source") === "nj") {
+      try {
+        const raw = sessionStorage.getItem("vettdre-nj-prefill");
+        if (raw) {
+          const p = JSON.parse(raw);
+          sessionStorage.removeItem("vettdre-nj-prefill");
+          if (p.address) { setAddress(p.address); setDealName(p.address); }
+          if (p.county) setBorough(`${p.municipality || ""}, ${p.county} County, NJ`);
+          setInputs(prev => ({
+            ...prev,
+            purchasePrice: p.lastSalePrice > 100000 ? p.lastSalePrice : (p.assessedTotal > 0 ? Math.round(p.assessedTotal * 1.3) : prev.purchasePrice),
+            realEstateTaxes: p.assessedTotal > 0 ? Math.round(p.assessedTotal * 0.028) : prev.realEstateTaxes,
+            insurance: p.units > 0 ? p.units * 1300 : prev.insurance,
           }));
         }
       } catch {}
