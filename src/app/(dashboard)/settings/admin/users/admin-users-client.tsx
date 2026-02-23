@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getUsers, updateUserApproval, updateUserActive, updateUserPlan, deleteUser } from "../admin-actions";
+import {
+  getUsers,
+  updateUserApproval,
+  updateUserActive,
+  updateUserPlan,
+  deleteUser,
+  getAuthStatuses,
+  adminSendPasswordReset,
+  adminSetPassword,
+  adminVerifyEmail,
+} from "../admin-actions";
 
 interface UserRow {
   id: string;
@@ -17,15 +27,36 @@ interface UserRow {
   orgName: string;
 }
 
+interface AuthStatus {
+  emailConfirmed: boolean;
+  authId: string;
+}
+
+interface Toast {
+  message: string;
+  type: "success" | "error" | "info";
+}
+
 export default function AdminUsersClient() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [planFilter, setPlanFilter] = useState("all");
   const [approvedFilter, setApprovedFilter] = useState("all");
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+
+  // Auth management state
+  const [authStatuses, setAuthStatuses] = useState<Record<string, AuthStatus>>({});
+  const [passwordModal, setPasswordModal] = useState<{ email: string; authId?: string } | null>(null);
+  const [passwordValue, setPasswordValue] = useState("");
+  const [copied, setCopied] = useState(false);
+  const [resetLinkModal, setResetLinkModal] = useState<{ email: string; link: string } | null>(null);
+
+  const showToast = (message: string, type: Toast["type"] = "success") => {
+    setToast({ message, type });
+  };
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
@@ -42,13 +73,23 @@ export default function AdminUsersClient() {
     setLoading(false);
   }, [search, planFilter, approvedFilter]);
 
+  const fetchAuthStatuses = useCallback(async () => {
+    try {
+      const statuses = await getAuthStatuses();
+      setAuthStatuses(statuses);
+    } catch (e) {
+      console.error("Failed to fetch auth statuses:", e);
+    }
+  }, []);
+
   useEffect(() => {
     fetchUsers();
-  }, [fetchUsers]);
+    fetchAuthStatuses();
+  }, [fetchUsers, fetchAuthStatuses]);
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 3000);
+    const t = setTimeout(() => setToast(null), 4000);
     return () => clearTimeout(t);
   }, [toast]);
 
@@ -57,9 +98,9 @@ export default function AdminUsersClient() {
     try {
       await updateUserApproval(userId, !currentlyApproved);
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, isApproved: !currentlyApproved } : u));
-      setToast(`User ${!currentlyApproved ? "approved" : "unapproved"}`);
+      showToast(`User ${!currentlyApproved ? "approved" : "unapproved"}`);
     } catch (e: any) {
-      setToast("Error: " + e.message);
+      showToast("Error: " + e.message, "error");
     }
     setUpdating(null);
   };
@@ -69,9 +110,9 @@ export default function AdminUsersClient() {
     try {
       await updateUserActive(userId, !currentlyActive);
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, isActive: !currentlyActive } : u));
-      setToast(`User ${!currentlyActive ? "activated" : "deactivated"}`);
+      showToast(`User ${!currentlyActive ? "activated" : "deactivated"}`);
     } catch (e: any) {
-      setToast("Error: " + e.message);
+      showToast("Error: " + e.message, "error");
     }
     setUpdating(null);
   };
@@ -81,9 +122,9 @@ export default function AdminUsersClient() {
     try {
       await updateUserPlan(userId, plan);
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan } : u));
-      setToast(`Plan updated to ${plan}`);
+      showToast(`Plan updated to ${plan}`);
     } catch (e: any) {
-      setToast("Error: " + e.message);
+      showToast("Error: " + e.message, "error");
     }
     setUpdating(null);
   };
@@ -93,29 +134,98 @@ export default function AdminUsersClient() {
     try {
       await deleteUser(userId);
       setUsers(prev => prev.filter(u => u.id !== userId));
-      setToast("User deleted");
+      showToast("User deleted");
       setConfirmDelete(null);
     } catch (e: any) {
-      setToast("Error: " + e.message);
+      showToast("Error: " + e.message, "error");
     }
     setUpdating(null);
   };
 
+  const handleSendReset = async (email: string) => {
+    setUpdating(email);
+    try {
+      const result = await adminSendPasswordReset(email);
+      if (result.link) {
+        setResetLinkModal({ email, link: result.link });
+      }
+      showToast(`Recovery link generated for ${email}`);
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+    setUpdating(null);
+  };
+
+  const handleSetPassword = async () => {
+    if (!passwordModal || !passwordValue.trim()) return;
+    setUpdating(passwordModal.email);
+    try {
+      await adminSetPassword(passwordModal.email, passwordValue, passwordModal.authId);
+      showToast("Password set and account verified");
+      // Update local auth status
+      setAuthStatuses(prev => ({
+        ...prev,
+        [passwordModal.email.toLowerCase()]: {
+          emailConfirmed: true,
+          authId: prev[passwordModal.email.toLowerCase()]?.authId || "new",
+        },
+      }));
+      setPasswordModal(null);
+      setPasswordValue("");
+      // Refresh auth statuses to get the real authId
+      fetchAuthStatuses();
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+    setUpdating(null);
+  };
+
+  const handleVerifyEmail = async (email: string, authId: string) => {
+    setUpdating(email);
+    try {
+      await adminVerifyEmail(authId);
+      setAuthStatuses(prev => ({
+        ...prev,
+        [email.toLowerCase()]: { ...prev[email.toLowerCase()], emailConfirmed: true },
+      }));
+      showToast("Email verified");
+    } catch (e: any) {
+      showToast(e.message, "error");
+    }
+    setUpdating(null);
+  };
+
+  const copyToClipboard = async (text: string) => {
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const getAuthStatus = (email: string): AuthStatus | undefined => {
+    return authStatuses[email.toLowerCase()];
+  };
+
   const fmtDate = (d: string | null) => {
-    if (!d) return "—";
+    if (!d) return "\u2014";
     return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(d));
+  };
+
+  const toastColors = {
+    success: "bg-emerald-600",
+    error: "bg-red-600",
+    info: "bg-slate-900",
   };
 
   return (
     <div>
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium">
-          {toast}
+        <div className={`fixed top-4 right-4 z-50 ${toastColors[toast.type]} text-white px-4 py-2.5 rounded-lg shadow-lg text-sm font-medium max-w-md`}>
+          {toast.message}
         </div>
       )}
 
-      {/* Delete Confirmation */}
+      {/* Delete Confirmation Modal */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
@@ -136,6 +246,92 @@ export default function AdminUsersClient() {
                 className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 {updating === confirmDelete ? "Deleting..." : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Set Password Modal */}
+      {passwordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Set Password</h3>
+            <p className="text-sm text-slate-500 mb-4">{passwordModal.email}</p>
+            {!passwordModal.authId && (
+              <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                No Supabase Auth account found. This will create one and auto-verify the email.
+              </p>
+            )}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-slate-700 mb-1">Password</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={passwordValue}
+                  onChange={(e) => setPasswordValue(e.target.value)}
+                  placeholder="Enter password..."
+                  autoComplete="off"
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <button
+                  onClick={() => copyToClipboard(passwordValue)}
+                  disabled={!passwordValue}
+                  className="px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 disabled:opacity-50 whitespace-nowrap"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => { setPasswordModal(null); setPasswordValue(""); setCopied(false); }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSetPassword}
+                disabled={!passwordValue.trim() || updating === passwordModal.email}
+                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+              >
+                {updating === passwordModal.email ? "Saving..." : "Save"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Link Modal */}
+      {resetLinkModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl p-6 max-w-lg w-full mx-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Recovery Link</h3>
+            <p className="text-sm text-slate-500 mb-4">
+              Generated for {resetLinkModal.email}. Copy and share with the user.
+            </p>
+            <div className="mb-4">
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={resetLinkModal.link}
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono bg-slate-50 text-slate-600"
+                />
+                <button
+                  onClick={() => copyToClipboard(resetLinkModal.link)}
+                  className="px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 border border-slate-200 rounded-lg hover:bg-slate-200 whitespace-nowrap"
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => { setResetLinkModal(null); setCopied(false); }}
+                className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-50"
+              >
+                Close
               </button>
             </div>
           </div>
@@ -206,69 +402,114 @@ export default function AdminUsersClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map((user) => (
-                  <tr key={user.id} className="hover:bg-slate-50">
-                    <td className="px-4 py-3">
-                      <p className="text-sm font-medium text-slate-900">{user.fullName}</p>
-                      <p className="text-xs text-slate-400">{user.orgName}</p>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{user.email}</td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={user.plan}
-                        onChange={(e) => handlePlanChange(user.id, e.target.value)}
-                        disabled={updating === user.id}
-                        className={`text-xs font-medium px-2 py-1 rounded-lg border ${
-                          user.plan === "free" ? "bg-slate-50 border-slate-200 text-slate-600" :
-                          user.plan === "pro" ? "bg-blue-50 border-blue-200 text-blue-700" :
-                          user.plan === "team" ? "bg-violet-50 border-violet-200 text-violet-700" :
-                          "bg-amber-50 border-amber-200 text-amber-700"
-                        }`}
-                      >
-                        <option value="free">Free</option>
-                        <option value="pro">Pro</option>
-                        <option value="team">Team</option>
-                        <option value="enterprise">Enterprise</option>
-                      </select>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleToggleApproval(user.id, user.isApproved)}
-                        disabled={updating === user.id}
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
-                          user.isApproved
-                            ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
-                            : "bg-amber-100 text-amber-700 hover:bg-amber-200"
-                        }`}
-                      >
-                        {user.isApproved ? "Approved" : "Pending"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <button
-                        onClick={() => handleToggleActive(user.id, user.isActive)}
-                        disabled={updating === user.id}
-                        className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
-                          user.isActive
-                            ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                            : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                        }`}
-                      >
-                        {user.isActive ? "Active" : "Inactive"}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.createdAt)}</td>
-                    <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.lastLoginAt)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => setConfirmDelete(user.id)}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {users.map((user) => {
+                  const auth = getAuthStatus(user.email);
+                  return (
+                    <tr key={user.id} className="hover:bg-slate-50">
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-medium text-slate-900">{user.fullName}</p>
+                        <p className="text-xs text-slate-400">{user.orgName}</p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-sm text-slate-600">{user.email}</span>
+                          {auth ? (
+                            auth.emailConfirmed ? (
+                              <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-100 text-emerald-600 flex-shrink-0" title="Email verified">
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleVerifyEmail(user.email, auth.authId)}
+                                disabled={updating === user.email}
+                                className="inline-flex items-center gap-0.5 text-[10px] font-medium text-amber-600 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5 hover:bg-amber-100 disabled:opacity-50 flex-shrink-0"
+                                title="Click to verify email"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                Verify
+                              </button>
+                            )
+                          ) : (
+                            <span className="inline-flex items-center text-[10px] font-medium text-slate-400 bg-slate-50 border border-slate-200 rounded px-1.5 py-0.5 flex-shrink-0">
+                              No Auth
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <select
+                          value={user.plan}
+                          onChange={(e) => handlePlanChange(user.id, e.target.value)}
+                          disabled={updating === user.id}
+                          className={`text-xs font-medium px-2 py-1 rounded-lg border ${
+                            user.plan === "free" ? "bg-slate-50 border-slate-200 text-slate-600" :
+                            user.plan === "pro" ? "bg-blue-50 border-blue-200 text-blue-700" :
+                            user.plan === "team" ? "bg-violet-50 border-violet-200 text-violet-700" :
+                            "bg-amber-50 border-amber-200 text-amber-700"
+                          }`}
+                        >
+                          <option value="free">Free</option>
+                          <option value="explorer">Explorer</option>
+                          <option value="pro">Pro</option>
+                          <option value="team">Team</option>
+                          <option value="enterprise">Enterprise</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleToggleApproval(user.id, user.isApproved)}
+                          disabled={updating === user.id}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                            user.isApproved
+                              ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                              : "bg-amber-100 text-amber-700 hover:bg-amber-200"
+                          }`}
+                        >
+                          {user.isApproved ? "Approved" : "Pending"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleToggleActive(user.id, user.isActive)}
+                          disabled={updating === user.id}
+                          className={`text-xs font-semibold px-2.5 py-1 rounded-full transition-colors ${
+                            user.isActive
+                              ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                              : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                          }`}
+                        >
+                          {user.isActive ? "Active" : "Inactive"}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.createdAt)}</td>
+                      <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.lastLoginAt)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleSendReset(user.email)}
+                            disabled={updating === user.email || !auth}
+                            title={!auth ? "User must have an Auth account first (use Set Password)" : "Send password reset link"}
+                            className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                          >
+                            Reset Pwd
+                          </button>
+                          <button
+                            onClick={() => setPasswordModal({ email: user.email, authId: auth?.authId })}
+                            className="text-xs text-violet-600 hover:text-violet-800 font-medium whitespace-nowrap"
+                          >
+                            Set Pwd
+                          </button>
+                          <button
+                            onClick={() => setConfirmDelete(user.id)}
+                            className="text-xs text-red-500 hover:text-red-700 font-medium"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
