@@ -590,6 +590,164 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
           )}
 
           {/* ============================================================ */}
+          {/* ACTIVE LISTINGS (from Brave Web Search) */}
+          {/* ============================================================ */}
+          {intel?.liveListings && (intel.liveListings.forSale.length > 0 || intel.liveListings.forRent.length > 0) && (
+            <Section id="listings" title="Active Listings" icon="🏷️"
+              badge={<span className="ml-2 px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-bold rounded-full uppercase">Live</span>}
+              collapsed={isCollapsed("listings")} onToggle={() => toggle("listings")}>
+              {/* For Sale */}
+              {intel.liveListings.forSale.length > 0 && (
+                <div className="mb-4">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-2">For Sale ({intel.liveListings.forSale.length})</p>
+                  <div className="space-y-2">
+                    {intel.liveListings.forSale.slice(0, 5).map((l, i) => (
+                      <div key={i} className="flex items-start justify-between p-2.5 bg-green-50 rounded-lg border border-green-100">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-900 truncate">{l.address}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {l.units && <span>{l.units} units · </span>}
+                            {l.sqft && <span>{l.sqft.toLocaleString()} sf · </span>}
+                            {l.brokerage && <span>{l.brokerage} · </span>}
+                            {l.daysOnMarket !== undefined && <span>{l.daysOnMarket}d on market</span>}
+                          </p>
+                          <p className="text-[10px] text-slate-400 mt-0.5 truncate">{l.sourceDomain}</p>
+                        </div>
+                        <div className="text-right ml-3 shrink-0">
+                          <p className="text-sm font-bold text-green-700">{l.priceStr}</p>
+                          {l.pricePerUnit && <p className="text-[10px] text-slate-400">${l.pricePerUnit.toLocaleString()}/unit</p>}
+                          <a href={l.sourceUrl} target="_blank" rel="noopener noreferrer"
+                            className="text-[10px] text-blue-600 hover:underline mt-1 block">View Listing →</a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* Model This Price button */}
+                  {intel.liveListings.forSale[0] && (
+                    <button
+                      onClick={() => {
+                        const listing = intel.liveListings!.forSale[0];
+                        try { sessionStorage.setItem("vettdre_listing_price", JSON.stringify({ price: listing.price, address: listing.address, source: listing.sourceDomain })); } catch {}
+                        router.push("/deals/new");
+                      }}
+                      className="mt-2 w-full py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors cursor-pointer"
+                    >
+                      Model This Price in Deal Modeler →
+                    </button>
+                  )}
+                </div>
+              )}
+              {/* For Rent (market rents) */}
+              {intel.liveListings.forRent.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-2">Rental Comps ({intel.liveListings.forRent.length})</p>
+                  <div className="space-y-1.5">
+                    {intel.liveListings.forRent.slice(0, 4).map((l, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs p-2 bg-slate-50 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-slate-700 font-medium truncate block">{l.address}</span>
+                          <span className="text-slate-400 text-[10px]">{l.sourceDomain}</span>
+                        </div>
+                        <div className="text-right ml-2 shrink-0">
+                          <span className="font-bold text-slate-900">{l.priceStr}/mo</span>
+                          {l.beds !== undefined && <span className="text-slate-400 ml-1">· {l.beds}BR</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => {
+                      const rents = intel.liveListings!.forRent;
+                      const avgRent = rents.length > 0 ? Math.round(rents.reduce((s, r) => s + r.price, 0) / rents.length) : 0;
+                      try { sessionStorage.setItem("vettdre_web_rents", JSON.stringify({ avgRent, count: rents.length, listings: rents.slice(0, 5) })); } catch {}
+                      router.push("/deals/new");
+                    }}
+                    className="mt-2 w-full py-1.5 text-xs font-semibold text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors cursor-pointer"
+                  >
+                    Use Web Rents in Deal Modeler →
+                  </button>
+                </div>
+              )}
+              {/* Web Comps */}
+              {intel.liveListings.webComps.length > 0 && (
+                <div className="mb-3">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-2">Web Comps ({intel.liveListings.webComps.length})</p>
+                  <div className="space-y-1.5">
+                    {intel.liveListings.webComps.slice(0, 4).map((c, i) => (
+                      <div key={i} className="flex items-center justify-between text-xs p-2 bg-amber-50 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-slate-700 font-medium truncate block">{c.address}</span>
+                          <span className="text-[10px] text-slate-400">{c.type === "sale" ? "Sold" : c.type === "pending" ? "Pending" : "Listed"}</span>
+                        </div>
+                        <div className="text-right ml-2 shrink-0">
+                          <span className="font-bold text-slate-900">{c.priceStr}</span>
+                          {c.pricePerUnit && <span className="text-[10px] text-slate-400 block">${c.pricePerUnit.toLocaleString()}/unit</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {/* Market Trend */}
+              {intel.liveListings.marketInsight && (
+                <div className="p-2.5 bg-blue-50 rounded-lg border border-blue-100 flex items-start gap-2">
+                  <span className="text-base">
+                    {intel.liveListings.marketTrend === "rising" ? "📈" : intel.liveListings.marketTrend === "declining" ? "📉" : "📊"}
+                  </span>
+                  <div>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold text-blue-600 mb-0.5">
+                      Market Trend: {intel.liveListings.marketTrend.charAt(0).toUpperCase() + intel.liveListings.marketTrend.slice(1)}
+                    </p>
+                    <p className="text-xs text-slate-700">{intel.liveListings.marketInsight}</p>
+                  </div>
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* ============================================================ */}
+          {/* WEB INTELLIGENCE (from Brave Entity Research) */}
+          {/* ============================================================ */}
+          {intel?.webIntelligence && intel.webIntelligence.newsCount > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg">🌐</span>
+                <h3 className="text-sm font-bold text-slate-900">Web Intelligence</h3>
+                <span className="px-2 py-0.5 bg-purple-100 text-purple-700 text-[10px] font-bold rounded-full uppercase">Brave</span>
+              </div>
+              <p className="text-xs text-slate-500 mb-2">
+                Found {intel.webIntelligence.newsCount} web mentions for <strong className="text-slate-700">{intel.webIntelligence.entityName}</strong>
+              </p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {intel.webIntelligence.hasNegativeNews && (
+                  <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[10px] font-semibold rounded-full">Negative Coverage</span>
+                )}
+                {intel.webIntelligence.hasLawsuits && (
+                  <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-[10px] font-semibold rounded-full">Lawsuits Found</span>
+                )}
+                {!intel.webIntelligence.hasNegativeNews && !intel.webIntelligence.hasLawsuits && (
+                  <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[10px] font-semibold rounded-full">Clean Record</span>
+                )}
+              </div>
+              {intel.webIntelligence.topArticles.length > 0 && (
+                <div className="space-y-1.5">
+                  {intel.webIntelligence.topArticles.slice(0, 3).map((a, i) => (
+                    <div key={i} className="p-2 bg-slate-50 rounded-lg text-xs">
+                      <p className="text-slate-700">{a.snippet}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className={"px-1.5 py-0.5 rounded text-[9px] font-semibold " + (a.sentiment === "negative" ? "bg-red-50 text-red-600" : a.sentiment === "positive" ? "bg-green-50 text-green-600" : "bg-slate-100 text-slate-500")}>
+                          {a.category}
+                        </span>
+                        {a.url && <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-[10px]">Source →</a>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ============================================================ */}
           {/* 1. PROPERTY OVERVIEW */}
           {/* ============================================================ */}
           <Section id="overview" title="Property Overview" icon="🏢"
