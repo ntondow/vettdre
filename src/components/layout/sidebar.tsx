@@ -24,6 +24,8 @@ const nav: { label: string; items: NavItem[] }[] = [
   ]},
   { label: "Deals", items: [
     { name: "Pipeline", href: "/pipeline", icon: "📋" },
+    { name: "Deal Pipeline", href: "/deals", icon: "🏗️" },
+    { name: "Deal Modeler", href: "/deals/new", icon: "🧮" },
     { name: "Properties", href: "/properties", icon: "🏠" },
   ]},
   { label: "Intelligence", items: [

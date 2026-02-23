@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { fetchBuildingProfile, fetchRelatedProperties, createContactFromBuilding } from "./building-profile-actions";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
+import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
 
 interface Props {
   boroCode: string;
@@ -50,6 +52,7 @@ function Section({ id, title, icon, badge, className, collapsed, onToggle, child
 }
 
 export default function BuildingProfile({ boroCode, block, lot, address, borough, ownerName, onClose, onNameClick, connectedVia }: Props) {
+  const router = useRouter();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -60,6 +63,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [skipTracing, setSkipTracing] = useState(false);
   const [addingToCRM, setAddingToCRM] = useState(false);
   const [crmResult, setCrmResult] = useState<{ contactId: string; enriched: boolean } | null>(null);
+  const [underwriting, setUnderwriting] = useState(false);
   // Smart defaults: collapse lower-priority sections
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     permits: true,
@@ -224,6 +228,44 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                   )}
                 </button>
               )}
+              <button
+                onClick={async () => {
+                  setUnderwriting(true);
+                  try {
+                    const result = await underwriteDeal({
+                      boroCode,
+                      block,
+                      lot,
+                      address: data?.pluto?.address || address,
+                      borough: displayBorough,
+                    });
+                    router.push(`/deals/new?id=${result.id}`);
+                  } catch (err) {
+                    console.error("Underwrite error:", err);
+                    setUnderwriting(false);
+                  }
+                }}
+                disabled={underwriting}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {underwriting ? (
+                  <>
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full"></span>
+                    Underwriting...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Underwrite This Deal
+                  </>
+                )}
+              </button>
+              <a
+                href={`/deals/new?address=${encodeURIComponent(displayAddr)}&borough=${encodeURIComponent(displayBorough)}&block=${encodeURIComponent(block)}&lot=${encodeURIComponent(lot)}&bbl=${encodeURIComponent(boroCode + block.padStart(5, "0") + lot.padStart(4, "0"))}&units=${data?.pluto?.unitsRes || ""}&assessed=${data?.pluto?.assessTotal || ""}`}
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold rounded-lg transition-colors"
+              >
+                Manual Model
+              </a>
               {crmResult && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg">

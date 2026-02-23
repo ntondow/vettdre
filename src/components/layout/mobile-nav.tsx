@@ -23,6 +23,8 @@ interface MoreItem {
 const moreItems: MoreItem[] = [
   { name: "Calendar", href: "/calendar", icon: "📅" },
   { name: "Properties", href: "/properties", icon: "🏠" },
+  { name: "Deal Pipeline", href: "/deals", icon: "🏗️" },
+  { name: "Deal Modeler", href: "/deals/new", icon: "🧮" },
   { name: "Market Intel", href: "/market-intel", icon: "🔍" },
   { name: "Prospecting", href: "/prospecting", icon: "🎯" },
   { name: "Portfolios", href: "/portfolios", icon: "🏢" },
