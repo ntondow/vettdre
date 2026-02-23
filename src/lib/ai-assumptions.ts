@@ -76,6 +76,25 @@ export function getNYSMarketRents(county: string): Record<string, number> {
 }
 
 // ============================================================
+// Rent estimates by county — NJ
+// ============================================================
+const NJ_MARKET_RENTS: Record<string, Record<string, number>> = {
+  Hudson: { Studio: 2000, "1BR": 2500, "2BR": 3200, "3BR": 4000 },
+  Essex: { Studio: 1200, "1BR": 1500, "2BR": 1900, "3BR": 2300 },
+  Bergen: { Studio: 1400, "1BR": 1800, "2BR": 2300, "3BR": 2800 },
+  Passaic: { Studio: 1100, "1BR": 1400, "2BR": 1800, "3BR": 2200 },
+  Middlesex: { Studio: 1300, "1BR": 1600, "2BR": 2100, "3BR": 2600 },
+  Union: { Studio: 1200, "1BR": 1500, "2BR": 2000, "3BR": 2400 },
+  Monmouth: { Studio: 1300, "1BR": 1600, "2BR": 2100, "3BR": 2600 },
+  Ocean: { Studio: 1100, "1BR": 1400, "2BR": 1800, "3BR": 2200 },
+  _default: { Studio: 1200, "1BR": 1500, "2BR": 1900, "3BR": 2300 },
+};
+
+export function getNJMarketRents(county: string): Record<string, number> {
+  return NJ_MARKET_RENTS[county] || NJ_MARKET_RENTS._default;
+}
+
+// ============================================================
 // Generate full deal assumptions from building data
 // ============================================================
 export function generateDealAssumptions(building: BuildingData): DealInputs {
@@ -522,4 +541,161 @@ export function generateNYSDealAssumptions(building: NYSBuildingData): DealInput
   inputs.exitCapRate = Math.max(3, Math.round((goingInCap - 0.25) * 100) / 100);
 
   return inputs;
+}
+
+// ============================================================
+// NJ Building Data (MOD-IV / ArcGIS)
+// ============================================================
+export interface NJBuildingData {
+  address: string;
+  municipality: string;
+  county: string;
+  block: string;
+  lot: string;
+  ownerName: string;
+  unitsRes: number;
+  yearBuilt: number;
+  numFloors: number;
+  bldgArea: number;
+  assessedTotal: number;
+  lastSalePrice: number;
+  lastSaleDate: string;
+  annualTaxes: number;
+  propertyClass: string;
+}
+
+// ============================================================
+// Generate Deal Assumptions for NJ Properties
+// ============================================================
+export function generateNJDealAssumptions(building: NJBuildingData): DealInputs {
+  const units = building.unitsRes || 1;
+  const county = building.county || "Hudson";
+  const rents = NJ_MARKET_RENTS[county] || NJ_MARKET_RENTS._default;
+  const assumptions: Record<string, boolean> = {};
+
+  // -- OFFER PRICE --
+  let purchasePrice = 0;
+  if (building.lastSalePrice > 100000 && building.lastSaleDate) {
+    const saleDate = new Date(building.lastSaleDate);
+    const yearsAgo = Math.max(0, (Date.now() - saleDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (yearsAgo < 3) {
+      purchasePrice = Math.round(building.lastSalePrice * 1.15);
+    } else {
+      purchasePrice = Math.round(building.lastSalePrice * (1 + yearsAgo * 0.04));
+    }
+    assumptions.purchasePrice = true;
+  } else if (building.assessedTotal > 0) {
+    purchasePrice = Math.round(building.assessedTotal * 1.3);
+    assumptions.purchasePrice = true;
+  }
+  if (purchasePrice === 0) purchasePrice = 2000000;
+
+  let rentMultiplier = 1.0;
+  if (building.yearBuilt > 0 && building.yearBuilt < 1950) rentMultiplier *= 0.90;
+  if (building.yearBuilt >= 2000) rentMultiplier *= 1.10;
+
+  const unitMix = estimateUnitMix(units, rents, rentMultiplier);
+  assumptions.unitMix = true;
+
+  const residentialVacancyRate = 5;
+  assumptions.residentialVacancyRate = true;
+
+  const realEstateTaxes = building.annualTaxes > 0 ? building.annualTaxes : Math.round(building.assessedTotal * 0.028);
+  if (building.annualTaxes <= 0) assumptions.realEstateTaxes = true;
+
+  const insurance = Math.round(1300 * units);
+  assumptions.insurance = true;
+  const licenseFees = Math.round(350 * units);
+  assumptions.licenseFees = true;
+  const fireMeter = Math.round(160 * units);
+  assumptions.fireMeter = true;
+  const electricityGas = Math.round(520 * units);
+  assumptions.electricityGas = true;
+  const waterSewer = Math.round(650 * units);
+  assumptions.waterSewer = true;
+  const payroll = Math.round(950 * units);
+  assumptions.payroll = true;
+  const rmGeneral = Math.round(1600 * units);
+  assumptions.rmGeneral = true;
+  const rmCapexReserve = Math.round(320 * units);
+  assumptions.rmCapexReserve = true;
+  const exterminating = Math.round(110 * units);
+  assumptions.exterminating = true;
+  const landscaping = Math.min(Math.round(900 * units), 22000);
+  assumptions.landscaping = true;
+  const elevator = building.numFloors > 3 ? 9000 : 0;
+  assumptions.elevator = true;
+  const cleaning = Math.round(450 * units);
+  assumptions.cleaning = true;
+  const trashRemoval = Math.round(750 * units);
+  assumptions.trashRemoval = true;
+  const accounting = 3500;
+  assumptions.accounting = true;
+  const legal = 1800;
+  assumptions.legal = true;
+  const marketing = 12000;
+  assumptions.marketing = true;
+  const generalAdmin = 3000;
+  assumptions.generalAdmin = true;
+  const snowRemoval = 9000;
+  assumptions.snowRemoval = true;
+  const alarmMonitoring = 4000;
+  assumptions.alarmMonitoring = true;
+  const telephoneInternet = 7000;
+  assumptions.telephoneInternet = true;
+  const closingCosts = 120000;
+  assumptions.closingCosts = true;
+  assumptions.exitCapRate = true;
+  assumptions.sellingCostPercent = true;
+  assumptions.holdPeriodYears = true;
+  assumptions.annualRentGrowth = true;
+  assumptions.annualExpenseGrowth = true;
+  assumptions.ltvPercent = true;
+  assumptions.interestRate = true;
+  assumptions.managementFeePercent = true;
+  assumptions.originationFeePercent = true;
+  assumptions.commercialVacancyRate = true;
+  assumptions.concessions = true;
+  assumptions.commercialRentAnnual = true;
+
+  const inputs: DealInputs = {
+    purchasePrice, closingCosts, renovationBudget: 0,
+    ltvPercent: 65, interestRate: 7.0, amortizationYears: 30, loanTermYears: 30, interestOnly: false, originationFeePercent: 1,
+    unitMix, residentialVacancyRate, concessions: 0,
+    commercialRentAnnual: 0, commercialVacancyRate: 10, commercialConcessions: 0,
+    lateFees: 0, parkingIncome: 0, storageIncome: 0, petDeposits: 0, petRent: 0, evCharging: 0, trashRubs: 0, waterRubs: 0, otherMiscIncome: 0,
+    annualRentGrowth: 3, annualExpenseGrowth: 2,
+    realEstateTaxes, insurance, licenseFees, fireMeter, electricityGas, waterSewer,
+    managementFeePercent: 4, payroll, accounting, legal, marketing, rmGeneral, rmCapexReserve, generalAdmin,
+    exterminating, landscaping, snowRemoval, elevator, alarmMonitoring, telephoneInternet, cleaning, trashRemoval, otherContractServices: 0,
+    holdPeriodYears: 5, exitCapRate: 0, sellingCostPercent: 5, _assumptions: assumptions,
+  };
+
+  const gpr = unitMix.reduce((s, u) => s + u.count * u.monthlyRent * 12, 0);
+  const vacLoss = gpr * (residentialVacancyRate / 100);
+  const totalIncome = gpr - vacLoss;
+  const mgmtFee = totalIncome * 0.04;
+  const totalExp = realEstateTaxes + insurance + licenseFees + fireMeter + electricityGas + waterSewer + mgmtFee + payroll + accounting + legal + marketing + rmGeneral + rmCapexReserve + generalAdmin + exterminating + landscaping + snowRemoval + elevator + alarmMonitoring + telephoneInternet + cleaning + trashRemoval;
+  const estNoi = totalIncome - totalExp;
+  const goingInCap = purchasePrice > 0 ? (estNoi / purchasePrice) * 100 : 6.5;
+  inputs.exitCapRate = Math.max(3, Math.round((goingInCap - 0.25) * 100) / 100);
+
+  return inputs;
+}
+
+// ============================================================
+// LL84 Utility Override — use actual LL84 data instead of estimates
+// ============================================================
+export function applyLL84UtilityOverride(
+  inputs: DealInputs,
+  ll84Utilities: { electricityCost: number; gasCost: number; waterCost: number; fuelOilCost: number; totalAnnualUtility: number }
+): DealInputs {
+  const updated = { ...inputs };
+  const assumptions = { ...(updated._assumptions || {}) };
+  updated.electricityGas = ll84Utilities.electricityCost + ll84Utilities.gasCost + ll84Utilities.fuelOilCost;
+  updated.waterSewer = ll84Utilities.waterCost;
+  delete assumptions.electricityGas;
+  delete assumptions.waterSewer;
+  updated._assumptions = assumptions;
+  return updated;
 }
