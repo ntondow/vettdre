@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { stripe, getPlanFromPriceId } from "@/lib/stripe";
+import { getStripe, getPlanFromPriceId } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
 
 export const runtime = "nodejs";
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
+    event = getStripe().webhooks.constructEvent(body, sig, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err: any) {
     console.error("Webhook signature verification failed:", err.message);
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
         const userId = session.metadata?.userId;
         if (!userId || !session.subscription) break;
 
-        const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+        const sub = await getStripe().subscriptions.retrieve(session.subscription as string);
         const priceId = sub.items.data[0]?.price?.id;
         if (!priceId) break;
 

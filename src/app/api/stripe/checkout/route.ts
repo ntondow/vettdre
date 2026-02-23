@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe, isValidPriceId } from "@/lib/stripe";
+import { getStripe, isValidPriceId } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     // Get or create Stripe customer
     let customerId = user.stripeCustomerId;
     if (!customerId) {
-      const customer = await stripe.customers.create({
+      const customer = await getStripe().customers.create({
         email: user.email,
         name: user.fullName,
         metadata: { userId: user.id, orgId: user.orgId },
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     // Grant 7-day Stripe trial only if user is on free plan AND has never had a trial
     const grantTrial = user.plan === "free" && !user.trialEndsAt;
 
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       customer: customerId,
       mode: "subscription",
       line_items: [{ price: priceId, quantity: 1 }],
