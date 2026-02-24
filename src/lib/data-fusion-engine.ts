@@ -65,6 +65,19 @@ export interface BuildingIntelligence {
     sources: string[];
   };
 
+  corporateIntel?: {
+    entityName: string;
+    dosId: string;
+    entityType: string;
+    filingDate: string;
+    processName: string;
+    processAddress: string;
+    registeredAgent: string | null;
+    registeredAgentAddress: string | null;
+    relatedEntities: { name: string; dosId: string; filingDate: string; entityType: string }[];
+    totalRelatedEntities: number;
+  };
+
   financials: {
     assessedValue: { value: number; source: string; year: number } | null;
     marketValue: { value: number; source: string; year: number } | null;
@@ -244,6 +257,7 @@ export interface BuildingIntelligence {
     leadVerification: any;
     rankedContacts: any[];
     ownerContacts: any[];
+    corporateIntel: any;
   };
 
   dataSources: string[];
@@ -758,6 +772,42 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   const rankedContacts = buildRankedContacts(ownerContacts, parsedHpdContacts, phoneRankings);
 
   // ============================================================
+  // PHASE 4b: NY Corporate Filing Lookup (non-blocking)
+  // ============================================================
+
+  let corporateIntel: BuildingIntelligence["corporateIntel"] = undefined;
+  const llcOwnerName = resolvedOwnership.llcName || hpdCorpOwners[0] || "";
+  if (llcOwnerName && llcOwnerName.length >= 3) {
+    try {
+      const { pierceEntityVeil } = await import("./ny-corporations");
+      const intel = await pierceEntityVeil(llcOwnerName);
+      if (intel) {
+        corporateIntel = {
+          entityName: intel.llcName,
+          dosId: intel.dosId,
+          entityType: intel.entityType,
+          filingDate: intel.filingDate,
+          processName: intel.processName,
+          processAddress: intel.processAddress,
+          registeredAgent: intel.registeredAgent,
+          registeredAgentAddress: intel.registeredAgentAddress,
+          relatedEntities: intel.relatedEntities.slice(0, 20).map(e => ({
+            name: e.currentEntityName,
+            dosId: e.dosId,
+            filingDate: e.initialFilingDate,
+            entityType: e.entityType,
+          })),
+          totalRelatedEntities: intel.totalRelatedEntities,
+        };
+        dataSources.push("NY DOS Corporate Filings");
+        dataFreshness["NY DOS Corporate Filings"] = "Live";
+      }
+    } catch (err) {
+      console.error("Corporate filing lookup error:", err);
+    }
+  }
+
+  // ============================================================
   // PHASE 5: Resolve Property Data (conflict resolution)
   // ============================================================
 
@@ -886,7 +936,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   // PHASE 8: Distress Score Calculation
   // ============================================================
 
-  const distressSignals = calculateDistressScore(compliance, energyIntel, speculation, rentStab, rollingSales, rpieRecords);
+  const distressSignals = calculateDistressScore(compliance, energyIntel, speculation, rentStab, rollingSales, rpieRecords, corporateIntel);
 
   // ============================================================
   // PHASE 9: Investment Score Calculation
@@ -1192,6 +1242,8 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
       sources: resolvedOwnership.sources,
     },
 
+    corporateIntel,
+
     financials,
     energy: energyIntel,
     compliance,
@@ -1231,6 +1283,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
       leadVerification,
       rankedContacts,
       ownerContacts,
+      corporateIntel,
     },
 
     dataSources,
@@ -1256,6 +1309,7 @@ function calculateDistressScore(
   rentStab: any,
   sales: any[],
   rpieRecords: any[],
+  corpIntel?: BuildingIntelligence["corporateIntel"],
 ): BuildingIntelligence["distressSignals"] {
   let score = 0;
   const signals: BuildingIntelligence["distressSignals"]["signals"] = [];
@@ -1364,7 +1418,30 @@ function calculateDistressScore(
     signals.push({ type: "high_complaints", severity: "medium", description: `${compliance.recentComplaints} complaints in last 3 years`, source: "HPD Complaints" });
   }
 
-  return { score: Math.min(100, score), signals };
+  // Corporate filing signals
+  if (corpIntel) {
+    // Old LLC formation (>20 years) — estate/long-hold signal
+    if (corpIntel.filingDate) {
+      const filingYear = new Date(corpIntel.filingDate).getFullYear();
+      const yearsOld = new Date().getFullYear() - filingYear;
+      if (yearsOld > 20) {
+        score += 5;
+        signals.push({ type: "old_llc", severity: "low", description: `LLC formed ${yearsOld} years ago (${filingYear}) — long-hold indicator`, source: "NY DOS" });
+      }
+    }
+    // Agent with many entities — likely a professional registered agent (less distressed)
+    if (corpIntel.totalRelatedEntities >= 10) {
+      score -= 5;
+      signals.push({ type: "professional_agent", severity: "low", description: `Registered agent manages ${corpIntel.totalRelatedEntities} entities — professional operator`, source: "NY DOS" });
+    }
+    // Agent with very few entities — small/individual operator (more distressed)
+    if (corpIntel.totalRelatedEntities >= 0 && corpIntel.totalRelatedEntities <= 2) {
+      score += 5;
+      signals.push({ type: "small_operator", severity: "low", description: `Owner operates only ${corpIntel.totalRelatedEntities + 1} entity — small/individual operator`, source: "NY DOS" });
+    }
+  }
+
+  return { score: Math.min(100, Math.max(0, score)), signals };
 }
 
 // ============================================================

@@ -29,6 +29,9 @@ export type Feature =
   | "bp_census_basic"
   | "bp_census_full"
   | "bp_census_trends"
+  // Corporate Filing
+  | "bp_corp_basic"
+  | "bp_corp_full"
   // Map
   | "map_search"
   // Phone & SMS
@@ -66,6 +69,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "bp_live_listings",
   "bp_web_intel",
   "bp_census_full",
+  "bp_corp_basic",
 ];
 
 const PRO_FEATURES: Feature[] = [
@@ -80,6 +84,7 @@ const PRO_FEATURES: Feature[] = [
   "bp_owner_contact",
   "bp_apollo_enrichment",
   "bp_census_trends",
+  "bp_corp_full",
   "phone_sms",
   "deal_modeler",
   "prospecting",
@@ -137,6 +142,8 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
   bp_census_full: "Upgrade to Explorer for full census demographics",
   bp_census_trends: "Upgrade to Pro for neighborhood trend data",
+  bp_corp_basic: "Upgrade to Explorer to see corporate filing data",
+  bp_corp_full: "Upgrade to Pro to see related entities & LLC piercing",
   deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   nav_deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   prospecting: "Upgrade to Pro to access Prospecting",
