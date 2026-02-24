@@ -2,9 +2,10 @@
 
 // ============================================================
 // NJ Property Search — ArcGIS REST API (Parcels & MOD-IV Composite)
+// Service: Parcels_Composite_NJ_WM (replaced Parcels_and_MODIV_Composite)
 // ============================================================
 
-const ARCGIS_BASE = "https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Parcels_and_MODIV_Composite/FeatureServer/0/query";
+const ARCGIS_BASE = "https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Parcels_Composite_NJ_WM/FeatureServer/0/query";
 
 export interface NJPropertyResult {
   municipality: string;
@@ -47,32 +48,35 @@ export interface NJDealPrefill {
 }
 
 // Multifamily property classes in NJ MOD-IV
-const MULTIFAMILY_CLASSES = ["2", "4A", "4C"];
+const NJ_MULTIFAMILY_CLASSES = ["2", "4A", "4C"];
+
+// Standard outFields for property queries
+const PROPERTY_OUT_FIELDS = "MUN_NAME,COUNTY,PCLBLOCK,PCLLOT,PCLQCODE,PROP_LOC,OWNER_NAME,PROP_CLASS,NET_VALUE,DWELL,YR_CONSTR,SALE_PRICE,DEED_DATE,BLDG_DESC,LAND_VAL,IMPRVT_VAL,ST_ADDRESS,CALC_ACRE";
 
 function parseNJFeature(f: any): NJPropertyResult {
   const a = f.attributes || f;
   return {
-    municipality: a.MUN_NAME || a.MUNICIPALITY || "",
+    municipality: a.MUN_NAME || "",
     county: a.COUNTY || "",
-    block: a.BLOCK || a.PAMS_BLOCK || "",
-    lot: a.LOT || a.PAMS_LOT || "",
-    qualifier: a.QUAL || a.QUALIFIER || "",
-    address: [a.ADDR_HOUSE_NO || a.HOUSE_NUMBER, a.ADDR_STREET || a.STREET_NAME].filter(Boolean).join(" ").trim() || a.PROP_LOC || "",
-    ownerName: a.OWNER_NAME || a.OWNER || "",
-    propertyClass: a.PROP_CLASS || a.PROPERTY_CLASS || "",
-    propertyClassDesc: a.PROP_CLASS_DESC || getClassDesc(a.PROP_CLASS || a.PROPERTY_CLASS || ""),
-    units: parseInt(a.DWELL_UNITS || a.NO_OF_DWELLINGS || "0") || 0,
-    assessedLand: parseFloat(a.LAND_VALUE || a.ASSESSED_LAND || "0") || 0,
-    assessedImprove: parseFloat(a.IMPR_VALUE || a.ASSESSED_IMPROVEMENT || "0") || 0,
-    assessedTotal: parseFloat(a.NET_VALUE || a.TOTAL_VALUE || a.ASSESSED_TOTAL || "0") || 0,
-    yearBuilt: parseInt(a.YR_BUILT || a.YEAR_BUILT || "0") || 0,
-    lastSalePrice: parseFloat(a.SALE_PRICE || a.LAST_SALE_PRICE || "0") || 0,
-    lastSaleDate: a.SALE_DATE || a.LAST_SALE_DATE || a.DEED_DATE || "",
-    bldgSqft: parseFloat(a.BLDG_SF || a.BUILDING_SQFT || "0") || 0,
-    lotSqft: parseFloat(a.LOT_SF || a.LOT_SQFT || a.LAND_SF || "0") || 0,
-    numStories: parseFloat(a.NO_OF_STORIES || a.STORIES || "0") || 0,
-    lat: f.geometry?.y || parseFloat(a.LAT || a.LATITUDE || "0") || 0,
-    lng: f.geometry?.x || parseFloat(a.LON || a.LONGITUDE || "0") || 0,
+    block: a.PCLBLOCK || "",
+    lot: a.PCLLOT || "",
+    qualifier: a.PCLQCODE || "",
+    address: a.PROP_LOC || a.ST_ADDRESS || "",
+    ownerName: a.OWNER_NAME || "",
+    propertyClass: a.PROP_CLASS || "",
+    propertyClassDesc: a.BLDG_DESC || getClassDesc(a.PROP_CLASS || ""),
+    units: parseInt(a.DWELL || "0") || 0,
+    assessedLand: parseFloat(a.LAND_VAL || "0") || 0,
+    assessedImprove: parseFloat(a.IMPRVT_VAL || "0") || 0,
+    assessedTotal: parseFloat(a.NET_VALUE || "0") || 0,
+    yearBuilt: parseInt(a.YR_CONSTR || "0") || 0,
+    lastSalePrice: parseFloat(a.SALE_PRICE || "0") || 0,
+    lastSaleDate: a.DEED_DATE || "",
+    bldgSqft: 0, // Not available in this dataset
+    lotSqft: a.CALC_ACRE ? Math.round(parseFloat(a.CALC_ACRE) * 43560) : 0,
+    numStories: 0, // Not available in this dataset
+    lat: f.geometry?.y || 0,
+    lng: f.geometry?.x || 0,
   };
 }
 
@@ -101,7 +105,7 @@ export async function searchNJProperties(filters: {
     if (filters.propertyClass) {
       conditions.push(`PROP_CLASS = '${filters.propertyClass}'`);
     } else {
-      conditions.push(`PROP_CLASS IN ('2','4A','4C')`);
+      conditions.push(`PROP_CLASS IN (${NJ_MULTIFAMILY_CLASSES.map(c => `'${c}'`).join(",")})`);
     }
 
     if (filters.county) {
@@ -122,7 +126,7 @@ export async function searchNJProperties(filters: {
 
     const params = new URLSearchParams({
       where,
-      outFields: "MUN_NAME,COUNTY,BLOCK,LOT,QUAL,PROP_LOC,OWNER_NAME,PROP_CLASS,DWELL_UNITS,LAND_VALUE,IMPR_VALUE,NET_VALUE,YR_BUILT,SALE_PRICE,SALE_DATE,BLDG_SF,LOT_SF,NO_OF_STORIES,ADDR_HOUSE_NO,ADDR_STREET",
+      outFields: PROPERTY_OUT_FIELDS,
       returnGeometry: "true",
       f: "json",
       resultRecordCount: String(limit),
@@ -138,6 +142,10 @@ export async function searchNJProperties(filters: {
     }
 
     const json = await res.json();
+    if (json.error) {
+      console.error("NJ ArcGIS query error:", json.error);
+      return { properties: [] };
+    }
     if (!json.features || !Array.isArray(json.features)) return { properties: [] };
 
     let properties = json.features.map(parseNJFeature);
@@ -156,7 +164,7 @@ export async function searchNJProperties(filters: {
 
 export async function getNJPropertyByParcel(municipality: string, block: string, lot: string): Promise<NJPropertyResult | null> {
   try {
-    const where = `UPPER(MUN_NAME) LIKE '%${municipality.toUpperCase()}%' AND BLOCK = '${block}' AND LOT = '${lot}'`;
+    const where = `UPPER(MUN_NAME) LIKE '%${municipality.toUpperCase()}%' AND PCLBLOCK = '${block}' AND PCLLOT = '${lot}'`;
     const params = new URLSearchParams({
       where,
       outFields: "*",
@@ -189,7 +197,7 @@ export async function searchNJAddresses(query: string, county?: string): Promise
 
     const params = new URLSearchParams({
       where,
-      outFields: "PROP_LOC,MUN_NAME,COUNTY,BLOCK,LOT",
+      outFields: "PROP_LOC,MUN_NAME,COUNTY,PCLBLOCK,PCLLOT",
       returnGeometry: "false",
       f: "json",
       resultRecordCount: "10",
@@ -204,8 +212,8 @@ export async function searchNJAddresses(query: string, county?: string): Promise
       address: f.attributes.PROP_LOC || "",
       municipality: f.attributes.MUN_NAME || "",
       county: f.attributes.COUNTY || "",
-      block: f.attributes.BLOCK || "",
-      lot: f.attributes.LOT || "",
+      block: f.attributes.PCLBLOCK || "",
+      lot: f.attributes.PCLLOT || "",
     }));
   } catch {
     return [];
@@ -236,11 +244,11 @@ export async function searchNJComps(params: {
 
     const urlParams = new URLSearchParams({
       where,
-      outFields: "MUN_NAME,COUNTY,BLOCK,LOT,PROP_LOC,OWNER_NAME,PROP_CLASS,DWELL_UNITS,NET_VALUE,YR_BUILT,SALE_PRICE,SALE_DATE,BLDG_SF,NO_OF_STORIES,ADDR_HOUSE_NO,ADDR_STREET",
+      outFields: PROPERTY_OUT_FIELDS,
       returnGeometry: "false",
       f: "json",
       resultRecordCount: String(limit),
-      orderByFields: "SALE_DATE DESC",
+      orderByFields: "SALE_PRICE DESC",
     });
 
     const res = await fetch(`${ARCGIS_BASE}?${urlParams.toString()}`, {
