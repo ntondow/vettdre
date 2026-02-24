@@ -46,7 +46,13 @@ export type Feature =
   | "sequences"
   | "financing"
   | "investors"
-  | "api_access";
+  | "api_access"
+  // Promote Model
+  | "promote_model"
+  | "nav_promote_model"
+  | "promote_templates"
+  | "promote_sensitivity"
+  | "promote_export";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -94,6 +100,8 @@ const PRO_FEATURES: Feature[] = [
   "sequences",
   "financing",
   "api_access",
+  "promote_model",
+  "nav_promote_model",
 ];
 
 const TEAM_FEATURES: Feature[] = [
@@ -101,6 +109,9 @@ const TEAM_FEATURES: Feature[] = [
   "nav_investors",
   "investors",
   "phone_multi_numbers",
+  "promote_templates",
+  "promote_sensitivity",
+  "promote_export",
 ];
 
 // Enterprise gets everything
@@ -162,6 +173,11 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   nav_investors: "Upgrade to Team to access Investors",
   phone_sms: "Upgrade to Pro to use Phone & SMS",
   phone_multi_numbers: "Upgrade to Team for multiple phone numbers",
+  promote_model: "Upgrade to Pro to access the Promote Model",
+  nav_promote_model: "Upgrade to Pro to access the Promote Model",
+  promote_templates: "Upgrade to Team for waterfall templates",
+  promote_sensitivity: "Upgrade to Team for sensitivity analysis",
+  promote_export: "Upgrade to Team for promote export",
 };
 
 export function getUpgradeMessage(feature: Feature): string {

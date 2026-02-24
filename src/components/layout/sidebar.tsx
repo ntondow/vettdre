@@ -46,6 +46,7 @@ const nav: NavGroup[] = [
     { name: "Contacts", href: "/contacts", icon: "👥" },
   ]},
   { label: "Capital", items: [
+    { name: "Promote Model", href: "/deals/promote", icon: "📊", feature: "nav_promote_model" },
     { name: "Financing", href: "/financing", icon: "💰", feature: "nav_financing" },
     { name: "Investors", href: "/investors", icon: "🤝", feature: "nav_investors" },
   ]},

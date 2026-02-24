@@ -548,6 +548,14 @@ export default function DealModeler() {
           </div>
           <div className="flex items-center gap-2 md:gap-3">
             {saveMsg && <span className={`text-sm ${saveMsg.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>{saveMsg}</span>}
+            {savedId && (
+              <a
+                href={`/deals/promote?dealId=${savedId}`}
+                className="px-3 md:px-4 py-2 border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-800 text-sm font-medium rounded-lg transition-colors"
+              >
+                Structure Partnership
+              </a>
+            )}
             {inputs.purchasePrice > 0 && (
               <button
                 onClick={openLoiModal}
