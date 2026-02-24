@@ -31,9 +31,10 @@ const NAV = [
     ],
   },
   {
-    group: "Email",
+    group: "Communications",
     items: [
       { href: "/settings/gmail", icon: "📬", label: "Gmail" },
+      { href: "/settings/phone", icon: "📞", label: "Phone & SMS" },
       { href: "/settings/sync", icon: "⏱️", label: "Sync" },
       { href: "/settings/templates", icon: "📝", label: "Templates" },
     ],

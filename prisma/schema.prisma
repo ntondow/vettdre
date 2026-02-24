@@ -245,6 +245,7 @@ model Organization {
   calendarEvents       CalendarEvent[]
   showingSlots         ShowingSlot[]
   dealAnalyses         DealAnalysis[]
+  phoneNumbers         PhoneNumber[]
   leadAssignmentRule   LeadAssignmentRule?
   aiSettings           AiSettings?
   brandSettings        BrandSettings?
@@ -298,6 +299,9 @@ model User {
   calendarEvents   CalendarEvent[]
   showingSlots     ShowingSlot[]
   dealAnalyses     DealAnalysis[]
+  phoneNumbers     PhoneNumber[]
+  smsMessages      SmsMessage[]
+  phoneCalls       PhoneCall[]
 
   @@unique([orgId, email])
   @@map("users")
@@ -346,6 +350,8 @@ model Contact {
   followUpReminders FollowUpReminder[]
   calendarEvents    CalendarEvent[]
   showingSlots      ShowingSlot[]
+  smsMessages       SmsMessage[]
+  phoneCalls        PhoneCall[]
 
   @@index([orgId, status])
 
@@ -1162,4 +1168,110 @@ model DealAnalysis {
   @@index([orgId, status])
   @@index([userId])
   @@map("deal_analyses")
+}
+
+// ============================================================
+// Twilio Phone System
+// ============================================================
+
+enum PhoneNumberStatus {
+  active
+  suspended
+  released
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum SmsStatus {
+  queued
+  sent
+  delivered
+  failed
+  received
+}
+
+enum CallDirection {
+  inbound
+  outbound
+}
+
+enum CallStatus {
+  initiated
+  ringing
+  answered
+  completed
+  missed
+  failed
+}
+
+model PhoneNumber {
+  id              String            @id @default(uuid())
+  number          String            @unique // E.164 format: +12125551234
+  twilioSid       String            @unique @map("twilio_sid")
+  friendlyName    String?           @map("friendly_name")
+  areaCode        String?           @map("area_code")
+  userId          String            @map("user_id")
+  organizationId  String            @map("organization_id")
+  status          PhoneNumberStatus @default(active)
+  forwardingNumber String?          @map("forwarding_number") // user's real phone for call forwarding
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  smsMessages  SmsMessage[]
+  calls        PhoneCall[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("phone_numbers")
+}
+
+model SmsMessage {
+  id            String           @id @default(uuid())
+  phoneNumberId String           @map("phone_number_id")
+  userId        String           @map("user_id")
+  contactId     String?          @map("contact_id")
+  direction     MessageDirection
+  from          String
+  to            String
+  body          String           @db.Text
+  status        SmsStatus        @default(queued)
+  twilioSid     String?          @unique @map("twilio_sid")
+  mediaUrls     Json             @default("[]") @map("media_urls")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([phoneNumberId, createdAt(sort: Desc)])
+  @@index([userId, to])
+  @@map("sms_messages")
+}
+
+model PhoneCall {
+  id            String        @id @default(uuid())
+  phoneNumberId String        @map("phone_number_id")
+  userId        String        @map("user_id")
+  contactId     String?       @map("contact_id")
+  direction     CallDirection
+  from          String
+  to            String
+  status        CallStatus    @default(initiated)
+  duration      Int?          // seconds
+  recordingUrl  String?       @map("recording_url")
+  twilioSid     String?       @unique @map("twilio_sid")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([phoneNumberId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("phone_calls")
 }

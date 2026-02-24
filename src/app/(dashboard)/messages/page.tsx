@@ -2,7 +2,7 @@ import Header from "@/components/layout/header";
 import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import MessagesView from "./messages-view";
+import MessagesTabs from "./messages-tabs";
 import { ensureDefaultLabels } from "./label-actions";
 import { getFollowUpCount } from "./follow-up-actions";
 import { seedDefaultTemplates } from "./template-actions";
@@ -61,7 +61,7 @@ export default async function MessagesPage() {
   return (
     <>
       <Header title="Messages" />
-      <MessagesView
+      <MessagesTabs
         gmailConnected={data.gmailConnected}
         gmailEmail={data.gmailEmail}
         templates={data.templates}
