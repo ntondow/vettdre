@@ -500,6 +500,24 @@ export function generateBuildingReport(
     }
     y += 10;
 
+    // STR Potential
+    if (intel.strProjection) {
+      y = sectionTitle("Short-Term Rental Potential", y);
+      const str = intel.strProjection;
+      y = labelValue(y, "STR Revenue:", `$${str.monthlySTRPerUnit.toLocaleString()}/mo per unit (${str.strPremium > 0 ? "+" : ""}${str.strPremium}% premium over LTR)`);
+      y = labelValue(y, "LTR Revenue:", `$${str.monthlyLTRPerUnit.toLocaleString()}/mo per unit`);
+      if (str.annualDelta !== 0) {
+        y = labelValue(y, "Annual Delta:", `${str.annualDelta > 0 ? "+" : "-"}$${Math.abs(str.annualDelta) >= 1e6 ? (Math.abs(str.annualDelta) / 1e6).toFixed(2) + "M" : Math.round(Math.abs(str.annualDelta) / 1000).toLocaleString() + "K"}/yr`);
+      }
+      doc.setFontSize(8);
+      doc.setTextColor(...GRAY);
+      doc.setFont("helvetica", "italic");
+      doc.text("Subject to NYC Local Law 18 restrictions on short-term rentals.", ML + 10, y);
+      doc.setFont("helvetica", "normal");
+      y += 18;
+      y += 10;
+    }
+
     // Investment Signals
     y = sectionTitle("Investment Signals", y);
     if (intel.investmentSignals.signals.length > 0) {

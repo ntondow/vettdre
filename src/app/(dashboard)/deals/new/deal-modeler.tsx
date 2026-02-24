@@ -109,6 +109,7 @@ export default function DealModeler() {
   const [fredRate, setFredRate] = useState<number | null>(null);
   const [compValuation, setCompValuation] = useState<CompValuation | null>(null);
   const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
+  const [strProjection, setStrProjection] = useState<import("@/lib/airbnb-market").STRProjection | null>(null);
 
   // Fetch live FRED mortgage rate on mount
   useEffect(() => {
@@ -130,6 +131,15 @@ export default function DealModeler() {
     import("@/app/(dashboard)/market-intel/renovation-actions")
       .then(m => m.fetchRenovationEstimate(bbl))
       .then(est => { if (est) setRenoEstimate(est); })
+      .catch(() => {});
+  }, [bbl]);
+
+  // Fetch STR (Airbnb) income projection when BBL is available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10) return;
+    import("@/app/(dashboard)/market-intel/str-actions")
+      .then(m => m.fetchSTRProjection(bbl))
+      .then(proj => { if (proj) setStrProjection(proj); })
       .catch(() => {});
   }, [bbl]);
 
@@ -837,6 +847,19 @@ export default function DealModeler() {
                 <Field label="Concessions (annual)" value={inputs.concessions} onChange={v => update({ concessions: v })} prefix="$" aiAssumed={isAi("concessions")} onClearAi={() => clearAi("concessions")} />
               </div>
               <Field label="Annual Rent Growth" value={inputs.annualRentGrowth} onChange={v => update({ annualRentGrowth: v })} suffix="%" step="0.5" aiAssumed={isAi("annualRentGrowth")} onClearAi={() => clearAi("annualRentGrowth")} />
+              {strProjection && (
+                <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 -mt-1">
+                  <div className="flex items-center justify-between">
+                    <span className="inline-flex items-center gap-1.5 text-xs text-purple-700 font-medium">
+                      🏠 STR Potential: ${strProjection.monthlySTRRevenue.toLocaleString()}/mo per unit
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${strProjection.strPremium > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                        {strProjection.strPremium > 0 ? "+" : ""}{strProjection.strPremium}% vs LTR
+                      </span>
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-purple-500 mt-1">Based on {strProjection.neighborhood} Airbnb data — {strProjection.occupancyRate * 100}% occupancy, ${strProjection.avgNightlyRate}/night. ⚠️ NYC LL18 restricts STR.</p>
+                </div>
+              )}
             </Section>
 
             {/* Income — Commercial */}

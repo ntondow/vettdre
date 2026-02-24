@@ -68,6 +68,8 @@ export default function MarketIntelSearch() {
   // FRED Market Pulse state
   const [fredData, setFredData] = useState<import("@/lib/fred").FredSeries | null>(null);
   const [pulseCollapsed, setPulseCollapsed] = useState(false);
+  const [pulseLoading, setPulseLoading] = useState(true);
+  const [pulseMore, setPulseMore] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   // Redfin/FHFA Market Pulse data
   const [nycRedfin, setNycRedfin] = useState<import("@/lib/redfin-market").RedfinMetrics | null>(null);
@@ -75,13 +77,16 @@ export default function MarketIntelSearch() {
 
   // Fetch FRED data on mount
   useEffect(() => {
-    import("@/lib/fred-actions").then(m => m.getFredSeries()).then(setFredData).catch(() => {});
-    import("@/lib/market-trends-actions").then(m => {
-      m.getRedfinNycAggregate().then(setNycRedfin).catch(() => {});
-      m.getAppreciation("10001").then(a => {
-        if (a) setNycAppreciation({ metroAppreciation1Yr: a.metroAppreciation1Yr, fhfaQuarter: a.fhfaQuarter });
-      }).catch(() => {});
-    });
+    setPulseLoading(true);
+    Promise.all([
+      import("@/lib/fred-actions").then(m => m.getFredSeries()).then(setFredData).catch(() => {}),
+      import("@/lib/market-trends-actions").then(m => {
+        m.getRedfinNycAggregate().then(setNycRedfin).catch(() => {});
+        m.getAppreciation("10001").then(a => {
+          if (a) setNycAppreciation({ metroAppreciation1Yr: a.metroAppreciation1Yr, fhfaQuarter: a.fhfaQuarter });
+        }).catch(() => {});
+      }),
+    ]).finally(() => setPulseLoading(false));
   }, []);
 
   // Name search cross-tab navigation
@@ -142,66 +147,150 @@ export default function MarketIntelSearch() {
         onClearAll={clearAllFilters}
       />
 
-      {/* Market Pulse — FRED economic indicators */}
-      {fredData && (fredData.mortgage30 || fredData.unemployment) && (
-        <div className="mx-4 md:mx-8 mt-4">
-          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 overflow-hidden">
-            <button onClick={() => setPulseCollapsed(!pulseCollapsed)}
-              className="w-full flex items-center justify-between px-4 py-2.5">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-indigo-900">Market Pulse</span>
-                <span className="text-[10px] text-indigo-400">FRED</span>
-              </div>
-              <span className={`text-indigo-300 text-xs transition-transform ${pulseCollapsed ? "" : "rotate-180"}`}>&#9662;</span>
-            </button>
-            {!pulseCollapsed && (
-              <div className="px-4 pb-3 space-y-2">
-                <div className="flex flex-wrap gap-3">
-                  {[
-                    { label: "30yr Fixed", obs: fredData.mortgage30, suffix: "%" },
-                    { label: "15yr Fixed", obs: fredData.mortgage15, suffix: "%" },
-                    { label: "30yr Treasury", obs: fredData.treasury30, suffix: "%" },
-                    { label: "Unemployment", obs: fredData.unemployment, suffix: "%" },
-                    { label: "Housing Starts", obs: fredData.housingStarts, suffix: "K" },
-                  ].filter(i => i.obs).map(i => (
-                    <div key={i.label} className="bg-white/70 rounded-lg px-3 py-2">
-                      <p className="text-[10px] text-slate-400">{i.label}</p>
-                      <p className="text-sm font-black text-slate-900">{i.obs!.value.toLocaleString()}{i.suffix}</p>
-                    </div>
-                  ))}
+      {/* Market Pulse — Bloomberg-style ticker */}
+      <div className="mx-4 md:mx-8 mt-4">
+        <div className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-white/5 overflow-hidden">
+          {/* Header bar */}
+          <button onClick={() => setPulseCollapsed(!pulseCollapsed)}
+            className="w-full flex items-center justify-between px-4 py-2 cursor-pointer">
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+              </span>
+              <span className="text-[11px] font-semibold text-slate-200 tracking-wide">Market Pulse</span>
+            </div>
+            <div className="flex items-center gap-3">
+              {/* Collapsed teaser */}
+              {pulseCollapsed && !pulseLoading && fredData?.mortgage30 && (
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="text-slate-400">30yr <span className="text-white font-semibold">{fredData.mortgage30.value}%</span></span>
+                  {nycAppreciation && <span className="text-slate-400">HPI <span className="text-emerald-400 font-semibold">+{nycAppreciation.metroAppreciation1Yr}%</span></span>}
                 </div>
-                {(nycRedfin || nycAppreciation) && (
-                  <div className="flex flex-wrap gap-3 pt-1 border-t border-indigo-100/50">
-                    {nycRedfin && (
-                      <>
-                        <div className="bg-white/70 rounded-lg px-3 py-2">
-                          <p className="text-[10px] text-slate-400">NYC Median Sale</p>
-                          <p className="text-sm font-black text-slate-900">${(nycRedfin.medianSalePrice / 1000).toFixed(0)}K</p>
-                        </div>
-                        <div className="bg-white/70 rounded-lg px-3 py-2">
-                          <p className="text-[10px] text-slate-400">Days on Market</p>
-                          <p className="text-sm font-black text-slate-900">{nycRedfin.medianDaysOnMarket}</p>
-                        </div>
-                        <div className="bg-white/70 rounded-lg px-3 py-2">
-                          <p className="text-[10px] text-slate-400">Supply</p>
-                          <p className="text-sm font-black text-slate-900">{nycRedfin.monthsOfSupply} mo</p>
-                        </div>
-                      </>
+              )}
+              <span className={`text-slate-500 text-[10px] transition-transform duration-200 ${pulseCollapsed ? "" : "rotate-180"}`}>&#9662;</span>
+            </div>
+          </button>
+
+          {/* Expanded content */}
+          <div className={`grid transition-[grid-template-rows] duration-200 ease-out ${pulseCollapsed ? "grid-rows-[0fr]" : "grid-rows-[1fr]"}`}>
+            <div className="overflow-hidden">
+              <div className="px-4 pb-3">
+                {pulseLoading ? (
+                  /* Shimmer loading state */
+                  <div className="flex gap-2 overflow-hidden">
+                    {Array.from({ length: 7 }).map((_, i) => (
+                      <div key={i} className="flex-shrink-0 w-[88px] h-[52px] rounded-lg bg-slate-700/30 animate-pulse" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-stretch gap-0 overflow-x-auto no-scrollbar">
+                    {/* LEFT GROUP — Rates (FRED) */}
+                    <div className="flex gap-1.5 flex-shrink-0">
+                      {(() => {
+                        const rates: { label: string; value: number | undefined; suffix: string; border: string; trend?: string }[] = [
+                          { label: "30yr Fixed", value: fredData?.mortgage30?.value, suffix: "%", border: "border-l-blue-400", trend: fredData?.mortgage30 ? (fredData.mortgage30.value < 6.5 ? "down-good" : "up-bad") : undefined },
+                          { label: "15yr Fixed", value: fredData?.mortgage15?.value, suffix: "%", border: "border-l-blue-400", trend: fredData?.mortgage15 ? (fredData.mortgage15.value < 5.8 ? "down-good" : "up-bad") : undefined },
+                          { label: "30yr Treasury", value: fredData?.treasury30?.value, suffix: "%", border: "border-l-blue-400" },
+                        ];
+                        return rates.filter(m => m.value != null).map(m => (
+                          <div key={m.label} className={`flex-shrink-0 border-l-2 ${m.border} bg-slate-700/20 rounded-r-lg px-3 py-1.5`}>
+                            <p className="text-[9px] text-slate-400 leading-tight">{m.label}</p>
+                            <div className="flex items-center gap-1">
+                              <p className="text-[13px] font-bold text-white leading-tight">{m.value}{m.suffix}</p>
+                              {m.trend === "down-good" && <span className="text-emerald-400 text-[10px]">&#8595;</span>}
+                              {m.trend === "up-bad" && <span className="text-red-400 text-[10px]">&#8593;</span>}
+                            </div>
+                          </div>
+                        ));
+                      })()}
+                      <p className="self-end text-[8px] text-slate-600 pb-1 pr-1 flex-shrink-0">FRED</p>
+                    </div>
+
+                    {/* Divider */}
+                    {(nycRedfin || nycAppreciation) && (
+                      <div className="w-px bg-slate-600/30 mx-2 my-1 flex-shrink-0" />
                     )}
-                    {nycAppreciation && (
-                      <div className="bg-white/70 rounded-lg px-3 py-2">
-                        <p className="text-[10px] text-slate-400">NYC 1yr HPI</p>
-                        <p className="text-sm font-black text-emerald-700">+{nycAppreciation.metroAppreciation1Yr}%</p>
+
+                    {/* RIGHT GROUP — NYC Market (Redfin/FHFA) */}
+                    {(nycRedfin || nycAppreciation) && (
+                      <div className="flex gap-1.5 flex-shrink-0">
+                        {nycRedfin && (
+                          <>
+                            <div className="flex-shrink-0 border-l-2 border-l-emerald-400 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                              <p className="text-[9px] text-slate-400 leading-tight">Median Sale</p>
+                              <p className="text-[13px] font-bold text-white leading-tight">${(nycRedfin.medianSalePrice / 1000).toFixed(0)}K</p>
+                            </div>
+                            <div className="flex-shrink-0 border-l-2 border-l-emerald-400 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                              <p className="text-[9px] text-slate-400 leading-tight">Days on Mkt</p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-[13px] font-bold text-white leading-tight">{nycRedfin.medianDaysOnMarket}</p>
+                                {nycRedfin.medianDaysOnMarket < 45 && <span className="text-emerald-400 text-[10px]">&#8595;</span>}
+                                {nycRedfin.medianDaysOnMarket > 60 && <span className="text-red-400 text-[10px]">&#8593;</span>}
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 border-l-2 border-l-amber-400 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                              <p className="text-[9px] text-slate-400 leading-tight">Supply</p>
+                              <div className="flex items-center gap-1">
+                                <p className="text-[13px] font-bold text-white leading-tight">{nycRedfin.monthsOfSupply} mo</p>
+                                {nycRedfin.monthsOfSupply < 4 && <span className="text-red-400 text-[10px]">&#8595;</span>}
+                                {nycRedfin.monthsOfSupply > 6 && <span className="text-red-400 text-[10px]">&#8593;</span>}
+                              </div>
+                            </div>
+                          </>
+                        )}
+                        {nycAppreciation && (
+                          <div className="flex-shrink-0 border-l-2 border-l-emerald-400 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                            <p className="text-[9px] text-slate-400 leading-tight">1yr HPI</p>
+                            <div className="flex items-center gap-1">
+                              <p className={`text-[13px] font-bold leading-tight ${nycAppreciation.metroAppreciation1Yr > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                {nycAppreciation.metroAppreciation1Yr > 0 ? "+" : ""}{nycAppreciation.metroAppreciation1Yr}%
+                              </p>
+                              {nycAppreciation.metroAppreciation1Yr > 0 && <span className="text-emerald-400 text-[10px]">&#8593;</span>}
+                              {nycAppreciation.metroAppreciation1Yr < 0 && <span className="text-red-400 text-[10px]">&#8595;</span>}
+                            </div>
+                          </div>
+                        )}
+                        <p className="self-end text-[8px] text-slate-600 pb-1 pr-1 flex-shrink-0">Redfin / FHFA</p>
                       </div>
                     )}
-                    <span className="self-center text-[10px] text-indigo-300">Redfin / FHFA</span>
+                  </div>
+                )}
+
+                {/* More Indicators — expandable */}
+                {!pulseLoading && (fredData?.unemployment || fredData?.housingStarts) && (
+                  <div className="mt-1.5">
+                    <button onClick={() => setPulseMore(!pulseMore)} className="text-[9px] text-slate-500 hover:text-slate-300 transition-colors flex items-center gap-1 cursor-pointer">
+                      <span>{pulseMore ? "Less" : "More Indicators"}</span>
+                      <span className={`transition-transform duration-150 ${pulseMore ? "rotate-180" : ""}`}>&#9662;</span>
+                    </button>
+                    {pulseMore && (
+                      <div className="flex gap-1.5 mt-1.5">
+                        {fredData?.unemployment && (
+                          <div className="flex-shrink-0 border-l-2 border-l-slate-500 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                            <p className="text-[9px] text-slate-400 leading-tight">Unemployment</p>
+                            <div className="flex items-center gap-1">
+                              <p className="text-[13px] font-bold text-white leading-tight">{fredData.unemployment.value}%</p>
+                              {fredData.unemployment.value < 4.5 && <span className="text-emerald-400 text-[10px]">&#8595;</span>}
+                              {fredData.unemployment.value > 5.5 && <span className="text-red-400 text-[10px]">&#8593;</span>}
+                            </div>
+                          </div>
+                        )}
+                        {fredData?.housingStarts && (
+                          <div className="flex-shrink-0 border-l-2 border-l-slate-500 bg-slate-700/20 rounded-r-lg px-3 py-1.5">
+                            <p className="text-[9px] text-slate-400 leading-tight">Housing Starts</p>
+                            <p className="text-[13px] font-bold text-white leading-tight">{fredData.housingStarts.value}K</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Main content area */}
       <div className="px-4 md:px-8 py-6">

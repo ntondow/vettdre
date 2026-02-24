@@ -741,7 +741,7 @@ export function calibrateWithCensusData(
   inputs: DealInputs,
   census: CensusCalibration,
   hudFmr?: HudFmrData,
-  marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string }; renovation?: { recommendedLevel: string; totalCost: number; costPerUnit: number; arv: number; roi: number } },
+  marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string }; renovation?: { recommendedLevel: string; totalCost: number; costPerUnit: number; arv: number; roi: number }; strProjection?: { monthlySTRPerUnit: number; monthlyLTRPerUnit: number; strPremium: number; neighborhood: string; occupancyRate: number; avgNightlyRate: number } },
 ): DealInputs {
   const updated = { ...inputs };
   const assumptions = { ...(updated._assumptions || {}) };
@@ -785,7 +785,7 @@ export function calibrateWithCensusData(
   return updated;
 }
 
-function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string }; renovation?: { recommendedLevel: string; totalCost: number; costPerUnit: number; arv: number; roi: number } }): string {
+function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string }; renovation?: { recommendedLevel: string; totalCost: number; costPerUnit: number; arv: number; roi: number }; strProjection?: { monthlySTRPerUnit: number; monthlyLTRPerUnit: number; strPremium: number; neighborhood: string; occupancyRate: number; avgNightlyRate: number } }): string {
   const parts: string[] = [];
   if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
   if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
@@ -818,6 +818,10 @@ function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends
   if (marketTrends?.renovation) {
     const r = marketTrends.renovation;
     parts.push(`Renovation (${r.recommendedLevel}): $${Math.round(r.totalCost / 1000)}K ($${Math.round(r.costPerUnit / 1000)}K/unit)${r.arv > 0 ? ` | ARV $${Math.round(r.arv / 1000)}K (ROI ${r.roi}%)` : ""}`);
+  }
+  if (marketTrends?.strProjection) {
+    const s = marketTrends.strProjection;
+    parts.push(`Short-term rental comparable: $${s.avgNightlyRate}/night at ${Math.round(s.occupancyRate * 100)}% occupancy = $${s.monthlySTRPerUnit.toLocaleString()}/mo per unit vs LTR at $${s.monthlyLTRPerUnit.toLocaleString()}/mo (${s.strPremium}% premium). Note: NYC LL18 restricts STR.`);
   }
   return parts.join(" | ");
 }

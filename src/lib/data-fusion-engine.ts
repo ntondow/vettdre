@@ -194,6 +194,15 @@ export interface BuildingIntelligence {
     conditionSignals: string[];
   } | null;
 
+  strProjection: {
+    monthlySTRPerUnit: number;
+    monthlyLTRPerUnit: number;
+    strPremium: number;
+    annualDelta: number;
+    regulatoryRisk: string;
+    neighborhood: string;
+  } | null;
+
   liveListings: {
     forSale: {
       address: string;
@@ -1387,6 +1396,37 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   }
 
   // ============================================================
+  // PHASE 13b: STR (Airbnb) Projection
+  // ============================================================
+  let strProjectionData: BuildingIntelligence["strProjection"] = null;
+  try {
+    const units = totalUnits?.value || resUnits?.value || 0;
+    const zip = plutoData?.zipcode || "";
+    const borough = primaryAddress?.borough || "";
+    if (units > 0 && borough) {
+      const { matchNeighborhood, projectSTRIncome } = await import("./airbnb-market");
+      const neighborhood = matchNeighborhood(primaryAddress?.raw || "", borough, zip) || borough;
+      const strResult = projectSTRIncome({ neighborhood, borough, units });
+      strProjectionData = {
+        monthlySTRPerUnit: strResult.monthlySTRRevenue,
+        monthlyLTRPerUnit: strResult.monthlyLTRRevenue,
+        strPremium: strResult.strPremium,
+        annualDelta: strResult.annualDelta,
+        regulatoryRisk: "high",
+        neighborhood: strResult.neighborhood,
+      };
+
+      if (strResult.strPremium > 80) {
+        investmentSignals.score = Math.min(100, investmentSignals.score + 3);
+        investmentSignals.signals.push({ type: "high_str_premium", description: `STR premium ${strResult.strPremium}% over LTR — strong alternative use case potential`, estimatedUpside: `+$${Math.round(strResult.annualDelta / 1000)}K/yr STR delta` });
+      }
+      dataSources.push("InsideAirbnb");
+    }
+  } catch (err) {
+    console.warn("STR projection skipped:", err);
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1466,6 +1506,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     marketTrends: marketTrendsData,
     fannieMaeLoan: fannieMaeLoanData,
     renovationEstimate: renovationEstimateData,
+    strProjection: strProjectionData,
     liveListings,
     webIntelligence,
 
