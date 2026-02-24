@@ -20,6 +20,7 @@ const apis: ApiInfo[] = [
   { name: "Google Calendar", key: "gcal", icon: "📅", desc: "Showing scheduling and availability", comingSoon: true },
   { name: "FRED (Federal Reserve)", key: "fred", icon: "📉", desc: "Live mortgage rates and economic indicators" },
   { name: "HUD Fair Market Rents", key: "hud", icon: "🏘️", desc: "Zip-level Fair Market Rents from HUD" },
+  { name: "Fannie Mae Loan Lookup", key: "fannie", icon: "🏦", desc: "Determine if property has GSE-backed mortgage" },
 ];
 
 export default function ApiKeysPage() {

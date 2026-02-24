@@ -179,6 +179,12 @@ export interface BuildingIntelligence {
     trend: "appreciating" | "stable" | "declining";
   } | null;
 
+  fannieMaeLoan: {
+    isOwnedByFannieMae: boolean;
+    servicerName?: string;
+    lookupDate: string;
+  } | null;
+
   liveListings: {
     forSale: {
       address: string;
@@ -1277,6 +1283,43 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   }
 
   // ============================================================
+  // PHASE 13.9: Fannie Mae Loan Lookup
+  // ============================================================
+  let fannieMaeLoanData: BuildingIntelligence["fannieMaeLoan"] = null;
+  try {
+    if (primaryAddress && primaryAddress.street) {
+      const { lookupLoanByAddress } = await import("./fannie-mae");
+      const borough = plutoData?.borough || "";
+      const zip = plutoData?.zipCode || hpdRegistrations?.[0]?.zip || "";
+      const fannieResult = await lookupLoanByAddress(
+        primaryAddress.street,
+        borough || "New York",
+        "NY",
+        zip,
+      );
+      if (fannieResult) {
+        fannieMaeLoanData = {
+          isOwnedByFannieMae: fannieResult.isOwnedByFannieMae,
+          servicerName: fannieResult.servicerName,
+          lookupDate: fannieResult.lookupDate,
+        };
+        dataSources.push("Fannie Mae");
+
+        // Scoring adjustments
+        if (fannieResult.isOwnedByFannieMae) {
+          investmentSignals.score = Math.min(100, investmentSignals.score + 3);
+          investmentSignals.signals.push({ type: "fannie_mae_loan", description: "Fannie Mae-backed mortgage — standardized terms, potentially assumable", estimatedUpside: "More transparent financing for acquisition" });
+        } else {
+          distressSignals.score = Math.min(100, distressSignals.score + 3);
+          distressSignals.signals.push({ type: "non_agency_loan", severity: "low", description: "Non-agency loan — may be portfolio, private, or hard money lending", source: "Fannie Mae" });
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("Fannie Mae lookup skipped:", err);
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1354,6 +1397,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     investmentSignals,
     comps: compsAnalysis,
     marketTrends: marketTrendsData,
+    fannieMaeLoan: fannieMaeLoanData,
     liveListings,
     webIntelligence,
 

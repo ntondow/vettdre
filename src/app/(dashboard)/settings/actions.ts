@@ -374,6 +374,7 @@ export async function getApiKeyStatus() {
     gmail: { configured: !!gmail, preview: gmail?.email || null },
     fred: { configured: !!process.env.FRED_API_KEY, preview: process.env.FRED_API_KEY ? `****${process.env.FRED_API_KEY.slice(-4)}` : null },
     hud: { configured: !!process.env.HUD_API_TOKEN, preview: process.env.HUD_API_TOKEN ? `****${process.env.HUD_API_TOKEN.slice(-4)}` : null },
+    fannie: { configured: !!(process.env.FANNIE_CLIENT_ID && process.env.FANNIE_CLIENT_SECRET), preview: process.env.FANNIE_CLIENT_ID ? `****${process.env.FANNIE_CLIENT_ID.slice(-4)}` : null },
   };
 }
 
@@ -428,6 +429,11 @@ export async function testApiConnection(api: string): Promise<{ success: boolean
         const { fetchFmrByZip } = await import("@/lib/hud");
         const fmr = await fetchFmrByZip("10001");
         return fmr.source === "api" ? { success: true, message: `2BR FMR (10001): $${fmr.twoBr}` } : { success: false, message: "API returned fallback" };
+      }
+      case "fannie": {
+        if (!process.env.FANNIE_CLIENT_ID || !process.env.FANNIE_CLIENT_SECRET) return { success: false, message: "FANNIE_CLIENT_ID or FANNIE_CLIENT_SECRET not set" };
+        const { testConnection } = await import("@/lib/fannie-mae");
+        return testConnection();
       }
       default:
         return { success: false, message: "Unknown API" };
