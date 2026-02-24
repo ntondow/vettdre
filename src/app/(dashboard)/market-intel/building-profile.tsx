@@ -107,6 +107,9 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [marketTemp, setMarketTemp] = useState<{ temperature: MarketTemperature; label: string } | null>(null);
   // Fannie Mae Loan Lookup
   const [fannieLoan, setFannieLoan] = useState<import("@/lib/fannie-mae").FannieLoanResult | null>(null);
+  // Renovation Estimate
+  const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
+  const [renoLoading, setRenoLoading] = useState(false);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -277,6 +280,20 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       });
     }
   }, [intel?.fannieMaeLoan, data?.pluto?.address]);
+
+  // Fetch renovation estimate when building data is loaded
+  useEffect(() => {
+    if (!intel || !data?.pluto) return;
+    const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+    const units = parseInt(data.pluto.unitsres || data.pluto.unitstotal || "0");
+    if (units <= 0) return;
+    setRenoLoading(true);
+    import("./renovation-actions")
+      .then(m => m.fetchRenovationEstimate(bbl))
+      .then(est => { if (est) setRenoEstimate(est); })
+      .catch(() => {})
+      .finally(() => setRenoLoading(false));
+  }, [intel, data?.pluto, boroCode, block, lot]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
   useEffect(() => {
@@ -2780,6 +2797,191 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </div>
             )}
           </Section>
+          )}
+
+          {/* ============================================================ */}
+          {/* RENOVATION COST ESTIMATE */}
+          {/* ============================================================ */}
+          {(renoEstimate || renoLoading) && (
+          <FeatureGate feature="bp_renovation_basic" blur>
+          <Section id="renovation" title="Renovation Estimate" icon="🔧"
+            badge={renoEstimate ? (
+              <>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                  renoEstimate.recommendedLevel === "gut" ? "bg-red-100 text-red-700" :
+                  renoEstimate.recommendedLevel === "moderate" ? "bg-amber-100 text-amber-700" :
+                  "bg-emerald-100 text-emerald-700"
+                }`}>
+                  {renoEstimate.recommendedLevel.charAt(0).toUpperCase() + renoEstimate.recommendedLevel.slice(1)} Rehab
+                </span>
+                <span className="text-xs text-slate-400">
+                  ${renoEstimate.totalCost[renoEstimate.recommendedLevel] >= 1e6
+                    ? (renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1e6).toFixed(1) + "M"
+                    : Math.round(renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1000) + "K"
+                  }
+                </span>
+              </>
+            ) : undefined}
+            collapsed={isCollapsed("renovation")} onToggle={() => toggle("renovation")}>
+            {renoLoading ? (
+              <div className="flex items-center gap-2 py-4">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent" />
+                <span className="text-sm text-slate-500">Calculating renovation costs...</span>
+              </div>
+            ) : renoEstimate ? (
+              <div className="space-y-4">
+                {/* Condition Assessment */}
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Condition Assessment</p>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      renoEstimate.recommendedLevel === "gut" ? "bg-red-100 text-red-700" :
+                      renoEstimate.recommendedLevel === "moderate" ? "bg-amber-100 text-amber-700" :
+                      "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      Recommended: {renoEstimate.recommendedLevel.charAt(0).toUpperCase() + renoEstimate.recommendedLevel.slice(1)} Renovation
+                    </span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${
+                      renoEstimate.confidence === "high" ? "bg-emerald-100 text-emerald-700" :
+                      renoEstimate.confidence === "medium" ? "bg-amber-100 text-amber-700" :
+                      "bg-slate-200 text-slate-600"
+                    }`}>
+                      {renoEstimate.confidence} confidence
+                    </span>
+                  </div>
+                  <div className="space-y-1">
+                    {renoEstimate.conditionSignals.map((signal, i) => (
+                      <p key={i} className="text-xs text-slate-600 flex items-start gap-1.5">
+                        <span className="text-slate-400 mt-0.5">&#8226;</span>
+                        {signal}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Cost Estimate Table */}
+                <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-200 bg-slate-50">
+                        <th className="text-left p-2.5 font-medium text-slate-500"></th>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <th key={lvl} className={`text-right p-2.5 font-bold ${lvl === renoEstimate.recommendedLevel ? "bg-blue-50 text-blue-800" : "text-slate-700"}`}>
+                            {lvl.charAt(0).toUpperCase() + lvl.slice(1)}
+                            {lvl === renoEstimate.recommendedLevel && <span className="block text-[9px] font-medium text-blue-500">Recommended</span>}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="border-b border-slate-100">
+                        <td className="p-2.5 text-slate-600">Per Unit</td>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <td key={lvl} className={`text-right p-2.5 font-medium ${lvl === renoEstimate.recommendedLevel ? "bg-blue-50/50 text-blue-900" : "text-slate-800"}`}>
+                            ${renoEstimate.costPerUnit[lvl].toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="p-2.5 text-slate-600">Unit Total</td>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <td key={lvl} className={`text-right p-2.5 font-medium ${lvl === renoEstimate.recommendedLevel ? "bg-blue-50/50 text-blue-900" : "text-slate-800"}`}>
+                            ${renoEstimate.unitRenovation[lvl].toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="p-2.5 text-slate-600">Common Areas</td>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <td key={lvl} className={`text-right p-2.5 font-medium ${lvl === renoEstimate.recommendedLevel ? "bg-blue-50/50 text-blue-900" : "text-slate-800"}`}>
+                            ${renoEstimate.commonAreaCosts.reduce((s, c) => s + c.cost, 0).toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="border-b border-slate-100">
+                        <td className="p-2.5 text-slate-600">Soft Costs</td>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <td key={lvl} className={`text-right p-2.5 font-medium ${lvl === renoEstimate.recommendedLevel ? "bg-blue-50/50 text-blue-900" : "text-slate-800"}`}>
+                            ${Math.round(renoEstimate.totalCost[lvl] - renoEstimate.unitRenovation[lvl] - renoEstimate.commonAreaCosts.reduce((s, c) => s + c.cost, 0)).toLocaleString()}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr className="bg-slate-50 font-bold">
+                        <td className="p-2.5 text-slate-900">Total</td>
+                        {(["light", "moderate", "gut"] as const).map(lvl => (
+                          <td key={lvl} className={`text-right p-2.5 ${lvl === renoEstimate.recommendedLevel ? "bg-blue-100 text-blue-900" : "text-slate-900"}`}>
+                            ${renoEstimate.totalCost[lvl] >= 1e6 ? (renoEstimate.totalCost[lvl] / 1e6).toFixed(2) + "M" : Math.round(renoEstimate.totalCost[lvl] / 1000) + "K"}
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* After Repair Value */}
+                {renoEstimate.currentEstimatedValue > 0 && (
+                  <FeatureGate feature="bp_renovation_full" blur>
+                  <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3">
+                    <p className="text-[10px] text-emerald-600 uppercase tracking-wider mb-2">After Repair Value</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-slate-400">Current Est. Value</p>
+                        <p className="text-sm font-bold text-slate-900">${(renoEstimate.currentEstimatedValue / 1e6).toFixed(2)}M</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400">ARV ({renoEstimate.recommendedLevel})</p>
+                        <p className="text-sm font-bold text-emerald-800">${(renoEstimate.arv[renoEstimate.recommendedLevel] / 1e6).toFixed(2)}M</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400">Renovation Cost</p>
+                        <p className="text-sm font-bold text-slate-700">
+                          ${renoEstimate.totalCost[renoEstimate.recommendedLevel] >= 1e6
+                            ? (renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1e6).toFixed(2) + "M"
+                            : Math.round(renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1000) + "K"
+                          }
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-400">ROI on Renovation</p>
+                        <p className={`text-sm font-bold ${renoEstimate.renovationROI[renoEstimate.recommendedLevel] > 0 ? "text-emerald-700" : "text-red-600"}`}>
+                          {renoEstimate.renovationROI[renoEstimate.recommendedLevel]}%
+                        </p>
+                      </div>
+                    </div>
+                    {renoEstimate.renovationROI[renoEstimate.recommendedLevel] > 50 && (
+                      <p className="text-xs text-emerald-700 mt-2 font-medium">
+                        Strong value-add opportunity — {renoEstimate.recommendedLevel} renovation could increase property value by ~{Math.round((renoEstimate.arv[renoEstimate.recommendedLevel] / renoEstimate.currentEstimatedValue - 1) * 100)}%
+                      </p>
+                    )}
+                  </div>
+                  </FeatureGate>
+                )}
+
+                {/* Common Area Breakdown (expandable) */}
+                {renoEstimate.commonAreaCosts.length > 0 && (
+                  <FeatureGate feature="bp_renovation_full" blur>
+                  <details className="group">
+                    <summary className="text-xs text-slate-500 cursor-pointer hover:text-slate-700 flex items-center gap-1">
+                      <span className="group-open:rotate-90 transition-transform text-slate-400">&#9654;</span>
+                      Common Area Breakdown ({renoEstimate.commonAreaCosts.length} items)
+                    </summary>
+                    <div className="mt-2 space-y-1.5">
+                      {renoEstimate.commonAreaCosts.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600">{item.item}</span>
+                          <span className="font-medium text-slate-800">${item.cost.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                  </FeatureGate>
+                )}
+
+                <p className="text-[10px] text-slate-400">{renoEstimate.methodology}</p>
+              </div>
+            ) : null}
+          </Section>
+          </FeatureGate>
           )}
 
           {/* ============================================================ */}

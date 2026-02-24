@@ -108,6 +108,7 @@ export default function DealModeler() {
   const [isAiGenerated, setIsAiGenerated] = useState(false);
   const [fredRate, setFredRate] = useState<number | null>(null);
   const [compValuation, setCompValuation] = useState<CompValuation | null>(null);
+  const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
 
   // Fetch live FRED mortgage rate on mount
   useEffect(() => {
@@ -120,6 +121,15 @@ export default function DealModeler() {
     import("@/app/(dashboard)/market-intel/comps-actions")
       .then(m => m.fetchCompsWithValuation(bbl))
       .then(r => { if (r.valuation.estimatedValue > 0) setCompValuation(r.valuation); })
+      .catch(() => {});
+  }, [bbl]);
+
+  // Fetch renovation estimate when BBL is available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10) return;
+    import("@/app/(dashboard)/market-intel/renovation-actions")
+      .then(m => m.fetchRenovationEstimate(bbl))
+      .then(est => { if (est) setRenoEstimate(est); })
       .catch(() => {});
   }, [bbl]);
 
@@ -711,6 +721,20 @@ export default function DealModeler() {
                 <Field label="Closing Costs" value={inputs.closingCosts} onChange={v => update({ closingCosts: v })} prefix="$" aiAssumed={isAi("closingCosts")} onClearAi={() => clearAi("closingCosts")} />
                 <Field label="Renovation Budget" value={inputs.renovationBudget} onChange={v => update({ renovationBudget: v })} prefix="$" />
               </div>
+              {renoEstimate && (
+                <div className="flex items-center justify-between -mt-1 mb-1">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-medium border border-amber-100">
+                    {renoEstimate.recommendedLevel.charAt(0).toUpperCase() + renoEstimate.recommendedLevel.slice(1)} Rehab: ${renoEstimate.totalCost[renoEstimate.recommendedLevel] >= 1e6 ? (renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1e6).toFixed(2) + "M" : Math.round(renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1000) + "K"}
+                    {renoEstimate.arv[renoEstimate.recommendedLevel] > 0 && (
+                      <span className="text-amber-500 font-normal">ARV ${(renoEstimate.arv[renoEstimate.recommendedLevel] / 1e6).toFixed(1)}M</span>
+                    )}
+                  </span>
+                  <button onClick={() => update({ renovationBudget: renoEstimate.totalCost[renoEstimate.recommendedLevel] })}
+                    className="text-xs text-amber-600 hover:text-amber-800 font-medium">
+                    Apply to deal
+                  </button>
+                </div>
+              )}
               <div className="bg-blue-50 rounded-lg p-3">
                 <div className="flex justify-between text-xs">
                   <span className="text-slate-500">Total Equity Required</span>
