@@ -91,6 +91,8 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   // Census / Neighborhood profile
   const [censusProfile, setCensusProfile] = useState<NeighborhoodProfile | null>(null);
   const [censusLoading, setCensusLoading] = useState(false);
+  // HUD Fair Market Rents
+  const [hudFmr, setHudFmr] = useState<import("@/lib/hud").HudFmrData | null>(null);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -227,6 +229,13 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .catch(err => console.error("Census profile error:", err))
       .finally(() => setCensusLoading(false));
   }, [data?.pluto?.address, data?.pluto?.borough, borough]);
+
+  // Fetch HUD FMR when zip is available
+  useEffect(() => {
+    const zip = data?.pluto?.zipCode || data?.registrations?.[0]?.zip;
+    if (!zip) return;
+    import("@/lib/hud-actions").then(m => m.getHudFmr(zip)).then(setHudFmr).catch(() => {});
+  }, [data?.pluto?.zipCode, data?.registrations]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
   useEffect(() => {
@@ -2297,6 +2306,34 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                       </div>
                     );
                   })()}
+
+                  {/* HUD Fair Market Rents */}
+                  {hudFmr && (
+                    <div className="bg-slate-50 rounded-lg p-3">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">
+                        HUD Fair Market Rents (FY{hudFmr.year}) — {hudFmr.source === "api" ? `ZIP ${hudFmr.zip}` : "NYC Metro"}
+                      </p>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[
+                          { label: "Studio", val: hudFmr.studio },
+                          { label: "1BR", val: hudFmr.oneBr },
+                          { label: "2BR", val: hudFmr.twoBr },
+                          { label: "3BR", val: hudFmr.threeBr },
+                          { label: "4BR", val: hudFmr.fourBr },
+                        ].map(r => (
+                          <div key={r.label} className="text-center">
+                            <p className="text-[10px] text-slate-400">{r.label}</p>
+                            <p className="text-sm font-bold text-slate-900">${r.val.toLocaleString()}</p>
+                          </div>
+                        ))}
+                      </div>
+                      {censusProfile?.census?.medianRent && hudFmr.twoBr > censusProfile.census.medianRent * 1.2 && (
+                        <p className="text-xs text-amber-600 mt-2 font-medium">
+                          HUD FMR exceeds census median rent by {Math.round((hudFmr.twoBr / censusProfile.census.medianRent - 1) * 100)}% — potential rent gap
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : null}
             </Section>

@@ -7,6 +7,8 @@ import type { BuildingData } from "@/lib/ai-assumptions";
 import { calculateAll } from "@/lib/deal-calculator";
 import { getCensusContextForAI } from "@/app/(dashboard)/market-intel/neighborhood-actions";
 import { sendEmail } from "@/lib/gmail-send";
+import { getCurrentMortgageRate } from "@/lib/fred";
+import { fetchFmrByZip } from "@/lib/hud";
 
 async function getUser() {
   const supabase = await createClient();
@@ -398,8 +400,20 @@ export async function underwriteDeal(params: {
     hasElevator: parseInt(p.numfloors || "0") > 5,
   };
 
+  // Fetch live market data (non-blocking)
+  const zip = (hpdRegData[0]?.zip || "").slice(0, 5);
+  const [fredResult, hudResult] = await Promise.allSettled([
+    getCurrentMortgageRate(),
+    zip ? fetchFmrByZip(zip) : Promise.resolve(null),
+  ]);
+  const liveRate = fredResult.status === "fulfilled" ? fredResult.value : null;
+  const hudFmr = hudResult.status === "fulfilled" ? hudResult.value : undefined;
+
   // Generate AI assumptions
-  let inputs = generateDealAssumptions(buildingData);
+  let inputs = generateDealAssumptions(buildingData, {
+    liveInterestRate: liveRate ?? undefined,
+    hudFmr: hudFmr ?? undefined,
+  });
 
   // Calibrate with Census data if available
   const censusContext = await getCensusContextForAI(`${address}, ${borough}, NY`).catch(() => null);
@@ -418,7 +432,7 @@ export async function underwriteDeal(params: {
       vacancyRate: extractPct("Census vacancy"),
       medianHouseholdIncome: extractNum("Median income"),
       rentBurdenPct: extractPct("Rent burden"),
-    });
+    }, hudFmr ?? undefined);
   }
 
   const outputs = calculateAll(inputs);
