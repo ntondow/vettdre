@@ -69,5 +69,11 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  // Prevent caching of the root route (landing page vs auth redirect)
+  if (pathname === "/") {
+    supabaseResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    supabaseResponse.headers.set("Pragma", "no-cache");
+  }
+
   return supabaseResponse;
 }
