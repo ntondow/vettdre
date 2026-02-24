@@ -3,17 +3,15 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState, useEffect, useCallback } from "react";
-import { getUnreadCount } from "@/app/(dashboard)/messages/actions";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
 import type { Feature } from "@/lib/feature-gate";
 import Paywall from "@/components/ui/paywall";
 
 const tabs = [
-  { name: "Dashboard", href: "/dashboard", icon: "📊" },
-  { name: "Contacts", href: "/contacts", icon: "👥" },
+  { name: "Market Intel", href: "/market-intel", icon: "🔍" },
+  { name: "Deal Modeler", href: "/deals/new", icon: "🧮" },
   { name: "Pipeline", href: "/pipeline", icon: "📋" },
-  { name: "Messages", href: "/messages", icon: "📬", badge: true },
   { name: "More", href: "#more", icon: "☰" },
 ];
 
@@ -25,14 +23,13 @@ interface MoreItem {
 }
 
 const moreItems: MoreItem[] = [
-  { name: "Calendar", href: "/calendar", icon: "📅" },
-  { name: "Properties", href: "/properties", icon: "🏠" },
-  { name: "Deal Pipeline", href: "/deals", icon: "🏗️" },
-  { name: "Deal Modeler", href: "/deals/new", icon: "🧮", feature: "nav_deal_modeler" },
-  { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
   { name: "Prospecting", href: "/prospecting", icon: "🎯", feature: "nav_prospecting" },
+  { name: "Properties", href: "/properties", icon: "🏠" },
+  { name: "Contacts", href: "/contacts", icon: "👥" },
+  { name: "Messages", href: "/messages", icon: "📬" },
   { name: "Portfolios", href: "/portfolios", icon: "🏢", feature: "nav_portfolios" },
   { name: "Campaigns", href: "/campaigns", icon: "📣", feature: "nav_campaigns" },
+  { name: "Calendar", href: "/calendar", icon: "📅" },
   { name: "Financing", href: "/financing", icon: "💰", feature: "nav_financing" },
   { name: "Settings", href: "/settings", icon: "⚙️" },
 ];
@@ -41,14 +38,9 @@ export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
   const { plan } = useUserPlan();
-  const [unread, setUnread] = useState(0);
   const [showMore, setShowMore] = useState(false);
   const [entered, setEntered] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
-
-  useEffect(() => {
-    getUnreadCount().then(n => setUnread(n)).catch(() => {});
-  }, [pathname]);
 
   // Close sheet on route change
   useEffect(() => {
@@ -101,13 +93,8 @@ export default function MobileNav() {
                   isActive ? "text-blue-600" : "text-slate-500"
                 }`}
               >
-                <span className="text-lg leading-none relative">
+                <span className="text-lg leading-none">
                   {tab.icon}
-                  {tab.badge && unread > 0 && (
-                    <span className="absolute -top-1 -right-2 min-w-[16px] h-[16px] flex items-center justify-center px-0.5 bg-red-500 text-white text-[9px] font-bold rounded-full">
-                      {unread > 99 ? "99+" : unread}
-                    </span>
-                  )}
                 </span>
                 <span>{tab.name}</span>
               </button>

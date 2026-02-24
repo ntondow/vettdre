@@ -22,7 +22,7 @@ export default function PendingApprovalPage() {
       // Refresh the session to pick up any changes
       await supabase.auth.refreshSession();
       // Navigate to dashboard — middleware will redirect back here if still not approved
-      router.push("/dashboard");
+      router.push("/market-intel");
       router.refresh();
     } catch {
       setChecking(false);
