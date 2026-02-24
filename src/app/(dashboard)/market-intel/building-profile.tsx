@@ -12,6 +12,8 @@ import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
 import type { CompSale, CompSummary } from "@/lib/comps-engine";
 import FeatureGate from "@/components/ui/feature-gate";
 import SmsComposeModal from "@/components/ui/sms-compose-modal";
+import { fetchNeighborhoodProfile } from "./neighborhood-actions";
+import type { NeighborhoodProfile } from "./neighborhood-actions";
 
 interface Props {
   boroCode: string;
@@ -86,6 +88,9 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [ll84Data, setLl84Data] = useState<LL84Data | null>(null);
   const [ll97Risk, setLl97Risk] = useState<LL97Risk | null>(null);
   const [ll84Utilities, setLl84Utilities] = useState<LL84UtilityEstimate | null>(null);
+  // Census / Neighborhood profile
+  const [censusProfile, setCensusProfile] = useState<NeighborhoodProfile | null>(null);
+  const [censusLoading, setCensusLoading] = useState(false);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -98,6 +103,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     listings: true,
     comps: false,
     energy: true,
+    census: true,
   });
 
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -203,6 +209,19 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       })
       .finally(() => setLoading(false));
   }, [boroCode, block, lot]);
+
+  // Fetch Census neighborhood profile when address is available
+  useEffect(() => {
+    if (!data?.pluto?.address) return;
+    const addr = data.pluto.address;
+    const boro = data.pluto.borough || borough || "";
+    const fullAddr = `${addr}, ${boro}, NY`;
+    setCensusLoading(true);
+    fetchNeighborhoodProfile(fullAddr, { includeTrends: true })
+      .then(profile => setCensusProfile(profile))
+      .catch(err => console.error("Census profile error:", err))
+      .finally(() => setCensusLoading(false));
+  }, [data?.pluto?.address, data?.pluto?.borough, borough]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
   useEffect(() => {
@@ -2002,6 +2021,205 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </Section>
             );
           })()}
+
+          {/* ============================================================ */}
+          {/* CENSUS DEMOGRAPHICS */}
+          {/* ============================================================ */}
+          {(censusProfile || censusLoading) && (
+            <Section id="census" title="Census Demographics" icon="📊"
+              badge={censusProfile?.censusTract ? (
+                <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">
+                  Tract {censusProfile.censusTract}
+                </span>
+              ) : undefined}
+              className="bg-gradient-to-r from-violet-50 to-purple-50 rounded-xl border border-violet-200"
+              collapsed={isCollapsed("census")} onToggle={() => toggle("census")}>
+              {censusLoading ? (
+                <div className="flex items-center gap-2 text-xs text-slate-500 py-4">
+                  <div className="animate-spin rounded-full h-3 w-3 border-2 border-violet-500 border-t-transparent" />
+                  <span>Loading census data...</span>
+                </div>
+              ) : censusProfile ? (
+                <div className="space-y-4">
+                  {/* Key Metrics */}
+                  <div className="grid grid-cols-3 gap-2">
+                    {censusProfile.census?.medianHouseholdIncome != null && censusProfile.census.medianHouseholdIncome > 0 && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Median Income</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          ${(censusProfile.census.medianHouseholdIncome / 1000).toFixed(0)}k
+                        </p>
+                      </div>
+                    )}
+                    {(censusProfile.census?.medianRent ?? censusProfile.quickStats.medianRent) != null && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Median Rent</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          ${(censusProfile.census?.medianRent || censusProfile.quickStats.medianRent || 0).toLocaleString()}
+                          <span className="text-[10px] font-normal text-slate-400">/mo</span>
+                        </p>
+                      </div>
+                    )}
+                    {censusProfile.census?.vacancyRate != null && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Vacancy</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          {censusProfile.census.vacancyRate.toFixed(1)}%
+                        </p>
+                      </div>
+                    )}
+                    {censusProfile.census?.population != null && censusProfile.census.population > 0 && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Population</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          {censusProfile.census.population.toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                    {censusProfile.census?.medianAge != null && censusProfile.census.medianAge > 0 && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Median Age</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          {censusProfile.census.medianAge.toFixed(0)}
+                        </p>
+                      </div>
+                    )}
+                    {censusProfile.census?.medianHomeValue != null && censusProfile.census.medianHomeValue > 0 && (
+                      <div className="bg-white/70 rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider">Home Value</p>
+                        <p className="text-base font-black text-slate-900 mt-0.5">
+                          ${(censusProfile.census.medianHomeValue / 1000).toFixed(0)}k
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Renter vs Owner bar */}
+                  {censusProfile.census && censusProfile.census.renterPct > 0 && (
+                    <div className="bg-white/70 rounded-lg p-3">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1.5">Tenure Split</p>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-violet-700 font-bold w-12">{censusProfile.census.renterPct.toFixed(0)}%</span>
+                        <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full"
+                            style={{ width: `${censusProfile.census.renterPct}%` }}
+                          />
+                        </div>
+                        <span className="text-slate-500 w-12 text-right">{(100 - censusProfile.census.renterPct).toFixed(0)}%</span>
+                      </div>
+                      <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
+                        <span>Renter</span>
+                        <span>Owner</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Housing Stock Breakdown */}
+                  {censusProfile.census && (() => {
+                    const hs = censusProfile.census!.housingStock;
+                    const total = hs.singleFamily + hs.twoUnit + hs.threeToFour + hs.fiveToNine + hs.tenToNineteen + hs.twentyToFortyNine + hs.fiftyPlus;
+                    if (total === 0) return null;
+                    const bars = [
+                      { label: "50+ units", value: hs.fiftyPlus, color: "bg-violet-600" },
+                      { label: "20-49", value: hs.twentyToFortyNine, color: "bg-violet-500" },
+                      { label: "10-19", value: hs.tenToNineteen, color: "bg-violet-400" },
+                      { label: "5-9", value: hs.fiveToNine, color: "bg-purple-400" },
+                      { label: "3-4", value: hs.threeToFour, color: "bg-purple-300" },
+                      { label: "2 units", value: hs.twoUnit, color: "bg-purple-200" },
+                      { label: "1 family", value: hs.singleFamily, color: "bg-slate-300" },
+                    ].filter(b => b.value > 0);
+                    return (
+                      <div className="bg-white/70 rounded-lg p-3">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Housing Stock</p>
+                        <div className="space-y-1">
+                          {bars.map(b => (
+                            <div key={b.label} className="flex items-center gap-2 text-[11px]">
+                              <span className="w-14 text-slate-500 text-right">{b.label}</span>
+                              <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                                <div className={`h-full ${b.color} rounded-full`} style={{ width: `${(b.value / total) * 100}%` }} />
+                              </div>
+                              <span className="w-10 text-slate-600 font-medium">{((b.value / total) * 100).toFixed(0)}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Market Signals */}
+                  {censusProfile.signals.length > 0 && (
+                    <div className="bg-white/70 rounded-lg p-3">
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Market Signals</p>
+                      <div className="space-y-1.5">
+                        {censusProfile.signals.map((s, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <span className="text-xs mt-0.5">
+                              {s.sentiment === "positive" ? "🟢" : s.sentiment === "negative" ? "🔴" : "🟡"}
+                            </span>
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-500 uppercase">{s.label}: </span>
+                              <span className="text-xs text-slate-700">{s.value}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Trends (if available) */}
+                  {censusProfile.trends && censusProfile.trends.length >= 2 && (() => {
+                    const t = censusProfile.trends!;
+                    const first = t[0];
+                    const last = t[t.length - 1];
+                    const incomeGrowth = first.medianHouseholdIncome && last.medianHouseholdIncome
+                      ? ((last.medianHouseholdIncome - first.medianHouseholdIncome) / first.medianHouseholdIncome * 100)
+                      : null;
+                    const rentGrowth = first.medianRent && last.medianRent
+                      ? ((last.medianRent - first.medianRent) / first.medianRent * 100)
+                      : null;
+                    const popGrowth = first.population && last.population
+                      ? ((last.population - first.population) / first.population * 100)
+                      : null;
+                    if (!incomeGrowth && !rentGrowth && !popGrowth) return null;
+                    return (
+                      <div className="bg-white/70 rounded-lg p-3">
+                        <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">
+                          Trends ({first.year}–{last.year})
+                        </p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {incomeGrowth != null && (
+                            <div>
+                              <p className="text-[10px] text-slate-400">Income</p>
+                              <p className={`text-sm font-bold ${incomeGrowth >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                {incomeGrowth >= 0 ? "+" : ""}{incomeGrowth.toFixed(0)}%
+                              </p>
+                            </div>
+                          )}
+                          {rentGrowth != null && (
+                            <div>
+                              <p className="text-[10px] text-slate-400">Rent</p>
+                              <p className={`text-sm font-bold ${rentGrowth >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                {rentGrowth >= 0 ? "+" : ""}{rentGrowth.toFixed(0)}%
+                              </p>
+                            </div>
+                          )}
+                          {popGrowth != null && (
+                            <div>
+                              <p className="text-[10px] text-slate-400">Population</p>
+                              <p className={`text-sm font-bold ${popGrowth >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                                {popGrowth >= 0 ? "+" : ""}{popGrowth.toFixed(0)}%
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : null}
+            </Section>
+          )}
 
           {/* ============================================================ */}
           {/* 7. RELATED PROPERTIES (Portfolio) */}

@@ -2,9 +2,10 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { generateDealAssumptions } from "@/lib/ai-assumptions";
+import { generateDealAssumptions, calibrateWithCensusData } from "@/lib/ai-assumptions";
 import type { BuildingData } from "@/lib/ai-assumptions";
 import { calculateAll } from "@/lib/deal-calculator";
+import { getCensusContextForAI } from "@/app/(dashboard)/market-intel/neighborhood-actions";
 import { sendEmail } from "@/lib/gmail-send";
 
 async function getUser() {
@@ -398,7 +399,28 @@ export async function underwriteDeal(params: {
   };
 
   // Generate AI assumptions
-  const inputs = generateDealAssumptions(buildingData);
+  let inputs = generateDealAssumptions(buildingData);
+
+  // Calibrate with Census data if available
+  const censusContext = await getCensusContextForAI(`${address}, ${borough}, NY`).catch(() => null);
+  if (censusContext) {
+    // Parse census context back into calibration params
+    const extractNum = (label: string) => {
+      const m = censusContext.match(new RegExp(label + ".*?\\$?([\\d,.]+)"));
+      return m ? parseFloat(m[1].replace(/,/g, "")) : undefined;
+    };
+    const extractPct = (label: string) => {
+      const m = censusContext.match(new RegExp(label + ".*?([\\d.]+)%"));
+      return m ? parseFloat(m[1]) : undefined;
+    };
+    inputs = calibrateWithCensusData(inputs, {
+      medianRent: extractNum("Census median rent"),
+      vacancyRate: extractPct("Census vacancy"),
+      medianHouseholdIncome: extractNum("Median income"),
+      rentBurdenPct: extractPct("Rent burden"),
+    });
+  }
+
   const outputs = calculateAll(inputs);
 
   // Save the deal
@@ -417,7 +439,7 @@ export async function underwriteDeal(params: {
       dealSource: "off_market" as any,
       inputs: inputs as any,
       outputs: outputs as any,
-      notes: `AI-generated underwriting assumptions based on ${unitsRes || unitsTotal} units at ${address}, ${borough}. Year built: ${buildingData.yearBuilt}. ${hpdViolationCount > 0 ? `HPD violations: ${hpdViolationCount}.` : ""} ${rentStabilizedUnits > 0 ? `Rent stabilized units: ${rentStabilizedUnits}.` : ""}`,
+      notes: `AI-generated underwriting assumptions based on ${unitsRes || unitsTotal} units at ${address}, ${borough}. Year built: ${buildingData.yearBuilt}. ${hpdViolationCount > 0 ? `HPD violations: ${hpdViolationCount}.` : ""} ${rentStabilizedUnits > 0 ? `Rent stabilized units: ${rentStabilizedUnits}.` : ""}${inputs._censusContext ? ` Census: ${inputs._censusContext}` : ""}`,
     },
   });
 

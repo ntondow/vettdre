@@ -25,6 +25,10 @@ export type Feature =
   | "bp_live_listings"
   | "bp_web_intel"
   | "bp_apollo_enrichment"
+  // Census / Neighborhood
+  | "bp_census_basic"
+  | "bp_census_full"
+  | "bp_census_trends"
   // Map
   | "map_search"
   // Phone & SMS
@@ -46,6 +50,7 @@ export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 const FREE_FEATURES: Feature[] = [
   "nav_market_intel",
   "market_nyc",
+  "bp_census_basic",
 ];
 
 const EXPLORER_FEATURES: Feature[] = [
@@ -60,6 +65,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "bp_rpie",
   "bp_live_listings",
   "bp_web_intel",
+  "bp_census_full",
 ];
 
 const PRO_FEATURES: Feature[] = [
@@ -73,6 +79,7 @@ const PRO_FEATURES: Feature[] = [
   "nav_comp_analysis",
   "bp_owner_contact",
   "bp_apollo_enrichment",
+  "bp_census_trends",
   "phone_sms",
   "deal_modeler",
   "prospecting",
@@ -128,6 +135,8 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bp_live_listings: "Upgrade to Explorer to see live listings",
   bp_web_intel: "Upgrade to Explorer to see web intelligence",
   bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
+  bp_census_full: "Upgrade to Explorer for full census demographics",
+  bp_census_trends: "Upgrade to Pro for neighborhood trend data",
   deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   nav_deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   prospecting: "Upgrade to Pro to access Prospecting",

@@ -42,6 +42,21 @@ function checkPublicOwner(name: string): boolean {
 }
 
 export async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
+  // Try Geocodio first for rooftop accuracy
+  try {
+    const { geocodeAddress: geocodioGeocode, getGeocodioBudget } = await import("@/lib/geocodio");
+    const budget = getGeocodioBudget();
+    if (budget.remaining > 0) {
+      const result = await geocodioGeocode(query.trim());
+      if (result && result.lat && result.lng) {
+        return { lat: result.lat, lng: result.lng };
+      }
+    }
+  } catch (err) {
+    console.error("Geocodio fallback:", err);
+  }
+
+  // Fallback to Nominatim
   try {
     const q = encodeURIComponent(query.trim() + ", New York City");
     const res = await fetch(

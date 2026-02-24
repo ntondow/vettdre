@@ -135,6 +135,8 @@ export interface DealInputs {
 
   // Metadata — tracks which fields were AI-generated
   _assumptions?: Record<string, boolean>;
+  // Census calibration context (for display in deal notes)
+  _censusContext?: string;
 }
 
 export interface CashFlowYear {
