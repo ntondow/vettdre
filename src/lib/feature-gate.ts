@@ -27,6 +27,9 @@ export type Feature =
   | "bp_apollo_enrichment"
   // Map
   | "map_search"
+  // Phone & SMS
+  | "phone_sms"
+  | "phone_multi_numbers"
   // Other
   | "deal_modeler"
   | "prospecting"
@@ -70,6 +73,7 @@ const PRO_FEATURES: Feature[] = [
   "nav_comp_analysis",
   "bp_owner_contact",
   "bp_apollo_enrichment",
+  "phone_sms",
   "deal_modeler",
   "prospecting",
   "portfolios",
@@ -84,6 +88,7 @@ const TEAM_FEATURES: Feature[] = [
   ...PRO_FEATURES,
   "nav_investors",
   "investors",
+  "phone_multi_numbers",
 ];
 
 // Enterprise gets everything
@@ -139,6 +144,8 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   nav_financing: "Upgrade to Pro to access Financing",
   investors: "Upgrade to Team to access Investors",
   nav_investors: "Upgrade to Team to access Investors",
+  phone_sms: "Upgrade to Pro to use Phone & SMS",
+  phone_multi_numbers: "Upgrade to Team for multiple phone numbers",
 };
 
 export function getUpgradeMessage(feature: Feature): string {

@@ -8,6 +8,7 @@ import { enrichContact } from "./enrich-actions";
 import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
 import { CONTACT_TYPE_META } from "@/lib/contact-types";
 import type { ContactType } from "@/lib/contact-types";
+import SmsComposeModal from "@/components/ui/sms-compose-modal";
 
 // ---- TYPES ----
 interface Contact {
@@ -66,6 +67,7 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
   const [emailSending, setEmailSending] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [smsOpen, setSmsOpen] = useState(false);
   const [companyPeople, setCompanyPeople] = useState<any[]>([]);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [loadingPeople, setLoadingPeople] = useState(false);
@@ -216,6 +218,9 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
             <button onClick={() => { setActiveTab("emails"); setEmailComposeOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">✉️ Email</button>
             <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">📞 Log Call</button>
             <button onClick={() => { setActiveTab("activity"); setLogOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">💬 Log Text</button>
+            {contact.phone && (
+              <button onClick={() => setSmsOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors">📱 SMS</button>
+            )}
             <button onClick={() => { setActiveTab("tasks"); setTaskOpen(true); }} className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100 transition-colors">✅ Add Task</button>
             <div className="h-5 w-px bg-slate-200 mx-1" />
             {/* Tags */}
@@ -1116,6 +1121,15 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
           </div>
         </div>
       )}
+
+      {/* SMS Compose Modal */}
+      {smsOpen && contact.phone && (
+        <SmsComposeModal
+          to={contact.phone}
+          contactName={`${contact.firstName} ${contact.lastName}`.trim()}
+          onClose={() => setSmsOpen(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1405,6 +1419,7 @@ function TypeProfileCard({ contact }: { contact: Contact }) {
           </div>
         )
       )}
+
     </div>
   );
 }
