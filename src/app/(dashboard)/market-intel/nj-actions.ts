@@ -270,6 +270,109 @@ export async function searchNJComps(params: {
   }
 }
 
+// ============================================================
+// Spatial Query — Fetch NJ Properties in Map Bounds
+// Uses ArcGIS envelope geometry query with returnGeometry
+// ============================================================
+export async function fetchNJPropertiesInBounds(
+  swLat: number,
+  swLng: number,
+  neLat: number,
+  neLng: number,
+  filters?: {
+    minUnits?: number;
+    maxUnits?: number;
+    maxValue?: number;
+    minYearBuilt?: number;
+    maxYearBuilt?: number;
+    propertyClass?: string[];
+    ownerName?: string;
+  },
+): Promise<{ properties: NJPropertyResult[]; total: number }> {
+  try {
+    const conditions: string[] = [];
+
+    // Default to multifamily
+    if (filters?.propertyClass && filters.propertyClass.length > 0) {
+      conditions.push(
+        `PROP_CLASS IN (${filters.propertyClass.map((c) => `'${c}'`).join(",")})`,
+      );
+    } else {
+      conditions.push(
+        `PROP_CLASS IN (${NJ_MULTIFAMILY_CLASSES.map((c) => `'${c}'`).join(",")})`,
+      );
+    }
+
+    if (filters?.maxValue) conditions.push(`NET_VALUE <= ${filters.maxValue}`);
+    if (filters?.minYearBuilt)
+      conditions.push(`YR_CONSTR >= ${filters.minYearBuilt}`);
+    if (filters?.maxYearBuilt)
+      conditions.push(`YR_CONSTR <= ${filters.maxYearBuilt}`);
+    if (filters?.ownerName) {
+      conditions.push(
+        `UPPER(OWNER_NAME) LIKE '%${filters.ownerName.toUpperCase()}%'`,
+      );
+    }
+
+    const where = conditions.length > 0 ? conditions.join(" AND ") : "1=1";
+
+    const geometry = JSON.stringify({
+      xmin: swLng,
+      ymin: swLat,
+      xmax: neLng,
+      ymax: neLat,
+      spatialReference: { wkid: 4326 },
+    });
+
+    const params = new URLSearchParams({
+      where,
+      geometry,
+      geometryType: "esriGeometryEnvelope",
+      spatialRel: "esriSpatialRelIntersects",
+      inSR: "4326",
+      outSR: "4326",
+      outFields: PROPERTY_OUT_FIELDS,
+      returnGeometry: "true",
+      f: "json",
+      resultRecordCount: "400",
+      orderByFields: "NET_VALUE DESC",
+    });
+
+    const res = await fetch(`${ARCGIS_BASE}?${params.toString()}`);
+    if (!res.ok) {
+      console.error("NJ ArcGIS bounds error:", res.status);
+      return { properties: [], total: 0 };
+    }
+
+    const json = await res.json();
+    if (json.error) {
+      console.error("NJ ArcGIS bounds query error:", json.error);
+      return { properties: [], total: 0 };
+    }
+    if (!json.features || !Array.isArray(json.features))
+      return { properties: [], total: 0 };
+
+    let properties = json.features.map(parseNJFeature);
+
+    // Client-side unit filter (DWELL field isn't reliably queryable server-side)
+    if (filters?.minUnits && filters.minUnits > 0) {
+      properties = properties.filter(
+        (p: NJPropertyResult) => p.units >= filters.minUnits!,
+      );
+    }
+    if (filters?.maxUnits && filters.maxUnits > 0) {
+      properties = properties.filter(
+        (p: NJPropertyResult) => p.units <= filters.maxUnits!,
+      );
+    }
+
+    return { properties, total: properties.length };
+  } catch (err) {
+    console.error("NJ bounds search error:", err);
+    return { properties: [], total: 0 };
+  }
+}
+
 export async function fetchNJDealPrefill(municipality: string, block: string, lot: string): Promise<NJDealPrefill | null> {
   const prop = await getNJPropertyByParcel(municipality, block, lot);
   if (!prop) return null;

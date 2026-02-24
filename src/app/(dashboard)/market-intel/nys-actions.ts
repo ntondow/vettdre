@@ -49,8 +49,10 @@ export interface NYSSearchFilters {
   streetAddress?: string;
   ownerName?: string;
   propertyClass?: string;
+  propertyClasses?: string[]; // Array of classes for multi-select filter
   minUnits?: number;
   minMarketValue?: number;
+  maxMarketValue?: number;
 }
 
 export interface NYSTaxRate {
@@ -72,8 +74,11 @@ export async function searchNYSProperties(
   // Filter for latest available roll year
   where.push(`roll_year = '${getLatestRollYear()}'`);
 
-  // Filter multifamily by default unless specific class requested
-  if (filters.propertyClass) {
+  // Filter multifamily by default unless specific class(es) requested
+  if (filters.propertyClasses && filters.propertyClasses.length > 0) {
+    const classFilter = filters.propertyClasses.map(c => `'${c}'`).join(",");
+    where.push(`property_class in(${classFilter})`);
+  } else if (filters.propertyClass) {
     where.push(`property_class = '${filters.propertyClass}'`);
   } else {
     const classFilter = MULTIFAMILY_CLASSES.map(c => `'${c}'`).join(",");
@@ -99,6 +104,10 @@ export async function searchNYSProperties(
 
   if (filters.minMarketValue) {
     where.push(`full_market_value >= ${filters.minMarketValue}`);
+  }
+
+  if (filters.maxMarketValue) {
+    where.push(`full_market_value <= ${filters.maxMarketValue}`);
   }
 
   // Note: residential_units does not exist in this dataset — skip unit filter

@@ -73,6 +73,7 @@ export async function fetchPropertiesInBounds(
     bldgClass?: string;
     zoneDist?: string;
     excludePublic?: boolean;
+    ownerName?: string;
   }
 ) {
   console.log("=== MAP FETCH ===", swLat, swLng, "to", neLat, neLng);
@@ -96,6 +97,7 @@ export async function fetchPropertiesInBounds(
   if (filters?.minFloors) conditions.push(`numfloors >= ${filters.minFloors}`);
   if (filters?.bldgClass) conditions.push(`bldgclass like '${filters.bldgClass}%'`);
   if (filters?.zoneDist) conditions.push(`zonedist1 like '${filters.zoneDist}%'`);
+  if (filters?.ownerName) conditions.push(`upper(ownername) like upper('%${filters.ownerName.replace(/'/g, "''")}%')`);
 
   try {
     const url = new URL(NYC + "/" + PLUTO + ".json");
