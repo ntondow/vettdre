@@ -3,6 +3,7 @@
 // ============================================================
 // NYS Server Actions — data.ny.gov Socrata API
 // Assessment Rolls + Municipal Tax Rates
+// Dataset: 7vem-aaz7 (Real Property Assessment Data)
 // ============================================================
 
 const NYS_ASSESSMENT_API = "https://data.ny.gov/resource/7vem-aaz7.json";
@@ -12,6 +13,11 @@ const NYS_TOKEN = process.env.NYS_OPEN_DATA_TOKEN || "";
 
 // Multifamily property classes in NYS assessment rolls
 const MULTIFAMILY_CLASSES = ["210","220","230","280","411","414","480","481","482","483"];
+
+// Assessment data is published ~2 years behind current year
+function getLatestRollYear(): string {
+  return String(new Date().getFullYear() - 2);
+}
 
 export interface NYSPropertyResult {
   swisCode: string;
@@ -63,8 +69,8 @@ export async function searchNYSProperties(
 ): Promise<{ properties: NYSPropertyResult[]; total: number }> {
   const where: string[] = [];
 
-  // Always filter for latest roll year
-  where.push(`roll_year = '${new Date().getFullYear() - 1}'`);
+  // Filter for latest available roll year
+  where.push(`roll_year = '${getLatestRollYear()}'`);
 
   // Filter multifamily by default unless specific class requested
   if (filters.propertyClass) {
@@ -75,29 +81,27 @@ export async function searchNYSProperties(
   }
 
   if (filters.county) {
-    where.push(`county_name = '${filters.county.toUpperCase()}'`);
+    where.push(`upper(county_name) = '${filters.county.toUpperCase()}'`);
   }
 
   if (filters.municipality) {
-    where.push(`municipality_name = '${filters.municipality.toUpperCase()}'`);
+    where.push(`upper(municipality_name) = '${filters.municipality.toUpperCase()}'`);
   }
 
   if (filters.streetAddress) {
-    where.push(`upper(street_address) like '%${filters.streetAddress.toUpperCase().replace(/'/g, "''")}%'`);
+    where.push(`upper(parcel_address_street) like '%${filters.streetAddress.toUpperCase().replace(/'/g, "''")}%'`);
   }
 
   if (filters.ownerName) {
-    where.push(`upper(owner_name) like '%${filters.ownerName.toUpperCase().replace(/'/g, "''")}%'`);
+    const name = filters.ownerName.toUpperCase().replace(/'/g, "''");
+    where.push(`(upper(primary_owner_last_name) like '%${name}%' OR upper(primary_owner_first_name) like '%${name}%')`);
   }
 
   if (filters.minMarketValue) {
     where.push(`full_market_value >= ${filters.minMarketValue}`);
   }
 
-  // For units, NYS data has total_units in some records
-  if (filters.minUnits) {
-    where.push(`residential_units >= ${filters.minUnits}`);
-  }
+  // Note: residential_units does not exist in this dataset — skip unit filter
 
   const whereClause = where.join(" AND ");
   const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(whereClause)}&$order=full_market_value DESC&$limit=200`;
@@ -135,7 +139,7 @@ export async function getNYSPropertyByParcel(
   swisCode: string,
   printKey: string
 ): Promise<NYSPropertyResult | null> {
-  const where = `swis_code = '${swisCode}' AND print_key = '${printKey}'`;
+  const where = `swis_code = '${swisCode}' AND print_key_code = '${printKey}'`;
   const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(where)}&$order=roll_year DESC&$limit=1`;
 
   const headers: Record<string, string> = {};
@@ -196,15 +200,15 @@ export async function searchNYSAddresses(
   if (!query || query.length < 3) return [];
 
   const where: string[] = [
-    `roll_year = '${new Date().getFullYear() - 1}'`,
-    `upper(street_address) like '%${query.toUpperCase().replace(/'/g, "''")}%'`,
+    `roll_year = '${getLatestRollYear()}'`,
+    `upper(parcel_address_street) like '%${query.toUpperCase().replace(/'/g, "''")}%'`,
   ];
 
   if (county) {
-    where.push(`county_name = '${county.toUpperCase()}'`);
+    where.push(`upper(county_name) = '${county.toUpperCase()}'`);
   }
 
-  const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(where.join(" AND "))}&$select=street_address,municipality_name,swis_code,print_key&$limit=15`;
+  const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(where.join(" AND "))}&$select=parcel_address_number,parcel_address_street,parcel_address_suff,municipality_name,swis_code,print_key_code&$limit=15`;
 
   const headers: Record<string, string> = {};
   if (NYS_TOKEN) headers["X-App-Token"] = NYS_TOKEN;
@@ -217,10 +221,10 @@ export async function searchNYSAddresses(
     if (!Array.isArray(data)) return [];
 
     return data.map((r: any) => ({
-      address: r.street_address || "",
+      address: [r.parcel_address_number, r.parcel_address_street, r.parcel_address_suff].filter(Boolean).join(" ").trim(),
       municipality: r.municipality_name || "",
       swisCode: r.swis_code || "",
-      printKey: r.print_key || "",
+      printKey: r.print_key_code || "",
     }));
   } catch {
     return [];
@@ -228,7 +232,7 @@ export async function searchNYSAddresses(
 }
 
 // ============================================================
-// NYS Comps Search
+// NYS Comps Search (assessment-based — no sale data in this dataset)
 // ============================================================
 export async function searchNYSComps(params: {
   county: string;
@@ -236,20 +240,18 @@ export async function searchNYSComps(params: {
   yearsBack?: number;
   limit?: number;
 }): Promise<{ comps: NYSPropertyResult[]; avgPricePerUnit: number; medianPricePerUnit: number }> {
-  const { county, minPrice = 500000, yearsBack = 5, limit = 50 } = params;
+  const { county, minPrice = 500000, limit = 50 } = params;
 
-  const cutoffYear = new Date().getFullYear() - yearsBack;
   const classFilter = MULTIFAMILY_CLASSES.map(c => `'${c}'`).join(",");
 
   const where = [
-    `county_name = '${county.toUpperCase()}'`,
+    `upper(county_name) = '${county.toUpperCase()}'`,
     `property_class in(${classFilter})`,
-    `sale_price >= ${minPrice}`,
-    `sale_date_ccyymmdd >= '${cutoffYear}0101'`,
-    `roll_year = '${new Date().getFullYear() - 1}'`,
+    `full_market_value >= ${minPrice}`,
+    `roll_year = '${getLatestRollYear()}'`,
   ].join(" AND ");
 
-  const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(where)}&$order=sale_date_ccyymmdd DESC&$limit=${limit}`;
+  const url = `${NYS_ASSESSMENT_API}?$where=${encodeURIComponent(where)}&$order=full_market_value DESC&$limit=${limit}`;
 
   const headers: Record<string, string> = {};
   if (NYS_TOKEN) headers["X-App-Token"] = NYS_TOKEN;
@@ -261,11 +263,11 @@ export async function searchNYSComps(params: {
     const data = await response.json();
     if (!Array.isArray(data)) return { comps: [], avgPricePerUnit: 0, medianPricePerUnit: 0 };
 
-    const comps = data.map((r: any) => parseNYSRecord(r)).filter(c => c.salePrice >= minPrice);
+    const comps = data.map((r: any) => parseNYSRecord(r));
 
-    // Calculate stats
+    // Use full_market_value as proxy for comps (no sale data in assessment roll)
     const ppuValues = comps
-      .map(c => c.totalUnits > 0 ? Math.round(c.salePrice / c.totalUnits) : 0)
+      .map(c => c.fullMarketValue > 0 ? Math.round(c.fullMarketValue) : 0)
       .filter(v => v > 0)
       .sort((a, b) => a - b);
 
@@ -310,7 +312,7 @@ export interface NYSDealPrefillData {
 export async function fetchNYSDealPrefill(
   swisCode: string,
   printKey: string,
-  county: string
+  _county: string
 ): Promise<NYSDealPrefillData | null> {
   const [property, taxRate] = await Promise.all([
     getNYSPropertyByParcel(swisCode, printKey),
@@ -360,39 +362,60 @@ export async function fetchNYSDealPrefill(
 // Helpers
 // ============================================================
 function parseNYSRecord(r: any): NYSPropertyResult {
-  // Parse sale date from CCYYMMDD format
-  let saleDate = "";
-  if (r.sale_date_ccyymmdd) {
-    const d = r.sale_date_ccyymmdd;
-    if (d.length === 8) {
-      saleDate = `${d.substring(0, 4)}-${d.substring(4, 6)}-${d.substring(6, 8)}`;
-    }
-  } else if (r.sale_date) {
-    saleDate = r.sale_date;
-  }
+  // Build owner name from first + last name fields
+  const ownerParts = [
+    r.primary_owner_first_name,
+    r.primary_owner_mi,
+    r.primary_owner_last_name,
+    r.primary_owner_suffix,
+  ].filter(Boolean);
+  // If no first name, check for additional owners (often LLC names span last_name + additional_owner)
+  const additionalParts = [
+    r.additional_owner_1_first,
+    r.additional_owner_1_last_name,
+  ].filter(Boolean);
+  const ownerName = ownerParts.length > 0
+    ? ownerParts.join(" ") + (additionalParts.length > 0 ? " / " + additionalParts.join(" ") : "")
+    : additionalParts.join(" ");
+
+  // Build street address from parts
+  const address = [
+    r.parcel_address_number,
+    r.parcel_address_street,
+    r.parcel_address_suff,
+  ].filter(Boolean).join(" ").trim();
+
+  // Build mailing address
+  const mailingAddress = [
+    [r.mailing_address_prefix, r.mailing_address_number, r.mailing_address_street, r.mailing_address_suff].filter(Boolean).join(" "),
+    r.mailing_address_city,
+    r.mailing_address_state,
+    r.mailing_address_zip,
+  ].filter(Boolean).join(", ");
 
   return {
     swisCode: r.swis_code || "",
-    printKey: r.print_key || "",
+    printKey: r.print_key_code || "",
     municipality: r.municipality_name || "",
     county: r.county_name || "",
-    address: r.street_address || r.print_key || "",
-    ownerName: r.owner_name || "",
-    mailingAddress: [r.mail_addr, r.mail_city, r.mail_state, r.mail_zip].filter(Boolean).join(", "),
+    address: address || r.print_key_code || "",
+    ownerName,
+    mailingAddress,
     propertyClass: r.property_class || "",
     propertyClassDesc: r.property_class_description || getPropertyClassDesc(r.property_class || ""),
-    yearBuilt: parseInt(r.year_built || "0"),
-    totalUnits: parseInt(r.residential_units || r.total_units || "0"),
-    totalLivingArea: parseInt(r.total_living_area || r.square_footage || "0"),
-    stories: parseInt(r.stories || r.number_of_stories || "0"),
+    // These fields don't exist in the assessment roll dataset
+    yearBuilt: 0,
+    totalUnits: 0,
+    totalLivingArea: 0,
+    stories: 0,
     fullMarketValue: parseInt(r.full_market_value || "0"),
-    totalAssessedValue: parseInt(r.total_assessed_value || "0"),
-    landValue: parseInt(r.land_assessed_value || "0"),
-    salePrice: parseInt(r.sale_price || "0"),
-    saleDate,
+    totalAssessedValue: parseInt(r.assessment_total || "0"),
+    landValue: parseInt(r.assessment_land || "0"),
+    salePrice: 0,
+    saleDate: "",
     rollYear: r.roll_year || "",
-    lat: parseFloat(r.latitude || "0"),
-    lng: parseFloat(r.longitude || "0"),
+    lat: 0,
+    lng: 0,
   };
 }
 
