@@ -404,7 +404,7 @@ export async function underwriteDeal(params: {
 
   // Fetch live market data (non-blocking)
   const zip = (hpdRegData[0]?.zip || "").slice(0, 5);
-  const [fredResult, hudResult, appreciationResult, fannieResult, renoResult] = await Promise.allSettled([
+  const [fredResult, hudResult, appreciationResult, fannieResult, renoResult, strResult] = await Promise.allSettled([
     getCurrentMortgageRate(),
     zip ? fetchFmrByZip(zip) : Promise.resolve(null),
     zip ? getMarketAppreciation(zip) : Promise.resolve(null),
@@ -420,6 +420,7 @@ export async function underwriteDeal(params: {
       dobPermitsRecent: 0,
       assessedValue: assessTotal,
     })).catch(() => null),
+    import("@/app/(dashboard)/market-intel/str-actions").then(m => m.fetchSTRProjection(bbl)).catch(() => null),
   ]);
   const liveRate = fredResult.status === "fulfilled" ? fredResult.value : null;
   const hudFmr = hudResult.status === "fulfilled" ? hudResult.value : undefined;
@@ -427,6 +428,7 @@ export async function underwriteDeal(params: {
   const redfin = zip ? getRedfinMetrics(zip) : null;
   const fannieLoan = fannieResult.status === "fulfilled" ? fannieResult.value : null;
   const renoEst = renoResult.status === "fulfilled" ? renoResult.value : null;
+  const strProj = strResult.status === "fulfilled" ? strResult.value : null;
 
   // Generate AI assumptions
   let inputs = generateDealAssumptions(buildingData, {
@@ -458,6 +460,7 @@ export async function underwriteDeal(params: {
       redfin: redfin ?? undefined,
       fannieMae: fannieLoan ? { isOwnedByFannieMae: fannieLoan.isOwnedByFannieMae, servicerName: fannieLoan.servicerName } : undefined,
       renovation: renoEst ? { recommendedLevel: renoEst.recommendedLevel, totalCost: renoEst.totalCost[renoEst.recommendedLevel], costPerUnit: renoEst.costPerUnit[renoEst.recommendedLevel], arv: renoEst.arv[renoEst.recommendedLevel], roi: renoEst.renovationROI[renoEst.recommendedLevel] } : undefined,
+      strProjection: strProj ? { monthlySTRPerUnit: strProj.monthlySTRRevenue, monthlyLTRPerUnit: strProj.monthlyLTRRevenue, strPremium: strProj.strPremium, neighborhood: strProj.neighborhood, occupancyRate: strProj.occupancyRate, avgNightlyRate: strProj.avgNightlyRate } : undefined,
     });
   }
 

@@ -110,6 +110,11 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   // Renovation Estimate
   const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
   const [renoLoading, setRenoLoading] = useState(false);
+  // STR (Airbnb) Projection
+  const [strProjection, setStrProjection] = useState<import("@/lib/airbnb-market").STRProjection | null>(null);
+  const [strLoading, setStrLoading] = useState(false);
+  // PDF Export
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -123,6 +128,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     comps: false,
     energy: true,
     census: true,
+    str: true,
   });
 
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
@@ -293,6 +299,20 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .then(est => { if (est) setRenoEstimate(est); })
       .catch(() => {})
       .finally(() => setRenoLoading(false));
+  }, [intel, data?.pluto, boroCode, block, lot]);
+
+  // Fetch STR (Airbnb) income projection
+  useEffect(() => {
+    if (!intel || !data?.pluto) return;
+    const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+    const units = parseInt(data.pluto.unitsres || data.pluto.unitstotal || "0");
+    if (units <= 0) return;
+    setStrLoading(true);
+    import("./str-actions")
+      .then(m => m.fetchSTRProjection(bbl))
+      .then(proj => { if (proj) setStrProjection(proj); })
+      .catch(() => {})
+      .finally(() => setStrLoading(false));
   }, [intel, data?.pluto, boroCode, block, lot]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
@@ -534,6 +554,46 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               >
                 Manual Model
               </a>
+              <button
+                onClick={async () => {
+                  const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+                  setPdfExporting(true);
+                  try {
+                    const res = await fetch(`/api/report/${bbl}`);
+                    if (!res.ok) {
+                      const err = await res.json().catch(() => ({ error: "Failed" }));
+                      alert(err.error || "Failed to generate report");
+                      return;
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `VettdRE-Report-${displayAddr.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-").slice(0, 60)}.pdf`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    console.error("PDF export error:", err);
+                  }
+                  setPdfExporting(false);
+                }}
+                disabled={pdfExporting}
+                className="px-4 py-2 border border-slate-300 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5"
+              >
+                {pdfExporting ? (
+                  <>
+                    <span className="animate-spin inline-block w-3 h-3 border-2 border-slate-400 border-t-transparent rounded-full"></span>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                    Export PDF
+                  </>
+                )}
+              </button>
               {crmResult && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg">
@@ -2978,6 +3038,143 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 )}
 
                 <p className="text-[10px] text-slate-400">{renoEstimate.methodology}</p>
+              </div>
+            ) : null}
+          </Section>
+          </FeatureGate>
+          )}
+
+          {/* ============================================================ */}
+          {/* Short-Term Rental Analysis */}
+          {/* ============================================================ */}
+          {(strProjection || strLoading) && (
+          <FeatureGate feature="bp_str_basic" blur>
+          <Section id="str" title="Short-Term Rental Analysis" icon="🏠"
+            badge={strProjection ? (
+              <span className="flex items-center gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-purple-100 text-purple-700">{strProjection.neighborhood}</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  strProjection.strPremium > 50 ? "bg-emerald-100 text-emerald-700" :
+                  strProjection.strPremium > 20 ? "bg-amber-100 text-amber-700" :
+                  "bg-slate-100 text-slate-600"
+                }`}>
+                  {strProjection.strPremium > 0 ? "+" : ""}{strProjection.strPremium}% vs LTR
+                </span>
+              </span>
+            ) : null}
+            collapsed={isCollapsed("str")} onToggle={() => toggle("str")}>
+            {strLoading ? (
+              <div className="flex items-center gap-2 py-3">
+                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-sm text-slate-500">Analyzing short-term rental potential...</span>
+              </div>
+            ) : strProjection ? (
+              <div className="space-y-4">
+                {/* Revenue Comparison — two-column LTR vs STR */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-slate-50 rounded-lg p-4">
+                    <p className="text-[10px] text-slate-400 uppercase tracking-wide mb-2 font-semibold">Long-Term Rental</p>
+                    <p className="text-lg font-bold text-slate-800">${strProjection.monthlyLTRRevenue.toLocaleString()}<span className="text-xs font-normal text-slate-400">/mo per unit</span></p>
+                    <p className="text-sm text-slate-600 mt-1">
+                      ${strProjection.annualLTRRevenue >= 1e6
+                        ? (strProjection.annualLTRRevenue / 1e6).toFixed(2) + "M"
+                        : Math.round(strProjection.annualLTRRevenue / 1000).toLocaleString() + "K"}/yr
+                      {data?.pluto && <span className="text-slate-400"> ({parseInt(data.pluto.unitsres || data.pluto.unitstotal || "0")} units)</span>}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <p className="text-[10px] text-blue-500 uppercase tracking-wide mb-2 font-semibold">Short-Term Rental</p>
+                    <p className="text-lg font-bold text-blue-900">${strProjection.monthlySTRRevenue.toLocaleString()}<span className="text-xs font-normal text-blue-400">/mo per unit</span></p>
+                    <p className="text-sm text-blue-700 mt-1">
+                      ${strProjection.annualSTRRevenue >= 1e6
+                        ? (strProjection.annualSTRRevenue / 1e6).toFixed(2) + "M"
+                        : Math.round(strProjection.annualSTRRevenue / 1000).toLocaleString() + "K"}/yr
+                      {data?.pluto && <span className="text-blue-400"> ({parseInt(data.pluto.unitsres || data.pluto.unitstotal || "0")} units)</span>}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Premium callout + delta */}
+                <div className={`rounded-lg p-3 ${strProjection.strPremium > 50 ? "bg-emerald-50 border border-emerald-200" : strProjection.strPremium > 20 ? "bg-amber-50 border border-amber-200" : "bg-slate-50 border border-slate-200"}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm font-bold ${strProjection.strPremium > 50 ? "text-emerald-800" : strProjection.strPremium > 20 ? "text-amber-800" : "text-slate-700"}`}>
+                      {strProjection.strPremium > 0 ? "+" : ""}{strProjection.strPremium}% revenue potential with STR
+                    </span>
+                    <span className={`text-sm font-bold ${strProjection.annualDelta > 0 ? "text-emerald-700" : "text-red-600"}`}>
+                      {strProjection.annualDelta > 0 ? "+" : "-"}${Math.abs(strProjection.annualDelta) >= 1e6
+                        ? (Math.abs(strProjection.annualDelta) / 1e6).toFixed(2) + "M"
+                        : Math.round(Math.abs(strProjection.annualDelta) / 1000).toLocaleString() + "K"}/yr
+                    </span>
+                  </div>
+                  <div className="w-full h-2 bg-white/60 rounded-full overflow-hidden mt-2">
+                    <div
+                      className={`h-full rounded-full transition-all ${strProjection.strPremium > 50 ? "bg-emerald-500" : strProjection.strPremium > 20 ? "bg-amber-500" : strProjection.strPremium > 0 ? "bg-blue-500" : "bg-red-400"}`}
+                      style={{ width: `${Math.min(Math.max(strProjection.strPremium, 0), 150) / 1.5}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Market Context (Pro+) */}
+                <FeatureGate feature="bp_str_full" blur>
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold mb-2">Market Context</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="bg-slate-50 rounded-lg p-2.5 text-center">
+                      <p className="text-[10px] text-slate-400">Avg Nightly</p>
+                      <p className="text-sm font-bold text-slate-900">${strProjection.avgNightlyRate}</p>
+                      <p className="text-[9px] text-slate-400">{strProjection.neighborhood}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-2.5 text-center">
+                      <p className="text-[10px] text-slate-400">Occupancy</p>
+                      <p className="text-sm font-bold text-slate-900">{Math.round(strProjection.occupancyRate * 100)}%</p>
+                      <p className="text-[9px] text-slate-400">avg rate</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-2.5 text-center">
+                      <p className="text-[10px] text-slate-400">Listings</p>
+                      <p className="text-sm font-bold text-slate-900">{strProjection.activeListings.toLocaleString()}</p>
+                      <p className="text-[9px] text-slate-400">in area</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-2.5 text-center">
+                      <p className="text-[10px] text-slate-400">Saturation</p>
+                      <p className={`text-sm font-bold ${strProjection.marketSaturation === "high" ? "text-red-700" : strProjection.marketSaturation === "medium" ? "text-amber-700" : "text-emerald-700"}`}>
+                        {strProjection.marketSaturation.charAt(0).toUpperCase() + strProjection.marketSaturation.slice(1)}
+                      </p>
+                      <p className="text-[9px] text-slate-400">{strProjection.borough}</p>
+                    </div>
+                  </div>
+                </div>
+                </FeatureGate>
+
+                {/* Regulatory Warning — always shown */}
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm mt-0.5">⚠️</span>
+                    <div>
+                      <p className="text-xs font-semibold text-amber-800">NYC Local Law 18 — Regulatory Risk: High</p>
+                      <p className="text-[10px] text-amber-700 mt-0.5 leading-relaxed">{strProjection.regulatoryNote}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Use case guidance */}
+                <FeatureGate feature="bp_str_full" blur>
+                <div className="bg-slate-50 rounded-lg p-3">
+                  <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wide mb-1">When STR Projections Apply</p>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    STR projections are most relevant for: mixed-use buildings with ground floor commercial, buildings being evaluated for condo conversion, and individual unit investors. For entire multifamily buildings, long-term rental assumptions are typically more appropriate due to NYC LL18 restrictions.
+                  </p>
+                </div>
+                </FeatureGate>
+
+                {/* Confidence + source */}
+                <div className="flex items-center justify-between">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                    strProjection.confidence === "high" ? "bg-emerald-100 text-emerald-700" :
+                    strProjection.confidence === "medium" ? "bg-amber-100 text-amber-700" :
+                    "bg-slate-100 text-slate-600"
+                  }`}>{strProjection.confidence} confidence</span>
+                  <p className="text-[10px] text-slate-400">{strProjection.dataSource}</p>
+                </div>
               </div>
             ) : null}
           </Section>

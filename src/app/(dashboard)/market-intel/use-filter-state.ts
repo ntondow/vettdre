@@ -7,7 +7,7 @@ import { URL_KEYS, countActiveFilters } from "./types";
 
 const DEFAULTS: FilterState = {
   market: "nyc",
-  tab: "property",
+  tab: "map",
   query: "",
   minUnits: "",
   maxUnits: "",
@@ -104,7 +104,7 @@ export function useFilterState() {
     const params = new URLSearchParams();
     // Keep market and tab
     if (filters.market !== "nyc") params.set("market", filters.market);
-    if (filters.tab !== "property") params.set("tab", filters.tab);
+    if (filters.tab !== "map") params.set("tab", filters.tab);
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }, [filters.market, filters.tab, router, pathname]);
