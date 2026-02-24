@@ -9,6 +9,8 @@
 // Organization Enrichment: costs credits
 // Organization Search: costs credits
 
+import { normalizeName, jaroWinklerSimilarity } from "./entity-resolver";
+
 const APOLLO_BASE = "https://api.apollo.io/api/v1";
 
 function getHeaders() {
@@ -171,8 +173,41 @@ export interface ApolloOrgResult {
   seoDescription: string | null;
 }
 
+/**
+ * Check if an Apollo org result is relevant to the queried company name.
+ * Uses both Jaro-Winkler similarity on normalized names and word overlap.
+ * Returns true if the result is likely the same organization.
+ */
+function isOrgResultRelevant(queryName: string, resultName: string): boolean {
+  const normQuery = normalizeName(queryName);
+  const normResult = normalizeName(resultName);
+  if (!normQuery || !normResult) return false;
+
+  // Jaro-Winkler similarity on normalized names
+  const jwSim = jaroWinklerSimilarity(normQuery, normResult);
+  if (jwSim >= 0.75) return true;
+
+  // Word overlap check — if significant words overlap, it's likely related
+  const queryWords = new Set(normQuery.split(/\s+/).filter(w => w.length > 2));
+  const resultWords = new Set(normResult.split(/\s+/).filter(w => w.length > 2));
+  if (queryWords.size === 0) return false;
+
+  let overlap = 0;
+  for (const word of queryWords) {
+    if (resultWords.has(word)) overlap++;
+  }
+  const overlapRatio = overlap / queryWords.size;
+  if (overlapRatio >= 0.5) return true;
+
+  // Check if result name contains the query or vice versa
+  if (normResult.includes(normQuery) || normQuery.includes(normResult)) return true;
+
+  return false;
+}
+
 export async function apolloEnrichOrganization(companyName: string): Promise<ApolloOrgResult | null> {
   if (!process.env.APOLLO_API_KEY) return null;
+  if (!companyName || companyName.trim().length < 3) return null;
 
   try {
     const res = await apolloFetch(APOLLO_BASE + "/mixed_companies/search", {
@@ -181,7 +216,7 @@ export async function apolloEnrichOrganization(companyName: string): Promise<Apo
       body: JSON.stringify({
         organization_name: companyName,
         organization_locations: ["New York, New York, United States"],
-        per_page: 1,
+        per_page: 3,
       }),
     });
 
@@ -191,29 +226,40 @@ export async function apolloEnrichOrganization(companyName: string): Promise<Apo
     }
 
     const data = await res.json();
-    const org = data.organizations?.[0] || data.accounts?.[0];
-    if (!org) {
+    const orgs = [...(data.organizations || []), ...(data.accounts || [])];
+    if (orgs.length === 0) {
       console.log("[APOLLO] No org match for:", companyName);
+      return null;
+    }
+
+    // Find the best matching org — validate relevance before accepting
+    const matchingOrg = orgs.find((org: any) => {
+      const orgName = org.name || "";
+      return isOrgResultRelevant(companyName, orgName);
+    });
+
+    if (!matchingOrg) {
+      console.log(`[APOLLO] Org results not relevant to "${companyName}". Top result: "${orgs[0]?.name}". Discarding.`);
       return null;
     }
 
     const result: ApolloOrgResult = {
       source: "apollo_org",
-      name: org.name || companyName,
-      website: org.website_url || null,
-      industry: org.industry || null,
-      subIndustry: org.sub_industry || null,
-      employeeCount: org.estimated_num_employees || null,
-      revenue: org.annual_revenue_printed || null,
-      phone: org.primary_phone?.sanitized_number || null,
-      address: org.raw_address || null,
-      city: org.city || null,
-      state: org.state || null,
-      linkedinUrl: org.linkedin_url || null,
-      logoUrl: org.logo_url || null,
-      foundedYear: org.founded_year || null,
-      shortDescription: org.short_description || null,
-      seoDescription: org.seo_description || null,
+      name: matchingOrg.name || companyName,
+      website: matchingOrg.website_url || null,
+      industry: matchingOrg.industry || null,
+      subIndustry: matchingOrg.sub_industry || null,
+      employeeCount: matchingOrg.estimated_num_employees || null,
+      revenue: matchingOrg.annual_revenue_printed || null,
+      phone: matchingOrg.primary_phone?.sanitized_number || null,
+      address: matchingOrg.raw_address || null,
+      city: matchingOrg.city || null,
+      state: matchingOrg.state || null,
+      linkedinUrl: matchingOrg.linkedin_url || null,
+      logoUrl: matchingOrg.logo_url || null,
+      foundedYear: matchingOrg.founded_year || null,
+      shortDescription: matchingOrg.short_description || null,
+      seoDescription: matchingOrg.seo_description || null,
     };
 
     console.log(`[APOLLO] Org enriched: ${result.name} | Industry: ${result.industry || "none"} | Employees: ${result.employeeCount || "?"} | Phone: ${result.phone ? "found" : "none"}`);

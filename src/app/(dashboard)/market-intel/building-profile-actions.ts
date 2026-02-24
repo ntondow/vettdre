@@ -844,10 +844,11 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
             const apolloOrg = await apolloEnrichOrganization(topCorpForApollo.name);
             if (apolloOrg) {
               results.apolloOrgEnrichment = apolloOrg;
-            }
-            const keyPeople = await apolloFindPeopleAtOrg(topCorpForApollo.name);
-            if (keyPeople.length > 0) {
-              results.apolloKeyPeople = keyPeople;
+              // Only search for key people if org enrichment found a relevant match
+              const keyPeople = await apolloFindPeopleAtOrg(apolloOrg.name);
+              if (keyPeople.length > 0) {
+                results.apolloKeyPeople = keyPeople;
+              }
             }
           })());
         }
