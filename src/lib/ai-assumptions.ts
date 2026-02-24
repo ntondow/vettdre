@@ -6,6 +6,8 @@
 
 import type { DealInputs, UnitMixRow } from "./deal-calculator";
 import type { HudFmrData } from "./hud";
+import type { MarketAppreciation } from "./fhfa";
+import type { RedfinMetrics } from "./redfin-market";
 
 // ============================================================
 // Building data from various NYC Open Data sources
@@ -100,7 +102,7 @@ export function getNJMarketRents(county: string): Record<string, number> {
 // ============================================================
 export function generateDealAssumptions(
   building: BuildingData,
-  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics },
 ): DealInputs {
   const units = building.unitsRes || building.hpdUnits || building.unitsTotal || 1;
   const borough = building.borough || "Brooklyn";
@@ -217,6 +219,16 @@ export function generateDealAssumptions(
   assumptions.concessions = true;
   assumptions.commercialRentAnnual = true;
 
+  // Adjust rent growth based on local market appreciation
+  let rentGrowth = 3;
+  if (options?.marketAppreciation?.localAppreciation1Yr != null) {
+    const appr = options.marketAppreciation.localAppreciation1Yr;
+    if (appr > 7) rentGrowth = 4;
+    else if (appr > 5) rentGrowth = 3.5;
+    else if (appr < -2) rentGrowth = 2;
+    else if (appr < 0) rentGrowth = 2.5;
+  }
+
   const inputs: DealInputs = {
     purchasePrice,
     closingCosts,
@@ -247,7 +259,7 @@ export function generateDealAssumptions(
     waterRubs: 0,
     otherMiscIncome: 0,
 
-    annualRentGrowth: 3,
+    annualRentGrowth: rentGrowth,
     annualExpenseGrowth: 2,
 
     realEstateTaxes,
@@ -366,7 +378,7 @@ export interface NYSBuildingData {
 // ============================================================
 export function generateNYSDealAssumptions(
   building: NYSBuildingData,
-  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics },
 ): DealInputs {
   const units = building.unitsRes || 1;
   const county = building.county || "Westchester";
@@ -469,6 +481,16 @@ export function generateNYSDealAssumptions(
   assumptions.concessions = true;
   assumptions.commercialRentAnnual = true;
 
+  // Adjust rent growth based on local market appreciation
+  let rentGrowth = 3;
+  if (options?.marketAppreciation?.localAppreciation1Yr != null) {
+    const appr = options.marketAppreciation.localAppreciation1Yr;
+    if (appr > 7) rentGrowth = 4;
+    else if (appr > 5) rentGrowth = 3.5;
+    else if (appr < -2) rentGrowth = 2;
+    else if (appr < 0) rentGrowth = 2.5;
+  }
+
   const inputs: DealInputs = {
     purchasePrice,
     closingCosts,
@@ -499,7 +521,7 @@ export function generateNYSDealAssumptions(
     waterRubs: 0,
     otherMiscIncome: 0,
 
-    annualRentGrowth: 3,
+    annualRentGrowth: rentGrowth,
     annualExpenseGrowth: 2,
 
     realEstateTaxes,
@@ -576,7 +598,7 @@ export interface NJBuildingData {
 // ============================================================
 export function generateNJDealAssumptions(
   building: NJBuildingData,
-  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics },
 ): DealInputs {
   const units = building.unitsRes || 1;
   const county = building.county || "Hudson";
@@ -668,13 +690,23 @@ export function generateNJDealAssumptions(
   assumptions.concessions = true;
   assumptions.commercialRentAnnual = true;
 
+  // Adjust rent growth based on local market appreciation
+  let rentGrowth = 3;
+  if (options?.marketAppreciation?.localAppreciation1Yr != null) {
+    const appr = options.marketAppreciation.localAppreciation1Yr;
+    if (appr > 7) rentGrowth = 4;
+    else if (appr > 5) rentGrowth = 3.5;
+    else if (appr < -2) rentGrowth = 2;
+    else if (appr < 0) rentGrowth = 2.5;
+  }
+
   const inputs: DealInputs = {
     purchasePrice, closingCosts, renovationBudget: 0,
     ltvPercent: 65, interestRate: options?.liveInterestRate ?? 7.0, amortizationYears: 30, loanTermYears: 30, interestOnly: false, originationFeePercent: 1,
     unitMix, residentialVacancyRate, concessions: 0,
     commercialRentAnnual: 0, commercialVacancyRate: 10, commercialConcessions: 0,
     lateFees: 0, parkingIncome: 0, storageIncome: 0, petDeposits: 0, petRent: 0, evCharging: 0, trashRubs: 0, waterRubs: 0, otherMiscIncome: 0,
-    annualRentGrowth: 3, annualExpenseGrowth: 2,
+    annualRentGrowth: rentGrowth, annualExpenseGrowth: 2,
     realEstateTaxes, insurance, licenseFees, fireMeter, electricityGas, waterSewer,
     managementFeePercent: 4, payroll, accounting, legal, marketing, rmGeneral, rmCapexReserve, generalAdmin,
     exterminating, landscaping, snowRemoval, elevator, alarmMonitoring, telephoneInternet, cleaning, trashRemoval, otherContractServices: 0,
@@ -709,6 +741,7 @@ export function calibrateWithCensusData(
   inputs: DealInputs,
   census: CensusCalibration,
   hudFmr?: HudFmrData,
+  marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics },
 ): DealInputs {
   const updated = { ...inputs };
   const assumptions = { ...(updated._assumptions || {}) };
@@ -748,11 +781,11 @@ export function calibrateWithCensusData(
   }
 
   updated._assumptions = assumptions;
-  updated._censusContext = buildCensusNote(census, hudFmr);
+  updated._censusContext = buildCensusNote(census, hudFmr, marketTrends);
   return updated;
 }
 
-function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData): string {
+function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics }): string {
   const parts: string[] = [];
   if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
   if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
@@ -767,6 +800,16 @@ function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData): string {
     if (c.medianRent && hudFmr.twoBr > c.medianRent * 1.2) {
       parts.push(`Rent gap: HUD FMR exceeds census median by ${Math.round((hudFmr.twoBr / c.medianRent - 1) * 100)}%`);
     }
+  }
+  if (marketTrends?.appreciation) {
+    const a = marketTrends.appreciation;
+    const localStr = a.localAppreciation1Yr != null ? `Local: ${a.localAppreciation1Yr > 0 ? "+" : ""}${a.localAppreciation1Yr}%/yr` : "";
+    const metroStr = `Metro: +${a.metroAppreciation1Yr}%/yr`;
+    parts.push(`Appreciation — ${localStr ? localStr + " | " : ""}${metroStr} (FHFA ${a.fhfaQuarter})`);
+  }
+  if (marketTrends?.redfin) {
+    const r = marketTrends.redfin;
+    parts.push(`Market: ${r.medianDaysOnMarket} DOM, ${(r.avgSaleToListRatio * 100).toFixed(0)}% sale/list, ${r.monthsOfSupply} mo supply`);
   }
   return parts.join(" | ");
 }

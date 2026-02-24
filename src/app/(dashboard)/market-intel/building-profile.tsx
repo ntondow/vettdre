@@ -11,6 +11,8 @@ import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
 import type { CompSale, CompSummary, CompResult } from "@/lib/comps-engine";
 import { fetchCompsWithValuation } from "./comps-actions";
+import type { MarketAppreciation } from "@/lib/fhfa";
+import type { RedfinMetrics, MarketTemperature } from "@/lib/redfin-market";
 import FeatureGate from "@/components/ui/feature-gate";
 import SmsComposeModal from "@/components/ui/sms-compose-modal";
 import { fetchNeighborhoodProfile } from "./neighborhood-actions";
@@ -99,6 +101,10 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [censusLoading, setCensusLoading] = useState(false);
   // HUD Fair Market Rents
   const [hudFmr, setHudFmr] = useState<import("@/lib/hud").HudFmrData | null>(null);
+  // Market Trends (FHFA + Redfin)
+  const [marketAppreciation, setMarketAppreciation] = useState<MarketAppreciation | null>(null);
+  const [redfinMetrics, setRedfinMetrics] = useState<RedfinMetrics | null>(null);
+  const [marketTemp, setMarketTemp] = useState<{ temperature: MarketTemperature; label: string } | null>(null);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -241,6 +247,21 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     const zip = data?.pluto?.zipCode || data?.registrations?.[0]?.zip;
     if (!zip) return;
     import("@/lib/hud-actions").then(m => m.getHudFmr(zip)).then(setHudFmr).catch(() => {});
+  }, [data?.pluto?.zipCode, data?.registrations]);
+
+  // Fetch Market Trends (FHFA + Redfin) when zip is available
+  useEffect(() => {
+    const zip = data?.pluto?.zipCode || data?.registrations?.[0]?.zip;
+    if (!zip) return;
+    import("@/lib/market-trends-actions").then(m => {
+      m.getAppreciation(zip).then(setMarketAppreciation).catch(() => {});
+      m.getRedfinTemperature(zip).then(r => {
+        if (r) {
+          setRedfinMetrics(r.metrics);
+          setMarketTemp({ temperature: r.temperature, label: r.label });
+        }
+      }).catch(() => {});
+    });
   }, [data?.pluto?.zipCode, data?.registrations]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
@@ -2590,6 +2611,141 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </p>
             )}
           </Section>
+
+          {/* ============================================================ */}
+          {/* MARKET TRENDS — FHFA Appreciation + Redfin Metrics */}
+          {/* ============================================================ */}
+          {(marketAppreciation || redfinMetrics) && (
+          <Section id="market-trends" title="Market Trends" icon="📈"
+            collapsed={isCollapsed("market-trends")} onToggle={() => toggle("market-trends")}
+            badge={
+              <>
+                {displayZip && <span className="text-xs text-slate-400">ZIP {displayZip}</span>}
+                {marketTemp && (
+                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                    marketTemp.temperature === "hot" ? "bg-red-100 text-red-700" :
+                    marketTemp.temperature === "warm" ? "bg-amber-100 text-amber-700" :
+                    marketTemp.temperature === "cool" ? "bg-blue-100 text-blue-700" :
+                    "bg-slate-100 text-slate-600"
+                  }`}>{marketTemp.label}</span>
+                )}
+              </>
+            }>
+            {/* Price Appreciation */}
+            {marketAppreciation && (
+              <div className="bg-slate-50 rounded-lg p-3">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Price Appreciation</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Local (ACRIS) */}
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1">This Zip ({marketAppreciation.zip})</p>
+                    {marketAppreciation.localAppreciation1Yr !== null ? (
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-1">
+                          <span className={`text-sm font-bold ${marketAppreciation.localAppreciation1Yr >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                            {marketAppreciation.localAppreciation1Yr >= 0 ? "+" : ""}{marketAppreciation.localAppreciation1Yr}%
+                          </span>
+                          <span className="text-[10px] text-slate-400">/ 1yr</span>
+                        </div>
+                        {marketAppreciation.localAppreciation5Yr !== null && (
+                          <div className="flex items-center gap-1">
+                            <span className={`text-xs font-medium ${marketAppreciation.localAppreciation5Yr >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                              {marketAppreciation.localAppreciation5Yr >= 0 ? "+" : ""}{marketAppreciation.localAppreciation5Yr}%
+                            </span>
+                            <span className="text-[10px] text-slate-400">/ 5yr</span>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-slate-400">{marketAppreciation.sampleSize} sales (ACRIS)</p>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400">No local data</p>
+                    )}
+                  </div>
+                  {/* Metro (FHFA) */}
+                  <div>
+                    <p className="text-[10px] text-slate-400 mb-1">{marketAppreciation.metroName}</p>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-1">
+                        <span className={`text-sm font-bold ${marketAppreciation.metroAppreciation1Yr >= 0 ? "text-emerald-700" : "text-red-700"}`}>
+                          {marketAppreciation.metroAppreciation1Yr >= 0 ? "+" : ""}{marketAppreciation.metroAppreciation1Yr}%
+                        </span>
+                        <span className="text-[10px] text-slate-400">/ 1yr</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className={`text-xs font-medium ${marketAppreciation.metroAppreciation5Yr >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                          {marketAppreciation.metroAppreciation5Yr >= 0 ? "+" : ""}{marketAppreciation.metroAppreciation5Yr}%
+                        </span>
+                        <span className="text-[10px] text-slate-400">/ 5yr</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400">FHFA HPI ({marketAppreciation.fhfaQuarter})</p>
+                    </div>
+                  </div>
+                </div>
+                {/* Outperformance indicator */}
+                {marketAppreciation.localAppreciation1Yr !== null && (
+                  <div className={`mt-2 text-xs font-medium ${
+                    marketAppreciation.localAppreciation1Yr > marketAppreciation.metroAppreciation1Yr ? "text-emerald-600" : "text-amber-600"
+                  }`}>
+                    {marketAppreciation.localAppreciation1Yr > marketAppreciation.metroAppreciation1Yr
+                      ? `Outperforming metro by ${(marketAppreciation.localAppreciation1Yr - marketAppreciation.metroAppreciation1Yr).toFixed(1)}%`
+                      : `Underperforming metro by ${(marketAppreciation.metroAppreciation1Yr - marketAppreciation.localAppreciation1Yr).toFixed(1)}%`
+                    }
+                  </div>
+                )}
+                {marketAppreciation.medianPricePerUnit && (
+                  <p className="text-xs text-slate-500 mt-1">Median $/unit: ${marketAppreciation.medianPricePerUnit.toLocaleString()}</p>
+                )}
+              </div>
+            )}
+
+            {/* Market Temperature (Redfin) */}
+            {redfinMetrics && (
+              <div className="bg-slate-50 rounded-lg p-3 mt-3">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Market Temperature ({redfinMetrics.period})</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="text-center bg-white rounded-lg p-2">
+                    <p className="text-[10px] text-slate-400">Days on Market</p>
+                    <p className="text-sm font-bold text-slate-900">{redfinMetrics.medianDaysOnMarket}</p>
+                  </div>
+                  <div className="text-center bg-white rounded-lg p-2">
+                    <p className="text-[10px] text-slate-400">Sale-to-List</p>
+                    <p className="text-sm font-bold text-slate-900">{(redfinMetrics.avgSaleToListRatio * 100).toFixed(0)}%</p>
+                  </div>
+                  <div className="text-center bg-white rounded-lg p-2">
+                    <p className="text-[10px] text-slate-400">Price Drops</p>
+                    <p className="text-sm font-bold text-slate-900">{redfinMetrics.pctPriceDrops}%</p>
+                  </div>
+                  <div className="text-center bg-white rounded-lg p-2">
+                    <p className="text-[10px] text-slate-400">Supply</p>
+                    <p className="text-sm font-bold text-slate-900">{redfinMetrics.monthsOfSupply} mo</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-slate-500">Median Sale: ${redfinMetrics.medianSalePrice.toLocaleString()} | ${redfinMetrics.medianPricePerSqft}/sqft</p>
+                  <p className="text-[10px] text-slate-400">Redfin</p>
+                </div>
+              </div>
+            )}
+
+            {/* Trend Summary */}
+            {marketAppreciation && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  marketAppreciation.trend === "appreciating" ? "bg-emerald-100 text-emerald-700" :
+                  marketAppreciation.trend === "declining" ? "bg-red-100 text-red-700" :
+                  "bg-slate-100 text-slate-600"
+                }`}>
+                  {marketAppreciation.trend === "appreciating" ? "Appreciating" : marketAppreciation.trend === "declining" ? "Declining" : "Stable"}
+                </span>
+                {marketTemp && redfinMetrics && (
+                  <span className="text-[10px] text-slate-400">
+                    {redfinMetrics.inventoryCount} active listings | {redfinMetrics.monthsOfSupply} mo supply
+                  </span>
+                )}
+              </div>
+            )}
+          </Section>
+          )}
 
           {/* ============================================================ */}
           {/* 8. DOB JOB FILINGS (Permits) */}
