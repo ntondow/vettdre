@@ -16,7 +16,7 @@ export default function LoginPage() {
     e.preventDefault(); setLoading(true); setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); }
-    else { router.push("/dashboard"); router.refresh(); }
+    else { router.push("/market-intel"); router.refresh(); }
   };
 
   return (
