@@ -404,15 +404,17 @@ export async function underwriteDeal(params: {
 
   // Fetch live market data (non-blocking)
   const zip = (hpdRegData[0]?.zip || "").slice(0, 5);
-  const [fredResult, hudResult, appreciationResult] = await Promise.allSettled([
+  const [fredResult, hudResult, appreciationResult, fannieResult] = await Promise.allSettled([
     getCurrentMortgageRate(),
     zip ? fetchFmrByZip(zip) : Promise.resolve(null),
     zip ? getMarketAppreciation(zip) : Promise.resolve(null),
+    address ? import("@/lib/fannie-mae").then(m => m.lookupLoan(`${address}, ${borough}, NY ${zip}`)).catch(() => null) : Promise.resolve(null),
   ]);
   const liveRate = fredResult.status === "fulfilled" ? fredResult.value : null;
   const hudFmr = hudResult.status === "fulfilled" ? hudResult.value : undefined;
   const appreciation = appreciationResult.status === "fulfilled" ? appreciationResult.value : undefined;
   const redfin = zip ? getRedfinMetrics(zip) : null;
+  const fannieLoan = fannieResult.status === "fulfilled" ? fannieResult.value : null;
 
   // Generate AI assumptions
   let inputs = generateDealAssumptions(buildingData, {
@@ -442,6 +444,7 @@ export async function underwriteDeal(params: {
     }, hudFmr ?? undefined, {
       appreciation: appreciation ?? undefined,
       redfin: redfin ?? undefined,
+      fannieMae: fannieLoan ? { isOwnedByFannieMae: fannieLoan.isOwnedByFannieMae, servicerName: fannieLoan.servicerName } : undefined,
     });
   }
 

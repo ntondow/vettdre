@@ -31,6 +31,8 @@ export type Feature =
   | "bp_census_trends"
   // Market Trends
   | "bp_market_trends"
+  // Fannie Mae
+  | "bp_fannie_mae_loan"
   // Corporate Filing
   | "bp_corp_basic"
   | "bp_corp_full"
@@ -78,6 +80,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "bp_web_intel",
   "bp_census_full",
   "bp_market_trends",
+  "bp_fannie_mae_loan",
   "bp_corp_basic",
 ];
 
@@ -156,6 +159,7 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
   bp_census_full: "Upgrade to Explorer for full census demographics",
   bp_market_trends: "Upgrade to Explorer for market trends and appreciation data",
+  bp_fannie_mae_loan: "Upgrade to Explorer to see Fannie Mae loan status",
   bp_census_trends: "Upgrade to Pro for neighborhood trend data",
   bp_corp_basic: "Upgrade to Explorer to see corporate filing data",
   bp_corp_full: "Upgrade to Pro to see related entities & LLC piercing",

@@ -105,6 +105,8 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [marketAppreciation, setMarketAppreciation] = useState<MarketAppreciation | null>(null);
   const [redfinMetrics, setRedfinMetrics] = useState<RedfinMetrics | null>(null);
   const [marketTemp, setMarketTemp] = useState<{ temperature: MarketTemperature; label: string } | null>(null);
+  // Fannie Mae Loan Lookup
+  const [fannieLoan, setFannieLoan] = useState<import("@/lib/fannie-mae").FannieLoanResult | null>(null);
 
   // Smart defaults: collapse lower-priority sections
   const [smsTarget, setSmsTarget] = useState<{ phone: string; name?: string } | null>(null);
@@ -263,6 +265,18 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       }).catch(() => {});
     });
   }, [data?.pluto?.zipCode, data?.registrations]);
+
+  // Populate Fannie Mae loan data from fusion engine
+  useEffect(() => {
+    if (intel?.fannieMaeLoan) {
+      setFannieLoan({
+        isOwnedByFannieMae: intel.fannieMaeLoan.isOwnedByFannieMae,
+        address: data?.pluto?.address || "",
+        lookupDate: intel.fannieMaeLoan.lookupDate,
+        servicerName: intel.fannieMaeLoan.servicerName,
+      });
+    }
+  }, [intel?.fannieMaeLoan, data?.pluto?.address]);
 
   // Fetch related properties immediately if ownerName prop available (eliminates waterfall)
   useEffect(() => {
@@ -639,6 +653,27 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                   </div>
                   {intel.ownership.likelyOwner.alternateNames.length > 0 && (
                     <p className="text-[10px] text-slate-400 mt-1">Also seen as: {intel.ownership.likelyOwner.alternateNames.slice(0, 3).join(", ")}</p>
+                  )}
+                </div>
+                </FeatureGate>
+              )}
+
+              {/* Fannie Mae Loan Status */}
+              {fannieLoan && (
+                <FeatureGate feature="bp_fannie_mae_loan" blur>
+                <div className={`mt-3 p-3 rounded-lg ${fannieLoan.isOwnedByFannieMae ? "bg-emerald-50 border border-emerald-100" : "bg-slate-50"}`}>
+                  <p className="text-[10px] uppercase tracking-wider font-semibold text-slate-400 mb-1">Mortgage Status</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full ${fannieLoan.isOwnedByFannieMae ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                      {fannieLoan.isOwnedByFannieMae ? "Fannie Mae Backed" : "Non-Agency Loan"}
+                    </span>
+                    <span className="text-[10px] text-slate-400">as of {fannieLoan.lookupDate}</span>
+                  </div>
+                  {fannieLoan.isOwnedByFannieMae && fannieLoan.servicerName && (
+                    <p className="text-xs text-emerald-700 mt-1">Servicer: {fannieLoan.servicerName}</p>
+                  )}
+                  {fannieLoan.isOwnedByFannieMae && (
+                    <p className="text-[10px] text-emerald-600 mt-1">GSE-backed loans may offer streamlined refinancing and modification options</p>
                   )}
                 </div>
                 </FeatureGate>

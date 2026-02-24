@@ -741,7 +741,7 @@ export function calibrateWithCensusData(
   inputs: DealInputs,
   census: CensusCalibration,
   hudFmr?: HudFmrData,
-  marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics },
+  marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string } },
 ): DealInputs {
   const updated = { ...inputs };
   const assumptions = { ...(updated._assumptions || {}) };
@@ -785,7 +785,7 @@ export function calibrateWithCensusData(
   return updated;
 }
 
-function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics }): string {
+function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends?: { appreciation?: MarketAppreciation; redfin?: RedfinMetrics; fannieMae?: { isOwnedByFannieMae: boolean; servicerName?: string } }): string {
   const parts: string[] = [];
   if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
   if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
@@ -810,6 +810,10 @@ function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends
   if (marketTrends?.redfin) {
     const r = marketTrends.redfin;
     parts.push(`Market: ${r.medianDaysOnMarket} DOM, ${(r.avgSaleToListRatio * 100).toFixed(0)}% sale/list, ${r.monthsOfSupply} mo supply`);
+  }
+  if (marketTrends?.fannieMae) {
+    const fm = marketTrends.fannieMae;
+    parts.push(`Fannie Mae: ${fm.isOwnedByFannieMae ? "GSE-backed loan" : "Non-agency loan"}${fm.servicerName ? ` (${fm.servicerName})` : ""}`);
   }
   return parts.join(" | ");
 }
