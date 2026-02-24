@@ -372,6 +372,8 @@ export async function getApiKeyStatus() {
     tracerfy: { configured: !!process.env.TRACERFY_API_KEY, preview: process.env.TRACERFY_API_KEY ? `****${process.env.TRACERFY_API_KEY.slice(-4)}` : null },
     anthropic: { configured: !!process.env.ANTHROPIC_API_KEY, preview: process.env.ANTHROPIC_API_KEY ? `****${process.env.ANTHROPIC_API_KEY.slice(-4)}` : null },
     gmail: { configured: !!gmail, preview: gmail?.email || null },
+    fred: { configured: !!process.env.FRED_API_KEY, preview: process.env.FRED_API_KEY ? `****${process.env.FRED_API_KEY.slice(-4)}` : null },
+    hud: { configured: !!process.env.HUD_API_TOKEN, preview: process.env.HUD_API_TOKEN ? `****${process.env.HUD_API_TOKEN.slice(-4)}` : null },
   };
 }
 
@@ -414,6 +416,18 @@ export async function testApiConnection(api: string): Promise<{ success: boolean
         const key = process.env.TRACERFY_API_KEY;
         if (!key) return { success: false, message: "API key not configured" };
         return { success: true, message: "Key configured (CSV-based)" };
+      }
+      case "fred": {
+        if (!process.env.FRED_API_KEY) return { success: false, message: "FRED_API_KEY not set" };
+        const { fetchFredSeries } = await import("@/lib/fred");
+        const obs = await fetchFredSeries("MORTGAGE30US", "30-Year Fixed");
+        return obs ? { success: true, message: `30yr rate: ${obs.value}% (${obs.date})` } : { success: false, message: "Could not fetch data" };
+      }
+      case "hud": {
+        if (!process.env.HUD_API_TOKEN) return { success: false, message: "HUD_API_TOKEN not set" };
+        const { fetchFmrByZip } = await import("@/lib/hud");
+        const fmr = await fetchFmrByZip("10001");
+        return fmr.source === "api" ? { success: true, message: `2BR FMR (10001): $${fmr.twoBr}` } : { success: false, message: "API returned fallback" };
       }
       default:
         return { success: false, message: "Unknown API" };

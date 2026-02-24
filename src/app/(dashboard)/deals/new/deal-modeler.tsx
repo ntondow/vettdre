@@ -106,6 +106,12 @@ export default function DealModeler() {
   const [prefillLoading, setPrefillLoading] = useState(false);
   const [assumptions, setAssumptions] = useState<Record<string, boolean>>({});
   const [isAiGenerated, setIsAiGenerated] = useState(false);
+  const [fredRate, setFredRate] = useState<number | null>(null);
+
+  // Fetch live FRED mortgage rate on mount
+  useEffect(() => {
+    import("@/lib/fred-actions").then(m => m.getFredMortgageRate()).then(setFredRate).catch(() => {});
+  }, []);
 
   // Contact picker state
   const [contactId, setContactId] = useState<string | null>(null);
@@ -691,6 +697,18 @@ export default function DealModeler() {
 
             {/* Financing */}
             <Section title="Financing">
+              {fredRate && (
+                <div className="flex items-center justify-between mb-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium border border-blue-100">
+                    30yr Fixed: {fredRate.toFixed(2)}%
+                    <span className="text-blue-400 font-normal">FRED</span>
+                  </span>
+                  <button onClick={() => update({ interestRate: fredRate })}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    Apply to deal
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="LTV" value={inputs.ltvPercent} onChange={v => update({ ltvPercent: v })} suffix="%" step="1" aiAssumed={isAi("ltvPercent")} onClearAi={() => clearAi("ltvPercent")} />
                 <Field label="Interest Rate" value={inputs.interestRate} onChange={v => update({ interestRate: v })} suffix="%" step="0.125" aiAssumed={isAi("interestRate")} onClearAi={() => clearAi("interestRate")} />

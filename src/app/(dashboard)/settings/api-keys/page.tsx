@@ -18,6 +18,8 @@ const apis: ApiInfo[] = [
   { name: "Anthropic (Claude AI)", key: "anthropic", icon: "🤖", desc: "Email parsing, ownership analysis, AI features" },
   { name: "Gmail", key: "gmail", icon: "📬", desc: "Email sync and send" },
   { name: "Google Calendar", key: "gcal", icon: "📅", desc: "Showing scheduling and availability", comingSoon: true },
+  { name: "FRED (Federal Reserve)", key: "fred", icon: "📉", desc: "Live mortgage rates and economic indicators" },
+  { name: "HUD Fair Market Rents", key: "hud", icon: "🏘️", desc: "Zip-level Fair Market Rents from HUD" },
 ];
 
 export default function ApiKeysPage() {

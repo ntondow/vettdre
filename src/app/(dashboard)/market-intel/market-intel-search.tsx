@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useFilterState } from "./use-filter-state";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
@@ -65,7 +65,15 @@ export default function MarketIntelSearch() {
 
   const [paywallFeature, setPaywallFeature] = useState<string | null>(null);
   const [searchLimitModal, setSearchLimitModal] = useState(false);
+  // FRED Market Pulse state
+  const [fredData, setFredData] = useState<import("@/lib/fred").FredSeries | null>(null);
+  const [pulseCollapsed, setPulseCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+
+  // Fetch FRED data on mount
+  useEffect(() => {
+    import("@/lib/fred-actions").then(m => m.getFredSeries()).then(setFredData).catch(() => {});
+  }, []);
 
   // Name search cross-tab navigation
   const [nameSearchQuery, setNameSearchQuery] = useState("");
@@ -124,6 +132,38 @@ export default function MarketIntelSearch() {
         onClearFilter={clearFilter}
         onClearAll={clearAllFilters}
       />
+
+      {/* Market Pulse — FRED economic indicators */}
+      {fredData && (fredData.mortgage30 || fredData.unemployment) && (
+        <div className="mx-4 md:mx-8 mt-4">
+          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 overflow-hidden">
+            <button onClick={() => setPulseCollapsed(!pulseCollapsed)}
+              className="w-full flex items-center justify-between px-4 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-indigo-900">Market Pulse</span>
+                <span className="text-[10px] text-indigo-400">FRED</span>
+              </div>
+              <span className={`text-indigo-300 text-xs transition-transform ${pulseCollapsed ? "" : "rotate-180"}`}>&#9662;</span>
+            </button>
+            {!pulseCollapsed && (
+              <div className="px-4 pb-3 flex flex-wrap gap-3">
+                {[
+                  { label: "30yr Fixed", obs: fredData.mortgage30, suffix: "%" },
+                  { label: "15yr Fixed", obs: fredData.mortgage15, suffix: "%" },
+                  { label: "30yr Treasury", obs: fredData.treasury30, suffix: "%" },
+                  { label: "Unemployment", obs: fredData.unemployment, suffix: "%" },
+                  { label: "Housing Starts", obs: fredData.housingStarts, suffix: "K" },
+                ].filter(i => i.obs).map(i => (
+                  <div key={i.label} className="bg-white/70 rounded-lg px-3 py-2">
+                    <p className="text-[10px] text-slate-400">{i.label}</p>
+                    <p className="text-sm font-black text-slate-900">{i.obs!.value.toLocaleString()}{i.suffix}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main content area */}
       <div className="px-4 md:px-8 py-6">

@@ -5,6 +5,7 @@
 // ============================================================
 
 import type { DealInputs, UnitMixRow } from "./deal-calculator";
+import type { HudFmrData } from "./hud";
 
 // ============================================================
 // Building data from various NYC Open Data sources
@@ -97,7 +98,10 @@ export function getNJMarketRents(county: string): Record<string, number> {
 // ============================================================
 // Generate full deal assumptions from building data
 // ============================================================
-export function generateDealAssumptions(building: BuildingData): DealInputs {
+export function generateDealAssumptions(
+  building: BuildingData,
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+): DealInputs {
   const units = building.unitsRes || building.hpdUnits || building.unitsTotal || 1;
   const borough = building.borough || "Brooklyn";
   const rents = MARKET_RENTS[borough] || MARKET_RENTS["Brooklyn"];
@@ -219,7 +223,7 @@ export function generateDealAssumptions(building: BuildingData): DealInputs {
     renovationBudget: 0,
 
     ltvPercent: 65,
-    interestRate: 7.0,
+    interestRate: options?.liveInterestRate ?? 7.0,
     amortizationYears: 30,
     loanTermYears: 30,
     interestOnly: false,
@@ -360,7 +364,10 @@ export interface NYSBuildingData {
 // Generate Deal Assumptions for NYS Properties
 // No rent stabilization, no HPD violations — simpler model
 // ============================================================
-export function generateNYSDealAssumptions(building: NYSBuildingData): DealInputs {
+export function generateNYSDealAssumptions(
+  building: NYSBuildingData,
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+): DealInputs {
   const units = building.unitsRes || 1;
   const county = building.county || "Westchester";
   const rents = NYS_MARKET_RENTS[county] || NYS_MARKET_RENTS._default;
@@ -468,7 +475,7 @@ export function generateNYSDealAssumptions(building: NYSBuildingData): DealInput
     renovationBudget: 0,
 
     ltvPercent: 65,
-    interestRate: 7.0,
+    interestRate: options?.liveInterestRate ?? 7.0,
     amortizationYears: 30,
     loanTermYears: 30,
     interestOnly: false,
@@ -567,7 +574,10 @@ export interface NJBuildingData {
 // ============================================================
 // Generate Deal Assumptions for NJ Properties
 // ============================================================
-export function generateNJDealAssumptions(building: NJBuildingData): DealInputs {
+export function generateNJDealAssumptions(
+  building: NJBuildingData,
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData },
+): DealInputs {
   const units = building.unitsRes || 1;
   const county = building.county || "Hudson";
   const rents = NJ_MARKET_RENTS[county] || NJ_MARKET_RENTS._default;
@@ -660,7 +670,7 @@ export function generateNJDealAssumptions(building: NJBuildingData): DealInputs 
 
   const inputs: DealInputs = {
     purchasePrice, closingCosts, renovationBudget: 0,
-    ltvPercent: 65, interestRate: 7.0, amortizationYears: 30, loanTermYears: 30, interestOnly: false, originationFeePercent: 1,
+    ltvPercent: 65, interestRate: options?.liveInterestRate ?? 7.0, amortizationYears: 30, loanTermYears: 30, interestOnly: false, originationFeePercent: 1,
     unitMix, residentialVacancyRate, concessions: 0,
     commercialRentAnnual: 0, commercialVacancyRate: 10, commercialConcessions: 0,
     lateFees: 0, parkingIncome: 0, storageIncome: 0, petDeposits: 0, petRent: 0, evCharging: 0, trashRubs: 0, waterRubs: 0, otherMiscIncome: 0,
@@ -698,6 +708,7 @@ export interface CensusCalibration {
 export function calibrateWithCensusData(
   inputs: DealInputs,
   census: CensusCalibration,
+  hudFmr?: HudFmrData,
 ): DealInputs {
   const updated = { ...inputs };
   const assumptions = { ...(updated._assumptions || {}) };
@@ -737,11 +748,11 @@ export function calibrateWithCensusData(
   }
 
   updated._assumptions = assumptions;
-  updated._censusContext = buildCensusNote(census);
+  updated._censusContext = buildCensusNote(census, hudFmr);
   return updated;
 }
 
-function buildCensusNote(c: CensusCalibration): string {
+function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData): string {
   const parts: string[] = [];
   if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
   if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
@@ -750,6 +761,12 @@ function buildCensusNote(c: CensusCalibration): string {
   if (c.medianHouseholdIncome) {
     const maxRent = Math.round(c.medianHouseholdIncome / 12 * 0.30);
     parts.push(`Affordability ceiling (30%): $${maxRent.toLocaleString()}/mo`);
+  }
+  if (hudFmr) {
+    parts.push(`HUD FMR (${hudFmr.source}): 1BR $${hudFmr.oneBr} | 2BR $${hudFmr.twoBr} | 3BR $${hudFmr.threeBr}`);
+    if (c.medianRent && hudFmr.twoBr > c.medianRent * 1.2) {
+      parts.push(`Rent gap: HUD FMR exceeds census median by ${Math.round((hudFmr.twoBr / c.medianRent - 1) * 100)}%`);
+    }
   }
   return parts.join(" | ");
 }
