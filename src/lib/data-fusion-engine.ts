@@ -185,6 +185,15 @@ export interface BuildingIntelligence {
     lookupDate: string;
   } | null;
 
+  renovationEstimate: {
+    recommendedLevel: "light" | "moderate" | "gut";
+    totalCost: number;
+    costPerUnit: number;
+    arv: number;
+    roi: number;
+    conditionSignals: string[];
+  } | null;
+
   liveListings: {
     forSale: {
       address: string;
@@ -1320,6 +1329,64 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   }
 
   // ============================================================
+  // PHASE 13.10: Renovation Cost Estimate
+  // ============================================================
+  let renovationEstimateData: BuildingIntelligence["renovationEstimate"] = null;
+  try {
+    const renoUnits = totalUnits?.value || 0;
+    const renoSqft = grossSqft?.value || 0;
+    const renoYear = yearBuilt?.value || 0;
+    const renoBldgClass = plutoData?.bldgClass || "";
+    const renoFloors = plutoData?.numFloors || 0;
+    if (renoUnits > 0 && renoYear > 0) {
+      const { estimateRenovationCost } = await import("./renovation-engine");
+      const renoHasElevator = renoFloors > 5 || renoBldgClass.toUpperCase().startsWith("D");
+      const compValue = compsAnalysis ? compsAnalysis.avgPricePerUnit * renoUnits : 0;
+      const assessedVal = plutoData?.assessTot || 0;
+      const renoEst = estimateRenovationCost({
+        units: renoUnits,
+        sqft: renoSqft,
+        yearBuilt: renoYear,
+        buildingClass: renoBldgClass,
+        floors: renoFloors,
+        hasElevator: renoHasElevator,
+        hpdViolations: hpdViolations.filter((v: any) => v.currentstatus === "OPEN").length,
+        dobPermitsRecent: dobPermits.filter((p: any) => {
+          const d = p.issuance_date || p.filing_date || "";
+          return d > `${new Date().getFullYear() - 5}-01-01`;
+        }).length,
+        ll84Grade: energyIntel?.energyStarGrade || undefined,
+        currentValue: compValue > 0 ? compValue : undefined,
+        assessedValue: assessedVal > 0 ? assessedVal : undefined,
+      });
+      const lvl = renoEst.recommendedLevel;
+      renovationEstimateData = {
+        recommendedLevel: lvl,
+        totalCost: renoEst.totalCost[lvl],
+        costPerUnit: renoEst.costPerUnit[lvl],
+        arv: renoEst.arv[lvl],
+        roi: renoEst.renovationROI[lvl],
+        conditionSignals: renoEst.conditionSignals,
+      };
+
+      // Scoring adjustments
+      if (renoEst.renovationROI[lvl] > 100) {
+        investmentSignals.score = Math.min(100, investmentSignals.score + 8);
+        investmentSignals.signals.push({ type: "high_reno_roi", description: `Renovation ROI ${renoEst.renovationROI[lvl]}% — exceptional value-add opportunity`, estimatedUpside: `ARV $${Math.round(renoEst.arv[lvl] / 1000)}K after ${lvl} rehab` });
+      } else if (renoEst.renovationROI[lvl] > 50) {
+        investmentSignals.score = Math.min(100, investmentSignals.score + 5);
+        investmentSignals.signals.push({ type: "good_reno_roi", description: `Renovation ROI ${renoEst.renovationROI[lvl]}% — strong value-add potential`, estimatedUpside: `ARV $${Math.round(renoEst.arv[lvl] / 1000)}K after ${lvl} rehab` });
+      }
+      if (lvl === "gut") {
+        distressSignals.score = Math.min(100, distressSignals.score + 5);
+        distressSignals.signals.push({ type: "gut_renovation_needed", severity: "high", description: "Building condition warrants gut renovation — significant deferred maintenance", source: "Renovation Engine" });
+      }
+    }
+  } catch (err) {
+    console.warn("Renovation estimate skipped:", err);
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1398,6 +1465,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     comps: compsAnalysis,
     marketTrends: marketTrendsData,
     fannieMaeLoan: fannieMaeLoanData,
+    renovationEstimate: renovationEstimateData,
     liveListings,
     webIntelligence,
 
