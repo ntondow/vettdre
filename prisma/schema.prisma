@@ -1164,10 +1164,32 @@ model DealAnalysis {
 
   organization   Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoteModels  PromoteModel[]
 
   @@index([orgId, status])
   @@index([userId])
   @@map("deal_analyses")
+}
+
+// ============================================================
+// GP/LP PROMOTE MODEL
+// ============================================================
+model PromoteModel {
+  id              String       @id @default(uuid())
+  dealAnalysisId  String       @map("deal_analysis_id")
+  name            String?
+  templateName    String?      @map("template_name")
+  gpEquityPct     Float        @default(10) @map("gp_equity_pct")
+  lpEquityPct     Float        @default(90) @map("lp_equity_pct")
+  waterfallTiers  Json         @default("[]") @map("waterfall_tiers")
+  outputs         Json         @default("{}")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  dealAnalysis    DealAnalysis @relation(fields: [dealAnalysisId], references: [id], onDelete: Cascade)
+
+  @@index([dealAnalysisId])
+  @@map("promote_models")
 }
 
 // ============================================================

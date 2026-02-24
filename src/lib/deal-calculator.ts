@@ -646,7 +646,7 @@ export function calculateSensitivity(inputs: DealInputs) {
 // ============================================================
 // IRR — Newton's method with bisection fallback
 // ============================================================
-function calculateIRR(cashFlows: number[], guess = 0.1, maxIter = 100, tolerance = 1e-7): number {
+export function calculateIRR(cashFlows: number[], guess = 0.1, maxIter = 100, tolerance = 1e-7): number {
   let rate = guess;
   for (let i = 0; i < maxIter; i++) {
     let npv = 0;
