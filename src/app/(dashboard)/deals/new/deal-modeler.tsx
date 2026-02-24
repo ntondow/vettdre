@@ -9,7 +9,7 @@ import type { ExpenseFlag } from "@/lib/expense-analyzer";
 import { saveDealAnalysis, fetchDealPrefillData, getDealAnalysis, searchContacts, getContact, getUserProfile, sendLoiEmail, fetchComps } from "../actions";
 import { fetchLL84Data, calculateLL97Risk, estimateLL84Utilities } from "@/app/(dashboard)/market-intel/building-profile-actions";
 import type { DealPrefillData } from "../actions";
-import type { CompSale, CompSummary } from "@/lib/comps-engine";
+import type { CompSale, CompSummary, CompValuation } from "@/lib/comps-engine";
 import { generateDealPdf } from "@/lib/deal-pdf";
 import { generateLoiPdf } from "@/lib/loi-pdf";
 import { generateLoiDocx } from "@/lib/loi-docx";
@@ -107,11 +107,21 @@ export default function DealModeler() {
   const [assumptions, setAssumptions] = useState<Record<string, boolean>>({});
   const [isAiGenerated, setIsAiGenerated] = useState(false);
   const [fredRate, setFredRate] = useState<number | null>(null);
+  const [compValuation, setCompValuation] = useState<CompValuation | null>(null);
 
   // Fetch live FRED mortgage rate on mount
   useEffect(() => {
     import("@/lib/fred-actions").then(m => m.getFredMortgageRate()).then(setFredRate).catch(() => {});
   }, []);
+
+  // Fetch enhanced comp valuation when BBL is available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10) return;
+    import("@/app/(dashboard)/market-intel/comps-actions")
+      .then(m => m.fetchCompsWithValuation(bbl))
+      .then(r => { if (r.valuation.estimatedValue > 0) setCompValuation(r.valuation); })
+      .catch(() => {});
+  }, [bbl]);
 
   // Contact picker state
   const [contactId, setContactId] = useState<string | null>(null);
@@ -683,6 +693,20 @@ export default function DealModeler() {
             {/* Acquisition */}
             <Section title="Acquisition">
               <Field label="Purchase Price" value={inputs.purchasePrice} onChange={v => update({ purchasePrice: v })} prefix="$" aiAssumed={isAi("purchasePrice")} onClearAi={() => clearAi("purchasePrice")} />
+              {compValuation && (
+                <div className="flex items-center justify-between -mt-1 mb-1">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium border border-emerald-100">
+                    Comp Estimate: ${(compValuation.estimatedValue / 1e6).toFixed(2)}M
+                    <span className={`text-[10px] px-1 py-0.5 rounded ${compValuation.confidence === "high" ? "bg-emerald-200 text-emerald-800" : compValuation.confidence === "medium" ? "bg-amber-200 text-amber-800" : "bg-slate-200 text-slate-600"}`}>
+                      {compValuation.confidence}
+                    </span>
+                  </span>
+                  <button onClick={() => update({ purchasePrice: compValuation.estimatedValue })}
+                    className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">
+                    Apply to deal
+                  </button>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Closing Costs" value={inputs.closingCosts} onChange={v => update({ closingCosts: v })} prefix="$" aiAssumed={isAi("closingCosts")} onClearAi={() => clearAi("closingCosts")} />
                 <Field label="Renovation Budget" value={inputs.renovationBudget} onChange={v => update({ renovationBudget: v })} prefix="$" />
