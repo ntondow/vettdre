@@ -998,9 +998,12 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
           }
           if (topCorp && topCorp.name.length > 3) {
             const orgResult = await apolloEnrichOrganization(topCorp.name);
-            if (orgResult) apolloOrgEnrichment = orgResult;
-            const keyPeople = await apolloFindPeopleAtOrg(topCorp.name);
-            if (keyPeople.length > 0) apolloKeyPeople = keyPeople;
+            if (orgResult) {
+              apolloOrgEnrichment = orgResult;
+              // Only search for key people if org enrichment found a relevant match
+              const keyPeople = await apolloFindPeopleAtOrg(orgResult.name);
+              if (keyPeople.length > 0) apolloKeyPeople = keyPeople;
+            }
           }
         } catch {}
       })(),
