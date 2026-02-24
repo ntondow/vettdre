@@ -69,10 +69,19 @@ export default function MarketIntelSearch() {
   const [fredData, setFredData] = useState<import("@/lib/fred").FredSeries | null>(null);
   const [pulseCollapsed, setPulseCollapsed] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  // Redfin/FHFA Market Pulse data
+  const [nycRedfin, setNycRedfin] = useState<import("@/lib/redfin-market").RedfinMetrics | null>(null);
+  const [nycAppreciation, setNycAppreciation] = useState<{ metroAppreciation1Yr: number; fhfaQuarter: string } | null>(null);
 
   // Fetch FRED data on mount
   useEffect(() => {
     import("@/lib/fred-actions").then(m => m.getFredSeries()).then(setFredData).catch(() => {});
+    import("@/lib/market-trends-actions").then(m => {
+      m.getRedfinNycAggregate().then(setNycRedfin).catch(() => {});
+      m.getAppreciation("10001").then(a => {
+        if (a) setNycAppreciation({ metroAppreciation1Yr: a.metroAppreciation1Yr, fhfaQuarter: a.fhfaQuarter });
+      }).catch(() => {});
+    });
   }, []);
 
   // Name search cross-tab navigation
@@ -146,19 +155,48 @@ export default function MarketIntelSearch() {
               <span className={`text-indigo-300 text-xs transition-transform ${pulseCollapsed ? "" : "rotate-180"}`}>&#9662;</span>
             </button>
             {!pulseCollapsed && (
-              <div className="px-4 pb-3 flex flex-wrap gap-3">
-                {[
-                  { label: "30yr Fixed", obs: fredData.mortgage30, suffix: "%" },
-                  { label: "15yr Fixed", obs: fredData.mortgage15, suffix: "%" },
-                  { label: "30yr Treasury", obs: fredData.treasury30, suffix: "%" },
-                  { label: "Unemployment", obs: fredData.unemployment, suffix: "%" },
-                  { label: "Housing Starts", obs: fredData.housingStarts, suffix: "K" },
-                ].filter(i => i.obs).map(i => (
-                  <div key={i.label} className="bg-white/70 rounded-lg px-3 py-2">
-                    <p className="text-[10px] text-slate-400">{i.label}</p>
-                    <p className="text-sm font-black text-slate-900">{i.obs!.value.toLocaleString()}{i.suffix}</p>
+              <div className="px-4 pb-3 space-y-2">
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { label: "30yr Fixed", obs: fredData.mortgage30, suffix: "%" },
+                    { label: "15yr Fixed", obs: fredData.mortgage15, suffix: "%" },
+                    { label: "30yr Treasury", obs: fredData.treasury30, suffix: "%" },
+                    { label: "Unemployment", obs: fredData.unemployment, suffix: "%" },
+                    { label: "Housing Starts", obs: fredData.housingStarts, suffix: "K" },
+                  ].filter(i => i.obs).map(i => (
+                    <div key={i.label} className="bg-white/70 rounded-lg px-3 py-2">
+                      <p className="text-[10px] text-slate-400">{i.label}</p>
+                      <p className="text-sm font-black text-slate-900">{i.obs!.value.toLocaleString()}{i.suffix}</p>
+                    </div>
+                  ))}
+                </div>
+                {(nycRedfin || nycAppreciation) && (
+                  <div className="flex flex-wrap gap-3 pt-1 border-t border-indigo-100/50">
+                    {nycRedfin && (
+                      <>
+                        <div className="bg-white/70 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-slate-400">NYC Median Sale</p>
+                          <p className="text-sm font-black text-slate-900">${(nycRedfin.medianSalePrice / 1000).toFixed(0)}K</p>
+                        </div>
+                        <div className="bg-white/70 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-slate-400">Days on Market</p>
+                          <p className="text-sm font-black text-slate-900">{nycRedfin.medianDaysOnMarket}</p>
+                        </div>
+                        <div className="bg-white/70 rounded-lg px-3 py-2">
+                          <p className="text-[10px] text-slate-400">Supply</p>
+                          <p className="text-sm font-black text-slate-900">{nycRedfin.monthsOfSupply} mo</p>
+                        </div>
+                      </>
+                    )}
+                    {nycAppreciation && (
+                      <div className="bg-white/70 rounded-lg px-3 py-2">
+                        <p className="text-[10px] text-slate-400">NYC 1yr HPI</p>
+                        <p className="text-sm font-black text-emerald-700">+{nycAppreciation.metroAppreciation1Yr}%</p>
+                      </div>
+                    )}
+                    <span className="self-center text-[10px] text-indigo-300">Redfin / FHFA</span>
                   </div>
-                ))}
+                )}
               </div>
             )}
           </div>

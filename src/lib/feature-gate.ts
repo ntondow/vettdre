@@ -29,6 +29,8 @@ export type Feature =
   | "bp_census_basic"
   | "bp_census_full"
   | "bp_census_trends"
+  // Market Trends
+  | "bp_market_trends"
   // Corporate Filing
   | "bp_corp_basic"
   | "bp_corp_full"
@@ -75,6 +77,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "bp_live_listings",
   "bp_web_intel",
   "bp_census_full",
+  "bp_market_trends",
   "bp_corp_basic",
 ];
 
@@ -152,6 +155,7 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bp_web_intel: "Upgrade to Explorer to see web intelligence",
   bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
   bp_census_full: "Upgrade to Explorer for full census demographics",
+  bp_market_trends: "Upgrade to Explorer for market trends and appreciation data",
   bp_census_trends: "Upgrade to Pro for neighborhood trend data",
   bp_corp_basic: "Upgrade to Explorer to see corporate filing data",
   bp_corp_full: "Upgrade to Pro to see related entities & LLC piercing",

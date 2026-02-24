@@ -171,6 +171,14 @@ export interface BuildingIntelligence {
     recentComps: any[];
   } | null;
 
+  marketTrends: {
+    localAppreciation1Yr: number | null;
+    metroAppreciation1Yr: number;
+    medianDaysOnMarket: number | null;
+    marketTemperature: "hot" | "warm" | "cool" | "cold" | null;
+    trend: "appreciating" | "stable" | "declining";
+  } | null;
+
   liveListings: {
     forSale: {
       address: string;
@@ -1227,6 +1235,48 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   }
 
   // ============================================================
+  // PHASE 13.8: Market Trends (FHFA + Redfin)
+  // ============================================================
+  let marketTrendsData: BuildingIntelligence["marketTrends"] = null;
+  try {
+    const trendZip = plutoData?.zipCode || hpdRegistrations?.[0]?.zip || "";
+    if (trendZip) {
+      const { getMarketAppreciation } = await import("./fhfa");
+      const { getRedfinMarketTemperature } = await import("./redfin-market");
+      const [appreciationResult, tempResult] = await Promise.allSettled([
+        getMarketAppreciation(trendZip),
+        Promise.resolve(getRedfinMarketTemperature(trendZip)),
+      ]);
+      const appreciation = appreciationResult.status === "fulfilled" ? appreciationResult.value : null;
+      const temp = tempResult.status === "fulfilled" ? tempResult.value : null;
+      if (appreciation) {
+        marketTrendsData = {
+          localAppreciation1Yr: appreciation.localAppreciation1Yr,
+          metroAppreciation1Yr: appreciation.metroAppreciation1Yr,
+          medianDaysOnMarket: temp?.metrics?.medianDaysOnMarket ?? null,
+          marketTemperature: temp?.temperature ?? null,
+          trend: appreciation.trend,
+        };
+        dataSources.push("FHFA/ACRIS");
+      }
+    }
+  } catch (err) {
+    console.warn("Market trends skipped:", err);
+  }
+
+  // Adjust investment/distress scores based on market trends
+  if (marketTrendsData) {
+    if (marketTrendsData.marketTemperature === "hot" && marketTrendsData.trend === "appreciating") {
+      investmentSignals.score = Math.min(100, investmentSignals.score + 5);
+      investmentSignals.signals.push({ type: "hot_market", description: "Hot appreciating market — strong buyer demand", estimatedUpside: "Quick sale at premium pricing" });
+    }
+    if (marketTrendsData.marketTemperature === "cold" && marketTrendsData.trend === "declining") {
+      distressSignals.score = Math.min(100, distressSignals.score + 5);
+      distressSignals.signals.push({ type: "cold_market", severity: "medium", description: "Cold declining market — sellers may be more motivated", source: "FHFA/Redfin" });
+    }
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1303,6 +1353,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     distressSignals,
     investmentSignals,
     comps: compsAnalysis,
+    marketTrends: marketTrendsData,
     liveListings,
     webIntelligence,
 

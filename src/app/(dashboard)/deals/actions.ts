@@ -9,6 +9,8 @@ import { getCensusContextForAI } from "@/app/(dashboard)/market-intel/neighborho
 import { sendEmail } from "@/lib/gmail-send";
 import { getCurrentMortgageRate } from "@/lib/fred";
 import { fetchFmrByZip } from "@/lib/hud";
+import { getMarketAppreciation } from "@/lib/fhfa";
+import { getRedfinMetrics } from "@/lib/redfin-market";
 
 async function getUser() {
   const supabase = await createClient();
@@ -402,17 +404,22 @@ export async function underwriteDeal(params: {
 
   // Fetch live market data (non-blocking)
   const zip = (hpdRegData[0]?.zip || "").slice(0, 5);
-  const [fredResult, hudResult] = await Promise.allSettled([
+  const [fredResult, hudResult, appreciationResult] = await Promise.allSettled([
     getCurrentMortgageRate(),
     zip ? fetchFmrByZip(zip) : Promise.resolve(null),
+    zip ? getMarketAppreciation(zip) : Promise.resolve(null),
   ]);
   const liveRate = fredResult.status === "fulfilled" ? fredResult.value : null;
   const hudFmr = hudResult.status === "fulfilled" ? hudResult.value : undefined;
+  const appreciation = appreciationResult.status === "fulfilled" ? appreciationResult.value : undefined;
+  const redfin = zip ? getRedfinMetrics(zip) : null;
 
   // Generate AI assumptions
   let inputs = generateDealAssumptions(buildingData, {
     liveInterestRate: liveRate ?? undefined,
     hudFmr: hudFmr ?? undefined,
+    marketAppreciation: appreciation ?? undefined,
+    redfinMetrics: redfin ?? undefined,
   });
 
   // Calibrate with Census data if available
@@ -432,7 +439,10 @@ export async function underwriteDeal(params: {
       vacancyRate: extractPct("Census vacancy"),
       medianHouseholdIncome: extractNum("Median income"),
       rentBurdenPct: extractPct("Rent burden"),
-    }, hudFmr ?? undefined);
+    }, hudFmr ?? undefined, {
+      appreciation: appreciation ?? undefined,
+      redfin: redfin ?? undefined,
+    });
   }
 
   const outputs = calculateAll(inputs);
