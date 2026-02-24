@@ -9,7 +9,8 @@ import type { BuildingIntelligence } from "@/lib/data-fusion-engine";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";
-import type { CompSale, CompSummary } from "@/lib/comps-engine";
+import type { CompSale, CompSummary, CompResult } from "@/lib/comps-engine";
+import { fetchCompsWithValuation } from "./comps-actions";
 import FeatureGate from "@/components/ui/feature-gate";
 import SmsComposeModal from "@/components/ui/sms-compose-modal";
 import { fetchNeighborhoodProfile } from "./neighborhood-actions";
@@ -75,7 +76,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [addingToCRM, setAddingToCRM] = useState(false);
   const [crmResult, setCrmResult] = useState<{ contactId: string; enriched: boolean } | null>(null);
   const [underwriting, setUnderwriting] = useState(false);
-  // Comps state
+  // Comps state (basic — kept for backward compat)
   const [comps, setComps] = useState<CompSale[]>([]);
   const [compSummary, setCompSummary] = useState<CompSummary | null>(null);
   const [compsLoading, setCompsLoading] = useState(false);
@@ -83,6 +84,11 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
   const [compRadius, setCompRadius] = useState(2);
   const [compYears, setCompYears] = useState(5);
   const [compMinUnits, setCompMinUnits] = useState(5);
+  // Enhanced comps with valuation
+  const [compResult, setCompResult] = useState<CompResult | null>(null);
+  const [enhancedCompsLoading, setEnhancedCompsLoading] = useState(false);
+  const [enhancedRadius, setEnhancedRadius] = useState(0.5);
+  const [enhancedMaxDays, setEnhancedMaxDays] = useState(730);
   // RPIE + LL84 state (populated from BuildingIntelligence)
   const [rpieRecords, setRpieRecords] = useState<RPIERecord[]>([]);
   const [ll84Data, setLl84Data] = useState<LL84Data | null>(null);
@@ -302,6 +308,30 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
       .then(result => { setComps(result.comps); setCompSummary(result.summary); })
       .catch(err => console.error("Comps error:", err))
       .finally(() => setCompsLoading(false));
+  };
+
+  // Enhanced comps with valuation — auto-load when intel is available
+  useEffect(() => {
+    if (!intel || enhancedCompsLoading || compResult) return;
+    const units = intel.property.residentialUnits?.value || intel.property.units?.value || 0;
+    if (units < 2) return;
+    setEnhancedCompsLoading(true);
+    const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+    fetchCompsWithValuation(bbl, { radiusMiles: enhancedRadius, maxAgeDays: enhancedMaxDays })
+      .then(setCompResult)
+      .catch(err => console.error("Enhanced comps error:", err))
+      .finally(() => setEnhancedCompsLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intel]);
+
+  const refreshEnhancedComps = () => {
+    setEnhancedCompsLoading(true);
+    setCompResult(null);
+    const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+    fetchCompsWithValuation(bbl, { radiusMiles: enhancedRadius, maxAgeDays: enhancedMaxDays })
+      .then(setCompResult)
+      .catch(err => console.error("Enhanced comps error:", err))
+      .finally(() => setEnhancedCompsLoading(false));
   };
 
   const handleSkipTrace = async () => {
@@ -2383,116 +2413,169 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
           </Section>
 
           {/* ============================================================ */}
-          {/* LIVE COMPS — Comparable Sales */}
+          {/* COMPARABLE SALES — Enhanced with Valuation */}
           {/* ============================================================ */}
-          <Section id="comps" title="Live Comps" icon="📊"
+          <Section id="comps" title="Comparable Sales" icon="📊"
             badge={
               <>
-                {compSummary && compSummary.count > 0 && (
-                  <span className="text-xs text-slate-400">{compSummary.count} sales</span>
+                {compResult && compResult.comps.length > 0 && (
+                  <span className="text-xs text-slate-400">{compResult.comps.length} comps</span>
                 )}
-                {compSummary && compSummary.avgPricePerUnit > 0 && (
-                  <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                    Avg ${compSummary.avgPricePerUnit.toLocaleString()}/unit
+                {compResult && compResult.valuation.confidence !== "low" && (
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                    compResult.valuation.confidence === "high" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {compResult.valuation.confidence === "high" ? "High" : "Medium"} Confidence
                   </span>
                 )}
               </>
             }
             collapsed={isCollapsed("comps")} onToggle={() => toggle("comps")}>
-            {compsLoading ? (
+            {enhancedCompsLoading ? (
               <div className="flex items-center gap-2 text-sm text-slate-500 py-4">
                 <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full" />
-                Searching comparable sales...
+                Analyzing comparable sales...
               </div>
-            ) : comps.length > 0 && compSummary ? (
+            ) : compResult && compResult.comps.length > 0 ? (
               <>
-                {/* Summary cards */}
+                {/* Valuation Summary Card */}
+                {compResult.valuation.estimatedValue > 0 && (
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200 p-4 mb-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                      <div>
+                        <p className="text-[10px] text-blue-500 uppercase font-medium">Estimated Value</p>
+                        <p className="text-lg font-black text-blue-900">{fmtPrice(compResult.valuation.estimatedValue)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-500 uppercase font-medium">Price/Unit</p>
+                        <p className="text-lg font-black text-blue-900">{fmtPrice(compResult.valuation.pricePerUnit)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-500 uppercase font-medium">Price/SqFt</p>
+                        <p className="text-lg font-black text-blue-900">{compResult.valuation.pricePerSqft ? `$${compResult.valuation.pricePerSqft.toLocaleString()}` : "—"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-blue-500 uppercase font-medium">Confidence</p>
+                        <p className={`text-lg font-black ${
+                          compResult.valuation.confidence === "high" ? "text-emerald-700" : compResult.valuation.confidence === "medium" ? "text-amber-700" : "text-red-600"
+                        }`}>
+                          {compResult.valuation.confidenceScore}/100
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-blue-600">{compResult.valuation.methodology}</p>
+
+                    {/* Appreciation comparison */}
+                    {compResult.subject.lastSalePrice && compResult.subject.lastSalePrice > 0 && compResult.valuation.estimatedValue > 0 && (
+                      <div className="mt-2 pt-2 border-t border-blue-200 flex items-center gap-4">
+                        <p className="text-xs text-slate-600">
+                          Last sold for {fmtPrice(compResult.subject.lastSalePrice)}
+                          {compResult.subject.lastSaleDate && ` in ${new Date(compResult.subject.lastSaleDate).getFullYear()}`}
+                        </p>
+                        {(() => {
+                          const pctChange = Math.round(((compResult.valuation.estimatedValue - compResult.subject.lastSalePrice!) / compResult.subject.lastSalePrice!) * 100);
+                          return (
+                            <span className={`text-xs font-bold ${pctChange >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                              {pctChange >= 0 ? "+" : ""}{pctChange}% est. appreciation
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Assessed value comparison */}
+                    {compResult.subject.assessedValue && compResult.subject.assessedValue > 0 && compResult.valuation.estimatedValue > 0 && (
+                      <p className="text-xs text-slate-500 mt-1">
+                        Assessed at {fmtPrice(compResult.subject.assessedValue)} — comp estimate is {Math.round((compResult.valuation.estimatedValue / compResult.subject.assessedValue - 1) * 100)}% {compResult.valuation.estimatedValue > compResult.subject.assessedValue ? "above" : "below"} assessment
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Summary cards (quick stats) */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                   <div className="bg-blue-50 rounded-lg p-3 text-center">
-                    <p className="text-[10px] text-blue-500 uppercase font-medium">Comp Count</p>
-                    <p className="text-lg font-bold text-blue-800">{compSummary.count}</p>
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Comps Found</p>
+                    <p className="text-lg font-bold text-blue-800">{compResult.comps.length}</p>
+                    <p className="text-[10px] text-blue-400">{compResult.searchParams.totalCandidates} candidates</p>
                   </div>
                   <div className="bg-blue-50 rounded-lg p-3 text-center">
                     <p className="text-[10px] text-blue-500 uppercase font-medium">Avg $/Unit</p>
-                    <p className="text-lg font-bold text-blue-800">${compSummary.avgPricePerUnit.toLocaleString()}</p>
+                    <p className="text-lg font-bold text-blue-800">{fmtPrice(compResult.valuation.pricePerUnit)}</p>
                   </div>
                   <div className="bg-blue-50 rounded-lg p-3 text-center">
-                    <p className="text-[10px] text-blue-500 uppercase font-medium">Median $/Unit</p>
-                    <p className="text-lg font-bold text-blue-800">${compSummary.medianPricePerUnit.toLocaleString()}</p>
+                    <p className="text-[10px] text-blue-500 uppercase font-medium">Avg Similarity</p>
+                    <p className="text-lg font-bold text-blue-800">
+                      {Math.round(compResult.comps.reduce((s, c) => s + c.similarityScore, 0) / compResult.comps.length)}/100
+                    </p>
                   </div>
                   <div className="bg-blue-50 rounded-lg p-3 text-center">
                     <p className="text-[10px] text-blue-500 uppercase font-medium">Avg $/SqFt</p>
-                    <p className="text-lg font-bold text-blue-800">{compSummary.avgPricePerSqft > 0 ? `$${compSummary.avgPricePerSqft.toLocaleString()}` : "—"}</p>
+                    <p className="text-lg font-bold text-blue-800">{compResult.valuation.pricePerSqft ? `$${compResult.valuation.pricePerSqft.toLocaleString()}` : "—"}</p>
                   </div>
                 </div>
 
-                {/* Filter controls */}
+                {/* Adjust Search controls */}
                 <div className="flex items-center gap-3 mb-3 flex-wrap">
                   <label className="text-[10px] text-slate-500 flex items-center gap-1">
                     Radius:
-                    <select value={compRadius} onChange={e => { setCompRadius(parseFloat(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                    <select value={enhancedRadius} onChange={e => setEnhancedRadius(parseFloat(e.target.value))} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                      <option value="0.25">0.25 mi</option>
                       <option value="0.5">0.5 mi</option>
                       <option value="1">1 mi</option>
                       <option value="2">2 mi</option>
-                      <option value="5">5 mi</option>
-                      <option value="10">10 mi</option>
                     </select>
                   </label>
                   <label className="text-[10px] text-slate-500 flex items-center gap-1">
-                    Years:
-                    <select value={compYears} onChange={e => { setCompYears(parseInt(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
-                      <option value="1">1 yr</option>
-                      <option value="2">2 yr</option>
-                      <option value="3">3 yr</option>
-                      <option value="5">5 yr</option>
+                    Period:
+                    <select value={enhancedMaxDays} onChange={e => setEnhancedMaxDays(parseInt(e.target.value))} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
+                      <option value="180">6 mo</option>
+                      <option value="365">1 yr</option>
+                      <option value="730">2 yr</option>
+                      <option value="1825">5 yr</option>
                     </select>
                   </label>
-                  <label className="text-[10px] text-slate-500 flex items-center gap-1">
-                    Min Units:
-                    <select value={compMinUnits} onChange={e => { setCompMinUnits(parseInt(e.target.value)); }} className="border border-slate-200 rounded px-1.5 py-0.5 text-xs bg-white">
-                      <option value="3">3+</option>
-                      <option value="5">5+</option>
-                      <option value="10">10+</option>
-                      <option value="20">20+</option>
-                    </select>
-                  </label>
-                  <button onClick={refreshComps} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
-                    Refresh
+                  <button onClick={refreshEnhancedComps} className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    Search
                   </button>
                 </div>
 
-                {/* Comps table */}
+                {/* Comps table with similarity scores */}
                 <div className="overflow-x-auto -mx-5 px-5">
-                  <table className="w-full text-xs min-w-[700px]">
+                  <table className="w-full text-xs min-w-[750px]">
                     <thead className="bg-slate-50">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-slate-500">Address</th>
-                        <th className="text-center px-2 py-2 font-medium text-slate-500">Borough</th>
                         <th className="text-center px-2 py-2 font-medium text-slate-500">Units</th>
-                        <th className="text-right px-2 py-2 font-medium text-slate-500">SqFt</th>
-                        <th className="text-center px-2 py-2 font-medium text-slate-500">Built</th>
                         <th className="text-right px-3 py-2 font-medium text-slate-500">Sale Price</th>
                         <th className="text-right px-2 py-2 font-medium text-slate-500">$/Unit</th>
                         <th className="text-right px-2 py-2 font-medium text-slate-500">$/SqFt</th>
                         <th className="text-center px-2 py-2 font-medium text-slate-500">Date</th>
                         <th className="text-center px-2 py-2 font-medium text-slate-500">Dist</th>
+                        <th className="text-center px-2 py-2 font-medium text-slate-500">Score</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {comps.slice(0, 25).map((c, i) => (
+                      {compResult.comps.map((c, i) => (
                         <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
                           <td className="px-3 py-1.5 text-slate-700 max-w-[200px] truncate" title={c.address}>{c.address}</td>
-                          <td className="text-center px-2 py-1.5 text-slate-500">{c.borough.substring(0, 3)}</td>
-                          <td className="text-center px-2 py-1.5">{c.totalUnits}</td>
-                          <td className="text-right px-2 py-1.5 text-slate-500">{c.grossSqft > 0 ? c.grossSqft.toLocaleString() : "—"}</td>
-                          <td className="text-center px-2 py-1.5 text-slate-500">{c.yearBuilt || "—"}</td>
+                          <td className="text-center px-2 py-1.5">{c.units}</td>
                           <td className="text-right px-3 py-1.5 font-medium">{fmtPrice(c.salePrice)}</td>
                           <td className="text-right px-2 py-1.5">{c.pricePerUnit > 0 ? fmtPrice(c.pricePerUnit) : "—"}</td>
-                          <td className="text-right px-2 py-1.5 text-slate-500">{c.pricePerSqft > 0 ? `$${c.pricePerSqft}` : "—"}</td>
+                          <td className="text-right px-2 py-1.5 text-slate-500">{c.pricePerSqft ? `$${c.pricePerSqft}` : "—"}</td>
                           <td className="text-center px-2 py-1.5 text-slate-500">
                             {c.saleDate ? new Intl.DateTimeFormat("en-US", { month: "short", year: "2-digit" }).format(new Date(c.saleDate)) : "—"}
                           </td>
-                          <td className="text-center px-2 py-1.5 text-slate-400">{c.distance} mi</td>
+                          <td className="text-center px-2 py-1.5 text-slate-400">{c.distanceMiles} mi</td>
+                          <td className="text-center px-2 py-1.5">
+                            <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              c.similarityScore >= 70 ? "bg-emerald-100 text-emerald-700" :
+                              c.similarityScore >= 45 ? "bg-amber-100 text-amber-700" :
+                              "bg-slate-100 text-slate-500"
+                            }`}>
+                              {c.similarityScore}
+                            </span>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -2501,9 +2584,9 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
               </>
             ) : (
               <p className="text-sm text-slate-400">
-                {data?.pluto?.unitsTot >= 5
-                  ? "No comparable sales found in this area. Try expanding the search radius."
-                  : "Comps are available for buildings with 5+ units."}
+                {(data?.pluto?.unitsTot || data?.pluto?.unitsRes || 0) >= 2
+                  ? "No comparable sales found. Try expanding the search radius or time period."
+                  : "Comparable sales analysis is available for buildings with 2+ units."}
               </p>
             )}
           </Section>

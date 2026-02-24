@@ -488,6 +488,8 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
       borough: boroName,
       block, lot, boroCode,
       zipCode: p.zipcode || "",
+      latitude: parseFloat(p.latitude || "0"),
+      longitude: parseFloat(p.longitude || "0"),
     };
     dataSources.push("PLUTO");
     dataFreshness.PLUTO = "2024";
@@ -1174,6 +1176,57 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   }
 
   // ============================================================
+  // PHASE 13.7: Comparable Sales Valuation (non-blocking)
+  // ============================================================
+
+  let compsAnalysis: BuildingIntelligence["comps"] = null;
+
+  try {
+    if (plutoData && plutoData.latitude && plutoData.longitude && (plutoData.unitsRes >= 2 || plutoData.unitsTot >= 2)) {
+      const { findComparableSales } = await import("./comps-engine");
+      const compResult = await findComparableSales({
+        bbl,
+        borough: boroName,
+        lat: plutoData.latitude,
+        lng: plutoData.longitude,
+        units: plutoData.unitsRes || plutoData.unitsTot,
+        sqft: plutoData.bldgArea,
+        yearBuilt: plutoData.yearBuilt,
+        buildingClass: plutoData.bldgClass,
+        assessedValue: plutoData.assessTotal,
+        address: plutoData.address,
+        lastSalePrice: lastSale?.price,
+        lastSaleDate: lastSale?.date,
+        radiusMiles: 0.5,
+        maxAgeDays: 730,
+      });
+
+      if (compResult.comps.length > 0) {
+        const avgSimilarity = compResult.comps.reduce((s, c) => s + c.similarityScore, 0) / compResult.comps.length;
+        // subjectVsMarket: negative = subject is below market (undervalued)
+        const subjectVsMarket = lastSale && lastSale.price > 0 && compResult.valuation.estimatedValue > 0
+          ? Math.round(((lastSale.price - compResult.valuation.estimatedValue) / compResult.valuation.estimatedValue) * 100)
+          : 0;
+        compsAnalysis = {
+          count: compResult.comps.length,
+          avgPricePerUnit: compResult.valuation.pricePerUnit,
+          medianPricePerUnit: compResult.comps.length > 0
+            ? (() => { const ppu = compResult.comps.map(c => c.pricePerUnit).filter(v => v > 0).sort((a, b) => a - b); const m = Math.floor(ppu.length / 2); return ppu.length % 2 ? ppu[m] : Math.round((ppu[m - 1] + ppu[m]) / 2); })()
+            : 0,
+          avgPricePerSqft: compResult.valuation.pricePerSqft || 0,
+          subjectVsMarket,
+          recentComps: compResult.comps.slice(0, 5).map(c => ({
+            address: c.address, salePrice: c.salePrice, saleDate: c.saleDate,
+            units: c.units, pricePerUnit: c.pricePerUnit, distanceMiles: c.distanceMiles, similarityScore: c.similarityScore,
+          })),
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("Comps analysis skipped:", err);
+  }
+
+  // ============================================================
   // PHASE 14: Build Contacts
   // ============================================================
 
@@ -1249,7 +1302,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     compliance,
     distressSignals,
     investmentSignals,
-    comps: null,
+    comps: compsAnalysis,
     liveListings,
     webIntelligence,
 
