@@ -76,33 +76,46 @@ export default function MarketIntelSearch() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header: market toggle + tab bar */}
-      <MarketIntelHeader
-        market={market}
-        mainTab={tab}
-        plan={plan}
-        activeFilterCount={activeFilterCount}
-        onMarketChange={(m) => {
-          if (m === "nys" && !hasPermission(plan, "market_nys")) {
-            setPaywallFeature("market_nys");
-            return;
-          }
-          if (m === "nj" && !hasPermission(plan, "market_nj")) {
-            setPaywallFeature("market_nj");
-            return;
-          }
-          setMarket(m);
-        }}
-        onTabChange={(t) => {
-          if (t === "map" && !hasPermission(plan, "map_search")) {
-            setPaywallFeature("map_search");
-            return;
-          }
-          setTab(t);
-        }}
-        onPaywall={setPaywallFeature}
-        onToggleFilters={() => setShowFilters(!showFilters)}
-      />
+      {/* Header + filter popover wrapper */}
+      <div className="relative">
+        <MarketIntelHeader
+          market={market}
+          mainTab={tab}
+          plan={plan}
+          activeFilterCount={activeFilterCount}
+          onMarketChange={(m) => {
+            if (m === "nys" && !hasPermission(plan, "market_nys")) {
+              setPaywallFeature("market_nys");
+              return;
+            }
+            if (m === "nj" && !hasPermission(plan, "market_nj")) {
+              setPaywallFeature("market_nj");
+              return;
+            }
+            setMarket(m);
+          }}
+          onTabChange={(t) => {
+            if (t === "map" && !hasPermission(plan, "map_search")) {
+              setPaywallFeature("map_search");
+              return;
+            }
+            setTab(t);
+          }}
+          onPaywall={setPaywallFeature}
+          onToggleFilters={() => setShowFilters(!showFilters)}
+        />
+
+        {/* Filter popover (dropdown on desktop, sheet on mobile) */}
+        <FilterPanel
+          open={showFilters}
+          market={market}
+          tab={tab}
+          filters={filters}
+          onClose={() => setShowFilters(false)}
+          onSetFilters={setFilters}
+          onClearAll={clearAllFilters}
+        />
+      </div>
 
       {/* Filter chips */}
       <FilterChips
@@ -112,19 +125,8 @@ export default function MarketIntelSearch() {
         onClearAll={clearAllFilters}
       />
 
-      {/* Filter panel (sidebar on desktop, sheet on mobile) */}
-      <FilterPanel
-        open={showFilters}
-        market={market}
-        tab={tab}
-        filters={filters}
-        onClose={() => setShowFilters(false)}
-        onSetFilters={setFilters}
-        onClearAll={clearAllFilters}
-      />
-
       {/* Main content area */}
-      <div className={`px-4 md:px-8 py-6 transition-all ${showFilters ? "md:ml-72" : ""}`}>
+      <div className="px-4 md:px-8 py-6">
 
         {/* ===== NYC tabs ===== */}
         {market === "nyc" && tab === "property" && (
