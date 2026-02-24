@@ -684,6 +684,77 @@ export function generateNJDealAssumptions(building: NJBuildingData): DealInputs 
 }
 
 // ============================================================
+// Census Data Calibration — adjust assumptions with tract-level data
+// ============================================================
+export interface CensusCalibration {
+  medianRent?: number;        // Census median gross rent
+  medianContractRent?: number;
+  vacancyRate?: number;       // Census vacancy rate
+  medianHouseholdIncome?: number;
+  rentBurdenPct?: number;     // Median gross rent as % of income
+  renterPct?: number;         // % renter occupied
+}
+
+export function calibrateWithCensusData(
+  inputs: DealInputs,
+  census: CensusCalibration,
+): DealInputs {
+  const updated = { ...inputs };
+  const assumptions = { ...(updated._assumptions || {}) };
+
+  // 1. Vacancy: use census vacancy rate if available (clamped 2-15%)
+  if (census.vacancyRate != null && census.vacancyRate > 0) {
+    const censusVac = Math.max(2, Math.min(15, census.vacancyRate));
+    // Blend: 60% census + 40% model estimate
+    updated.residentialVacancyRate = Math.round(
+      (censusVac * 0.6 + updated.residentialVacancyRate * 0.4) * 10
+    ) / 10;
+    delete assumptions.residentialVacancyRate; // No longer fully assumed
+  }
+
+  // 2. Rent calibration: if census median rent differs from our estimates
+  //    by >20%, adjust unit mix rents toward census figure
+  if (census.medianRent && census.medianRent > 0 && updated.unitMix.length > 0) {
+    const currentWeightedRent = updated.unitMix.reduce(
+      (s, u) => s + u.count * u.monthlyRent, 0
+    ) / updated.unitMix.reduce((s, u) => s + u.count, 0);
+
+    // Census median is typically close to 1BR/2BR blended rent
+    const ratio = census.medianRent / currentWeightedRent;
+    if (ratio < 0.8 || ratio > 1.2) {
+      // Adjust each unit type proportionally, but don't go below 80% or above 120% of original
+      const adjFactor = Math.max(0.85, Math.min(1.15, (ratio + 1) / 2)); // damped adjustment
+      updated.unitMix = updated.unitMix.map(u => ({
+        ...u,
+        monthlyRent: Math.round(u.monthlyRent * adjFactor),
+      }));
+    }
+  }
+
+  // 3. If rent burden > 35%, increase concessions slightly (tenants stretched)
+  if (census.rentBurdenPct && census.rentBurdenPct > 35) {
+    updated.concessions = Math.max(updated.concessions, 1);
+  }
+
+  updated._assumptions = assumptions;
+  updated._censusContext = buildCensusNote(census);
+  return updated;
+}
+
+function buildCensusNote(c: CensusCalibration): string {
+  const parts: string[] = [];
+  if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
+  if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
+  if (c.medianHouseholdIncome) parts.push(`Median income: $${c.medianHouseholdIncome.toLocaleString()}`);
+  if (c.rentBurdenPct) parts.push(`Rent burden: ${c.rentBurdenPct.toFixed(0)}%`);
+  if (c.medianHouseholdIncome) {
+    const maxRent = Math.round(c.medianHouseholdIncome / 12 * 0.30);
+    parts.push(`Affordability ceiling (30%): $${maxRent.toLocaleString()}/mo`);
+  }
+  return parts.join(" | ");
+}
+
+// ============================================================
 // LL84 Utility Override — use actual LL84 data instead of estimates
 // ============================================================
 export function applyLL84UtilityOverride(

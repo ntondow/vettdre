@@ -515,3 +515,34 @@ export function resolveValue<T>(
     alternateValues: disagreeing.map(d => ({ value: d.value, source: d.source })),
   };
 }
+
+// ============================================================
+// Geocodio Address Normalization — high-confidence fallback
+// Use sparingly (costs a Geocodio lookup). Only when local
+// normalizer has low confidence on ambiguous addresses.
+// ============================================================
+export async function normalizeAddressWithGeocodio(
+  rawAddress: string,
+): Promise<{ formatted: string; lat: number; lng: number; confidence: number } | null> {
+  try {
+    const { geocodeAddress, getGeocodioBudget } = await import("@/lib/geocodio");
+    const budget = getGeocodioBudget();
+    if (budget.remaining <= 0) return null;
+
+    const result = await geocodeAddress(rawAddress);
+    if (!result || !result.lat) return null;
+
+    return {
+      formatted: result.formatted_address,
+      lat: result.lat,
+      lng: result.lng,
+      confidence: result.accuracy_type === "rooftop" ? 95
+        : result.accuracy_type === "range_interpolation" ? 80
+        : result.accuracy_type === "nearest_street" ? 60
+        : 40,
+    };
+  } catch (err) {
+    console.error("Geocodio normalize error:", err);
+    return null;
+  }
+}
