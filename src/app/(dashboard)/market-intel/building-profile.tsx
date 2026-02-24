@@ -172,6 +172,10 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
         }
         // Set legacy data for the existing UI sections
         if (legacyData) {
+          // Merge corporate intel from fusion engine into legacy data
+          if (intelResult?.corporateIntel) {
+            legacyData.corporateIntel = intelResult.corporateIntel;
+          }
           setData(legacyData);
         } else if (intelResult) {
           // Fallback: construct minimal legacy data from fusion engine
@@ -200,6 +204,7 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
             leadVerification: intelResult.raw.leadVerification,
             rankedContacts: intelResult.raw.rankedContacts,
             ownerContacts: intelResult.raw.ownerContacts,
+            corporateIntel: intelResult.raw.corporateIntel || intelResult.corporateIntel,
             distressScore: intelResult.distressSignals.score,
             distressSignals: intelResult.distressSignals.signals.map(s => s.description),
           });
@@ -1294,6 +1299,82 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Corporate Filing — NY DOS */}
+              {data?.corporateIntel && (
+                <FeatureGate feature="bp_corp_basic" blur>
+                <div className="mt-4 rounded-lg border border-violet-200 bg-gradient-to-r from-violet-50 to-purple-50 p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🏛️</span>
+                    <span className="text-sm font-bold text-slate-900">NY Corporate Filing</span>
+                    <span className="text-[10px] bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full font-medium">DOS</span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs mb-3">
+                    <div>
+                      <p className="text-slate-400">Entity Name</p>
+                      <p className="text-slate-900 font-bold">{data.corporateIntel.entityName}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Entity Type</p>
+                      <p className="text-slate-900 font-medium">{data.corporateIntel.entityType}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">DOS ID</p>
+                      <p className="text-slate-900 font-medium">{data.corporateIntel.dosId}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400">Formation Date</p>
+                      <p className="text-slate-900 font-medium">
+                        {data.corporateIntel.filingDate ? new Date(data.corporateIntel.filingDate).toLocaleDateString() : "—"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Process Agent / Registered Agent */}
+                  <div className="bg-white/60 rounded-lg border border-violet-100 p-3 mb-3">
+                    <p className="text-[10px] text-slate-400 uppercase font-medium mb-1">
+                      {data.corporateIntel.registeredAgent ? "Registered Agent" : "Process Agent"}
+                    </p>
+                    <p className="text-sm font-bold text-slate-900">
+                      {data.corporateIntel.registeredAgent || data.corporateIntel.processName || "—"}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {data.corporateIntel.registeredAgentAddress || data.corporateIntel.processAddress || "—"}
+                    </p>
+                  </div>
+
+                  {/* Related Entities — Pro+ only */}
+                  {data.corporateIntel.totalRelatedEntities > 0 && (
+                    <FeatureGate feature="bp_corp_full" blur>
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-slate-400 uppercase font-medium">
+                          Related Entities ({data.corporateIntel.totalRelatedEntities})
+                        </p>
+                      </div>
+                      <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                        {data.corporateIntel.relatedEntities.slice(0, 10).map((e: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between bg-white/60 rounded border border-violet-100 px-3 py-1.5">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-slate-800 truncate">{e.name}</p>
+                              <p className="text-[10px] text-slate-400">{e.entityType} · Filed {e.filingDate ? new Date(e.filingDate).toLocaleDateString() : "—"}</p>
+                            </div>
+                            <span className="text-[10px] text-violet-500 font-medium ml-2 shrink-0">DOS {e.dosId}</span>
+                          </div>
+                        ))}
+                        {data.corporateIntel.totalRelatedEntities > 10 && (
+                          <p className="text-[10px] text-slate-400 text-center py-1">
+                            + {data.corporateIntel.totalRelatedEntities - 10} more entities
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    </FeatureGate>
+                  )}
+                </div>
+                </FeatureGate>
               )}
             </Section>
           )}
