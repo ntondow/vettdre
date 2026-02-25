@@ -8,6 +8,9 @@ import type { DealInputs, UnitMixRow } from "./deal-calculator";
 import type { HudFmrData } from "./hud";
 import type { MarketAppreciation } from "./fhfa";
 import type { RedfinMetrics } from "./redfin-market";
+import { getExpenseBenchmark, classifyBuildingCategory, CATEGORY_LABELS } from "./expense-benchmarks";
+import { getBlendedRGBRate } from "./rent-stabilization";
+import type { CapRateAnalysis } from "./cap-rate-engine";
 
 // ============================================================
 // Building data from various NYC Open Data sources
@@ -102,7 +105,7 @@ export function getNJMarketRents(county: string): Record<string, number> {
 // ============================================================
 export function generateDealAssumptions(
   building: BuildingData,
-  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics },
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics; capRateAnalysis?: CapRateAnalysis },
 ): DealInputs {
   const units = building.unitsRes || building.hpdUnits || building.unitsTotal || 1;
   const borough = building.borough || "Brooklyn";
@@ -197,6 +200,30 @@ export function generateDealAssumptions(
   assumptions.alarmMonitoring = true;
   const telephoneInternet = 9000;
   assumptions.telephoneInternet = true;
+
+  // -- BENCHMARK CONTEXT -- (for notes, not overriding)
+  let benchmarkNote = "";
+  try {
+    const benchmark = getExpenseBenchmark({
+      yearBuilt: building.yearBuilt,
+      hasElevator: building.hasElevator,
+      numFloors: building.numFloors,
+      bldgClass: building.bldgClass,
+      bldgArea: building.bldgArea,
+      unitsRes: units,
+      borough,
+      rentStabilizedUnits: building.rentStabilizedUnits,
+    });
+    benchmarkNote = `RGB benchmark (${benchmark.categoryLabel}): $${benchmark.totalPerUnit.toLocaleString()}/unit/yr`;
+    const aiTotal = insurance + electricityGas + waterSewer + payroll + rmGeneral +
+      cleaning + trashRemoval + elevator + exterminating + legal + accounting;
+    const aiPerUnit = units > 0 ? Math.round(aiTotal / units) : 0;
+    const diff = aiPerUnit - benchmark.totalPerUnit;
+    const diffPct = benchmark.totalPerUnit > 0 ? Math.round((diff / benchmark.totalPerUnit) * 100) : 0;
+    if (Math.abs(diffPct) > 20) {
+      benchmarkNote += ` (AI estimate ${diffPct > 0 ? "+" : ""}${diffPct}%)`;
+    }
+  } catch { /* benchmark is non-critical */ }
 
   // -- FINANCING --
   const closingCosts = 150000;
@@ -306,6 +333,20 @@ export function generateDealAssumptions(
   const estNoi = totalIncome - totalExp;
   const goingInCap = purchasePrice > 0 ? (estNoi / purchasePrice) * 100 : 5.5;
   inputs.exitCapRate = Math.max(3, Math.round((goingInCap - 0.25) * 100) / 100);
+
+  // Attach benchmark note for enrichment context
+  if (benchmarkNote) {
+    const rsNote = building.rentStabilizedUnits > 0
+      ? ` | Stabilized: ${building.rentStabilizedUnits} units at RGB ${getBlendedRGBRate().toFixed(2)}% blend`
+      : "";
+    (inputs as any)._benchmarkNote = benchmarkNote + rsNote;
+  }
+
+  // Attach cap rate context if available via options
+  if (options?.capRateAnalysis) {
+    const cr = options.capRateAnalysis;
+    (inputs as any)._capRateNote = `Market cap rate: ${cr.marketCapRate.toFixed(2)}% (${cr.confidence}, ${cr.compCount} comps, ${cr.trend} ${Math.abs(cr.trendBpsPerYear)}bp/yr)`;
+  }
 
   return inputs;
 }
@@ -789,6 +830,7 @@ function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends
   const parts: string[] = [];
   if (c.medianRent) parts.push(`Census median rent: $${c.medianRent.toLocaleString()}/mo`);
   if (c.vacancyRate != null) parts.push(`Census vacancy: ${c.vacancyRate.toFixed(1)}%`);
+  // Note: rent stabilization context is added by the caller via _benchmarkNote
   if (c.medianHouseholdIncome) parts.push(`Median income: $${c.medianHouseholdIncome.toLocaleString()}`);
   if (c.rentBurdenPct) parts.push(`Rent burden: ${c.rentBurdenPct.toFixed(0)}%`);
   if (c.medianHouseholdIncome) {

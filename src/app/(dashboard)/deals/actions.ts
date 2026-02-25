@@ -165,6 +165,10 @@ export interface DealPrefillData {
   hpdUnits: number;
   // DOF / Tax
   annualTaxes: number;
+  // Rent Stabilization
+  rentStabilizedUnits: number;
+  // Building features
+  hasElevator: boolean;
   // Estimated unit mix
   suggestedUnitMix: { type: string; count: number; monthlyRent: number }[];
 }
@@ -179,8 +183,8 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
   const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
   const borough = boroNames[parseInt(boro)] || "";
 
-  // Fetch PLUTO, ACRIS Sales, HPD in parallel
-  const [plutoResult, salesResult, hpdResult] = await Promise.allSettled([
+  // Fetch PLUTO, ACRIS Sales, HPD, Rent Stab in parallel
+  const [plutoResult, salesResult, hpdResult, rentStabResult] = await Promise.allSettled([
     // PLUTO
     fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boro}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar,condession&$limit=1`)
       .then(r => r.ok ? r.json() : []),
@@ -190,11 +194,15 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
     // HPD Registrations
     fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boro}' AND block='${block}' AND lot='${lot}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
+    // Rent Stabilization
+    fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
   ]);
 
   const plutoData = plutoResult.status === "fulfilled" ? plutoResult.value : [];
   const salesData = salesResult.status === "fulfilled" ? salesResult.value : [];
   const hpdData = hpdResult.status === "fulfilled" ? hpdResult.value : [];
+  const rentStabData = rentStabResult.status === "fulfilled" ? rentStabResult.value : [];
 
   if (plutoData.length === 0) return null;
   const p = plutoData[0];
@@ -224,6 +232,16 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
 
   // HPD unit count
   const hpdUnits = hpdData.length > 0 ? parseInt(hpdData[0].unitsres || "0") : 0;
+
+  // Rent stabilized units
+  const rentStabilizedUnits = Array.isArray(rentStabData) && rentStabData.length > 0
+    ? parseInt(rentStabData[0].uc2024rstab || rentStabData[0].uc2023rstab || rentStabData[0].uc2022rstab || "0")
+    : 0;
+
+  // Elevator detection
+  const numFloors = parseInt(p.numfloors || "0");
+  const bldgClassVal = p.bldgclass || "";
+  const hasElevator = numFloors > 5 || bldgClassVal.startsWith("D");
 
   // Estimate unit mix based on total units and borough
   const totalUnits = unitsRes || hpdUnits || unitsTotal;
@@ -268,19 +286,21 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
     unitsRes,
     unitsTotal,
     yearBuilt: parseInt(p.yearbuilt || "0"),
-    numFloors: parseInt(p.numfloors || "0"),
+    numFloors,
     assessTotal,
     bldgArea,
     lotArea,
     zoneDist: p.zonedist1 || "",
     ownerName: p.ownername || "",
-    bldgClass: p.bldgclass || "",
+    bldgClass: bldgClassVal,
     far: parseFloat(p.builtfar || "0"),
     residFar: parseFloat(p.residfar || "0"),
     lastSalePrice,
     lastSaleDate,
     hpdUnits,
     annualTaxes,
+    rentStabilizedUnits,
+    hasElevator,
     suggestedUnitMix,
   };
 }

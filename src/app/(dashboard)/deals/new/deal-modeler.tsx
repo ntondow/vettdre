@@ -17,6 +17,14 @@ import { generateLoiPlainText, getLoiCoverEmailSubject, getLoiCoverEmailHtml, LO
 import type { LoiData } from "@/lib/loi-template";
 import type { DealStructureType, DealInputsBase, StructuredDealInputs, DealAnalysis as StructureAnalysis } from "@/lib/deal-structure-engine";
 import { STRUCTURE_LABELS, STRUCTURE_DESCRIPTIONS, calculateDealStructure, getDefaultStructureInputs, compareDealStructures } from "@/lib/deal-structure-engine";
+import type { ClosingCostBreakdown, TaxReassessment } from "@/lib/nyc-deal-costs";
+import { fetchClosingCosts, fetchTaxReassessment } from "../closing-cost-actions";
+import { fetchExpenseBenchmark, fetchRentProjection, fetchLL97Projection } from "../benchmark-actions";
+import { fetchMarketCapRate } from "../caprate-actions";
+import type { ExpenseBenchmark } from "@/lib/expense-benchmarks";
+import type { RentProjection } from "@/lib/rent-stabilization";
+import type { LL97Projection } from "@/lib/ll97-penalties";
+import type { CapRateAnalysis } from "@/lib/cap-rate-engine";
 import { ChevronDown, Banknote, Building2, ArrowRightLeft, KeyRound, Users, Info } from "lucide-react";
 import { BarChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Cell, ReferenceLine } from "recharts";
 
@@ -227,6 +235,22 @@ export default function DealModeler() {
   const [compValuation, setCompValuation] = useState<CompValuation | null>(null);
   const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
   const [strProjection, setStrProjection] = useState<import("@/lib/airbnb-market").STRProjection | null>(null);
+
+  // NYC Deal Costs state
+  const [closingCostBreakdown, setClosingCostBreakdown] = useState<ClosingCostBreakdown | null>(null);
+  const [taxReassessment, setTaxReassessment] = useState<TaxReassessment | null>(null);
+  const [showCostDetail, setShowCostDetail] = useState(false);
+  const [useCEMA, setUseCEMA] = useState(true);
+  const closingCostTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Benchmark engine state
+  const [expenseBenchmark, setExpenseBenchmark] = useState<ExpenseBenchmark | null>(null);
+  const [rentProjection, setRentProjection] = useState<RentProjection | null>(null);
+  const [ll97Projection, setLl97Projection] = useState<LL97Projection | null>(null);
+  const [showBenchmarkDetail, setShowBenchmarkDetail] = useState(false);
+
+  // Market cap rate state
+  const [marketCapRate, setMarketCapRate] = useState<CapRateAnalysis | null>(null);
 
   // Deal Structure state
   const [activeStructure, setActiveStructure] = useState<DealStructureType>("conventional");
@@ -538,8 +562,15 @@ export default function DealModeler() {
       closingCostsPct: inputs.purchasePrice > 0 ? (inputs.closingCosts / inputs.purchasePrice) * 100 : 3,
       currentMarketRate: fredRate || undefined,
       compEstimate: compValuation?.estimatedValue,
+      closingCostBreakdown: closingCostBreakdown || undefined,
+      taxReassessment: taxReassessment || undefined,
+      rentProjectionData: rentProjection ? { yearlyProjections: rentProjection.yearlyProjections.map(yp => ({ year: yp.year, totalAnnualRent: yp.totalAnnualRent })) } : undefined,
+      ll97AnnualPenalties: ll97Projection ? ll97Projection.yearlyPenalties.map(yp => yp.annualPenalty) : undefined,
+      stabilizedUnitCount: propertyDetails?.rentStabilizedUnits,
+      stabilizedUnitPct: propertyDetails?.rentStabilizedUnits && totalUnitsCalc > 0 ? (propertyDetails.rentStabilizedUnits / totalUnitsCalc) * 100 : undefined,
+      capRateAnalysis: marketCapRate ? { marketCapRate: marketCapRate.marketCapRate, range: marketCapRate.range, median: marketCapRate.median, suggestedExitCap: marketCapRate.suggestedExitCap, confidence: marketCapRate.confidence, trend: marketCapRate.trend, trendBpsPerYear: marketCapRate.trendBpsPerYear } : undefined,
     };
-  }, [inputs, outputs.totalExpenses, fredRate, compValuation]);
+  }, [inputs, outputs.totalExpenses, fredRate, compValuation, closingCostBreakdown, taxReassessment, rentProjection, ll97Projection, propertyDetails?.rentStabilizedUnits, marketCapRate]);
 
   // Merged structure inputs (defaults + user overrides)
   const mergedStructureInputs = useMemo(() => {
@@ -553,6 +584,98 @@ export default function DealModeler() {
       return calculateDealStructure(mergedStructureInputs as StructuredDealInputs);
     } catch { return null; }
   }, [mergedStructureInputs]);
+
+  // Auto-fetch NYC closing costs (debounced 300ms)
+  useEffect(() => {
+    if (inputs.purchasePrice <= 0) { setClosingCostBreakdown(null); return; }
+    if (closingCostTimer.current) clearTimeout(closingCostTimer.current);
+    closingCostTimer.current = setTimeout(() => {
+      const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
+      const loanAmt = inputs.purchasePrice * (inputs.ltvPercent / 100);
+      const msi = mergedStructureInputs as Record<string, any>;
+      const bridgeLoan = activeStructure === "bridge_refi" ? inputs.purchasePrice * ((msi.bridgeLtvPct ?? 80) / 100) : 0;
+      const refiLoan = activeStructure === "bridge_refi" ? inputs.purchasePrice * ((msi.refiLtvPct ?? 75) / 100) * 1.2 : 0;
+      const assumedBal = activeStructure === "assumable" ? (msi.existingLoanBalance ?? 0) : 0;
+      const suppLoan = activeStructure === "assumable" ? (msi.supplementalLoanAmount ?? 0) : 0;
+      fetchClosingCosts({
+        purchasePrice: inputs.purchasePrice, loanAmount: loanAmt,
+        structure: activeStructure, units: totalUnits > 0 ? totalUnits : 10,
+        assumedBalance: assumedBal, supplementalLoan: suppLoan,
+        bridgeLoanAmount: bridgeLoan, refiLoanAmount: refiLoan,
+        useCEMA, borough: borough || undefined,
+      }).then(setClosingCostBreakdown).catch(() => {});
+    }, 300);
+    return () => { if (closingCostTimer.current) clearTimeout(closingCostTimer.current); };
+  }, [inputs.purchasePrice, inputs.ltvPercent, inputs.unitMix, activeStructure, useCEMA, borough, mergedStructureInputs]);
+
+  // Auto-fetch tax reassessment when BBL and purchase price available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10 || inputs.purchasePrice <= 0) { setTaxReassessment(null); return; }
+    const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
+    fetchTaxReassessment({
+      bbl, purchasePrice: inputs.purchasePrice,
+      currentTaxBill: inputs.realEstateTaxes > 0 ? inputs.realEstateTaxes : undefined,
+      units: totalUnits > 0 ? totalUnits : undefined,
+      yearBuilt: propertyDetails?.yearBuilt ? Number(propertyDetails.yearBuilt) : undefined,
+    }).then(r => { if (r) setTaxReassessment(r); }).catch(() => {});
+  }, [bbl, inputs.purchasePrice, inputs.realEstateTaxes]);
+
+  // Auto-fetch expense benchmark when property details available
+  useEffect(() => {
+    if (!propertyDetails || !propertyDetails.yearBuilt || !propertyDetails.unitsRes) return;
+    fetchExpenseBenchmark({
+      bbl: bbl || "",
+      yearBuilt: propertyDetails.yearBuilt,
+      numFloors: propertyDetails.numFloors,
+      bldgClass: propertyDetails.bldgClass,
+      bldgArea: propertyDetails.bldgArea,
+      unitsRes: propertyDetails.unitsRes,
+      borough: propertyDetails.borough || borough,
+      hasElevator: propertyDetails.hasElevator,
+      rentStabilizedUnits: propertyDetails.rentStabilizedUnits,
+    }).then(b => { if (b) setExpenseBenchmark(b); }).catch(() => {});
+  }, [propertyDetails, bbl, borough]);
+
+  // Auto-fetch rent projection when stabilized units exist
+  useEffect(() => {
+    if (!propertyDetails?.rentStabilizedUnits || propertyDetails.rentStabilizedUnits <= 0) return;
+    if (inputs.unitMix.length === 0) return;
+    const avgRent = inputs.unitMix.reduce((s, u) => s + u.count * u.monthlyRent, 0) / Math.max(1, totalUnits);
+    if (avgRent <= 0) return;
+    fetchRentProjection({
+      bbl: bbl || "",
+      totalUnits: totalUnits || propertyDetails.unitsRes,
+      holdPeriodYears: inputs.holdPeriodYears,
+      marketRentGrowthPct: inputs.annualRentGrowth,
+      avgMarketRent: avgRent,
+      renovationBudget: inputs.renovationBudget > 0 ? inputs.renovationBudget : undefined,
+    }).then(r => { if (r) setRentProjection(r); }).catch(() => {});
+  }, [propertyDetails?.rentStabilizedUnits, bbl, inputs.holdPeriodYears, inputs.annualRentGrowth, inputs.renovationBudget]);
+
+  // Auto-fetch LL97 projection when BBL available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10) return;
+    fetchLL97Projection({
+      bbl,
+      holdPeriodYears: inputs.holdPeriodYears,
+    }).then(p => { if (p) setLl97Projection(p); }).catch(() => {});
+  }, [bbl, inputs.holdPeriodYears]);
+
+  // Auto-fetch market cap rate when BBL available
+  useEffect(() => {
+    if (!bbl || bbl.length < 10) return;
+    fetchMarketCapRate(bbl)
+      .then(cr => {
+        if (cr) {
+          setMarketCapRate(cr);
+          // Auto-set exit cap rate to suggested value if user hasn't manually changed it
+          if (isAi("exitCapRate") && cr.suggestedExitCap > 0) {
+            update({ exitCapRate: cr.suggestedExitCap });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [bbl]);
 
   // Run expense anomaly detection whenever inputs change
   useEffect(() => {
@@ -979,6 +1102,105 @@ export default function DealModeler() {
                 <Field label="Closing Costs" value={inputs.closingCosts} onChange={v => update({ closingCosts: v })} prefix="$" aiAssumed={isAi("closingCosts")} onClearAi={() => clearAi("closingCosts")} />
                 <Field label="Renovation Budget" value={inputs.renovationBudget} onChange={v => update({ renovationBudget: v })} prefix="$" badge="Reno" />
               </div>
+              {/* NYC Acquisition Cost Breakdown */}
+              {closingCostBreakdown && inputs.purchasePrice > 0 && (
+                <div className="rounded-lg border border-white/5 overflow-hidden">
+                  <button
+                    onClick={() => setShowCostDetail(!showCostDetail)}
+                    className="w-full flex items-center justify-between px-3 py-2 bg-white/[0.03] hover:bg-white/[0.05] transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">NYC Acquisition Costs</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">NYC</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono tabular-nums font-semibold text-white">{fmt(closingCostBreakdown.totalBuyerCosts)}</span>
+                      <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${showCostDetail ? "rotate-180" : ""}`} />
+                    </div>
+                  </button>
+                  {showCostDetail && (
+                    <div className="px-3 py-2 space-y-0.5 bg-white/[0.01]">
+                      {closingCostBreakdown.nycTransferTax > 0 && (
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-[11px] text-slate-400">NYC Transfer Tax ({(closingCostBreakdown.nycTransferTax / inputs.purchasePrice * 100).toFixed(3)}%)</span>
+                          <span className="text-[11px] font-mono tabular-nums text-white">{fmt(closingCostBreakdown.nycTransferTax)}</span>
+                        </div>
+                      )}
+                      {closingCostBreakdown.nysTransferTax > 0 && (
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-[11px] text-slate-400">NYS Transfer Tax (0.4%)</span>
+                          <span className="text-[11px] font-mono tabular-nums text-white">{fmt(closingCostBreakdown.nysTransferTax)}</span>
+                        </div>
+                      )}
+                      {closingCostBreakdown.mansionTax > 0 && (
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-[11px] text-slate-400">Mansion Tax</span>
+                          <span className="text-[11px] font-mono tabular-nums text-white">{fmt(closingCostBreakdown.mansionTax)}</span>
+                        </div>
+                      )}
+                      {closingCostBreakdown.mortgageRecordingTax > 0 && (
+                        <div className="flex justify-between py-0.5">
+                          <span className="text-[11px] text-slate-400">Mortgage Recording Tax</span>
+                          <span className="text-[11px] font-mono tabular-nums text-white">{fmt(closingCostBreakdown.mortgageRecordingTax)}</span>
+                        </div>
+                      )}
+                      {/* Bridge→Refi double MRT detail */}
+                      {activeStructure === "bridge_refi" && closingCostBreakdown.bridgeMrt != null && closingCostBreakdown.bridgeMrt > 0 && (
+                        <div className="mt-1 pt-1 border-t border-white/5">
+                          <div className="flex justify-between py-0.5">
+                            <span className="text-[11px] text-amber-400">Bridge MRT</span>
+                            <span className="text-[11px] font-mono tabular-nums text-amber-400">{fmt(closingCostBreakdown.bridgeMrt)}</span>
+                          </div>
+                          <div className="flex justify-between py-0.5">
+                            <span className="text-[11px] text-amber-400">Refi MRT{useCEMA ? " (CEMA)" : ""}</span>
+                            <span className="text-[11px] font-mono tabular-nums text-amber-400">{fmt(closingCostBreakdown.refiMrt ?? 0)}</span>
+                          </div>
+                          {closingCostBreakdown.cemaSavings != null && closingCostBreakdown.cemaSavings > 0 && (
+                            <div className="flex justify-between py-0.5">
+                              <span className="text-[11px] text-emerald-400">CEMA Savings</span>
+                              <span className="text-[11px] font-mono tabular-nums text-emerald-400">-{fmt(closingCostBreakdown.cemaSavings)}</span>
+                            </div>
+                          )}
+                          <label className="flex items-center gap-2 mt-1 cursor-pointer">
+                            <input type="checkbox" checked={useCEMA} onChange={e => setUseCEMA(e.target.checked)}
+                              className="rounded border-white/20 bg-slate-800/40 text-blue-500 focus:ring-blue-500/30 w-3 h-3" />
+                            <span className="text-[10px] text-slate-400">Use CEMA for refi</span>
+                          </label>
+                        </div>
+                      )}
+                      {/* Assumable MRT savings */}
+                      {activeStructure === "assumable" && closingCostBreakdown.mrtSavings != null && closingCostBreakdown.mrtSavings > 0 && (
+                        <div className="flex justify-between py-0.5 mt-1 pt-1 border-t border-white/5">
+                          <span className="text-[11px] text-emerald-400">MRT Savings (assumed)</span>
+                          <span className="text-[11px] font-mono tabular-nums text-emerald-400">-{fmt(closingCostBreakdown.mrtSavings)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between py-0.5">
+                        <span className="text-[11px] text-slate-400">Title Insurance</span>
+                        <span className="text-[11px] font-mono tabular-nums text-white">{fmt(closingCostBreakdown.titleInsurance)}</span>
+                      </div>
+                      <div className="flex justify-between py-0.5">
+                        <span className="text-[11px] text-slate-400">Legal & Professional</span>
+                        <span className="text-[11px] font-mono tabular-nums text-white">{fmt((closingCostBreakdown.buyerAttorneyFee + closingCostBreakdown.bankAttorneyFee) + closingCostBreakdown.appraisalFee + closingCostBreakdown.environmentalReport + closingCostBreakdown.surveyFee + closingCostBreakdown.miscFees)}</span>
+                      </div>
+                      <div className="flex justify-between pt-1 mt-1 border-t border-white/10">
+                        <span className="text-[11px] font-semibold text-white">Total Buyer Costs</span>
+                        <span className="text-[11px] font-mono tabular-nums font-bold text-white">{fmt(closingCostBreakdown.totalBuyerCosts)}</span>
+                      </div>
+                      <div className="flex justify-between py-0.5">
+                        <span className="text-[10px] text-slate-500">as % of purchase price</span>
+                        <span className="text-[10px] font-mono tabular-nums text-slate-500">{(closingCostBreakdown.totalBuyerCosts / inputs.purchasePrice * 100).toFixed(2)}%</span>
+                      </div>
+                      <button
+                        onClick={() => update({ closingCosts: closingCostBreakdown.totalBuyerCosts })}
+                        className="w-full mt-1 text-xs text-blue-400 hover:text-blue-300 font-medium py-1 rounded bg-blue-500/5 hover:bg-blue-500/10 transition-colors"
+                      >
+                        Apply NYC costs to deal
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
               {renoEstimate && (
                 <div className="flex items-center justify-between -mt-1 mb-1">
                   <span className="inline-flex items-center gap-1.5 text-xs bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full font-medium border border-amber-500/20">
@@ -1244,6 +1466,38 @@ export default function DealModeler() {
                   <p className="text-[10px] text-purple-500/60 mt-1">Based on {strProjection.neighborhood} Airbnb data — {strProjection.occupancyRate * 100}% occupancy, ${strProjection.avgNightlyRate}/night. NYC LL18 restricts STR.</p>
                 </div>
               )}
+              {/* Rent Stabilization Card */}
+              {rentProjection && rentProjection.stabilizedPct > 0 && (
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 -mt-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-blue-400">Rent Stabilization</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">HSTPA 2019</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white/[0.03] rounded-lg p-2">
+                      <p className="text-[10px] text-slate-500 uppercase">RGB Rate</p>
+                      <p className="text-sm font-bold text-blue-400">{rentProjection.rgbBlendedRate.toFixed(2)}%</p>
+                    </div>
+                    <div className="bg-white/[0.03] rounded-lg p-2">
+                      <p className="text-[10px] text-slate-500 uppercase">Market Rate</p>
+                      <p className="text-sm font-bold text-white">{inputs.annualRentGrowth}%</p>
+                    </div>
+                    <div className="bg-white/[0.03] rounded-lg p-2">
+                      <p className="text-[10px] text-slate-500 uppercase">Blended</p>
+                      <p className="text-sm font-bold text-emerald-400">{rentProjection.blendedAnnualGrowthPct.toFixed(2)}%</p>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-blue-500/60 mt-2">
+                    {Math.round(rentProjection.stabilizedPct)}% stabilized ({propertyDetails?.rentStabilizedUnits || 0} units).
+                    No vacancy bonus, no high-rent deregulation (HSTPA 2019).
+                  </p>
+                  {rentProjection.mciUpside && inputs.renovationBudget > 0 && (
+                    <p className="text-[10px] text-emerald-400 mt-1">
+                      MCI upside: +${rentProjection.mciUpside.monthlyPerUnit}/unit/mo ({rentProjection.mciUpside.note})
+                    </p>
+                  )}
+                </div>
+              )}
             </Section>
 
             {/* Income — Commercial */}
@@ -1301,6 +1555,64 @@ export default function DealModeler() {
               </div>
             )}
 
+            {/* Expense Benchmark Card */}
+            {expenseBenchmark && (
+              <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 overflow-hidden">
+                <button
+                  onClick={() => setShowBenchmarkDetail(!showBenchmarkDetail)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-emerald-500/10 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-emerald-400">Expense Benchmark</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">RGB I&E</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono tabular-nums text-emerald-400">{expenseBenchmark.categoryLabel}</span>
+                    <span className="text-xs font-mono tabular-nums font-semibold text-white">${expenseBenchmark.totalPerUnit.toLocaleString()}/unit</span>
+                    <ChevronDown className={`w-3 h-3 text-emerald-500 transition-transform ${showBenchmarkDetail ? "rotate-180" : ""}`} />
+                  </div>
+                </button>
+                {showBenchmarkDetail && (
+                  <div className="px-3 py-2 space-y-1 bg-white/[0.01] border-t border-emerald-500/10">
+                    <div className="grid grid-cols-[1fr_80px_80px] gap-1 text-[10px] font-medium text-slate-500 uppercase tracking-wider pb-1">
+                      <span>Line Item</span>
+                      <span className="text-right">$/Unit</span>
+                      <span className="text-right">Annual</span>
+                    </div>
+                    {expenseBenchmark.lineItems.map(item => (
+                      <div key={item.field} className="grid grid-cols-[1fr_80px_80px] gap-1 py-0.5 border-t border-white/[0.03]">
+                        <span className="text-[11px] text-slate-400">{item.label}</span>
+                        <span className="text-[11px] font-mono tabular-nums text-white text-right">${item.perUnit.toLocaleString()}</span>
+                        <span className="text-[11px] font-mono tabular-nums text-slate-400 text-right">${item.totalAnnual.toLocaleString()}</span>
+                      </div>
+                    ))}
+                    <div className="grid grid-cols-[1fr_80px_80px] gap-1 pt-1 border-t border-white/10">
+                      <span className="text-[11px] font-semibold text-white">Total</span>
+                      <span className="text-[11px] font-mono tabular-nums font-bold text-white text-right">${expenseBenchmark.totalPerUnit.toLocaleString()}</span>
+                      <span className="text-[11px] font-mono tabular-nums font-bold text-white text-right">${expenseBenchmark.totalAnnual.toLocaleString()}</span>
+                    </div>
+                    {expenseBenchmark.adjustmentNotes.length > 0 && (
+                      <p className="text-[10px] text-slate-500 mt-1">{expenseBenchmark.adjustmentNotes.join(" | ")}</p>
+                    )}
+                    <button
+                      onClick={() => {
+                        const updates: Partial<DealInputs> = {};
+                        for (const item of expenseBenchmark.lineItems) {
+                          if (item.field in inputs) {
+                            (updates as any)[item.field] = item.totalAnnual;
+                          }
+                        }
+                        update(updates);
+                      }}
+                      className="w-full mt-1 text-xs text-emerald-400 hover:text-emerald-300 font-medium py-1.5 rounded bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors"
+                    >
+                      Apply benchmark to all expenses
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Expenses — Fixed */}
             <Section title="Expenses — Taxes & Insurance">
               <div className="grid grid-cols-2 gap-3">
@@ -1309,6 +1621,42 @@ export default function DealModeler() {
                 <Field label="License/Permit/Insp." value={inputs.licenseFees} onChange={v => update({ licenseFees: v })} prefix="$" aiAssumed={isAi("licenseFees")} onClearAi={() => clearAi("licenseFees")} />
                 <Field label="Fire Meter Service" value={inputs.fireMeter} onChange={v => update({ fireMeter: v })} prefix="$" aiAssumed={isAi("fireMeter")} onClearAi={() => clearAi("fireMeter")} />
               </div>
+              {/* Tax Reassessment Card */}
+              {taxReassessment && (
+                <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-widest text-amber-400">Post-Acquisition Tax Estimate</span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">PLUTO</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                    <div className="flex justify-between">
+                      <span className="text-[11px] text-slate-400">Current</span>
+                      <span className="text-[11px] font-mono tabular-nums text-white">{fmt(taxReassessment.currentTaxBill)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[11px] text-slate-400">Year {Math.min(5, taxReassessment.yearByYearTax.length)}</span>
+                      <span className="text-[11px] font-mono tabular-nums text-amber-400">{fmt(taxReassessment.yearByYearTax[Math.min(4, taxReassessment.yearByYearTax.length - 1)] ?? taxReassessment.estimatedNewTaxBill)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[11px] text-slate-400">Stabilized</span>
+                      <span className="text-[11px] font-mono tabular-nums text-red-400">{fmt(taxReassessment.estimatedNewTaxBill)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-[11px] text-slate-400">Increase</span>
+                      <span className="text-[11px] font-mono tabular-nums text-red-400">+{taxReassessment.taxIncreasePct.toFixed(0)}%</span>
+                    </div>
+                  </div>
+                  {taxReassessment.caveats && taxReassessment.caveats.length > 0 && (
+                    <p className="text-[10px] text-slate-500 mt-1.5">{taxReassessment.caveats[0]}</p>
+                  )}
+                  <button
+                    onClick={() => update({ realEstateTaxes: taxReassessment.estimatedNewTaxBill })}
+                    className="w-full mt-2 text-xs text-amber-400 hover:text-amber-300 font-medium py-1 rounded bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+                  >
+                    Apply stabilized tax to deal
+                  </button>
+                </div>
+              )}
             </Section>
 
             {/* Expenses — Utilities */}
@@ -1424,8 +1772,124 @@ export default function DealModeler() {
             <Section title="Exit Assumptions" summary={`${inputs.holdPeriodYears}yr hold, ${inputs.exitCapRate}% exit cap`}>
               <div className="grid grid-cols-2 gap-3">
                 <SliderField label="Hold Period (yrs)" value={inputs.holdPeriodYears} onChange={v => update({ holdPeriodYears: Math.max(1, Math.round(v)) })} min={1} max={30} step={1} suffix="yr" />
-                <SliderField label="Exit Cap Rate" value={inputs.exitCapRate} onChange={v => update({ exitCapRate: v })} min={1} max={15} step={0.25} />
+                <SliderField label="Exit Cap Rate" value={inputs.exitCapRate} onChange={v => { update({ exitCapRate: v }); clearAi("exitCapRate"); }} min={1} max={15} step={0.25} />
               </div>
+
+              {/* Market Cap Rate Visual */}
+              {marketCapRate && marketCapRate.compCount > 0 && (
+                <div className="bg-gradient-to-r from-violet-500/5 to-indigo-500/5 border border-violet-500/10 rounded-lg p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-semibold uppercase tracking-widest text-violet-400">Market Cap Rate</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                        marketCapRate.confidence === "high" ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" :
+                        marketCapRate.confidence === "medium" ? "bg-amber-500/10 text-amber-400 border border-amber-500/20" :
+                        "bg-slate-500/10 text-slate-400 border border-slate-500/20"
+                      }`}>{marketCapRate.confidence}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">{marketCapRate.compCount} comps</span>
+                  </div>
+
+                  {/* Range bar with markers */}
+                  <div className="relative pt-3 pb-1">
+                    {/* Cap rate range bar */}
+                    {(() => {
+                      const barMin = Math.max(1, Math.floor(marketCapRate.range.low - 1));
+                      const barMax = Math.ceil(marketCapRate.range.high + 1);
+                      const span = barMax - barMin;
+                      const pctOf = (v: number) => Math.max(0, Math.min(100, ((v - barMin) / span) * 100));
+                      const lowPct = pctOf(marketCapRate.range.low);
+                      const highPct = pctOf(marketCapRate.range.high);
+                      const mktPct = pctOf(marketCapRate.marketCapRate);
+                      const exitPct = pctOf(inputs.exitCapRate);
+
+                      return (
+                        <div className="relative h-8">
+                          {/* Background track */}
+                          <div className="absolute top-3 inset-x-0 h-2 bg-white/5 rounded-full" />
+                          {/* Range highlight */}
+                          <div
+                            className="absolute top-3 h-2 bg-violet-500/20 rounded-full"
+                            style={{ left: `${lowPct}%`, width: `${Math.max(1, highPct - lowPct)}%` }}
+                          />
+                          {/* Market average marker */}
+                          <div
+                            className="absolute top-1.5 flex flex-col items-center"
+                            style={{ left: `${mktPct}%`, transform: "translateX(-50%)" }}
+                          >
+                            <span className="text-[8px] font-bold text-violet-400 whitespace-nowrap">{marketCapRate.marketCapRate.toFixed(2)}%</span>
+                            <div className="w-0.5 h-4 bg-violet-400 rounded-full" />
+                          </div>
+                          {/* Exit cap marker (user's selection) */}
+                          <div
+                            className="absolute top-1.5 flex flex-col items-center"
+                            style={{ left: `${exitPct}%`, transform: "translateX(-50%)" }}
+                          >
+                            <span className="text-[8px] font-bold text-blue-400 whitespace-nowrap">{inputs.exitCapRate.toFixed(2)}%</span>
+                            <div className="w-2 h-2 mt-0.5 bg-blue-400 rounded-full border-2 border-slate-900" />
+                          </div>
+                          {/* Scale labels */}
+                          <div className="absolute top-7 left-0 text-[8px] text-slate-600">{barMin}%</div>
+                          <div className="absolute top-7 right-0 text-[8px] text-slate-600">{barMax}%</div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Metrics row */}
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-[9px] text-slate-500 uppercase">Entry Cap</p>
+                      <p className="text-sm font-bold text-white">{structureAnalysis ? fmtPct(structureAnalysis.capRate) : "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-slate-500 uppercase">Market Avg</p>
+                      <p className="text-sm font-bold text-violet-400">{marketCapRate.marketCapRate.toFixed(2)}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-slate-500 uppercase">Trend</p>
+                      <p className={`text-sm font-bold ${
+                        marketCapRate.trend === "compressing" ? "text-emerald-400" :
+                        marketCapRate.trend === "expanding" ? "text-red-400" : "text-slate-400"
+                      }`}>
+                        {marketCapRate.trend === "compressing" ? "↓" : marketCapRate.trend === "expanding" ? "↑" : "→"} {Math.abs(marketCapRate.trendBpsPerYear)}bp/yr
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Suggested exit cap */}
+                  {Math.abs(inputs.exitCapRate - marketCapRate.suggestedExitCap) > 0.25 && (
+                    <button
+                      onClick={() => update({ exitCapRate: marketCapRate.suggestedExitCap })}
+                      className="w-full text-[10px] text-violet-400 hover:text-violet-300 bg-violet-500/5 hover:bg-violet-500/10 rounded py-1.5 transition-colors"
+                    >
+                      Apply suggested exit cap: {marketCapRate.suggestedExitCap.toFixed(2)}% (market + 25bp)
+                    </button>
+                  )}
+
+                  <p className="text-[9px] text-slate-600">{marketCapRate.methodology}</p>
+                </div>
+              )}
+
+              {/* Exit Sensitivity (from structure analysis) */}
+              {structureAnalysis?.exitSensitivity && (
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {(["optimistic", "base", "conservative"] as const).map(sc => {
+                    const s = structureAnalysis.exitSensitivity![sc];
+                    return (
+                      <div key={sc} className={`rounded-lg p-2 ${sc === "base" ? "bg-blue-500/10 border border-blue-500/20" : "bg-white/[0.02] border border-white/5"}`}>
+                        <p className="text-[9px] text-slate-500 uppercase">{sc}</p>
+                        <p className="text-[10px] text-slate-400">{s.capRate.toFixed(2)}% cap</p>
+                        <p className="text-sm font-bold text-white">{fmt(s.salePrice)}</p>
+                        <p className={`text-[10px] font-medium ${s.irr >= 15 ? "text-emerald-400" : s.irr >= 8 ? "text-amber-400" : "text-red-400"}`}>
+                          {isFinite(s.irr) ? `${s.irr.toFixed(1)}% IRR` : "N/A"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               <Field label="Selling Costs" value={inputs.sellingCostPercent} onChange={v => update({ sellingCostPercent: v })} suffix="%" step="0.5" aiAssumed={isAi("sellingCostPercent")} onClearAi={() => clearAi("sellingCostPercent")} />
             </Section>
 
@@ -2007,12 +2471,47 @@ export default function DealModeler() {
                   <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Uses</h3>
                 </div>
                 <div className="px-4 py-2">
-                  {outputs.uses.map((u, i) => (
-                    <div key={i} className="flex justify-between py-1 border-b border-white/5 last:border-0">
-                      <span className="text-xs text-slate-400">{u.label}</span>
-                      <span className="text-xs font-mono tabular-nums font-medium text-white">{fmt(u.amount)}</span>
-                    </div>
-                  ))}
+                  {outputs.uses.map((u, i) => {
+                    // Expand "Closing Costs" line item if we have NYC breakdown
+                    if (u.label === "Closing Costs" && closingCostBreakdown && inputs.closingCosts === closingCostBreakdown.totalBuyerCosts) {
+                      return (
+                        <div key={i}>
+                          <div className="flex justify-between py-1 border-b border-white/5">
+                            <span className="text-xs text-slate-400 font-medium">Closing Costs</span>
+                            <span className="text-xs font-mono tabular-nums font-medium text-white">{fmt(u.amount)}</span>
+                          </div>
+                          {closingCostBreakdown.nycTransferTax > 0 && (
+                            <div className="flex justify-between py-0.5 pl-3 border-b border-white/[0.02]">
+                              <span className="text-[10px] text-slate-500">NYC RPT</span>
+                              <span className="text-[10px] font-mono tabular-nums text-slate-400">{fmt(closingCostBreakdown.nycTransferTax)}</span>
+                            </div>
+                          )}
+                          {closingCostBreakdown.nysTransferTax > 0 && (
+                            <div className="flex justify-between py-0.5 pl-3 border-b border-white/[0.02]">
+                              <span className="text-[10px] text-slate-500">NYS Transfer</span>
+                              <span className="text-[10px] font-mono tabular-nums text-slate-400">{fmt(closingCostBreakdown.nysTransferTax)}</span>
+                            </div>
+                          )}
+                          {closingCostBreakdown.mortgageRecordingTax > 0 && (
+                            <div className="flex justify-between py-0.5 pl-3 border-b border-white/[0.02]">
+                              <span className="text-[10px] text-slate-500">MRT</span>
+                              <span className="text-[10px] font-mono tabular-nums text-slate-400">{fmt(closingCostBreakdown.mortgageRecordingTax)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between py-0.5 pl-3 border-b border-white/5">
+                            <span className="text-[10px] text-slate-500">Title + Legal</span>
+                            <span className="text-[10px] font-mono tabular-nums text-slate-400">{fmt(closingCostBreakdown.titleInsurance + (closingCostBreakdown.buyerAttorneyFee + closingCostBreakdown.bankAttorneyFee) + closingCostBreakdown.appraisalFee + closingCostBreakdown.environmentalReport + closingCostBreakdown.surveyFee + closingCostBreakdown.miscFees)}</span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={i} className="flex justify-between py-1 border-b border-white/5 last:border-0">
+                        <span className="text-xs text-slate-400">{u.label}</span>
+                        <span className="text-xs font-mono tabular-nums font-medium text-white">{fmt(u.amount)}</span>
+                      </div>
+                    );
+                  })}
                   <div className="flex justify-between py-1.5 mt-0.5 border-t border-white/10">
                     <span className="text-xs font-semibold text-white">Total</span>
                     <span className="text-xs font-mono tabular-nums font-bold text-white">{fmt(outputs.uses.reduce((s, r) => s + r.amount, 0))}</span>
@@ -2182,6 +2681,95 @@ export default function DealModeler() {
                 )}
               </div>
             </div>
+
+            {/* LL97 Carbon Penalty Projection */}
+            {ll97Projection && (
+              <div className={`border rounded-xl overflow-hidden ${
+                ll97Projection.complianceStatus === "compliant" ? "border-emerald-500/20 bg-emerald-500/5" :
+                ll97Projection.complianceStatus === "at_risk_2030" ? "border-amber-500/20 bg-amber-500/5" :
+                "border-red-500/20 bg-red-500/5"
+              }`}>
+                <div className="px-5 py-4 border-b border-white/5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-200">LL97 Carbon Penalties</h3>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                      ll97Projection.complianceStatus === "compliant" ? "bg-emerald-500/20 text-emerald-400" :
+                      ll97Projection.complianceStatus === "at_risk_2030" ? "bg-amber-500/20 text-amber-400" :
+                      "bg-red-500/20 text-red-400"
+                    }`}>
+                      {ll97Projection.complianceStatus === "compliant" ? "Compliant" :
+                       ll97Projection.complianceStatus === "at_risk_2030" ? "At Risk 2030" : "Non-Compliant"}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-5 space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-center">
+                    <div className="bg-white/[0.03] rounded-lg p-3">
+                      <p className="text-[10px] text-slate-500 uppercase">Total Over Hold</p>
+                      <p className={`text-lg font-bold ${ll97Projection.totalPenaltyOverHold > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {ll97Projection.totalPenaltyOverHold > 0 ? fmt(ll97Projection.totalPenaltyOverHold) : "$0"}
+                      </p>
+                    </div>
+                    <div className="bg-white/[0.03] rounded-lg p-3">
+                      <p className="text-[10px] text-slate-500 uppercase">Avg Annual</p>
+                      <p className={`text-lg font-bold ${ll97Projection.avgAnnualPenalty > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        {ll97Projection.avgAnnualPenalty > 0 ? fmt(ll97Projection.avgAnnualPenalty) : "$0"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Year-by-year penalty table */}
+                  {ll97Projection.totalPenaltyOverHold > 0 && (
+                    <div className="border border-white/5 rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-white/[0.03]">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-slate-500">Year</th>
+                            <th className="text-right px-3 py-2 font-medium text-slate-500">Period</th>
+                            <th className="text-right px-3 py-2 font-medium text-slate-500">Excess tCO2</th>
+                            <th className="text-right px-3 py-2 font-medium text-slate-500">Penalty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ll97Projection.yearlyPenalties.map(yp => (
+                            <tr key={yp.year} className="border-t border-white/[0.03]">
+                              <td className="px-3 py-1.5 text-slate-400">{yp.calendarYear}</td>
+                              <td className="px-3 py-1.5 text-right text-slate-500">P{yp.period}</td>
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums text-slate-300">{yp.excessEmissions > 0 ? yp.excessEmissions.toFixed(1) : "—"}</td>
+                              <td className={`px-3 py-1.5 text-right font-mono tabular-nums font-medium ${yp.annualPenalty > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                                {yp.annualPenalty > 0 ? fmt(yp.annualPenalty) : "$0"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Retrofit options */}
+                  {ll97Projection.totalPenaltyOverHold > 0 && ll97Projection.retrofitOptions.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500 mb-1.5">Retrofit Options</p>
+                      <div className="space-y-1">
+                        {ll97Projection.retrofitOptions.map(r => (
+                          <div key={r.measure} className="flex items-center justify-between py-1 border-t border-white/[0.03]">
+                            <div className="min-w-0">
+                              <p className="text-[11px] text-white truncate">{r.measure}</p>
+                              <p className="text-[10px] text-slate-500">{r.costRange} | -{r.emissionReductionPct}% emissions</p>
+                            </div>
+                            <div className="text-right flex-shrink-0 ml-2">
+                              <p className="text-[11px] font-mono tabular-nums text-white">{fmt(r.estimatedCost)}</p>
+                              <p className="text-[10px] text-slate-500">{r.paybackYears < 99 ? `${r.paybackYears}yr payback` : "N/A"}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-slate-500">LL97 penalty: $268/metric ton CO2e over limit</p>
+                </div>
+              </div>
+            )}
 
             {/* Property Details (from pre-fill) */}
             {propertyDetails && (
