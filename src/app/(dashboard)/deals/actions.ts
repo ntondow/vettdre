@@ -657,3 +657,86 @@ export async function fetchComps(params: {
   const { searchComps } = await import("@/lib/comps-engine");
   return searchComps(params);
 }
+
+// ============================================================
+// Deal Structure Engine — Server Actions
+// ============================================================
+
+export async function calculateDealStructureAction(inputs: import("@/lib/deal-structure-engine").StructuredDealInputs) {
+  const { calculateDealStructure } = await import("@/lib/deal-structure-engine");
+  return calculateDealStructure(inputs);
+}
+
+export async function compareDealStructuresAction(
+  base: import("@/lib/deal-structure-engine").DealInputsBase,
+  structures: import("@/lib/deal-structure-engine").DealStructureType[],
+) {
+  const { compareDealStructures } = await import("@/lib/deal-structure-engine");
+  return compareDealStructures(base, structures);
+}
+
+export async function getStructureDefaultsAction(
+  structure: import("@/lib/deal-structure-engine").DealStructureType,
+  bbl: string,
+) {
+  const { getDefaultStructureInputs } = await import("@/lib/deal-structure-engine");
+
+  // Fetch property data to build the base inputs
+  const prefill = bbl ? await fetchDealPrefillData(bbl) : null;
+
+  // Get live FRED rate
+  let fredRate: number | undefined;
+  try { fredRate = (await getCurrentMortgageRate()) ?? undefined; } catch {}
+
+  // Get Fannie Mae status
+  let fannieMaeBacked: boolean | undefined;
+  if (prefill?.address) {
+    try {
+      const { lookupLoan } = await import("@/lib/fannie-mae");
+      const result = await lookupLoan(`${prefill.address}, ${prefill.borough}, NY`);
+      fannieMaeBacked = result?.isOwnedByFannieMae;
+    } catch {}
+  }
+
+  // Get comp estimate
+  let compEstimate: number | undefined;
+  if (bbl) {
+    try {
+      const { fetchCompsWithValuation } = await import("@/app/(dashboard)/market-intel/comps-actions");
+      const result = await fetchCompsWithValuation(bbl);
+      if (result.valuation.estimatedValue > 0) compEstimate = result.valuation.estimatedValue;
+    } catch {}
+  }
+
+  // Build base inputs from property data
+  const units = prefill ? (prefill.unitsRes || prefill.hpdUnits || prefill.unitsTotal || 1) : 10;
+  const purchasePrice = prefill?.lastSalePrice && prefill.lastSalePrice > 100000
+    ? prefill.lastSalePrice
+    : (prefill?.assessTotal ? Math.round(prefill.assessTotal * 1.4) : 5000000);
+  const annualRent = prefill?.suggestedUnitMix
+    ? prefill.suggestedUnitMix.reduce((s, u) => s + u.count * u.monthlyRent * 12, 0)
+    : units * 2500 * 12;
+
+  const base: import("@/lib/deal-structure-engine").DealInputsBase = {
+    purchasePrice,
+    units,
+    grossRentalIncome: annualRent,
+    otherIncome: 0,
+    vacancyRate: 5,
+    operatingExpenses: Math.round(annualRent * 0.35),
+    capexReserve: Math.round(350 * units),
+    propertyTaxes: prefill?.annualTaxes || Math.round(purchasePrice * 0.012),
+    insurance: Math.round(1600 * units),
+    holdPeriod: 5,
+    exitCapRate: 5.5,
+    annualRentGrowth: 3,
+    annualExpenseGrowth: 3,
+    renovationBudget: 0,
+    closingCostsPct: 3,
+    currentMarketRate: fredRate,
+    compEstimate,
+    fannieMaeBacked,
+  };
+
+  return JSON.parse(JSON.stringify(getDefaultStructureInputs(structure, base)));
+}

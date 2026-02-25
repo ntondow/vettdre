@@ -6,6 +6,8 @@
 import jsPDF from "jspdf";
 import type { DealInputs, DealOutputs, ExpenseDetailRow } from "./deal-calculator";
 import type { DealPrefillData } from "@/app/(dashboard)/deals/actions";
+import type { DealAnalysis, DealStructureType } from "./deal-structure-engine";
+import { STRUCTURE_LABELS } from "./deal-structure-engine";
 
 const fmt = (n: number) => n >= 0 ? `$${n.toLocaleString()}` : `-$${Math.abs(n).toLocaleString()}`;
 const fmtPct = (n: number) => `${n.toFixed(2)}%`;
@@ -19,6 +21,9 @@ interface DealPdfOptions {
   outputs: DealOutputs;
   propertyDetails?: DealPrefillData | null;
   notes?: string;
+  structureType?: DealStructureType;
+  structureAnalysis?: DealAnalysis;
+  comparisonResults?: DealAnalysis[];
 }
 
 // Colors (as tuples for jsPDF)
@@ -40,7 +45,7 @@ function colorForMetric(value: number, green: number, amber: number): RGB {
 }
 
 export function generateDealPdf(options: DealPdfOptions) {
-  const { dealName, address, borough, inputs, outputs, propertyDetails, notes } = options;
+  const { dealName, address, borough, inputs, outputs, propertyDetails, notes, structureType, structureAnalysis, comparisonResults } = options;
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "letter" });
   const W = doc.internal.pageSize.getWidth();
   const H = doc.internal.pageSize.getHeight();
@@ -689,8 +694,102 @@ export function generateDealPdf(options: DealPdfOptions) {
     y += lines.length * 12;
   }
 
+  // Deal Structure Analysis (if provided)
+  if (structureType || comparisonResults) {
+    y += 5;
+    y = sectionTitle("Deal Structure Analysis", y);
+
+    if (structureType) {
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...GRAY);
+      doc.text("Structure:", ML + 5, y);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...DARK);
+      doc.text(STRUCTURE_LABELS[structureType] || structureType, ML + 65, y);
+      y += 14;
+    }
+
+    if (structureAnalysis) {
+      const structMetrics = [
+        ["Cash-on-Cash", fmtPct(structureAnalysis.cashOnCash)],
+        ["IRR", isFinite(structureAnalysis.irr) ? fmtPct(structureAnalysis.irr) : "N/A"],
+        ["Equity Multiple", fmtX(structureAnalysis.equityMultiple)],
+        ["Total Equity", fmt(structureAnalysis.totalEquity)],
+        ["Total Debt", fmt(structureAnalysis.totalDebt)],
+        ["DSCR", structureAnalysis.dscr > 0 ? fmtX(structureAnalysis.dscr) : "\u2014"],
+      ];
+      structMetrics.forEach((item, i) => {
+        if (i % 2 === 0) {
+          doc.setFillColor(...BG_LIGHT);
+          doc.rect(ML, y - 9, CW, 14, "F");
+        }
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...GRAY);
+        doc.text(item[0], ML + 5, y);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...DARK);
+        doc.text(item[1], W - MR - 5, y, { align: "right" });
+        y += 14;
+      });
+      y += 10;
+    }
+
+    if (comparisonResults && comparisonResults.length > 1) {
+      y = sectionTitle("Structure Comparison", y);
+      const cols = comparisonResults.length;
+      const labelW = 100;
+      const colW = (CW - labelW) / cols;
+
+      // Header
+      doc.setFillColor(...BLUE);
+      doc.rect(ML, y - 10, CW, 16, "F");
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...WHITE);
+      doc.text("Metric", ML + 5, y);
+      comparisonResults.forEach((r, i) => {
+        doc.text(r.label, ML + labelW + i * colW + colW / 2, y, { align: "center" });
+      });
+      y += 16;
+
+      const compRows = [
+        { label: "Total Equity", fn: (r: DealAnalysis) => fmt(r.totalEquity) },
+        { label: "Cash-on-Cash", fn: (r: DealAnalysis) => fmtPct(r.cashOnCash) },
+        { label: "IRR", fn: (r: DealAnalysis) => isFinite(r.irr) ? fmtPct(r.irr) : "N/A" },
+        { label: "Equity Multiple", fn: (r: DealAnalysis) => fmtX(r.equityMultiple) },
+        { label: "DSCR", fn: (r: DealAnalysis) => r.dscr > 0 ? fmtX(r.dscr) : "\u2014" },
+        { label: "Break-Even Occ.", fn: (r: DealAnalysis) => fmtPct(r.breakEvenOccupancy) },
+      ];
+
+      compRows.forEach((row, i) => {
+        if (i % 2 === 0) {
+          doc.setFillColor(...BG_LIGHT);
+          doc.rect(ML, y - 9, CW, 14, "F");
+        }
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...GRAY);
+        doc.text(row.label, ML + 5, y);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(...DARK);
+        comparisonResults.forEach((r, ci) => {
+          doc.text(row.fn(r), ML + labelW + ci * colW + colW / 2, y, { align: "center" });
+        });
+        y += 14;
+      });
+      y += 10;
+    }
+  }
+
   // Disclaimer
   y += 20;
+  if (y > H - 80) {
+    addFooter(4);
+    doc.addPage();
+    y = 50;
+  }
   drawLine(y);
   y += 12;
   doc.setFontSize(7);

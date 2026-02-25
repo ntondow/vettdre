@@ -827,6 +827,39 @@ function buildCensusNote(c: CensusCalibration, hudFmr?: HudFmrData, marketTrends
 }
 
 // ============================================================
+// Structure-Specific AI Guidance for Deal Modeler
+// ============================================================
+
+import type { DealStructureType } from "./deal-structure-engine";
+
+export const STRUCTURE_AI_GUIDANCE: Record<DealStructureType, string> = {
+  all_cash: "Conservative baseline. Focus on NOI accuracy and rent growth. No leverage risk — returns driven entirely by property performance and exit value.",
+  conventional: "Standard leverage play. Key risks: rate environment, refinance at balloon. Focus on DSCR adequacy and interest rate sensitivity.",
+  bridge_refi: "Value-add strategy. Critical assumptions: renovation timeline, post-rehab rents, ARV, refi terms. Use conservative rent bump estimate. Bridge period interest costs reduce overall returns.",
+  assumable: "Rate arbitrage play. Key advantage: locked-in below-market rate. Main risk: assumption approval timeline and lender consent. Quantify annual savings vs current market rate.",
+  syndication: "Institutional structure. Model fees accurately — they significantly impact LP returns. Preferred return creates a cash flow floor for LPs. Waterfall splits affect GP promote economics.",
+};
+
+export function getStructureAIContext(
+  structure: DealStructureType,
+  extras?: { currentRate?: number; assumedRate?: number; renovationBudget?: number; postRehabRentBump?: number },
+): string {
+  const parts: string[] = [`Structure: ${structure.replace("_", " ").replace("bridge refi", "Bridge \u2192 Refi (BRRRR)")}.`];
+  parts.push(STRUCTURE_AI_GUIDANCE[structure]);
+
+  if (structure === "bridge_refi" && extras?.renovationBudget) {
+    parts.push(`Renovation budget: $${extras.renovationBudget.toLocaleString()}.`);
+    if (extras.postRehabRentBump) {
+      parts.push(`Post-rehab rent increase estimate: ${extras.postRehabRentBump}%.`);
+    }
+  }
+  if (structure === "assumable" && extras?.assumedRate && extras?.currentRate) {
+    parts.push(`Assumed rate: ${extras.assumedRate}% vs current market: ${extras.currentRate}%.`);
+  }
+  return parts.join(" ");
+}
+
+// ============================================================
 // LL84 Utility Override — use actual LL84 data instead of estimates
 // ============================================================
 export function applyLL84UtilityOverride(

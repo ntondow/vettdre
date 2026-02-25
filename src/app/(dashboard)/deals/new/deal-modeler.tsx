@@ -15,6 +15,8 @@ import { generateLoiPdf } from "@/lib/loi-pdf";
 import { generateLoiDocx } from "@/lib/loi-docx";
 import { generateLoiPlainText, getLoiCoverEmailSubject, getLoiCoverEmailHtml, LOI_DEFAULTS } from "@/lib/loi-template";
 import type { LoiData } from "@/lib/loi-template";
+import type { DealStructureType, DealInputsBase, StructuredDealInputs, DealAnalysis as StructureAnalysis } from "@/lib/deal-structure-engine";
+import { STRUCTURE_LABELS, STRUCTURE_DESCRIPTIONS, calculateDealStructure, getDefaultStructureInputs, compareDealStructures } from "@/lib/deal-structure-engine";
 
 // ============================================================
 // Collapsible Section
@@ -111,6 +113,12 @@ export default function DealModeler() {
   const [renoEstimate, setRenoEstimate] = useState<import("@/lib/renovation-engine").RenovationEstimate | null>(null);
   const [strProjection, setStrProjection] = useState<import("@/lib/airbnb-market").STRProjection | null>(null);
 
+  // Deal Structure state
+  const [activeStructure, setActiveStructure] = useState<DealStructureType>("conventional");
+  const [structureOverrides, setStructureOverrides] = useState<Partial<Record<DealStructureType, Record<string, number | boolean>>>>({});
+  const [showComparison, setShowComparison] = useState(false);
+  const [comparisonResults, setComparisonResults] = useState<StructureAnalysis[]>([]);
+
   // Fetch live FRED mortgage rate on mount
   useEffect(() => {
     import("@/lib/fred-actions").then(m => m.getFredMortgageRate()).then(setFredRate).catch(() => {});
@@ -202,6 +210,12 @@ export default function DealModeler() {
           if (loaded._assumptions) {
             setAssumptions(loaded._assumptions);
             setIsAiGenerated(true);
+          }
+          if ((loaded as any)._structureType) {
+            setActiveStructure((loaded as any)._structureType);
+          }
+          if ((loaded as any)._structureOverrides) {
+            setStructureOverrides((loaded as any)._structureOverrides);
           }
         }
         setPrefillLoading(false);
@@ -383,6 +397,48 @@ export default function DealModeler() {
 
   const outputs: DealOutputs = useMemo(() => calculateAll(inputs), [inputs]);
 
+  // Build DealInputsBase from current inputs for the structure engine
+  const structureBase: DealInputsBase = useMemo(() => {
+    const totalUnitsCalc = inputs.unitMix.reduce((s, u) => s + u.count, 0);
+    const grossRental = inputs.unitMix.reduce((s, u) => s + u.count * u.monthlyRent * 12, 0);
+    const otherInc = inputs.commercialRentAnnual + inputs.parkingIncome + inputs.storageIncome +
+      inputs.lateFees + inputs.petDeposits + inputs.petRent + inputs.evCharging +
+      inputs.trashRubs + inputs.waterRubs + (inputs.camRecoveries || 0) + inputs.otherMiscIncome +
+      (inputs.customIncomeItems || []).reduce((s, i) => s + i.amount, 0);
+    return {
+      purchasePrice: inputs.purchasePrice,
+      units: totalUnitsCalc,
+      grossRentalIncome: grossRental,
+      otherIncome: otherInc,
+      vacancyRate: inputs.residentialVacancyRate,
+      operatingExpenses: outputs.totalExpenses - inputs.realEstateTaxes - inputs.insurance - inputs.rmCapexReserve,
+      capexReserve: inputs.rmCapexReserve,
+      propertyTaxes: inputs.realEstateTaxes,
+      insurance: inputs.insurance,
+      holdPeriod: inputs.holdPeriodYears,
+      exitCapRate: inputs.exitCapRate,
+      annualRentGrowth: inputs.annualRentGrowth,
+      annualExpenseGrowth: inputs.annualExpenseGrowth,
+      renovationBudget: inputs.renovationBudget,
+      closingCostsPct: inputs.purchasePrice > 0 ? (inputs.closingCosts / inputs.purchasePrice) * 100 : 3,
+      currentMarketRate: fredRate || undefined,
+      compEstimate: compValuation?.estimatedValue,
+    };
+  }, [inputs, outputs.totalExpenses, fredRate, compValuation]);
+
+  // Merged structure inputs (defaults + user overrides)
+  const mergedStructureInputs = useMemo(() => {
+    const defaults = getDefaultStructureInputs(activeStructure, structureBase);
+    return { ...defaults, ...(structureOverrides[activeStructure] || {}) };
+  }, [activeStructure, structureBase, structureOverrides]);
+
+  // Run structure analysis
+  const structureAnalysis: StructureAnalysis | null = useMemo(() => {
+    try {
+      return calculateDealStructure(mergedStructureInputs as StructuredDealInputs);
+    } catch { return null; }
+  }, [mergedStructureInputs]);
+
   // Run expense anomaly detection whenever inputs change
   useEffect(() => {
     const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
@@ -549,7 +605,7 @@ export default function DealModeler() {
         contactId: contactId || undefined,
         dealType,
         dealSource,
-        inputs: { ...inputs, _assumptions: assumptions },
+        inputs: { ...inputs, _assumptions: assumptions, _structureType: activeStructure, _structureOverrides: structureOverrides },
         outputs,
         notes: notes || undefined,
       });
@@ -562,6 +618,22 @@ export default function DealModeler() {
       setSaving(false);
     }
   };
+
+  // Structure param update
+  const updateStructureParam = useCallback((param: string, value: number | boolean) => {
+    setStructureOverrides(prev => ({
+      ...prev,
+      [activeStructure]: { ...(prev[activeStructure] || {}), [param]: value },
+    }));
+  }, [activeStructure]);
+
+  // Run comparison across all structures
+  const runComparison = useCallback(() => {
+    const structures: DealStructureType[] = ["all_cash", "conventional", "bridge_refi", "assumable", "syndication"];
+    const results = compareDealStructures(structureBase, structures, structureOverrides as any);
+    setComparisonResults(results);
+    setShowComparison(true);
+  }, [structureBase, structureOverrides]);
 
   const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
 
@@ -601,7 +673,7 @@ export default function DealModeler() {
               </button>
             )}
             <button
-              onClick={() => generateDealPdf({ dealName: dealName || address || "Deal Analysis", address, borough, inputs, outputs, propertyDetails, notes })}
+              onClick={() => generateDealPdf({ dealName: dealName || address || "Deal Analysis", address, borough, inputs, outputs, propertyDetails, notes, structureType: activeStructure, structureAnalysis: structureAnalysis || undefined, comparisonResults: comparisonResults.length > 0 ? comparisonResults : undefined })}
               className="px-3 md:px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
             >
               Export PDF
@@ -639,6 +711,37 @@ export default function DealModeler() {
           </div>
         </div>
       )}
+
+      {/* Deal Structure Selector */}
+      <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          {(["all_cash", "conventional", "bridge_refi", "assumable", "syndication"] as DealStructureType[]).map(s => (
+            <button
+              key={s}
+              onClick={() => { setActiveStructure(s); setShowComparison(false); }}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                activeStructure === s
+                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
+                  : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+              }`}
+            >
+              {STRUCTURE_LABELS[s]}
+            </button>
+          ))}
+          <div className="h-4 w-px bg-slate-200 mx-1" />
+          <button
+            onClick={runComparison}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+              showComparison
+                ? "bg-violet-600 text-white border-violet-600 shadow-sm"
+                : "bg-white text-violet-600 border-violet-300 hover:bg-violet-50"
+            }`}
+          >
+            Compare All
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mt-1">{STRUCTURE_DESCRIPTIONS[activeStructure]}</p>
+      </div>
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
@@ -790,6 +893,91 @@ export default function DealModeler() {
                 <div className="flex justify-between text-xs"><span className="text-slate-500">Amort Annual Payment</span><span className="font-medium">{fmt(outputs.annualDebtService)}</span></div>
               </div>
             </Section>
+
+            {/* Structure-Specific Financing */}
+            {activeStructure === "all_cash" && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <p className="text-xs text-emerald-700 font-medium">All Cash — No leverage</p>
+                <p className="text-[10px] text-emerald-600 mt-0.5">100% equity. Financing section above is ignored for structure analysis.</p>
+              </div>
+            )}
+
+            {activeStructure === "bridge_refi" && (
+              <Section title="Bridge → Refi (BRRRR)">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2">Phase 1: Bridge Loan</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Bridge LTV" value={(mergedStructureInputs as any).bridgeLtvPct ?? 80} onChange={v => updateStructureParam("bridgeLtvPct", v)} suffix="%" step="1" />
+                  <Field label="Bridge Rate" value={(mergedStructureInputs as any).bridgeRate ?? 10} onChange={v => updateStructureParam("bridgeRate", v)} suffix="%" step="0.25" />
+                  <Field label="Term (months)" value={(mergedStructureInputs as any).bridgeTermMonths ?? 24} onChange={v => updateStructureParam("bridgeTermMonths", v)} step="1" />
+                  <Field label="Origination Pts" value={(mergedStructureInputs as any).bridgeOriginationPts ?? 2} onChange={v => updateStructureParam("bridgeOriginationPts", v)} suffix="%" step="0.25" />
+                </div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Phase 2: Stabilization</p>
+                <Field label="Post-Rehab Rent Bump" value={(mergedStructureInputs as any).postRehabRentBump ?? 20} onChange={v => updateStructureParam("postRehabRentBump", v)} suffix="%" step="1" />
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Phase 3: Permanent Refi</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Refi LTV (of ARV)" value={(mergedStructureInputs as any).refiLtvPct ?? 75} onChange={v => updateStructureParam("refiLtvPct", v)} suffix="%" step="1" />
+                  <Field label="Refi Rate" value={(mergedStructureInputs as any).refiRate ?? (fredRate || 7)} onChange={v => updateStructureParam("refiRate", v)} suffix="%" step="0.125" />
+                  <Field label="Amortization (yrs)" value={(mergedStructureInputs as any).refiAmortization ?? 30} onChange={v => updateStructureParam("refiAmortization", v)} step="1" />
+                  <Field label="Refi Term (yrs)" value={(mergedStructureInputs as any).refiTermYears ?? 10} onChange={v => updateStructureParam("refiTermYears", v)} step="1" />
+                </div>
+                <Field label="ARV Override" value={(mergedStructureInputs as any).arvOverride ?? 0} onChange={v => updateStructureParam("arvOverride", v)} prefix="$" />
+              </Section>
+            )}
+
+            {activeStructure === "assumable" && (
+              <Section title="Assumable Mortgage">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2">Existing Loan</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Loan Balance" value={(mergedStructureInputs as any).existingLoanBalance ?? 0} onChange={v => updateStructureParam("existingLoanBalance", v)} prefix="$" />
+                  <Field label="Locked Rate" value={(mergedStructureInputs as any).existingRate ?? 3.5} onChange={v => updateStructureParam("existingRate", v)} suffix="%" step="0.125" />
+                  <Field label="Remaining (months)" value={(mergedStructureInputs as any).existingTermRemaining ?? 300} onChange={v => updateStructureParam("existingTermRemaining", v)} step="1" />
+                  <Field label="Original Amort (yrs)" value={(mergedStructureInputs as any).existingAmortization ?? 30} onChange={v => updateStructureParam("existingAmortization", v)} step="1" />
+                </div>
+                <Field label="Assumption Fee" value={(mergedStructureInputs as any).assumptionFee ?? 1} onChange={v => updateStructureParam("assumptionFee", v)} suffix="%" step="0.25" />
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Supplemental Loan (Optional)</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Supp. Amount" value={(mergedStructureInputs as any).supplementalLoanAmount ?? 0} onChange={v => updateStructureParam("supplementalLoanAmount", v)} prefix="$" />
+                  <Field label="Supp. Rate" value={(mergedStructureInputs as any).supplementalRate ?? 0} onChange={v => updateStructureParam("supplementalRate", v)} suffix="%" step="0.125" />
+                </div>
+                {fredRate && ((mergedStructureInputs as any).existingRate || 3.5) < fredRate && (
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
+                    <p className="text-xs text-green-700 font-medium">Rate Savings: {(fredRate - ((mergedStructureInputs as any).existingRate || 3.5)).toFixed(2)}% below market</p>
+                    <p className="text-[10px] text-green-600">Current 30yr fixed: {fredRate.toFixed(2)}% (FRED)</p>
+                  </div>
+                )}
+              </Section>
+            )}
+
+            {activeStructure === "syndication" && (
+              <Section title="Syndication Structure">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2">Debt Terms</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="LTV" value={(mergedStructureInputs as any).ltvPct ?? 65} onChange={v => updateStructureParam("ltvPct", v)} suffix="%" step="1" />
+                  <Field label="Rate" value={(mergedStructureInputs as any).interestRate ?? (fredRate || 7)} onChange={v => updateStructureParam("interestRate", v)} suffix="%" step="0.125" />
+                  <Field label="Amortization" value={(mergedStructureInputs as any).amortizationYears ?? 30} onChange={v => updateStructureParam("amortizationYears", v)} step="1" />
+                  <Field label="Loan Term" value={(mergedStructureInputs as any).loanTermYears ?? 10} onChange={v => updateStructureParam("loanTermYears", v)} step="1" />
+                </div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Equity Split</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="GP Equity %" value={(mergedStructureInputs as any).gpEquityPct ?? 10} onChange={v => updateStructureParam("gpEquityPct", v)} suffix="%" step="1" />
+                  <Field label="LP Equity %" value={(mergedStructureInputs as any).lpEquityPct ?? 90} onChange={v => updateStructureParam("lpEquityPct", v)} suffix="%" step="1" />
+                </div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Sponsor Fees</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Acquisition Fee" value={(mergedStructureInputs as any).acquisitionFeePct ?? 2} onChange={v => updateStructureParam("acquisitionFeePct", v)} suffix="%" step="0.25" />
+                  <Field label="Asset Mgmt Fee" value={(mergedStructureInputs as any).assetManagementFeePct ?? 1.5} onChange={v => updateStructureParam("assetManagementFeePct", v)} suffix="%" step="0.25" />
+                  <Field label="Disposition Fee" value={(mergedStructureInputs as any).dispositionFeePct ?? 1} onChange={v => updateStructureParam("dispositionFeePct", v)} suffix="%" step="0.25" />
+                  <Field label="Construction Mgmt" value={(mergedStructureInputs as any).constructionMgmtFeePct ?? 5} onChange={v => updateStructureParam("constructionMgmtFeePct", v)} suffix="%" step="1" />
+                </div>
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2 mt-3">Waterfall</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Preferred Return" value={(mergedStructureInputs as any).preferredReturn ?? 8} onChange={v => updateStructureParam("preferredReturn", v)} suffix="%" step="0.5" />
+                  <Field label="GP Promote (Pref)" value={(mergedStructureInputs as any).gpPromoteAbovePref ?? 20} onChange={v => updateStructureParam("gpPromoteAbovePref", v)} suffix="%" step="5" />
+                  <Field label="IRR Hurdle" value={(mergedStructureInputs as any).irrHurdle ?? 15} onChange={v => updateStructureParam("irrHurdle", v)} suffix="%" step="1" />
+                  <Field label="GP Promote (Hurdle)" value={(mergedStructureInputs as any).gpPromoteAboveHurdle ?? 30} onChange={v => updateStructureParam("gpPromoteAboveHurdle", v)} suffix="%" step="5" />
+                </div>
+              </Section>
+            )}
 
             {/* Income — Residential */}
             <Section title="Income — Residential">
@@ -1059,6 +1247,130 @@ export default function DealModeler() {
 
           {/* ======================== RIGHT PANEL — OUTPUTS ======================== */}
           <div className="flex-1 min-w-0 space-y-6">
+
+            {/* Structure Analysis */}
+            {structureAnalysis && (
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-blue-100 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-blue-900">{structureAnalysis.label} Structure Analysis</h3>
+                  <span className="text-[10px] text-blue-500 font-medium uppercase tracking-wider">Deal Structure Engine</span>
+                </div>
+                <div className="p-5">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    {[
+                      { label: "CoC Return", value: fmtPct(structureAnalysis.cashOnCash), color: structureAnalysis.cashOnCash >= 8 ? "text-green-700" : structureAnalysis.cashOnCash >= 4 ? "text-amber-700" : "text-red-700" },
+                      { label: "IRR", value: isFinite(structureAnalysis.irr) ? fmtPct(structureAnalysis.irr) : "N/A", color: structureAnalysis.irr >= 15 ? "text-green-700" : structureAnalysis.irr >= 8 ? "text-amber-700" : "text-red-700" },
+                      { label: "Equity Multiple", value: fmtX(structureAnalysis.equityMultiple), color: structureAnalysis.equityMultiple >= 2 ? "text-green-700" : structureAnalysis.equityMultiple >= 1.5 ? "text-amber-700" : "text-red-700" },
+                      { label: "DSCR", value: structureAnalysis.dscr > 0 ? fmtX(structureAnalysis.dscr) : "N/A", color: structureAnalysis.dscr >= 1.25 ? "text-green-700" : structureAnalysis.dscr >= 1.0 ? "text-amber-700" : "text-red-700" },
+                    ].map(m => (
+                      <div key={m.label} className="bg-white/60 rounded-lg p-3 border border-blue-100">
+                        <p className="text-[10px] font-medium text-blue-400 uppercase tracking-wide">{m.label}</p>
+                        <p className={`text-lg font-bold mt-0.5 ${m.color}`}>{m.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Equity</span><span className="font-medium">{fmt(structureAnalysis.totalEquity)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Debt</span><span className="font-medium">{fmt(structureAnalysis.totalDebt)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Year 1 Cash Flow</span><span className={`font-medium ${structureAnalysis.cashFlow >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(structureAnalysis.cashFlow)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Break-even Occ.</span><span className="font-medium">{fmtPct(structureAnalysis.breakEvenOccupancy)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Projected Sale</span><span className="font-medium">{fmt(structureAnalysis.projectedSalePrice)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Profit</span><span className={`font-medium ${structureAnalysis.totalProfit >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(structureAnalysis.totalProfit)}</span></div>
+                  </div>
+                  {/* BRRRR-specific */}
+                  {structureAnalysis.structure === "bridge_refi" && structureAnalysis.cashOutOnRefi != null && (
+                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-emerald-200">
+                      <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wider mb-1">BRRRR Metrics</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-slate-500">Cash-Out on Refi</span><span className="font-medium text-emerald-700">{fmt(structureAnalysis.cashOutOnRefi)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Cash Left in Deal</span><span className="font-medium">{fmt(structureAnalysis.cashLeftInDeal || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Refi Loan</span><span className="font-medium">{fmt(structureAnalysis.refiLoanAmount || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Bridge Cost</span><span className="font-medium text-red-600">{fmt(structureAnalysis.totalBridgeCost || 0)}</span></div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Assumable-specific */}
+                  {structureAnalysis.structure === "assumable" && structureAnalysis.annualRateSavings != null && (
+                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-green-200">
+                      <p className="text-[10px] text-green-600 font-medium uppercase tracking-wider mb-1">Rate Advantage</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-slate-500">Annual Savings</span><span className="font-medium text-green-700">{fmt(structureAnalysis.annualRateSavings)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Total Savings</span><span className="font-medium text-green-700">{fmt(structureAnalysis.totalRateSavings || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Blended Rate</span><span className="font-medium">{fmtPct(structureAnalysis.blendedRate || 0)}</span></div>
+                      </div>
+                    </div>
+                  )}
+                  {/* Syndication-specific */}
+                  {structureAnalysis.structure === "syndication" && structureAnalysis.gpIrr != null && (
+                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-violet-200">
+                      <p className="text-[10px] text-violet-600 font-medium uppercase tracking-wider mb-1">Syndication Returns</p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                        <div className="flex justify-between"><span className="text-slate-500">GP IRR</span><span className="font-medium text-violet-700">{fmtPct(structureAnalysis.gpIrr)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">LP IRR</span><span className="font-medium text-violet-700">{fmtPct(structureAnalysis.lpIrr || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">GP Multiple</span><span className="font-medium">{fmtX(structureAnalysis.gpEquityMultiple || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">LP Multiple</span><span className="font-medium">{fmtX(structureAnalysis.lpEquityMultiple || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Total Fees</span><span className="font-medium">{fmt(structureAnalysis.totalFees || 0)}</span></div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Comparison Table */}
+            {showComparison && comparisonResults.length > 0 && (
+              <div className="bg-white border-2 border-violet-200 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-violet-100 bg-violet-50/50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-violet-900">Structure Comparison</h3>
+                  <button onClick={() => setShowComparison(false)} className="text-xs text-violet-500 hover:text-violet-700">Close</button>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs min-w-[700px]">
+                    <thead className="bg-violet-50">
+                      <tr>
+                        <th className="text-left px-4 py-3 font-semibold text-slate-500">Metric</th>
+                        {comparisonResults.map(r => (
+                          <th key={r.structure} className={`text-center px-3 py-3 font-semibold ${r.structure === activeStructure ? "text-blue-700 bg-blue-50" : "text-slate-500"}`}>
+                            {r.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([
+                        { key: "cashOnCash", label: "Cash-on-Cash", format: fmtPct, best: "max" as const },
+                        { key: "irr", label: "IRR", format: fmtPct, best: "max" as const },
+                        { key: "equityMultiple", label: "Equity Multiple", format: fmtX, best: "max" as const },
+                        { key: "totalEquity", label: "Total Equity", format: fmt, best: "min" as const },
+                        { key: "totalDebt", label: "Total Debt", format: fmt, best: "min" as const },
+                        { key: "dscr", label: "DSCR", format: fmtX, best: "max" as const },
+                        { key: "cashFlow", label: "Year 1 Cash Flow", format: fmt, best: "max" as const },
+                        { key: "breakEvenOccupancy", label: "Break-even Occ.", format: fmtPct, best: "min" as const },
+                        { key: "totalProfit", label: "Total Profit", format: fmt, best: "max" as const },
+                      ]).map(({ key, label, format, best }) => {
+                        const values = comparisonResults.map(r => (r as unknown as Record<string, number>)[key]);
+                        const validValues = values.filter(v => isFinite(v) && v !== 0);
+                        const bestVal = validValues.length > 0 ? (best === "max" ? Math.max(...validValues) : Math.min(...validValues)) : null;
+                        return (
+                          <tr key={key} className="border-t border-slate-100">
+                            <td className="px-4 py-2 font-medium text-slate-600">{label}</td>
+                            {comparisonResults.map(r => {
+                              const val = (r as unknown as Record<string, number>)[key];
+                              const isBest = bestVal !== null && isFinite(val) && val !== 0 && val === bestVal;
+                              return (
+                                <td key={r.structure} className={`text-center px-3 py-2 font-medium ${isBest ? "text-green-700 bg-green-50" : r.structure === activeStructure ? "text-blue-700 bg-blue-50/30" : "text-slate-700"}`}>
+                                  {isFinite(val) ? format(val) : "N/A"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Key Metrics Cards */}
             <div className="sticky top-[65px] z-10 bg-white/95 backdrop-blur-sm pb-4">
