@@ -17,19 +17,47 @@ import { generateLoiPlainText, getLoiCoverEmailSubject, getLoiCoverEmailHtml, LO
 import type { LoiData } from "@/lib/loi-template";
 import type { DealStructureType, DealInputsBase, StructuredDealInputs, DealAnalysis as StructureAnalysis } from "@/lib/deal-structure-engine";
 import { STRUCTURE_LABELS, STRUCTURE_DESCRIPTIONS, calculateDealStructure, getDefaultStructureInputs, compareDealStructures } from "@/lib/deal-structure-engine";
+import { ChevronDown, Banknote, Building2, ArrowRightLeft, KeyRound, Users, Info } from "lucide-react";
+import { BarChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart, Cell, ReferenceLine } from "recharts";
+
+// ============================================================
+// Structure selector constants
+// ============================================================
+const STRUCTURE_ICONS: Record<DealStructureType, typeof Banknote> = {
+  all_cash: Banknote,
+  conventional: Building2,
+  bridge_refi: ArrowRightLeft,
+  assumable: KeyRound,
+  syndication: Users,
+};
+
+const STRUCTURE_SUBTITLES: Record<DealStructureType, string> = {
+  all_cash: "Pure equity play",
+  conventional: "Standard leverage",
+  bridge_refi: "BRRRR strategy",
+  assumable: "Below-market rate",
+  syndication: "LP/GP structure",
+};
 
 // ============================================================
 // Collapsible Section
 // ============================================================
-function Section({ title, defaultOpen = true, children }: { title: string; defaultOpen?: boolean; children: React.ReactNode }) {
+function Section({ title, defaultOpen = true, summary, children }: { title: string; defaultOpen?: boolean; summary?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-slate-200 rounded-lg overflow-hidden">
-      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors">
-        <span className="text-sm font-semibold text-slate-700">{title}</span>
-        <svg className={`w-4 h-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+    <div className="border border-white/5 rounded-lg overflow-hidden">
+      <button onClick={() => setOpen(!open)} className="w-full flex items-center justify-between px-4 py-3 bg-white/[0.03] hover:bg-white/[0.05] transition-colors">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{title}</span>
+          {!open && summary && <span className="text-[10px] text-slate-600 truncate">{summary}</span>}
+        </div>
+        <ChevronDown className={`w-3.5 h-3.5 text-slate-500 transition-transform flex-shrink-0 ${open ? "rotate-180" : ""}`} />
       </button>
-      {open && <div className="p-4 space-y-3">{children}</div>}
+      <div className={`grid transition-all duration-200 ${open ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+        <div className="overflow-hidden">
+          <div className="p-4 space-y-3">{children}</div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -39,25 +67,26 @@ function Section({ title, defaultOpen = true, children }: { title: string; defau
 // ============================================================
 function Sparkle() {
   return (
-    <span className="inline-block ml-1 text-amber-500" title="AI-generated assumption">
+    <span className="inline-block ml-1 text-amber-400" title="AI-generated assumption">
       <svg className="w-3 h-3 inline" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z" /></svg>
     </span>
   );
 }
 
 // ============================================================
-// Input Field with optional AI sparkle
+// Input Field with optional AI sparkle + badge
 // ============================================================
-function Field({ label, value, onChange, prefix, suffix, type = "number", step, min, className, aiAssumed, onClearAi }: {
+function Field({ label, value, onChange, prefix, suffix, type = "number", step, min, className, aiAssumed, onClearAi, badge }: {
   label: string; value: number | string; onChange: (v: number) => void;
   prefix?: string; suffix?: string; type?: string; step?: string; min?: string; className?: string;
-  aiAssumed?: boolean; onClearAi?: () => void;
+  aiAssumed?: boolean; onClearAi?: () => void; badge?: string;
 }) {
   return (
     <div className={className}>
-      <label className="block text-xs font-medium text-slate-500 mb-1">
+      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">
         {label}
         {aiAssumed && <Sparkle />}
+        {badge && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 normal-case tracking-normal">{badge}</span>}
       </label>
       <div className="relative">
         {prefix && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">{prefix}</span>}
@@ -70,11 +99,97 @@ function Field({ label, value, onChange, prefix, suffix, type = "number", step, 
           }}
           step={step || "any"}
           min={min}
-          className={`w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 ${prefix ? "pl-7" : ""} ${suffix ? "pr-7" : ""} ${aiAssumed ? "bg-amber-50/40" : ""}`}
+          className={`w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm font-semibold text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500/30 ${prefix ? "pl-7" : ""} ${suffix ? "pr-7" : ""} ${aiAssumed ? "bg-amber-500/10 border-amber-500/20" : ""}`}
         />
         {suffix && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">{suffix}</span>}
       </div>
     </div>
+  );
+}
+
+// ============================================================
+// Slider + Text Input Field
+// ============================================================
+function SliderField({ label, value, onChange, min = 0, max = 100, step = 1, suffix = "%", badge }: {
+  label: string; value: number; onChange: (v: number) => void;
+  min?: number; max?: number; step?: number; suffix?: string; badge?: string;
+}) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return (
+    <div>
+      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1.5">
+        {label}
+        {badge && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 normal-case tracking-normal">{badge}</span>}
+      </label>
+      <div className="flex items-center gap-3">
+        <div className="flex-1 relative h-6 flex items-center">
+          <div className="absolute inset-x-0 h-1 bg-white/10 rounded-full" />
+          <div className="absolute left-0 h-1 bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={e => onChange(parseFloat(e.target.value))}
+            className="absolute inset-0 w-full opacity-0 cursor-pointer"
+          />
+          <div
+            className="absolute w-4 h-4 bg-white rounded-full shadow-lg pointer-events-none"
+            style={{ left: `calc(${pct}% - 8px)` }}
+          />
+        </div>
+        <div className="relative w-20">
+          <input
+            type="number"
+            value={value}
+            onChange={e => onChange(parseFloat(e.target.value) || 0)}
+            step={step}
+            min={min}
+            max={max}
+            className="w-full px-2 py-1.5 bg-slate-800/40 border border-white/5 rounded text-sm font-semibold text-white text-right focus:outline-none focus:ring-2 focus:ring-blue-500/30 pr-6"
+          />
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">{suffix}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// Semi-circular gauge for KPI cards
+// ============================================================
+function MetricGauge({ value, min, max, color }: { value: number; min: number; max: number; color: string }) {
+  const clamped = Math.max(min, Math.min(max, value));
+  const pct = max > min ? (clamped - min) / (max - min) : 0;
+  // Arc: semicircle from 180° to 0° (left to right), radius 50, center (60, 60)
+  const r = 46;
+  const cx = 60;
+  const cy = 58;
+  const circumference = Math.PI * r; // half-circle
+  const filled = circumference * pct;
+  const gap = circumference - filled;
+  return (
+    <svg viewBox="0 0 120 68" className="w-full h-auto">
+      {/* Background track */}
+      <path
+        d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+        fill="none"
+        stroke="rgba(255,255,255,0.05)"
+        strokeWidth={6}
+        strokeLinecap="round"
+      />
+      {/* Filled arc */}
+      <path
+        d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
+        fill="none"
+        stroke={color}
+        strokeWidth={6}
+        strokeLinecap="round"
+        strokeDasharray={`${filled} ${gap}`}
+        className="transition-all duration-500"
+      />
+    </svg>
   );
 }
 
@@ -635,31 +750,55 @@ export default function DealModeler() {
     setShowComparison(true);
   }, [structureBase, structureOverrides]);
 
+  // Keyboard shortcuts: Cmd+1-5 switch structures, Cmd+K toggle comparison
+  useEffect(() => {
+    const structures: DealStructureType[] = ["all_cash", "conventional", "bridge_refi", "assumable", "syndication"];
+    const handler = (e: KeyboardEvent) => {
+      if (!e.metaKey && !e.ctrlKey) return;
+      if (e.key >= "1" && e.key <= "5") {
+        e.preventDefault();
+        const idx = parseInt(e.key) - 1;
+        setActiveStructure(structures[idx]);
+        setShowComparison(false);
+      }
+      if (e.key === "k" || e.key === "K") {
+        e.preventDefault();
+        if (showComparison) {
+          setShowComparison(false);
+        } else {
+          runComparison();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [showComparison, runComparison]);
+
   const totalUnits = inputs.unitMix.reduce((s, u) => s + u.count, 0);
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-[#0B0F19] text-white">
       {/* Header */}
-      <div className="sticky top-0 z-20 bg-white border-b border-slate-200 px-4 md:px-6 py-3">
+      <div className="sticky top-0 z-20 bg-[#0B0F19]/95 backdrop-blur-sm border-b border-white/5 px-4 md:px-6 py-3">
         <div className="flex items-center justify-between max-w-[1600px] mx-auto">
           <div className="flex items-center gap-3">
-            <a href="/deals" className="text-sm text-slate-500 hover:text-blue-600">&larr; Back</a>
+            <a href="/deals" className="text-sm text-slate-400 hover:text-blue-400">&larr; Back</a>
             <div>
               <input
                 value={dealName}
                 onChange={e => setDealName(e.target.value)}
                 placeholder="Deal name..."
-                className="text-lg font-bold text-slate-900 border-none focus:outline-none bg-transparent placeholder:text-slate-300 w-full max-w-md"
+                className="text-lg font-bold text-white border-none focus:outline-none bg-transparent placeholder:text-slate-600 w-full max-w-md"
               />
               {address && <p className="text-xs text-slate-500">{address}{borough ? `, ${borough}` : ""}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2 md:gap-3">
-            {saveMsg && <span className={`text-sm ${saveMsg.startsWith("Error") ? "text-red-600" : "text-green-600"}`}>{saveMsg}</span>}
+            {saveMsg && <span className={`text-sm ${saveMsg.startsWith("Error") ? "text-red-400" : "text-green-400"}`}>{saveMsg}</span>}
             {savedId && (
               <a
                 href={`/deals/promote?dealId=${savedId}`}
-                className="px-3 md:px-4 py-2 border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-800 text-sm font-medium rounded-lg transition-colors"
+                className="px-3 md:px-4 py-2 border border-violet-500/20 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 text-sm font-medium rounded-lg transition-colors"
               >
                 Structure Partnership
               </a>
@@ -667,14 +806,14 @@ export default function DealModeler() {
             {inputs.purchasePrice > 0 && (
               <button
                 onClick={openLoiModal}
-                className="px-3 md:px-4 py-2 border border-amber-300 bg-amber-50 hover:bg-amber-100 text-amber-800 text-sm font-medium rounded-lg transition-colors"
+                className="px-3 md:px-4 py-2 border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-sm font-medium rounded-lg transition-colors"
               >
                 Generate LOI
               </button>
             )}
             <button
               onClick={() => generateDealPdf({ dealName: dealName || address || "Deal Analysis", address, borough, inputs, outputs, propertyDetails, notes, structureType: activeStructure, structureAnalysis: structureAnalysis || undefined, comparisonResults: comparisonResults.length > 0 ? comparisonResults : undefined })}
-              className="px-3 md:px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+              className="px-3 md:px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg transition-colors"
             >
               Export PDF
             </button>
@@ -686,17 +825,17 @@ export default function DealModeler() {
       </div>
 
       {prefillLoading && (
-        <div className="bg-blue-50 border-b border-blue-100 px-4 md:px-6 py-2">
-          <div className="max-w-[1600px] mx-auto flex items-center gap-2 text-sm text-blue-700">
-            <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full" />
+        <div className="bg-blue-500/10 border-b border-blue-500/20 px-4 md:px-6 py-2">
+          <div className="max-w-[1600px] mx-auto flex items-center gap-2 text-sm text-blue-400">
+            <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full" />
             Loading deal data...
           </div>
         </div>
       )}
 
       {isAiGenerated && !prefillLoading && (
-        <div className="bg-amber-50 border-b border-amber-200 px-4 md:px-6 py-2.5">
-          <div className="max-w-[1600px] mx-auto flex items-center gap-2 text-sm text-amber-800">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 md:px-6 py-2.5">
+          <div className="max-w-[1600px] mx-auto flex items-center gap-2 text-sm text-amber-400">
             <svg className="w-4 h-4 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z" /></svg>
             <span><strong>AI-Generated Assumptions</strong> — Review and adjust inputs as needed. Fields marked with <Sparkle /> were auto-calculated.</span>
           </div>
@@ -704,8 +843,8 @@ export default function DealModeler() {
       )}
 
       {propertyDetails && !prefillLoading && !isAiGenerated && (
-        <div className="bg-green-50 border-b border-green-100 px-4 md:px-6 py-2">
-          <div className="max-w-[1600px] mx-auto text-sm text-green-700">
+        <div className="bg-green-500/10 border-b border-green-500/20 px-4 md:px-6 py-2">
+          <div className="max-w-[1600px] mx-auto text-sm text-green-400">
             Pre-filled from {propertyDetails.address}, {propertyDetails.borough} — {propertyDetails.unitsRes} units, built {propertyDetails.yearBuilt}
             {propertyDetails.lastSalePrice > 0 && ` — Last sale: ${fmt(propertyDetails.lastSalePrice)}`}
           </div>
@@ -714,33 +853,39 @@ export default function DealModeler() {
 
       {/* Deal Structure Selector */}
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          {(["all_cash", "conventional", "bridge_refi", "assumable", "syndication"] as DealStructureType[]).map(s => (
-            <button
-              key={s}
-              onClick={() => { setActiveStructure(s); setShowComparison(false); }}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
-                activeStructure === s
-                  ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                  : "bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:text-blue-600"
-              }`}
-            >
-              {STRUCTURE_LABELS[s]}
-            </button>
-          ))}
-          <div className="h-4 w-px bg-slate-200 mx-1" />
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+          {(["all_cash", "conventional", "bridge_refi", "assumable", "syndication"] as DealStructureType[]).map(s => {
+            const Icon = STRUCTURE_ICONS[s];
+            return (
+              <button
+                key={s}
+                onClick={() => { setActiveStructure(s); setShowComparison(false); }}
+                className={`flex-shrink-0 flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg border transition-all min-w-[120px] ${
+                  activeStructure === s
+                    ? "bg-blue-500/5 border-l-2 border-l-blue-500 border-y-white/5 border-r-white/5"
+                    : "bg-white/[0.02] border-white/5 hover:bg-white/[0.04]"
+                }`}
+              >
+                <Icon className={`w-4 h-4 flex-shrink-0 ${activeStructure === s ? "text-blue-400" : "text-slate-500"}`} />
+                <div className="text-left">
+                  <p className={`text-[13px] font-bold leading-tight ${activeStructure === s ? "text-white" : "text-slate-300"}`}>{STRUCTURE_LABELS[s]}</p>
+                  <p className="text-[11px] text-slate-500 leading-tight">{STRUCTURE_SUBTITLES[s]}</p>
+                </div>
+              </button>
+            );
+          })}
+          <div className="h-8 w-px bg-white/10 mx-1 flex-shrink-0" />
           <button
             onClick={runComparison}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+            className={`flex-shrink-0 px-3.5 py-2.5 rounded-lg text-xs font-medium border transition-all ${
               showComparison
-                ? "bg-violet-600 text-white border-violet-600 shadow-sm"
-                : "bg-white text-violet-600 border-violet-300 hover:bg-violet-50"
+                ? "bg-violet-500/10 border-violet-500/30 text-violet-400"
+                : "bg-white/[0.02] border-white/5 text-violet-400 hover:bg-white/[0.04]"
             }`}
           >
             Compare All
           </button>
         </div>
-        <p className="text-[10px] text-slate-400 mt-1">{STRUCTURE_DESCRIPTIONS[activeStructure]}</p>
       </div>
 
       <div className="max-w-[1600px] mx-auto px-4 md:px-6 py-6">
@@ -753,8 +898,8 @@ export default function DealModeler() {
             <Section title="Deal Info">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Deal Type</label>
-                  <select value={dealType} onChange={e => setDealType(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                  <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Deal Type</label>
+                  <select value={dealType} onChange={e => setDealType(e.target.value)} className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white">
                     <option value="acquisition">Acquisition</option>
                     <option value="value_add">Value-Add</option>
                     <option value="new_development">New Development</option>
@@ -763,8 +908,8 @@ export default function DealModeler() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-500 mb-1">Source</label>
-                  <select value={dealSource} onChange={e => setDealSource(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white">
+                  <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Source</label>
+                  <select value={dealSource} onChange={e => setDealSource(e.target.value)} className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white">
                     <option value="off_market">Off-Market</option>
                     <option value="on_market">On-Market</option>
                     <option value="new_development">New Development</option>
@@ -778,12 +923,12 @@ export default function DealModeler() {
             {/* Linked Contact */}
             <Section title="Linked Contact" defaultOpen={!!linkedContact}>
               {linkedContact ? (
-                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-900 truncate">{linkedContact.firstName} {linkedContact.lastName}</p>
-                    {linkedContact.email && <p className="text-xs text-slate-500 truncate">{linkedContact.email}</p>}
+                    <p className="text-sm font-medium text-white truncate">{linkedContact.firstName} {linkedContact.lastName}</p>
+                    {linkedContact.email && <p className="text-xs text-slate-400 truncate">{linkedContact.email}</p>}
                   </div>
-                  <button onClick={unlinkContact} className="text-slate-400 hover:text-red-500 text-lg leading-none" title="Unlink contact">&times;</button>
+                  <button onClick={unlinkContact} className="text-slate-500 hover:text-red-400 text-lg leading-none" title="Unlink contact">&times;</button>
                 </div>
               ) : (
                 <div className="relative">
@@ -793,18 +938,18 @@ export default function DealModeler() {
                     onFocus={() => { if (contactResults.length > 0) setContactDropdownOpen(true); }}
                     onBlur={() => setTimeout(() => setContactDropdownOpen(false), 200)}
                     placeholder="Search contacts by name or email..."
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
                   />
                   {contactDropdownOpen && contactResults.length > 0 && (
-                    <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    <div className="absolute z-30 top-full left-0 right-0 mt-1 bg-[#0B0F19] border border-white/10 rounded-lg shadow-lg max-h-48 overflow-y-auto">
                       {contactResults.map(c => (
                         <button
                           key={c.id}
                           onMouseDown={e => { e.preventDefault(); selectContact(c); }}
-                          className="w-full text-left px-3 py-2 hover:bg-blue-50 transition-colors"
+                          className="w-full text-left px-3 py-2 hover:bg-white/[0.05] transition-colors"
                         >
-                          <p className="text-sm font-medium text-slate-900">{c.firstName} {c.lastName}</p>
-                          <p className="text-xs text-slate-500">{c.email || "No email"}</p>
+                          <p className="text-sm font-medium text-white">{c.firstName} {c.lastName}</p>
+                          <p className="text-xs text-slate-400">{c.email || "No email"}</p>
                         </button>
                       ))}
                     </div>
@@ -818,61 +963,61 @@ export default function DealModeler() {
               <Field label="Purchase Price" value={inputs.purchasePrice} onChange={v => update({ purchasePrice: v })} prefix="$" aiAssumed={isAi("purchasePrice")} onClearAi={() => clearAi("purchasePrice")} />
               {compValuation && (
                 <div className="flex items-center justify-between -mt-1 mb-1">
-                  <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium border border-emerald-100">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full font-medium border border-emerald-500/20">
                     Comp Estimate: ${(compValuation.estimatedValue / 1e6).toFixed(2)}M
-                    <span className={`text-[10px] px-1 py-0.5 rounded ${compValuation.confidence === "high" ? "bg-emerald-200 text-emerald-800" : compValuation.confidence === "medium" ? "bg-amber-200 text-amber-800" : "bg-slate-200 text-slate-600"}`}>
+                    <span className={`text-[10px] px-1 py-0.5 rounded ${compValuation.confidence === "high" ? "bg-emerald-500/20 text-emerald-400" : compValuation.confidence === "medium" ? "bg-amber-500/20 text-amber-400" : "bg-white/10 text-slate-400"}`}>
                       {compValuation.confidence}
                     </span>
                   </span>
                   <button onClick={() => update({ purchasePrice: compValuation.estimatedValue })}
-                    className="text-xs text-emerald-600 hover:text-emerald-800 font-medium">
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-medium">
                     Apply to deal
                   </button>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Closing Costs" value={inputs.closingCosts} onChange={v => update({ closingCosts: v })} prefix="$" aiAssumed={isAi("closingCosts")} onClearAi={() => clearAi("closingCosts")} />
-                <Field label="Renovation Budget" value={inputs.renovationBudget} onChange={v => update({ renovationBudget: v })} prefix="$" />
+                <Field label="Renovation Budget" value={inputs.renovationBudget} onChange={v => update({ renovationBudget: v })} prefix="$" badge="Reno" />
               </div>
               {renoEstimate && (
                 <div className="flex items-center justify-between -mt-1 mb-1">
-                  <span className="inline-flex items-center gap-1.5 text-xs bg-amber-50 text-amber-700 px-2.5 py-1 rounded-full font-medium border border-amber-100">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-amber-500/10 text-amber-400 px-2.5 py-1 rounded-full font-medium border border-amber-500/20">
                     {renoEstimate.recommendedLevel.charAt(0).toUpperCase() + renoEstimate.recommendedLevel.slice(1)} Rehab: ${renoEstimate.totalCost[renoEstimate.recommendedLevel] >= 1e6 ? (renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1e6).toFixed(2) + "M" : Math.round(renoEstimate.totalCost[renoEstimate.recommendedLevel] / 1000) + "K"}
                     {renoEstimate.arv[renoEstimate.recommendedLevel] > 0 && (
-                      <span className="text-amber-500 font-normal">ARV ${(renoEstimate.arv[renoEstimate.recommendedLevel] / 1e6).toFixed(1)}M</span>
+                      <span className="text-amber-300 font-normal">ARV ${(renoEstimate.arv[renoEstimate.recommendedLevel] / 1e6).toFixed(1)}M</span>
                     )}
                   </span>
                   <button onClick={() => update({ renovationBudget: renoEstimate.totalCost[renoEstimate.recommendedLevel] })}
-                    className="text-xs text-amber-600 hover:text-amber-800 font-medium">
+                    className="text-xs text-amber-400 hover:text-amber-300 font-medium">
                     Apply to deal
                   </button>
                 </div>
               )}
-              <div className="bg-blue-50 rounded-lg p-3">
+              <div className="bg-blue-500/10 rounded-lg p-3">
                 <div className="flex justify-between text-xs">
-                  <span className="text-slate-500">Total Equity Required</span>
-                  <span className="font-semibold text-blue-700">{fmt(outputs.totalEquity)}</span>
+                  <span className="text-slate-400">Total Equity Required</span>
+                  <span className="font-semibold text-blue-400">{fmt(outputs.totalEquity)}</span>
                 </div>
               </div>
             </Section>
 
             {/* Financing */}
-            <Section title="Financing">
+            <Section title="Financing" summary={`${inputs.ltvPercent}% LTV at ${inputs.interestRate}%`}>
               {fredRate && (
                 <div className="flex items-center justify-between mb-2">
-                  <span className="inline-flex items-center gap-1.5 text-xs bg-blue-50 text-blue-700 px-2.5 py-1 rounded-full font-medium border border-blue-100">
+                  <span className="inline-flex items-center gap-1.5 text-xs bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full font-medium border border-blue-500/20">
                     30yr Fixed: {fredRate.toFixed(2)}%
-                    <span className="text-blue-400 font-normal">FRED</span>
+                    <span className="text-blue-500/60 font-normal">FRED</span>
                   </span>
                   <button onClick={() => update({ interestRate: fredRate })}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium">
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium">
                     Apply to deal
                   </button>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
-                <Field label="LTV" value={inputs.ltvPercent} onChange={v => update({ ltvPercent: v })} suffix="%" step="1" aiAssumed={isAi("ltvPercent")} onClearAi={() => clearAi("ltvPercent")} />
-                <Field label="Interest Rate" value={inputs.interestRate} onChange={v => update({ interestRate: v })} suffix="%" step="0.125" aiAssumed={isAi("interestRate")} onClearAi={() => clearAi("interestRate")} />
+                <SliderField label="LTV" value={inputs.ltvPercent} onChange={v => update({ ltvPercent: v })} min={0} max={100} step={1} badge="FRED" />
+                <SliderField label="Interest Rate" value={inputs.interestRate} onChange={v => update({ interestRate: v })} min={0} max={15} step={0.125} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Amortization (yrs)" value={inputs.amortizationYears} onChange={v => update({ amortizationYears: v })} step="1" />
@@ -881,29 +1026,51 @@ export default function DealModeler() {
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Origination Fee" value={inputs.originationFeePercent} onChange={v => update({ originationFeePercent: v })} suffix="%" step="0.25" aiAssumed={isAi("originationFeePercent")} onClearAi={() => clearAi("originationFeePercent")} />
                 <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
-                    <input type="checkbox" checked={inputs.interestOnly} onChange={e => update({ interestOnly: e.target.checked })} className="rounded border-slate-300 text-blue-600" />
+                  <label className="flex items-center gap-2 text-sm text-slate-300">
+                    <input type="checkbox" checked={inputs.interestOnly} onChange={e => update({ interestOnly: e.target.checked })} className="rounded border-white/10 bg-slate-800/40 text-blue-500" />
                     Interest Only
                   </label>
                 </div>
               </div>
-              <div className="bg-slate-50 rounded-lg p-3 space-y-1">
-                <div className="flex justify-between text-xs"><span className="text-slate-500">Loan Amount</span><span className="font-medium">{fmt(outputs.loanAmount)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-slate-500">IO Annual Payment</span><span className="font-medium">{fmt(outputs.ioAnnualPayment)}</span></div>
-                <div className="flex justify-between text-xs"><span className="text-slate-500">Amort Annual Payment</span><span className="font-medium">{fmt(outputs.annualDebtService)}</span></div>
+              <div className="bg-white/[0.03] rounded-lg p-3 space-y-1">
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Loan Amount</span><span className="font-medium text-white">{fmt(outputs.loanAmount)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-slate-500">IO Annual Payment</span><span className="font-medium text-white">{fmt(outputs.ioAnnualPayment)}</span></div>
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Amort Annual Payment</span><span className="font-medium text-white">{fmt(outputs.annualDebtService)}</span></div>
               </div>
             </Section>
 
             {/* Structure-Specific Financing */}
             {activeStructure === "all_cash" && (
-              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-                <p className="text-xs text-emerald-700 font-medium">All Cash — No leverage</p>
-                <p className="text-[10px] text-emerald-600 mt-0.5">100% equity. Financing section above is ignored for structure analysis.</p>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+                <p className="text-xs text-emerald-400 font-medium">All Cash — No leverage</p>
+                <p className="text-[10px] text-emerald-500/60 mt-0.5">100% equity. Financing section above is ignored for structure analysis.</p>
               </div>
             )}
 
             {activeStructure === "bridge_refi" && (
               <Section title="Bridge → Refi (BRRRR)">
+                {/* Visual Timeline */}
+                <div className="flex items-stretch gap-0 mb-4 overflow-x-auto no-scrollbar">
+                  {[
+                    { phase: "ACQUIRE", detail: "Bridge Loan", time: "Month 0", color: "border-amber-500/30 bg-amber-500/5", dot: "bg-amber-400" },
+                    { phase: "RENOVATE &\nSTABILIZE", detail: "Value-Add", time: `Month 1–${(mergedStructureInputs as any).bridgeTermMonths ?? 24}`, color: "border-blue-500/30 bg-blue-500/5", dot: "bg-blue-400" },
+                    { phase: "REFINANCE", detail: "Permanent", time: `Month ${(mergedStructureInputs as any).bridgeTermMonths ?? 24}+`, color: "border-emerald-500/30 bg-emerald-500/5", dot: "bg-emerald-400" },
+                  ].map((step, i) => (
+                    <div key={i} className="flex items-center">
+                      <div className={`border rounded-lg p-2.5 min-w-[100px] text-center ${step.color}`}>
+                        <div className={`w-2 h-2 rounded-full mx-auto mb-1.5 ${step.dot}`} />
+                        <p className="text-[10px] font-bold text-white leading-tight whitespace-pre-line">{step.phase}</p>
+                        <p className="text-[9px] text-slate-400 mt-0.5">{step.detail}</p>
+                        <p className="text-[9px] text-slate-500 mt-0.5 font-mono">{step.time}</p>
+                      </div>
+                      {i < 2 && (
+                        <div className="flex items-center px-1 text-slate-600">
+                          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none"><path d="M3 8h10m0 0L9 4m4 4L9 12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <p className="text-[10px] text-slate-400 uppercase tracking-wider font-medium mb-2">Phase 1: Bridge Loan</p>
                 <div className="grid grid-cols-2 gap-3">
                   <Field label="Bridge LTV" value={(mergedStructureInputs as any).bridgeLtvPct ?? 80} onChange={v => updateStructureParam("bridgeLtvPct", v)} suffix="%" step="1" />
@@ -939,12 +1106,41 @@ export default function DealModeler() {
                   <Field label="Supp. Amount" value={(mergedStructureInputs as any).supplementalLoanAmount ?? 0} onChange={v => updateStructureParam("supplementalLoanAmount", v)} prefix="$" />
                   <Field label="Supp. Rate" value={(mergedStructureInputs as any).supplementalRate ?? 0} onChange={v => updateStructureParam("supplementalRate", v)} suffix="%" step="0.125" />
                 </div>
-                {fredRate && ((mergedStructureInputs as any).existingRate || 3.5) < fredRate && (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-3 mt-2">
-                    <p className="text-xs text-green-700 font-medium">Rate Savings: {(fredRate - ((mergedStructureInputs as any).existingRate || 3.5)).toFixed(2)}% below market</p>
-                    <p className="text-[10px] text-green-600">Current 30yr fixed: {fredRate.toFixed(2)}% (FRED)</p>
-                  </div>
-                )}
+                {fredRate != null && (() => {
+                  const assumedRate = (mergedStructureInputs as any).existingRate || 3.5;
+                  const marketRate = fredRate;
+                  const maxRate = Math.max(assumedRate, marketRate, 1);
+                  const savings = marketRate - assumedRate;
+                  const loanBal = (mergedStructureInputs as any).existingLoanBalance || 0;
+                  const annualSavings = loanBal > 0 ? Math.round(loanBal * (savings / 100)) : 0;
+                  return (
+                    <div className="bg-white/[0.02] border border-white/5 rounded-lg p-3 mt-2 space-y-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Your Assumed Rate</span>
+                          <span className="text-xs font-bold text-emerald-400 font-mono">{assumedRate.toFixed(2)}%</span>
+                        </div>
+                        <div className="h-2.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${(assumedRate / maxRate) * 100}%` }} />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[10px] text-slate-500 uppercase tracking-wider font-medium">Today&apos;s Market Rate</span>
+                          <span className="text-xs font-bold text-amber-400 font-mono">{marketRate.toFixed(2)}% <span className="text-[9px] font-normal text-slate-500 ml-1 px-1 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20">FRED</span></span>
+                        </div>
+                        <div className="h-2.5 bg-white/5 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-500 rounded-full transition-all duration-300" style={{ width: `${(marketRate / maxRate) * 100}%` }} />
+                        </div>
+                      </div>
+                      {savings > 0 && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-2.5 text-center">
+                          <p className="text-xs font-bold text-emerald-400">You Save: {savings.toFixed(2)}%{annualSavings > 0 ? ` → ${fmt(annualSavings)}/year` : ""}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </Section>
             )}
 
@@ -980,15 +1176,15 @@ export default function DealModeler() {
             )}
 
             {/* Income — Residential */}
-            <Section title="Income — Residential">
+            <Section title="Income — Residential" summary={`GPR ${fmt(outputs.grossPotentialResidentialRent)}, ${inputs.residentialVacancyRate}% vacancy`}>
               <div className="space-y-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-slate-500">Unit Mix ({totalUnits} units){isAi("unitMix") && <Sparkle />}</span>
-                  <button onClick={addUnitType} className="text-xs text-blue-600 hover:text-blue-700 font-medium">+ Add Type</button>
+                  <span className="text-[10px] font-medium uppercase tracking-widest text-slate-500">Unit Mix ({totalUnits} units){isAi("unitMix") && <Sparkle />}</span>
+                  <button onClick={addUnitType} className="text-xs text-blue-400 hover:text-blue-300 font-medium">+ Add Type</button>
                 </div>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
+                <div className="border border-white/5 rounded-lg overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="bg-slate-50">
+                    <thead className="bg-white/[0.03]">
                       <tr>
                         <th className="text-left px-3 py-2 font-medium text-slate-500">Type</th>
                         <th className="text-center px-2 py-2 font-medium text-slate-500">Ct</th>
@@ -999,31 +1195,31 @@ export default function DealModeler() {
                     </thead>
                     <tbody>
                       {inputs.unitMix.map((u, i) => (
-                        <tr key={i} className="border-t border-slate-100">
+                        <tr key={i} className="border-t border-white/5">
                           <td className="px-2 py-1.5">
-                            <input value={u.type} onChange={e => updateUnit(i, "type", e.target.value)} className="w-full px-1.5 py-1 border border-slate-200 rounded text-xs" />
+                            <input value={u.type} onChange={e => updateUnit(i, "type", e.target.value)} className="w-full px-1.5 py-1 bg-slate-800/40 border border-white/5 rounded text-xs text-white" />
                           </td>
                           <td className="px-1 py-1.5">
-                            <input type="number" value={u.count} onChange={e => updateUnit(i, "count", parseInt(e.target.value) || 0)} className="w-14 text-center px-1 py-1 border border-slate-200 rounded text-xs" min="0" />
+                            <input type="number" value={u.count} onChange={e => updateUnit(i, "count", parseInt(e.target.value) || 0)} className="w-14 text-center px-1 py-1 bg-slate-800/40 border border-white/5 rounded text-xs text-white" min="0" />
                           </td>
                           <td className="px-2 py-1.5">
-                            <input type="number" value={u.monthlyRent} onChange={e => updateUnit(i, "monthlyRent", parseFloat(e.target.value) || 0)} className="w-full text-right px-1.5 py-1 border border-slate-200 rounded text-xs" />
+                            <input type="number" value={u.monthlyRent} onChange={e => updateUnit(i, "monthlyRent", parseFloat(e.target.value) || 0)} className="w-full text-right px-1.5 py-1 bg-slate-800/40 border border-white/5 rounded text-xs text-white" />
                           </td>
-                          <td className="px-3 py-1.5 text-right text-slate-600">{fmt(u.count * u.monthlyRent * 12)}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-400">{fmt(u.count * u.monthlyRent * 12)}</td>
                           <td className="pr-2">
                             {inputs.unitMix.length > 1 && (
-                              <button onClick={() => removeUnitType(i)} className="text-slate-300 hover:text-red-500 text-sm">&times;</button>
+                              <button onClick={() => removeUnitType(i)} className="text-slate-500 hover:text-red-400 text-sm">&times;</button>
                             )}
                           </td>
                         </tr>
                       ))}
                     </tbody>
-                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                    <tfoot className="bg-white/[0.03] border-t border-white/5">
                       <tr>
-                        <td className="px-3 py-2 font-semibold text-slate-700">GPR</td>
-                        <td className="text-center px-2 py-2 font-semibold">{totalUnits}</td>
+                        <td className="px-3 py-2 font-semibold text-white">GPR</td>
+                        <td className="text-center px-2 py-2 font-semibold text-white">{totalUnits}</td>
                         <td></td>
-                        <td className="text-right px-3 py-2 font-semibold text-slate-700">{fmt(outputs.grossPotentialResidentialRent)}</td>
+                        <td className="text-right px-3 py-2 font-semibold text-white">{fmt(outputs.grossPotentialResidentialRent)}</td>
                         <td></td>
                       </tr>
                     </tfoot>
@@ -1031,21 +1227,21 @@ export default function DealModeler() {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Vacancy Rate" value={inputs.residentialVacancyRate} onChange={v => update({ residentialVacancyRate: v })} suffix="%" step="0.5" aiAssumed={isAi("residentialVacancyRate")} onClearAi={() => clearAi("residentialVacancyRate")} />
+                <SliderField label="Vacancy Rate" value={inputs.residentialVacancyRate} onChange={v => update({ residentialVacancyRate: v })} min={0} max={30} step={0.5} />
                 <Field label="Concessions (annual)" value={inputs.concessions} onChange={v => update({ concessions: v })} prefix="$" aiAssumed={isAi("concessions")} onClearAi={() => clearAi("concessions")} />
               </div>
-              <Field label="Annual Rent Growth" value={inputs.annualRentGrowth} onChange={v => update({ annualRentGrowth: v })} suffix="%" step="0.5" aiAssumed={isAi("annualRentGrowth")} onClearAi={() => clearAi("annualRentGrowth")} />
+              <SliderField label="Annual Rent Growth" value={inputs.annualRentGrowth} onChange={v => update({ annualRentGrowth: v })} min={-5} max={15} step={0.5} />
               {strProjection && (
-                <div className="bg-purple-50 border border-purple-100 rounded-lg p-3 -mt-1">
+                <div className="bg-purple-500/10 border border-purple-500/20 rounded-lg p-3 -mt-1">
                   <div className="flex items-center justify-between">
-                    <span className="inline-flex items-center gap-1.5 text-xs text-purple-700 font-medium">
-                      🏠 STR Potential: ${strProjection.monthlySTRRevenue.toLocaleString()}/mo per unit
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${strProjection.strPremium > 0 ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-600"}`}>
+                    <span className="inline-flex items-center gap-1.5 text-xs text-purple-400 font-medium">
+                      STR Potential: ${strProjection.monthlySTRRevenue.toLocaleString()}/mo per unit
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${strProjection.strPremium > 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"}`}>
                         {strProjection.strPremium > 0 ? "+" : ""}{strProjection.strPremium}% vs LTR
                       </span>
                     </span>
                   </div>
-                  <p className="text-[10px] text-purple-500 mt-1">Based on {strProjection.neighborhood} Airbnb data — {strProjection.occupancyRate * 100}% occupancy, ${strProjection.avgNightlyRate}/night. ⚠️ NYC LL18 restricts STR.</p>
+                  <p className="text-[10px] text-purple-500/60 mt-1">Based on {strProjection.neighborhood} Airbnb data — {strProjection.occupancyRate * 100}% occupancy, ${strProjection.avgNightlyRate}/night. NYC LL18 restricts STR.</p>
                 </div>
               )}
             </Section>
@@ -1075,7 +1271,7 @@ export default function DealModeler() {
               <Field label="Other Misc Income" value={inputs.otherMiscIncome} onChange={v => update({ otherMiscIncome: v })} prefix="$" />
               <button
                 onClick={addCustomIncome}
-                className="w-full px-3 py-2 border border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 text-slate-500 hover:text-blue-600 text-xs font-medium rounded-lg transition-colors"
+                className="w-full px-3 py-2 border border-dashed border-white/10 hover:border-blue-500/30 hover:bg-blue-500/5 text-slate-500 hover:text-blue-400 text-xs font-medium rounded-lg transition-colors"
               >
                 + Add Income Line Item
               </button>
@@ -1085,13 +1281,13 @@ export default function DealModeler() {
             <div className="flex items-center gap-2">
               <button
                 onClick={openT12Modal}
-                className="flex-1 px-3 py-2 border border-blue-200 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition-colors text-center"
+                className="flex-1 px-3 py-2 border border-blue-500/20 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 text-xs font-medium rounded-lg transition-colors text-center"
               >
                 Enter T-12 Actuals
               </button>
               <button
                 onClick={addCustomExpense}
-                className="flex-1 px-3 py-2 border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-medium rounded-lg transition-colors text-center"
+                className="flex-1 px-3 py-2 border border-white/10 hover:bg-white/[0.05] text-slate-400 text-xs font-medium rounded-lg transition-colors text-center"
               >
                 + Add Expense Line
               </button>
@@ -1099,9 +1295,9 @@ export default function DealModeler() {
 
             {/* Expense Flags Summary */}
             {expenseFlags.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-xs font-semibold text-amber-800 mb-1">{expenseFlags.length} expense flag{expenseFlags.length !== 1 ? "s" : ""} detected</p>
-                <p className="text-[10px] text-amber-600">Review flagged items in the P&L section on the right panel.</p>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
+                <p className="text-xs font-semibold text-amber-400 mb-1">{expenseFlags.length} expense flag{expenseFlags.length !== 1 ? "s" : ""} detected</p>
+                <p className="text-[10px] text-amber-500/60">Review flagged items in the P&L section on the right panel.</p>
               </div>
             )}
 
@@ -1129,8 +1325,8 @@ export default function DealModeler() {
                 <Field label="Mgmt Fee" value={inputs.managementFeePercent} onChange={v => update({ managementFeePercent: v })} suffix="%" step="0.5" aiAssumed={isAi("managementFeePercent")} onClearAi={() => clearAi("managementFeePercent")} />
                 <Field label="Payroll" value={inputs.payroll} onChange={v => update({ payroll: v })} prefix="$" aiAssumed={isAi("payroll")} onClearAi={() => clearAi("payroll")} />
               </div>
-              <div className="bg-slate-50 rounded-lg p-3">
-                <div className="flex justify-between text-xs"><span className="text-slate-500">Calculated Mgmt Fee</span><span className="font-medium">{fmt(outputs.managementFee)}</span></div>
+              <div className="bg-white/[0.03] rounded-lg p-3">
+                <div className="flex justify-between text-xs"><span className="text-slate-500">Calculated Mgmt Fee</span><span className="font-medium text-white">{fmt(outputs.managementFee)}</span></div>
               </div>
             </Section>
 
@@ -1177,7 +1373,7 @@ export default function DealModeler() {
                       <input
                         value={item.name}
                         onChange={e => updateCustomExpense(item.id, "name", e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs"
+                        className="flex-1 px-2 py-1.5 bg-slate-800/40 border border-white/5 rounded text-xs text-white"
                         placeholder="Expense name"
                       />
                       <div className="relative w-28">
@@ -1186,10 +1382,10 @@ export default function DealModeler() {
                           type="number"
                           value={item.amount}
                           onChange={e => updateCustomExpense(item.id, "amount", parseFloat(e.target.value) || 0)}
-                          className="w-full pl-5 pr-2 py-1.5 border border-slate-200 rounded text-xs text-right"
+                          className="w-full pl-5 pr-2 py-1.5 bg-slate-800/40 border border-white/5 rounded text-xs text-right text-white"
                         />
                       </div>
-                      <button onClick={() => removeCustomExpense(item.id)} className="text-slate-300 hover:text-red-500 text-sm">&times;</button>
+                      <button onClick={() => removeCustomExpense(item.id)} className="text-slate-500 hover:text-red-400 text-sm">&times;</button>
                     </div>
                   ))}
                 </div>
@@ -1205,7 +1401,7 @@ export default function DealModeler() {
                       <input
                         value={item.name}
                         onChange={e => updateCustomIncome(item.id, "name", e.target.value)}
-                        className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs"
+                        className="flex-1 px-2 py-1.5 bg-slate-800/40 border border-white/5 rounded text-xs text-white"
                         placeholder="Income name"
                       />
                       <div className="relative w-28">
@@ -1214,10 +1410,10 @@ export default function DealModeler() {
                           type="number"
                           value={item.amount}
                           onChange={e => updateCustomIncome(item.id, "amount", parseFloat(e.target.value) || 0)}
-                          className="w-full pl-5 pr-2 py-1.5 border border-slate-200 rounded text-xs text-right"
+                          className="w-full pl-5 pr-2 py-1.5 bg-slate-800/40 border border-white/5 rounded text-xs text-right text-white"
                         />
                       </div>
-                      <button onClick={() => removeCustomIncome(item.id)} className="text-slate-300 hover:text-red-500 text-sm">&times;</button>
+                      <button onClick={() => removeCustomIncome(item.id)} className="text-slate-500 hover:text-red-400 text-sm">&times;</button>
                     </div>
                   ))}
                 </div>
@@ -1225,10 +1421,10 @@ export default function DealModeler() {
             )}
 
             {/* Exit Assumptions */}
-            <Section title="Exit Assumptions">
+            <Section title="Exit Assumptions" summary={`${inputs.holdPeriodYears}yr hold, ${inputs.exitCapRate}% exit cap`}>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Hold Period (yrs)" value={inputs.holdPeriodYears} onChange={v => update({ holdPeriodYears: Math.max(1, Math.round(v)) })} step="1" min="1" aiAssumed={isAi("holdPeriodYears")} onClearAi={() => clearAi("holdPeriodYears")} />
-                <Field label="Exit Cap Rate" value={inputs.exitCapRate} onChange={v => update({ exitCapRate: v })} suffix="%" step="0.25" aiAssumed={isAi("exitCapRate")} onClearAi={() => clearAi("exitCapRate")} />
+                <SliderField label="Hold Period (yrs)" value={inputs.holdPeriodYears} onChange={v => update({ holdPeriodYears: Math.max(1, Math.round(v)) })} min={1} max={30} step={1} suffix="yr" />
+                <SliderField label="Exit Cap Rate" value={inputs.exitCapRate} onChange={v => update({ exitCapRate: v })} min={1} max={15} step={0.25} />
               </div>
               <Field label="Selling Costs" value={inputs.sellingCostPercent} onChange={v => update({ sellingCostPercent: v })} suffix="%" step="0.5" aiAssumed={isAi("sellingCostPercent")} onClearAi={() => clearAi("sellingCostPercent")} />
             </Section>
@@ -1240,97 +1436,199 @@ export default function DealModeler() {
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Deal notes, assumptions, conditions..."
                 rows={4}
-                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none placeholder:text-slate-600"
               />
             </Section>
+
+            {/* Phase 10: Left Panel Sticky Summary Bar */}
+            {structureAnalysis && (
+              <div className="hidden lg:block sticky bottom-0 bg-slate-800/60 backdrop-blur-md border border-white/5 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  {[
+                    { label: "CoC", value: fmtPct(structureAnalysis.cashOnCash), threshold: structureAnalysis.cashOnCash >= 8 ? "text-emerald-400" : structureAnalysis.cashOnCash >= 4 ? "text-amber-400" : "text-red-400" },
+                    { label: "IRR", value: isFinite(structureAnalysis.irr) ? fmtPct(structureAnalysis.irr) : "N/A", threshold: structureAnalysis.irr >= 15 ? "text-emerald-400" : structureAnalysis.irr >= 8 ? "text-amber-400" : "text-red-400" },
+                    { label: "Eq Multiple", value: fmtX(structureAnalysis.equityMultiple), threshold: structureAnalysis.equityMultiple >= 2 ? "text-emerald-400" : structureAnalysis.equityMultiple >= 1.5 ? "text-amber-400" : "text-red-400" },
+                  ].map(m => (
+                    <div key={m.label} className="text-center">
+                      <p className="text-[9px] uppercase tracking-widest text-slate-500">{m.label}</p>
+                      <p className={`text-sm font-bold ${m.threshold}`}>{m.value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* ======================== RIGHT PANEL — OUTPUTS ======================== */}
-          <div className="flex-1 min-w-0 space-y-6">
+          <div className="flex-1 min-w-0 space-y-6 lg:max-h-[calc(100vh-65px)] lg:overflow-y-auto lg:sticky lg:top-[65px] no-scrollbar">
 
             {/* Structure Analysis */}
             {structureAnalysis && (
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-blue-100 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-blue-900">{structureAnalysis.label} Structure Analysis</h3>
-                  <span className="text-[10px] text-blue-500 font-medium uppercase tracking-wider">Deal Structure Engine</span>
+              <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+                <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">{structureAnalysis.label} Structure Analysis</h3>
+                  <span className="text-[10px] text-blue-400 font-medium uppercase tracking-wider">Deal Structure Engine</span>
                 </div>
                 <div className="p-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                     {[
-                      { label: "CoC Return", value: fmtPct(structureAnalysis.cashOnCash), color: structureAnalysis.cashOnCash >= 8 ? "text-green-700" : structureAnalysis.cashOnCash >= 4 ? "text-amber-700" : "text-red-700" },
-                      { label: "IRR", value: isFinite(structureAnalysis.irr) ? fmtPct(structureAnalysis.irr) : "N/A", color: structureAnalysis.irr >= 15 ? "text-green-700" : structureAnalysis.irr >= 8 ? "text-amber-700" : "text-red-700" },
-                      { label: "Equity Multiple", value: fmtX(structureAnalysis.equityMultiple), color: structureAnalysis.equityMultiple >= 2 ? "text-green-700" : structureAnalysis.equityMultiple >= 1.5 ? "text-amber-700" : "text-red-700" },
-                      { label: "DSCR", value: structureAnalysis.dscr > 0 ? fmtX(structureAnalysis.dscr) : "N/A", color: structureAnalysis.dscr >= 1.25 ? "text-green-700" : structureAnalysis.dscr >= 1.0 ? "text-amber-700" : "text-red-700" },
+                      { label: "CoC Return", value: fmtPct(structureAnalysis.cashOnCash), color: structureAnalysis.cashOnCash >= 8 ? "text-green-400" : structureAnalysis.cashOnCash >= 4 ? "text-amber-400" : "text-red-400" },
+                      { label: "IRR", value: isFinite(structureAnalysis.irr) ? fmtPct(structureAnalysis.irr) : "N/A", color: structureAnalysis.irr >= 15 ? "text-green-400" : structureAnalysis.irr >= 8 ? "text-amber-400" : "text-red-400" },
+                      { label: "Equity Multiple", value: fmtX(structureAnalysis.equityMultiple), color: structureAnalysis.equityMultiple >= 2 ? "text-green-400" : structureAnalysis.equityMultiple >= 1.5 ? "text-amber-400" : "text-red-400" },
+                      { label: "DSCR", value: structureAnalysis.dscr > 0 ? fmtX(structureAnalysis.dscr) : "N/A", color: structureAnalysis.dscr >= 1.25 ? "text-green-400" : structureAnalysis.dscr >= 1.0 ? "text-amber-400" : "text-red-400" },
                     ].map(m => (
-                      <div key={m.label} className="bg-white/60 rounded-lg p-3 border border-blue-100">
-                        <p className="text-[10px] font-medium text-blue-400 uppercase tracking-wide">{m.label}</p>
+                      <div key={m.label} className="bg-white/[0.03] rounded-lg p-3 border border-white/5">
+                        <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">{m.label}</p>
                         <p className={`text-lg font-bold mt-0.5 ${m.color}`}>{m.value}</p>
                       </div>
                     ))}
                   </div>
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Equity</span><span className="font-medium">{fmt(structureAnalysis.totalEquity)}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Debt</span><span className="font-medium">{fmt(structureAnalysis.totalDebt)}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Year 1 Cash Flow</span><span className={`font-medium ${structureAnalysis.cashFlow >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(structureAnalysis.cashFlow)}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Break-even Occ.</span><span className="font-medium">{fmtPct(structureAnalysis.breakEvenOccupancy)}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Projected Sale</span><span className="font-medium">{fmt(structureAnalysis.projectedSalePrice)}</span></div>
-                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Profit</span><span className={`font-medium ${structureAnalysis.totalProfit >= 0 ? "text-green-700" : "text-red-600"}`}>{fmt(structureAnalysis.totalProfit)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Equity</span><span className="font-medium text-white">{fmt(structureAnalysis.totalEquity)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Debt</span><span className="font-medium text-white">{fmt(structureAnalysis.totalDebt)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Year 1 Cash Flow</span><span className={`font-medium ${structureAnalysis.cashFlow >= 0 ? "text-green-400" : "text-red-400"}`}>{fmt(structureAnalysis.cashFlow)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Break-even Occ.</span><span className="font-medium text-white">{fmtPct(structureAnalysis.breakEvenOccupancy)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Projected Sale</span><span className="font-medium text-white">{fmt(structureAnalysis.projectedSalePrice)}</span></div>
+                    <div className="flex justify-between py-1"><span className="text-slate-500">Total Profit</span><span className={`font-medium ${structureAnalysis.totalProfit >= 0 ? "text-green-400" : "text-red-400"}`}>{fmt(structureAnalysis.totalProfit)}</span></div>
                   </div>
                   {/* BRRRR-specific */}
                   {structureAnalysis.structure === "bridge_refi" && structureAnalysis.cashOutOnRefi != null && (
-                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-emerald-200">
-                      <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wider mb-1">BRRRR Metrics</p>
+                    <div className="mt-3 bg-white/[0.03] rounded-lg p-3 border border-emerald-500/20">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[10px] text-emerald-400 font-medium uppercase tracking-wider">BRRRR Metrics</p>
+                        {(structureAnalysis.cashLeftInDeal || 0) <= 0 && (
+                          <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 animate-pulse">Infinite Return</span>
+                        )}
+                      </div>
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <div className="flex justify-between"><span className="text-slate-500">Cash-Out on Refi</span><span className="font-medium text-emerald-700">{fmt(structureAnalysis.cashOutOnRefi)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Cash Left in Deal</span><span className="font-medium">{fmt(structureAnalysis.cashLeftInDeal || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Refi Loan</span><span className="font-medium">{fmt(structureAnalysis.refiLoanAmount || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Bridge Cost</span><span className="font-medium text-red-600">{fmt(structureAnalysis.totalBridgeCost || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Cash-Out on Refi</span><span className="font-medium text-emerald-400">{fmt(structureAnalysis.cashOutOnRefi)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Cash Left in Deal</span><span className={`font-medium ${(structureAnalysis.cashLeftInDeal || 0) <= 0 ? "text-emerald-400" : "text-white"}`}>{fmt(structureAnalysis.cashLeftInDeal || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Refi Loan</span><span className="font-medium text-white">{fmt(structureAnalysis.refiLoanAmount || 0)}</span></div>
+                        <div className="flex justify-between"><span className="text-slate-500">Bridge Cost</span><span className="font-medium text-red-400">{fmt(structureAnalysis.totalBridgeCost || 0)}</span></div>
                       </div>
                     </div>
                   )}
                   {/* Assumable-specific */}
                   {structureAnalysis.structure === "assumable" && structureAnalysis.annualRateSavings != null && (
-                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-green-200">
-                      <p className="text-[10px] text-green-600 font-medium uppercase tracking-wider mb-1">Rate Advantage</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <div className="flex justify-between"><span className="text-slate-500">Annual Savings</span><span className="font-medium text-green-700">{fmt(structureAnalysis.annualRateSavings)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Total Savings</span><span className="font-medium text-green-700">{fmt(structureAnalysis.totalRateSavings || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Blended Rate</span><span className="font-medium">{fmtPct(structureAnalysis.blendedRate || 0)}</span></div>
+                    <div className="mt-3 bg-white/[0.03] rounded-lg p-3 border border-green-500/20">
+                      <p className="text-[10px] text-green-400 font-medium uppercase tracking-wider mb-2">Rate Advantage</p>
+                      {/* Visual rate comparison */}
+                      {(() => {
+                        const assumed = structureAnalysis.blendedRate || ((mergedStructureInputs as any).existingRate || 3.5);
+                        const market = fredRate || 7;
+                        const maxR = Math.max(assumed, market, 1);
+                        return (
+                          <div className="space-y-2 mb-3">
+                            <div>
+                              <div className="flex justify-between text-[10px] mb-0.5"><span className="text-slate-500">Blended Rate</span><span className="text-emerald-400 font-mono font-medium">{fmtPct(assumed)}</span></div>
+                              <div className="h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(assumed / maxR) * 100}%` }} /></div>
+                            </div>
+                            <div>
+                              <div className="flex justify-between text-[10px] mb-0.5"><span className="text-slate-500">Market Rate</span><span className="text-amber-400 font-mono font-medium">{fmtPct(market)}</span></div>
+                              <div className="h-2 bg-white/5 rounded-full overflow-hidden"><div className="h-full bg-amber-500 rounded-full" style={{ width: `${(market / maxR) * 100}%` }} /></div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div className="bg-emerald-500/10 rounded-lg p-2 text-center">
+                          <p className="text-[9px] text-slate-500 uppercase">Annual</p>
+                          <p className="font-bold text-emerald-400">{fmt(structureAnalysis.annualRateSavings)}</p>
+                        </div>
+                        <div className="bg-emerald-500/10 rounded-lg p-2 text-center">
+                          <p className="text-[9px] text-slate-500 uppercase">Total</p>
+                          <p className="font-bold text-emerald-400">{fmt(structureAnalysis.totalRateSavings || 0)}</p>
+                        </div>
+                        <div className="bg-white/[0.03] rounded-lg p-2 text-center">
+                          <p className="text-[9px] text-slate-500 uppercase">Blended</p>
+                          <p className="font-bold text-white">{fmtPct(structureAnalysis.blendedRate || 0)}</p>
+                        </div>
                       </div>
                     </div>
                   )}
-                  {/* Syndication-specific */}
-                  {structureAnalysis.structure === "syndication" && structureAnalysis.gpIrr != null && (
-                    <div className="mt-3 bg-white/60 rounded-lg p-3 border border-violet-200">
-                      <p className="text-[10px] text-violet-600 font-medium uppercase tracking-wider mb-1">Syndication Returns</p>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-                        <div className="flex justify-between"><span className="text-slate-500">GP IRR</span><span className="font-medium text-violet-700">{fmtPct(structureAnalysis.gpIrr)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">LP IRR</span><span className="font-medium text-violet-700">{fmtPct(structureAnalysis.lpIrr || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">GP Multiple</span><span className="font-medium">{fmtX(structureAnalysis.gpEquityMultiple || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">LP Multiple</span><span className="font-medium">{fmtX(structureAnalysis.lpEquityMultiple || 0)}</span></div>
-                        <div className="flex justify-between"><span className="text-slate-500">Total Fees</span><span className="font-medium">{fmt(structureAnalysis.totalFees || 0)}</span></div>
+                  {/* Syndication waterfall visualization */}
+                  {structureAnalysis.structure === "syndication" && structureAnalysis.gpIrr != null && (() => {
+                    const gpPct = (mergedStructureInputs as any).gpEquityPct ?? 10;
+                    const lpPct = (mergedStructureInputs as any).lpEquityPct ?? 90;
+                    const prefReturn = (mergedStructureInputs as any).preferredReturn ?? 8;
+                    const gpPromotePref = (mergedStructureInputs as any).gpPromoteAbovePref ?? 20;
+                    const irrHurdle = (mergedStructureInputs as any).irrHurdle ?? 15;
+                    const gpPromoteHurdle = (mergedStructureInputs as any).gpPromoteAboveHurdle ?? 30;
+                    const gpTotal = structureAnalysis.gpTotalReturn || 0;
+                    const lpTotal = structureAnalysis.lpTotalReturn || 0;
+                    const totalReturns = gpTotal + lpTotal;
+                    const gpPctOfReturns = totalReturns > 0 ? (gpTotal / totalReturns * 100) : 0;
+                    const lpPctOfReturns = totalReturns > 0 ? (lpTotal / totalReturns * 100) : 0;
+                    const tiers = [
+                      { label: `Preferred Return (${prefReturn}%)`, lpSplit: 100, gpSplit: 0, shade: "bg-violet-500/20" },
+                      { label: "Above Pref", lpSplit: 100 - gpPromotePref, gpSplit: gpPromotePref, shade: "bg-violet-500/40" },
+                      { label: `Above ${irrHurdle}% IRR`, lpSplit: 100 - gpPromoteHurdle, gpSplit: gpPromoteHurdle, shade: "bg-violet-500/60" },
+                    ];
+                    return (
+                      <div className="mt-3 bg-white/[0.03] rounded-lg p-3 border border-violet-500/20">
+                        <p className="text-[10px] text-violet-400 font-medium uppercase tracking-wider mb-3">Promote Waterfall</p>
+                        <div className="space-y-2 mb-3">
+                          {tiers.map((t, i) => (
+                            <div key={i}>
+                              <div className="flex items-center justify-between text-[10px] mb-0.5">
+                                <span className="text-slate-400">{t.label}</span>
+                                <span className="text-slate-500">{t.lpSplit}% LP / {t.gpSplit}% GP</span>
+                              </div>
+                              <div className="h-3 bg-white/5 rounded-full overflow-hidden flex">
+                                <div className="h-full bg-blue-500/60 transition-all" style={{ width: `${t.lpSplit}%` }} />
+                                <div className={`h-full ${t.shade} transition-all`} style={{ width: `${t.gpSplit}%` }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-3 text-[9px] text-slate-500 mb-3">
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-blue-500/60" /> LP</span>
+                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-violet-500/40" /> GP Promote</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="bg-violet-500/10 rounded-lg p-2.5 text-center border border-violet-500/20">
+                            <p className="text-[9px] text-slate-500 uppercase mb-0.5">GP Total</p>
+                            <p className="text-sm font-bold text-violet-400">{fmt(gpTotal)}</p>
+                            <p className="text-[10px] text-slate-500">{gpPctOfReturns.toFixed(0)}% of returns</p>
+                            <div className="flex justify-center gap-3 mt-1 text-[10px]">
+                              <span className="text-slate-400">IRR: <span className="text-violet-400 font-medium">{fmtPct(structureAnalysis.gpIrr || 0)}</span></span>
+                              <span className="text-slate-400">{fmtX(structureAnalysis.gpEquityMultiple || 0)}</span>
+                            </div>
+                          </div>
+                          <div className="bg-blue-500/10 rounded-lg p-2.5 text-center border border-blue-500/20">
+                            <p className="text-[9px] text-slate-500 uppercase mb-0.5">LP Total</p>
+                            <p className="text-sm font-bold text-blue-400">{fmt(lpTotal)}</p>
+                            <p className="text-[10px] text-slate-500">{lpPctOfReturns.toFixed(0)}% of returns</p>
+                            <div className="flex justify-center gap-3 mt-1 text-[10px]">
+                              <span className="text-slate-400">IRR: <span className="text-blue-400 font-medium">{fmtPct(structureAnalysis.lpIrr || 0)}</span></span>
+                              <span className="text-slate-400">{fmtX(structureAnalysis.lpEquityMultiple || 0)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {(structureAnalysis.totalFees || 0) > 0 && (
+                          <div className="mt-2 text-center text-[10px] text-slate-500">Sponsor Fees: <span className="text-white font-medium">{fmt(structureAnalysis.totalFees || 0)}</span></div>
+                        )}
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             )}
 
             {/* Comparison Table */}
             {showComparison && comparisonResults.length > 0 && (
-              <div className="bg-white border-2 border-violet-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-violet-100 bg-violet-50/50 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-violet-900">Structure Comparison</h3>
-                  <button onClick={() => setShowComparison(false)} className="text-xs text-violet-500 hover:text-violet-700">Close</button>
+              <div className="bg-slate-800/20 border border-violet-500/20 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5 bg-white/[0.03] flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white">Structure Comparison</h3>
+                  <button onClick={() => setShowComparison(false)} className="text-xs text-violet-400 hover:text-violet-300">Close</button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs min-w-[700px]">
-                    <thead className="bg-violet-50">
+                    <thead className="bg-white/[0.03]">
                       <tr>
                         <th className="text-left px-4 py-3 font-semibold text-slate-500">Metric</th>
                         {comparisonResults.map(r => (
-                          <th key={r.structure} className={`text-center px-3 py-3 font-semibold ${r.structure === activeStructure ? "text-blue-700 bg-blue-50" : "text-slate-500"}`}>
+                          <th key={r.structure} className={`text-center px-3 py-3 font-semibold ${r.structure === activeStructure ? "text-blue-400 bg-blue-500/10" : "text-slate-500"}`}>
                             {r.label}
                           </th>
                         ))}
@@ -1352,13 +1650,13 @@ export default function DealModeler() {
                         const validValues = values.filter(v => isFinite(v) && v !== 0);
                         const bestVal = validValues.length > 0 ? (best === "max" ? Math.max(...validValues) : Math.min(...validValues)) : null;
                         return (
-                          <tr key={key} className="border-t border-slate-100">
-                            <td className="px-4 py-2 font-medium text-slate-600">{label}</td>
+                          <tr key={key} className="border-t border-white/5">
+                            <td className="px-4 py-2 font-medium text-slate-400">{label}</td>
                             {comparisonResults.map(r => {
                               const val = (r as unknown as Record<string, number>)[key];
                               const isBest = bestVal !== null && isFinite(val) && val !== 0 && val === bestVal;
                               return (
-                                <td key={r.structure} className={`text-center px-3 py-2 font-medium ${isBest ? "text-green-700 bg-green-50" : r.structure === activeStructure ? "text-blue-700 bg-blue-50/30" : "text-slate-700"}`}>
+                                <td key={r.structure} className={`text-center px-3 py-2 font-medium ${isBest ? "text-green-400 bg-green-500/10" : r.structure === activeStructure ? "text-blue-400 bg-blue-500/5" : "text-slate-200"}`}>
                                   {isFinite(val) ? format(val) : "N/A"}
                                 </td>
                               );
@@ -1372,33 +1670,66 @@ export default function DealModeler() {
               </div>
             )}
 
-            {/* Key Metrics Cards */}
-            <div className="sticky top-[65px] z-10 bg-white/95 backdrop-blur-sm pb-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
-                {[
-                  { label: "Cap Rate", value: fmtPct(outputs.capRate), color: outputs.capRate >= 5 ? "text-green-700" : outputs.capRate >= 3 ? "text-amber-700" : "text-red-700" },
-                  { label: "CoC (IO)", value: fmtPct(outputs.cashOnCashIO), color: outputs.cashOnCashIO >= 8 ? "text-green-700" : outputs.cashOnCashIO >= 4 ? "text-amber-700" : "text-red-700" },
-                  { label: "CoC (Amort)", value: fmtPct(outputs.cashOnCashAmort), color: outputs.cashOnCashAmort >= 6 ? "text-green-700" : outputs.cashOnCashAmort >= 2 ? "text-amber-700" : "text-red-700" },
-                  { label: "IRR", value: isFinite(outputs.irr) ? fmtPct(outputs.irr) : "N/A", color: outputs.irr >= 15 ? "text-green-700" : outputs.irr >= 8 ? "text-amber-700" : "text-red-700" },
-                  { label: "DSCR", value: fmtX(outputs.dscr), color: outputs.dscr >= 1.25 ? "text-green-700" : outputs.dscr >= 1.0 ? "text-amber-700" : "text-red-700" },
-                  { label: "Debt Yield", value: fmtPct(outputs.debtYield), color: outputs.debtYield >= 8 ? "text-green-700" : outputs.debtYield >= 6 ? "text-amber-700" : "text-red-700" },
-                  { label: "Eq Multiple", value: fmtX(outputs.equityMultiple), color: outputs.equityMultiple >= 2 ? "text-green-700" : outputs.equityMultiple >= 1.5 ? "text-amber-700" : "text-red-700" },
-                  { label: "NOI", value: fmt(outputs.noi), color: outputs.noi > 0 ? "text-green-700" : "text-red-700" },
-                ].map(m => (
-                  <div key={m.label} className="bg-white border border-slate-200 rounded-xl p-3">
-                    <p className="text-[10px] font-medium text-slate-400 uppercase tracking-wide">{m.label}</p>
-                    <p className={`text-lg font-bold mt-0.5 ${m.color}`}>{m.value}</p>
+            {/* KPI Cards with Semi-Circular Gauges */}
+            {(() => {
+              const hasData = inputs.purchasePrice > 0 && outputs.noi !== 0;
+              const beOcc = outputs.totalIncome > 0 ? ((outputs.totalExpenses + outputs.annualDebtService) / outputs.totalIncome) * 100 : 0;
+              const kpis = [
+                { label: "Cash-on-Cash", value: outputs.cashOnCashAmort, display: fmtPct(outputs.cashOnCashAmort), min: 0, max: 20, thresholds: [8, 4], hex: ["#34d399", "#fbbf24", "#f87171"], tip: "Annual cash flow ÷ total equity invested. Target: 8-12% for stabilized multifamily." },
+                { label: "IRR", value: outputs.irr, display: isFinite(outputs.irr) ? fmtPct(outputs.irr) : "N/A", min: 0, max: 30, thresholds: [15, 8], hex: ["#34d399", "#fbbf24", "#f87171"], tip: "Internal Rate of Return — time-weighted annualized return over hold period. Target: 15%+ for value-add." },
+                { label: "Equity Multiple", value: outputs.equityMultiple, display: fmtX(outputs.equityMultiple), min: 0, max: 4, thresholds: [2, 1.5], hex: ["#34d399", "#fbbf24", "#f87171"], tip: "Total profit ÷ equity invested. 2.0x = you doubled your money. Target: 1.5-2.5x over 5-7 years." },
+                { label: "Cap Rate", value: outputs.capRate, display: fmtPct(outputs.capRate), min: 0, max: 12, thresholds: [5, 3], hex: ["#34d399", "#fbbf24", "#f87171"], tip: "NOI ÷ purchase price. Higher = better yield. NYC multifamily: 4-6% typical." },
+                { label: "DSCR", value: outputs.dscr, display: fmtX(outputs.dscr), min: 0, max: 3, thresholds: [1.25, 1.0], hex: ["#34d399", "#fbbf24", "#f87171"], tip: "NOI ÷ annual debt service. Lenders require 1.20-1.25x minimum. Below 1.0x = negative cash flow." },
+                { label: "Break-Even Occ.", value: beOcc, display: `${beOcc.toFixed(1)}%`, min: 0, max: 100, thresholds: [75, 90], hex: ["#34d399", "#fbbf24", "#f87171"], invert: true, tip: "Occupancy needed to cover expenses + debt service. Below 75% = strong cushion. Above 90% = risky." },
+              ];
+              return (
+                <div className="sticky top-0 z-10 bg-[#0B0F19]/95 backdrop-blur-sm pb-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {kpis.map(k => {
+                      if (!hasData) {
+                        return (
+                          <div key={k.label} className="border border-dashed border-white/10 rounded-xl p-4 flex flex-col items-center">
+                            <p className="text-[10px] font-medium text-slate-600 uppercase tracking-wider mb-1">{k.label}</p>
+                            <div className="w-20 -mb-3 opacity-20">
+                              <MetricGauge value={0} min={k.min} max={k.max} color="rgba(255,255,255,0.1)" />
+                            </div>
+                            <p className="text-lg font-bold text-slate-700">—</p>
+                          </div>
+                        );
+                      }
+                      const hexColor = k.invert
+                        ? (k.value <= k.thresholds[0] ? k.hex[0] : k.value <= k.thresholds[1] ? k.hex[1] : k.hex[2])
+                        : (k.value >= k.thresholds[0] ? k.hex[0] : k.value >= k.thresholds[1] ? k.hex[1] : k.hex[2]);
+                      const textColor = k.invert
+                        ? (k.value <= k.thresholds[0] ? "text-emerald-400" : k.value <= k.thresholds[1] ? "text-amber-400" : "text-red-400")
+                        : (k.value >= k.thresholds[0] ? "text-emerald-400" : k.value >= k.thresholds[1] ? "text-amber-400" : "text-red-400");
+                      return (
+                        <div key={k.label} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex flex-col items-center relative group">
+                          <div className="flex items-center gap-1 mb-1">
+                            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">{k.label}</p>
+                            <Info className="w-3 h-3 text-slate-600 cursor-help" />
+                            <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 p-2.5 bg-[#0B0F19] border border-white/10 rounded-lg shadow-xl text-[10px] text-slate-300 leading-relaxed opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-20">
+                              {k.tip}
+                            </div>
+                          </div>
+                          <div className="w-20 -mb-3">
+                            <MetricGauge value={k.value} min={k.min} max={k.max} color={hexColor} />
+                          </div>
+                          <p className={`text-lg font-bold transition-all duration-200 ${textColor}`}>{k.display}</p>
+                        </div>
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              );
+            })()}
 
             {/* Year 1 Budget P&L — PRIMARY OUTPUT */}
-            <div className="bg-white border-2 border-blue-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-blue-100 bg-blue-50/50 flex items-center justify-between">
-                <h3 className="text-sm font-bold text-slate-800">Year 1 Budget P&L</h3>
+            <div className="bg-slate-800/20 border border-blue-500/20 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5 bg-white/[0.03] flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Year 1 Budget P&L</h3>
                 {expenseFlags.length > 0 && (
-                  <span className="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium">
+                  <span className="text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded-full font-medium">
                     {expenseFlags.length} flag{expenseFlags.length !== 1 ? "s" : ""}
                   </span>
                 )}
@@ -1415,7 +1746,7 @@ export default function DealModeler() {
                   </thead>
                   <tbody>
                     {/* RESIDENTIAL INCOME */}
-                    <tr className="border-t border-slate-100"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-600">Residential Income</td></tr>
+                    <tr className="border-t border-white/5"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-400">Residential Income</td></tr>
                     <PnlRowFull label="Gross Potential Residential Rent" value={outputs.grossPotentialResidentialRent} perUnit={totalUnits > 0 ? Math.round(outputs.grossPotentialResidentialRent / totalUnits) : undefined} />
                     <PnlRowFull label="Less: Residential Vacancy" value={-outputs.residentialVacancyLoss} indent note={`${inputs.residentialVacancyRate}%`} />
                     {outputs.concessionsLoss > 0 && <PnlRowFull label="Less: Concessions" value={-outputs.concessionsLoss} indent />}
@@ -1424,7 +1755,7 @@ export default function DealModeler() {
                     {/* COMMERCIAL INCOME */}
                     {outputs.grossPotentialCommercialRent > 0 && (
                       <>
-                        <tr className="border-t border-slate-100"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-600">Commercial Income</td></tr>
+                        <tr className="border-t border-white/5"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-400">Commercial Income</td></tr>
                         <PnlRowFull label="Gross Potential Commercial Rent" value={outputs.grossPotentialCommercialRent} />
                         <PnlRowFull label="Less: Commercial Vacancy" value={-outputs.commercialVacancyLoss} indent note={`${inputs.commercialVacancyRate}%`} />
                         {outputs.commercialConcessionsLoss > 0 && <PnlRowFull label="Less: Concessions" value={-outputs.commercialConcessionsLoss} indent />}
@@ -1435,41 +1766,41 @@ export default function DealModeler() {
                     {/* OTHER INCOME */}
                     {outputs.totalOtherIncome > 0 && (
                       <>
-                        <tr className="border-t border-slate-100"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-600">Other Income</td></tr>
+                        <tr className="border-t border-white/5"><td colSpan={4} className="pt-3 pb-1 text-[10px] uppercase tracking-wider font-bold text-blue-400">Other Income</td></tr>
                         <PnlRowFull label="Total Other Income" value={outputs.totalOtherIncome} />
                       </>
                     )}
 
                     {/* TOTAL INCOME */}
-                    <tr className="border-t-2 border-slate-300">
-                      <td className="py-2 font-bold text-slate-900">TOTAL INCOME</td>
-                      <td className="py-2 text-right font-bold text-slate-900">{fmt(outputs.totalIncome)}</td>
+                    <tr className="border-t-2 border-white/10">
+                      <td className="py-2 font-bold text-white">TOTAL INCOME</td>
+                      <td className="py-2 text-right font-bold text-white">{fmt(outputs.totalIncome)}</td>
                       <td className="py-2 text-right text-xs text-slate-500">{totalUnits > 0 ? fmt(Math.round(outputs.totalIncome / totalUnits)) : ""}</td>
                       <td></td>
                     </tr>
 
                     {/* OPERATING EXPENSES */}
-                    <tr><td colSpan={4} className="pt-4 pb-1 text-[10px] uppercase tracking-wider font-bold text-red-600">Operating Expenses</td></tr>
+                    <tr><td colSpan={4} className="pt-4 pb-1 text-[10px] uppercase tracking-wider font-bold text-red-400">Operating Expenses</td></tr>
                     {outputs.expenseDetails.filter(d => d.amount > 0).map((d, i) => {
                       const flag = d.field ? getFlagForField(d.field) : undefined;
                       return (
-                        <tr key={i} className={`border-t border-slate-50 ${flag ? "bg-amber-50/40" : ""}`}>
-                          <td className="py-1.5 text-slate-600 flex items-center gap-1">
-                            {flag && <span className="text-amber-500 cursor-help" title={flag.message}>&#9888;</span>}
+                        <tr key={i} className={`border-t border-white/[0.03] ${flag ? "bg-amber-500/5" : ""}`}>
+                          <td className="py-1.5 text-slate-400 flex items-center gap-1">
+                            {flag && <span className="text-amber-400 cursor-help" title={flag.message}>&#9888;</span>}
                             {d.label}
                             {d.source && (
-                              <span className={`ml-1 text-[9px] px-1 py-0.5 rounded ${d.source === 't12' ? 'bg-blue-100 text-blue-600' : d.source === 'ai_estimate' ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500'}`}>
+                              <span className={`ml-1 text-[9px] px-1 py-0.5 rounded ${d.source === 't12' ? 'bg-blue-500/10 text-blue-400' : d.source === 'ai_estimate' ? 'bg-purple-500/10 text-purple-400' : 'bg-white/5 text-slate-500'}`}>
                                 {d.methodology || d.source}
                               </span>
                             )}
                           </td>
-                          <td className="py-1.5 text-right text-slate-700">{fmt(d.amount)}</td>
+                          <td className="py-1.5 text-right text-slate-200">{fmt(d.amount)}</td>
                           <td className="py-1.5 text-right text-xs text-slate-500">{d.perUnit != null && d.perUnit > 0 ? fmt(d.perUnit) : ""}</td>
                           <td className="py-1.5 text-right">
                             {flag && flag.suggestedAmount != null && (
                               <button
                                 onClick={() => applySuggestedAmount(flag)}
-                                className="text-[9px] text-blue-600 hover:text-blue-800 underline"
+                                className="text-[9px] text-blue-400 hover:text-blue-300 underline"
                               >
                                 Use {fmt(flag.suggestedAmount)}
                               </button>
@@ -1478,17 +1809,17 @@ export default function DealModeler() {
                         </tr>
                       );
                     })}
-                    <tr className="border-t border-slate-200">
-                      <td className="py-2 font-semibold text-slate-900">Total Operating Expenses</td>
-                      <td className="py-2 text-right font-semibold text-red-700">{fmt(outputs.totalExpenses)}</td>
+                    <tr className="border-t border-white/5">
+                      <td className="py-2 font-semibold text-white">Total Operating Expenses</td>
+                      <td className="py-2 text-right font-semibold text-red-400">{fmt(outputs.totalExpenses)}</td>
                       <td className="py-2 text-right text-xs text-slate-500">{totalUnits > 0 ? fmt(Math.round(outputs.totalExpenses / totalUnits)) : ""}</td>
                       <td></td>
                     </tr>
 
                     {/* NOI */}
-                    <tr className="border-t-2 border-double border-slate-400">
-                      <td className="py-3 font-bold text-lg text-slate-900">NET OPERATING INCOME</td>
-                      <td className={`py-3 text-right font-bold text-lg ${outputs.noi >= 0 ? "text-green-700" : "text-red-700"}`}>{fmt(outputs.noi)}</td>
+                    <tr className="border-t-2 border-double border-white/10">
+                      <td className="py-3 font-bold text-lg text-white">NET OPERATING INCOME</td>
+                      <td className={`py-3 text-right font-bold text-lg ${outputs.noi >= 0 ? "text-green-400" : "text-red-400"}`}>{fmt(outputs.noi)}</td>
                       <td className="py-3 text-right text-xs text-slate-500">{totalUnits > 0 ? fmt(Math.round(outputs.noi / totalUnits)) : ""}</td>
                       <td></td>
                     </tr>
@@ -1504,8 +1835,8 @@ export default function DealModeler() {
             </div>
 
             {/* Analysis Section */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100"><h3 className="text-sm font-semibold text-slate-700">Analysis</h3></div>
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5"><h3 className="text-sm font-semibold text-slate-200">Analysis</h3></div>
               <div className="p-5">
                 <table className="w-full text-sm">
                   <tbody>
@@ -1528,74 +1859,119 @@ export default function DealModeler() {
               </div>
             </div>
 
-            {/* Cash Flow Waterfall */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100"><h3 className="text-sm font-semibold text-slate-700">Cash Flow Waterfall</h3></div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs min-w-[600px]">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="text-left px-4 py-2.5 font-semibold text-slate-500">Year</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">GPR</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Vacancy</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">EGI</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Expenses</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">NOI</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Debt Svc</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Cash Flow</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500">Cumulative</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {outputs.cashFlows.map(cf => (
-                      <tr key={cf.year} className="border-t border-slate-100 hover:bg-slate-50">
-                        <td className="px-4 py-2 font-medium text-slate-700">{cf.year}</td>
-                        <td className="text-right px-3 py-2 text-slate-600">{fmt(cf.gpr)}</td>
-                        <td className="text-right px-3 py-2 text-red-500">({fmt(cf.vacancy)})</td>
-                        <td className="text-right px-3 py-2 text-slate-600">{fmt(cf.egi)}</td>
-                        <td className="text-right px-3 py-2 text-red-500">({fmt(cf.expenses)})</td>
-                        <td className="text-right px-3 py-2 font-medium text-slate-700">{fmt(cf.noi)}</td>
-                        <td className="text-right px-3 py-2 text-red-500">({fmt(cf.debtService)})</td>
-                        <td className={`text-right px-3 py-2 font-medium ${cf.cashFlow >= 0 ? "text-green-700" : "text-red-700"}`}>{fmt(cf.cashFlow)}</td>
-                        <td className={`text-right px-3 py-2 ${cf.cumulativeCashFlow >= 0 ? "text-green-600" : "text-red-600"}`}>{fmt(cf.cumulativeCashFlow)}</td>
-                      </tr>
-                    ))}
-                    <tr className="border-t-2 border-slate-300 bg-blue-50/50">
-                      <td className="px-4 py-2 font-semibold text-slate-700">Exit</td>
-                      <td colSpan={4} className="text-right px-3 py-2 text-xs text-slate-500">Sale @ {fmtPct(inputs.exitCapRate)} Cap</td>
-                      <td className="text-right px-3 py-2 font-medium">{fmt(outputs.exitValue)}</td>
-                      <td className="text-right px-3 py-2 text-red-500">({fmt(outputs.loanBalanceAtExit)})</td>
-                      <td className="text-right px-3 py-2 font-bold text-blue-700">{fmt(outputs.exitProceeds)}</td>
-                      <td></td>
-                    </tr>
-                  </tbody>
-                </table>
+            {/* Cash Flow Chart */}
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5">
+                <h3 className="text-sm font-semibold text-slate-200">Cash Flow</h3>
+              </div>
+              <div className="px-4 py-3" style={{ height: 200 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={[
+                    ...outputs.cashFlows.map(cf => ({
+                      name: `Yr ${cf.year}`,
+                      cashFlow: cf.cashFlow,
+                      cumulative: cf.cumulativeCashFlow,
+                      isExit: false,
+                    })),
+                    {
+                      name: "Exit",
+                      cashFlow: outputs.exitProceeds,
+                      cumulative: outputs.cashFlows.length > 0 ? outputs.cashFlows[outputs.cashFlows.length - 1].cumulativeCashFlow + outputs.exitProceeds : outputs.exitProceeds,
+                      isExit: true,
+                    },
+                  ]} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#64748b" }} axisLine={{ stroke: "rgba(255,255,255,0.05)" }} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#64748b" }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000000 || v <= -1000000 ? `$${(v / 1000000).toFixed(1)}M` : v >= 1000 || v <= -1000 ? `$${(v / 1000).toFixed(0)}K` : `$${v}`} width={55} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#0B0F19", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 12 }}
+                      labelStyle={{ color: "#94a3b8" }}
+                      formatter={(value?: number, name?: string) => [fmt(Math.round(value ?? 0)), name === "cashFlow" ? "Cash Flow" : "Cumulative"]}
+                    />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.1)" />
+                    <Bar dataKey="cashFlow" radius={[3, 3, 0, 0]} maxBarSize={28}>
+                      {[...outputs.cashFlows.map(cf => ({ isExit: false, cashFlow: cf.cashFlow })), { isExit: true, cashFlow: outputs.exitProceeds }].map((entry, i) => (
+                        <Cell key={i} fill={entry.isExit ? "#3b82f6" : entry.cashFlow >= 0 ? "#34d399" : "#f87171"} fillOpacity={entry.isExit ? 0.8 : 0.6} />
+                      ))}
+                    </Bar>
+                    <Line type="monotone" dataKey="cumulative" stroke="#fbbf24" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             </div>
 
+            {/* Year-by-Year Projections — Collapsible */}
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <Section title="Year-by-Year Projections" defaultOpen={false} summary={`${outputs.cashFlows.length} years + exit`}>
+                <div className="overflow-x-auto -mx-4 -mb-3">
+                  <table className="w-full text-xs font-mono min-w-[700px]">
+                    <thead className="bg-white/[0.03] sticky top-0">
+                      <tr>
+                        <th className="text-left px-4 py-2 font-semibold text-slate-500 tabular-nums">Year</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Income</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Vacancy</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">NOI</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Debt Svc</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Cash Flow</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Value</th>
+                        <th className="text-right px-3 py-2 font-semibold text-slate-500">Equity</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {outputs.cashFlows.map((cf, i) => {
+                        const projValue = inputs.exitCapRate > 0 ? cf.noi / (inputs.exitCapRate / 100) : 0;
+                        const loanBal = outputs.loanAmount; // simplified — principal paydown ignored for projection
+                        const equity = projValue - loanBal;
+                        return (
+                          <tr key={cf.year} className={`border-t border-white/5 ${i % 2 === 1 ? "bg-white/[0.015]" : ""}`}>
+                            <td className="px-4 py-1.5 font-medium text-slate-300 tabular-nums">{cf.year}</td>
+                            <td className="text-right px-3 py-1.5 text-slate-400 tabular-nums">{fmt(cf.egi)}</td>
+                            <td className="text-right px-3 py-1.5 text-red-400/70 tabular-nums">({fmt(cf.vacancy)})</td>
+                            <td className="text-right px-3 py-1.5 font-medium text-white tabular-nums">{fmt(cf.noi)}</td>
+                            <td className="text-right px-3 py-1.5 text-red-400/70 tabular-nums">({fmt(cf.debtService)})</td>
+                            <td className={`text-right px-3 py-1.5 font-medium tabular-nums ${cf.cashFlow >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fmt(cf.cashFlow)}</td>
+                            <td className="text-right px-3 py-1.5 text-slate-400 tabular-nums">{projValue > 0 ? fmt(Math.round(projValue)) : "—"}</td>
+                            <td className={`text-right px-3 py-1.5 tabular-nums ${equity >= 0 ? "text-blue-400" : "text-red-400"}`}>{projValue > 0 ? fmt(Math.round(equity)) : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                      <tr className="border-t-2 border-white/10 bg-blue-500/5">
+                        <td className="px-4 py-2 font-semibold text-slate-200">Exit</td>
+                        <td colSpan={2} className="text-right px-3 py-2 text-[10px] text-slate-500">Sale @ {fmtPct(inputs.exitCapRate)} Cap</td>
+                        <td className="text-right px-3 py-2 font-medium text-white tabular-nums">{fmt(outputs.exitValue)}</td>
+                        <td className="text-right px-3 py-2 text-red-400 tabular-nums">({fmt(outputs.loanBalanceAtExit)})</td>
+                        <td className="text-right px-3 py-2 font-bold text-blue-400 tabular-nums">{fmt(outputs.exitProceeds)}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Section>
+            </div>
+
             {/* Sensitivity Matrix */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100"><h3 className="text-sm font-semibold text-slate-700">Sensitivity Analysis — IRR</h3></div>
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5"><h3 className="text-sm font-semibold text-slate-200">Sensitivity Analysis — IRR</h3></div>
               <div className="overflow-x-auto p-4">
                 <table className="w-full text-xs">
                   <thead>
                     <tr>
                       <th className="px-3 py-2 text-left text-slate-500 font-medium">{outputs.sensitivity.rowParam} \ {outputs.sensitivity.colParam}</th>
                       {outputs.sensitivity.colLabels.map((cl, i) => (
-                        <th key={i} className={`px-3 py-2 text-center font-medium ${cl === "Base" ? "text-blue-700 bg-blue-50" : "text-slate-500"}`}>{cl}</th>
+                        <th key={i} className={`px-3 py-2 text-center font-medium ${cl === "Base" ? "text-blue-400 bg-blue-500/10" : "text-slate-500"}`}>{cl}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {outputs.sensitivity.rows.map((row, ri) => (
-                      <tr key={ri} className="border-t border-slate-100">
-                        <td className={`px-3 py-2 font-medium ${outputs.sensitivity.rowLabels[ri] === `${inputs.exitCapRate.toFixed(1)}%` ? "text-blue-700 bg-blue-50" : "text-slate-600"}`}>
+                      <tr key={ri} className="border-t border-white/5">
+                        <td className={`px-3 py-2 font-medium ${outputs.sensitivity.rowLabels[ri] === `${inputs.exitCapRate.toFixed(1)}%` ? "text-blue-400 bg-blue-500/10" : "text-slate-400"}`}>
                           {outputs.sensitivity.rowLabels[ri]}
                         </td>
                         {row.map((val, ci) => {
                           const isBase = outputs.sensitivity.colLabels[ci] === "Base" && outputs.sensitivity.rowLabels[ri] === `${inputs.exitCapRate.toFixed(1)}%`;
                           return (
-                            <td key={ci} className={`px-3 py-2 text-center font-medium ${isBase ? "bg-blue-100 text-blue-800 font-bold" : val >= 15 ? "text-green-700" : val >= 8 ? "text-amber-700" : "text-red-700"}`}>
+                            <td key={ci} className={`px-3 py-2 text-center font-medium ${isBase ? "bg-blue-500/20 text-blue-300 font-bold" : val >= 15 ? "text-green-400" : val >= 8 ? "text-amber-400" : "text-red-400"}`}>
                               {isFinite(val) ? `${val.toFixed(1)}%` : "N/A"}
                             </td>
                           );
@@ -1607,64 +1983,68 @@ export default function DealModeler() {
               </div>
             </div>
 
-            {/* Sources & Uses */}
+            {/* Sources & Uses — Compact Monospaced */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50"><h3 className="text-sm font-semibold text-slate-700">Sources</h3></div>
-                <div className="p-4">
+              <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/5 bg-white/[0.03]">
+                  <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Sources</h3>
+                </div>
+                <div className="px-4 py-2">
                   {outputs.sources.map((s, i) => (
-                    <div key={i} className="flex justify-between py-1.5 text-sm">
-                      <span className="text-slate-600">{s.label}</span>
-                      <span className="font-medium text-slate-900">{fmt(s.amount)}</span>
+                    <div key={i} className="flex justify-between py-1 border-b border-white/5 last:border-0">
+                      <span className="text-xs text-slate-400">{s.label}</span>
+                      <span className="text-xs font-mono tabular-nums font-medium text-white">{fmt(s.amount)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between py-2 mt-1 border-t border-slate-200 text-sm font-bold">
-                    <span>Total Sources</span>
-                    <span>{fmt(outputs.sources.reduce((s, r) => s + r.amount, 0))}</span>
+                  <div className="flex justify-between py-1.5 mt-0.5 border-t border-white/10">
+                    <span className="text-xs font-semibold text-white">Total</span>
+                    <span className="text-xs font-mono tabular-nums font-bold text-white">{fmt(outputs.sources.reduce((s, r) => s + r.amount, 0))}</span>
                   </div>
                 </div>
               </div>
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-3 border-b border-slate-100 bg-slate-50"><h3 className="text-sm font-semibold text-slate-700">Uses</h3></div>
-                <div className="p-4">
+              <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-white/5 bg-white/[0.03]">
+                  <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">Uses</h3>
+                </div>
+                <div className="px-4 py-2">
                   {outputs.uses.map((u, i) => (
-                    <div key={i} className="flex justify-between py-1.5 text-sm">
-                      <span className="text-slate-600">{u.label}</span>
-                      <span className="font-medium text-slate-900">{fmt(u.amount)}</span>
+                    <div key={i} className="flex justify-between py-1 border-b border-white/5 last:border-0">
+                      <span className="text-xs text-slate-400">{u.label}</span>
+                      <span className="text-xs font-mono tabular-nums font-medium text-white">{fmt(u.amount)}</span>
                     </div>
                   ))}
-                  <div className="flex justify-between py-2 mt-1 border-t border-slate-200 text-sm font-bold">
-                    <span>Total Uses</span>
-                    <span>{fmt(outputs.uses.reduce((s, r) => s + r.amount, 0))}</span>
+                  <div className="flex justify-between py-1.5 mt-0.5 border-t border-white/10">
+                    <span className="text-xs font-semibold text-white">Total</span>
+                    <span className="text-xs font-mono tabular-nums font-bold text-white">{fmt(outputs.uses.reduce((s, r) => s + r.amount, 0))}</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* Exit Analysis */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100"><h3 className="text-sm font-semibold text-slate-700">Exit Analysis</h3></div>
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5"><h3 className="text-sm font-semibold text-slate-200">Exit Analysis</h3></div>
               <div className="p-5">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div><p className="text-xs text-slate-400 uppercase">Exit NOI</p><p className="text-lg font-bold text-slate-900">{fmt(outputs.exitNoi)}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase">Exit Value</p><p className="text-lg font-bold text-slate-900">{fmt(outputs.exitValue)}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase">Loan Balance</p><p className="text-lg font-bold text-red-600">{fmt(outputs.loanBalanceAtExit)}</p></div>
-                  <div><p className="text-xs text-slate-400 uppercase">Net Proceeds</p><p className="text-lg font-bold text-green-700">{fmt(outputs.exitProceeds)}</p></div>
+                  <div><p className="text-xs text-slate-500 uppercase">Exit NOI</p><p className="text-lg font-bold text-white">{fmt(outputs.exitNoi)}</p></div>
+                  <div><p className="text-xs text-slate-500 uppercase">Exit Value</p><p className="text-lg font-bold text-white">{fmt(outputs.exitValue)}</p></div>
+                  <div><p className="text-xs text-slate-500 uppercase">Loan Balance</p><p className="text-lg font-bold text-red-400">{fmt(outputs.loanBalanceAtExit)}</p></div>
+                  <div><p className="text-xs text-slate-500 uppercase">Net Proceeds</p><p className="text-lg font-bold text-green-400">{fmt(outputs.exitProceeds)}</p></div>
                 </div>
               </div>
             </div>
 
             {/* Live Comps */}
-            <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-slate-700">Live Comps</h3>
+            <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-slate-200">Live Comps</h3>
                 {!compsLoading && comps.length === 0 && propertyDetails && (
                   <button
                     onClick={() => {
                       const zip = propertyDetails.bbl?.substring(0, 5) || "";
                       if (zip) loadComps(zip);
                     }}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                    className="text-xs text-blue-400 hover:text-blue-300 font-medium"
                   >
                     Load Comps
                   </button>
@@ -1672,8 +2052,8 @@ export default function DealModeler() {
               </div>
               <div className="p-5">
                 {compsLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-slate-500">
-                    <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-600 border-t-transparent rounded-full" />
+                  <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <div className="animate-spin h-3.5 w-3.5 border-2 border-blue-400 border-t-transparent rounded-full" />
                     Searching comparable sales...
                   </div>
                 ) : comps.length > 0 && compSummary ? (
@@ -1681,16 +2061,16 @@ export default function DealModeler() {
                     {/* Market comparison */}
                     {inputs.purchasePrice > 0 && totalUnits > 0 && compSummary.avgPricePerUnit > 0 && (
                       <div className={`mb-4 rounded-lg p-3 ${
-                        inputs.purchasePrice / totalUnits < compSummary.avgPricePerUnit ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"
+                        inputs.purchasePrice / totalUnits < compSummary.avgPricePerUnit ? "bg-green-500/10 border border-green-500/20" : "bg-red-500/10 border border-red-500/20"
                       }`}>
-                        <p className={`text-sm font-medium ${inputs.purchasePrice / totalUnits < compSummary.avgPricePerUnit ? "text-green-800" : "text-red-800"}`}>
+                        <p className={`text-sm font-medium ${inputs.purchasePrice / totalUnits < compSummary.avgPricePerUnit ? "text-green-400" : "text-red-400"}`}>
                           Your offer: {fmt(Math.round(inputs.purchasePrice / totalUnits))}/unit — Market avg: {fmt(compSummary.avgPricePerUnit)}/unit
                           {" "}({Math.abs(Math.round(((inputs.purchasePrice / totalUnits) / compSummary.avgPricePerUnit - 1) * 100))}% {inputs.purchasePrice / totalUnits < compSummary.avgPricePerUnit ? "below" : "above"})
                         </p>
                         {inputs.purchasePrice / totalUnits > compSummary.avgPricePerUnit && (
                           <button
                             onClick={() => update({ purchasePrice: compSummary.avgPricePerUnit * totalUnits })}
-                            className="mt-1 text-xs text-blue-600 hover:text-blue-800 underline"
+                            className="mt-1 text-xs text-blue-400 hover:text-blue-300 underline"
                           >
                             Use Market Avg as Offer
                           </button>
@@ -1700,21 +2080,21 @@ export default function DealModeler() {
 
                     {/* Summary stats */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div className="bg-slate-50 rounded-lg p-2.5">
-                        <p className="text-[10px] text-slate-400 uppercase">Comps Found</p>
-                        <p className="text-sm font-bold text-slate-900">{compSummary.count}</p>
+                      <div className="bg-white/[0.03] rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-500 uppercase">Comps Found</p>
+                        <p className="text-sm font-bold text-white">{compSummary.count}</p>
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-2.5">
-                        <p className="text-[10px] text-slate-400 uppercase">Avg $/Unit</p>
-                        <p className="text-sm font-bold text-slate-900">{fmt(compSummary.avgPricePerUnit)}</p>
+                      <div className="bg-white/[0.03] rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-500 uppercase">Avg $/Unit</p>
+                        <p className="text-sm font-bold text-white">{fmt(compSummary.avgPricePerUnit)}</p>
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-2.5">
-                        <p className="text-[10px] text-slate-400 uppercase">Median $/Unit</p>
-                        <p className="text-sm font-bold text-slate-900">{fmt(compSummary.medianPricePerUnit)}</p>
+                      <div className="bg-white/[0.03] rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-500 uppercase">Median $/Unit</p>
+                        <p className="text-sm font-bold text-white">{fmt(compSummary.medianPricePerUnit)}</p>
                       </div>
-                      <div className="bg-slate-50 rounded-lg p-2.5">
-                        <p className="text-[10px] text-slate-400 uppercase">Avg $/SqFt</p>
-                        <p className="text-sm font-bold text-slate-900">{compSummary.avgPricePerSqft > 0 ? fmt(compSummary.avgPricePerSqft) : "—"}</p>
+                      <div className="bg-white/[0.03] rounded-lg p-2.5">
+                        <p className="text-[10px] text-slate-500 uppercase">Avg $/SqFt</p>
+                        <p className="text-sm font-bold text-white">{compSummary.avgPricePerSqft > 0 ? fmt(compSummary.avgPricePerSqft) : "—"}</p>
                       </div>
                     </div>
 
@@ -1722,7 +2102,7 @@ export default function DealModeler() {
                     <div className="flex items-center gap-3 mb-3 flex-wrap">
                       <label className="text-[10px] text-slate-500 flex items-center gap-1">
                         Radius:
-                        <select value={compRadius} onChange={e => setCompRadius(parseFloat(e.target.value))} className="border border-slate-200 rounded px-1 py-0.5 text-xs">
+                        <select value={compRadius} onChange={e => setCompRadius(parseFloat(e.target.value))} className="bg-slate-800/40 border border-white/5 rounded px-1 py-0.5 text-xs text-white">
                           <option value="0.5">0.5 mi</option>
                           <option value="1">1 mi</option>
                           <option value="2">2 mi</option>
@@ -1732,7 +2112,7 @@ export default function DealModeler() {
                       </label>
                       <label className="text-[10px] text-slate-500 flex items-center gap-1">
                         Years:
-                        <select value={compYears} onChange={e => setCompYears(parseInt(e.target.value))} className="border border-slate-200 rounded px-1 py-0.5 text-xs">
+                        <select value={compYears} onChange={e => setCompYears(parseInt(e.target.value))} className="bg-slate-800/40 border border-white/5 rounded px-1 py-0.5 text-xs text-white">
                           <option value="1">1 yr</option>
                           <option value="2">2 yr</option>
                           <option value="3">3 yr</option>
@@ -1741,7 +2121,7 @@ export default function DealModeler() {
                       </label>
                       <label className="text-[10px] text-slate-500 flex items-center gap-1">
                         Min Units:
-                        <select value={compMinUnits} onChange={e => setCompMinUnits(parseInt(e.target.value))} className="border border-slate-200 rounded px-1 py-0.5 text-xs">
+                        <select value={compMinUnits} onChange={e => setCompMinUnits(parseInt(e.target.value))} className="bg-slate-800/40 border border-white/5 rounded px-1 py-0.5 text-xs text-white">
                           <option value="3">3+</option>
                           <option value="5">5+</option>
                           <option value="10">10+</option>
@@ -1754,7 +2134,7 @@ export default function DealModeler() {
                             const zip = propertyDetails.bbl?.substring(0, 5) || "";
                             if (zip) loadComps(zip);
                           }}
-                          className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          className="text-xs text-blue-400 hover:text-blue-300 font-medium"
                         >
                           Refresh
                         </button>
@@ -1764,7 +2144,7 @@ export default function DealModeler() {
                     {/* Comps table */}
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs min-w-[700px]">
-                        <thead className="bg-slate-50">
+                        <thead className="bg-white/[0.03]">
                           <tr>
                             <th className="text-left px-3 py-2 font-medium text-slate-500">Address</th>
                             <th className="text-center px-2 py-2 font-medium text-slate-500">Boro</th>
@@ -1780,17 +2160,17 @@ export default function DealModeler() {
                         </thead>
                         <tbody>
                           {comps.slice(0, 20).map((c, i) => (
-                            <tr key={i} className="border-t border-slate-100 hover:bg-slate-50">
-                              <td className="px-3 py-1.5 text-slate-700 max-w-[180px] truncate" title={c.address}>{c.address}</td>
-                              <td className="text-center px-2 py-1.5 text-slate-500">{c.borough.substring(0, 3)}</td>
-                              <td className="text-center px-2 py-1.5">{c.totalUnits}</td>
-                              <td className="text-right px-2 py-1.5 text-slate-500">{c.grossSqft > 0 ? c.grossSqft.toLocaleString() : "—"}</td>
-                              <td className="text-center px-2 py-1.5 text-slate-500">{c.yearBuilt || "—"}</td>
-                              <td className="text-right px-3 py-1.5 font-medium">{fmt(c.salePrice)}</td>
-                              <td className="text-right px-2 py-1.5">{c.pricePerUnit > 0 ? fmt(c.pricePerUnit) : "—"}</td>
-                              <td className="text-right px-2 py-1.5 text-slate-500">{c.pricePerSqft > 0 ? `$${c.pricePerSqft}` : "—"}</td>
-                              <td className="text-center px-2 py-1.5 text-slate-500">{c.saleDate ? new Date(c.saleDate).toLocaleDateString("en-US", { month: "short", year: "2-digit" }) : "—"}</td>
-                              <td className="text-center px-2 py-1.5 text-slate-400">{c.distance} mi</td>
+                            <tr key={i} className="border-t border-white/5 hover:bg-white/[0.03]">
+                              <td className="px-3 py-1.5 text-slate-200 max-w-[180px] truncate" title={c.address}>{c.address}</td>
+                              <td className="text-center px-2 py-1.5 text-slate-400">{c.borough.substring(0, 3)}</td>
+                              <td className="text-center px-2 py-1.5 text-white">{c.totalUnits}</td>
+                              <td className="text-right px-2 py-1.5 text-slate-400">{c.grossSqft > 0 ? c.grossSqft.toLocaleString() : "—"}</td>
+                              <td className="text-center px-2 py-1.5 text-slate-400">{c.yearBuilt || "—"}</td>
+                              <td className="text-right px-3 py-1.5 font-medium text-white">{fmt(c.salePrice)}</td>
+                              <td className="text-right px-2 py-1.5 text-slate-200">{c.pricePerUnit > 0 ? fmt(c.pricePerUnit) : "—"}</td>
+                              <td className="text-right px-2 py-1.5 text-slate-400">{c.pricePerSqft > 0 ? `$${c.pricePerSqft}` : "—"}</td>
+                              <td className="text-center px-2 py-1.5 text-slate-400">{c.saleDate ? new Date(c.saleDate).toLocaleDateString("en-US", { month: "short", year: "2-digit" }) : "—"}</td>
+                              <td className="text-center px-2 py-1.5 text-slate-500">{c.distance} mi</td>
                             </tr>
                           ))}
                         </tbody>
@@ -1798,29 +2178,29 @@ export default function DealModeler() {
                     </div>
                   </>
                 ) : (
-                  <p className="text-sm text-slate-400">{propertyDetails ? "Click Load Comps to search comparable sales." : "Pre-fill a property to enable comps search."}</p>
+                  <p className="text-sm text-slate-500">{propertyDetails ? "Click Load Comps to search comparable sales." : "Pre-fill a property to enable comps search."}</p>
                 )}
               </div>
             </div>
 
             {/* Property Details (from pre-fill) */}
             {propertyDetails && (
-              <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-slate-100"><h3 className="text-sm font-semibold text-slate-700">Property Details</h3></div>
+              <div className="bg-slate-800/20 border border-white/5 rounded-xl overflow-hidden">
+                <div className="px-5 py-4 border-b border-white/5"><h3 className="text-sm font-semibold text-slate-200">Property Details</h3></div>
                 <div className="p-5">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-3 text-sm">
-                    <div><p className="text-xs text-slate-400">Address</p><p className="font-medium">{propertyDetails.address}</p></div>
-                    <div><p className="text-xs text-slate-400">Borough</p><p className="font-medium">{propertyDetails.borough}</p></div>
-                    <div><p className="text-xs text-slate-400">Block / Lot</p><p className="font-medium">{propertyDetails.block} / {propertyDetails.lot}</p></div>
-                    <div><p className="text-xs text-slate-400">BBL</p><p className="font-medium">{propertyDetails.bbl}</p></div>
-                    <div><p className="text-xs text-slate-400">Res Units</p><p className="font-medium">{propertyDetails.unitsRes || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Total Units</p><p className="font-medium">{propertyDetails.unitsTotal || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Year Built</p><p className="font-medium">{propertyDetails.yearBuilt || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Stories</p><p className="font-medium">{propertyDetails.numFloors || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Building Area</p><p className="font-medium">{propertyDetails.bldgArea > 0 ? `${propertyDetails.bldgArea.toLocaleString()} sqft` : "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Lot Area</p><p className="font-medium">{propertyDetails.lotArea > 0 ? `${propertyDetails.lotArea.toLocaleString()} sqft` : "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Zoning</p><p className="font-medium">{propertyDetails.zoneDist || "—"}</p></div>
-                    <div><p className="text-xs text-slate-400">Building Class</p><p className="font-medium">{propertyDetails.bldgClass || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Address</p><p className="font-medium text-white">{propertyDetails.address}</p></div>
+                    <div><p className="text-xs text-slate-500">Borough</p><p className="font-medium text-white">{propertyDetails.borough}</p></div>
+                    <div><p className="text-xs text-slate-500">Block / Lot</p><p className="font-medium text-white">{propertyDetails.block} / {propertyDetails.lot}</p></div>
+                    <div><p className="text-xs text-slate-500">BBL</p><p className="font-medium text-white">{propertyDetails.bbl}</p></div>
+                    <div><p className="text-xs text-slate-500">Res Units</p><p className="font-medium text-white">{propertyDetails.unitsRes || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Total Units</p><p className="font-medium text-white">{propertyDetails.unitsTotal || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Year Built</p><p className="font-medium text-white">{propertyDetails.yearBuilt || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Stories</p><p className="font-medium text-white">{propertyDetails.numFloors || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Building Area</p><p className="font-medium text-white">{propertyDetails.bldgArea > 0 ? `${propertyDetails.bldgArea.toLocaleString()} sqft` : "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Lot Area</p><p className="font-medium text-white">{propertyDetails.lotArea > 0 ? `${propertyDetails.lotArea.toLocaleString()} sqft` : "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Zoning</p><p className="font-medium text-white">{propertyDetails.zoneDist || "—"}</p></div>
+                    <div><p className="text-xs text-slate-500">Building Class</p><p className="font-medium text-white">{propertyDetails.bldgClass || "—"}</p></div>
                   </div>
                 </div>
               </div>
@@ -1833,18 +2213,18 @@ export default function DealModeler() {
       {/* ======================== T-12 MODAL ======================== */}
       {showT12Modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowT12Modal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-[modal-in_0.2s_ease-out]">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowT12Modal(false)} />
+          <div className="relative bg-[#0B0F19] border border-white/10 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col animate-[modal-in_0.2s_ease-out]">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Enter T-12 Actuals</h2>
+                <h2 className="text-lg font-bold text-white">Enter T-12 Actuals</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Enter trailing 12-month actual expenses. Year 1 Budget = T-12 x Growth Factor.</p>
               </div>
-              <button onClick={() => setShowT12Modal(false)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+              <button onClick={() => setShowT12Modal(false)} className="text-slate-500 hover:text-slate-300 text-2xl leading-none">&times;</button>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-1">
-                <div className="grid grid-cols-[1fr_110px_80px_100px] gap-2 text-[10px] font-medium text-slate-400 uppercase tracking-wider pb-1">
+                <div className="grid grid-cols-[1fr_110px_80px_100px] gap-2 text-[10px] font-medium text-slate-500 uppercase tracking-wider pb-1">
                   <span>Expense</span>
                   <span className="text-right">T-12 Actual</span>
                   <span className="text-center">Growth</span>
@@ -1877,15 +2257,15 @@ export default function DealModeler() {
                   const gf = t12GrowthDraft[field] || 1.03;
                   const budgeted = t12Val > 0 ? Math.round(t12Val * gf) : 0;
                   return (
-                    <div key={field} className="grid grid-cols-[1fr_110px_80px_100px] gap-2 items-center py-1 border-t border-slate-50">
-                      <span className="text-xs text-slate-600">{label}</span>
+                    <div key={field} className="grid grid-cols-[1fr_110px_80px_100px] gap-2 items-center py-1 border-t border-white/[0.03]">
+                      <span className="text-xs text-slate-400">{label}</span>
                       <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">$</span>
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">$</span>
                         <input
                           type="number"
                           value={t12Val || ""}
                           onChange={e => setT12Draft(prev => ({ ...prev, [field]: parseFloat(e.target.value) || 0 }))}
-                          className="w-full pl-5 pr-1 py-1 border border-slate-200 rounded text-xs text-right"
+                          className="w-full pl-5 pr-1 py-1 bg-slate-800/40 border border-white/5 rounded text-xs text-right text-white"
                           placeholder="0"
                         />
                       </div>
@@ -1894,19 +2274,19 @@ export default function DealModeler() {
                           type="number"
                           value={Math.round((gf - 1) * 100)}
                           onChange={e => setT12GrowthDraft(prev => ({ ...prev, [field]: 1 + (parseFloat(e.target.value) || 0) / 100 }))}
-                          className="w-full px-1 py-1 border border-slate-200 rounded text-xs text-center"
+                          className="w-full px-1 py-1 bg-slate-800/40 border border-white/5 rounded text-xs text-center text-white"
                           step="1"
                         />
-                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400">%</span>
+                        <span className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">%</span>
                       </div>
-                      <span className="text-xs text-right text-slate-700 font-medium">{budgeted > 0 ? fmt(budgeted) : "—"}</span>
+                      <span className="text-xs text-right text-slate-200 font-medium">{budgeted > 0 ? fmt(budgeted) : "—"}</span>
                     </div>
                   );
                 })}
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-end gap-2">
-              <button onClick={() => setShowT12Modal(false)} className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg">Cancel</button>
+            <div className="px-6 py-4 border-t border-white/5 flex items-center justify-end gap-2">
+              <button onClick={() => setShowT12Modal(false)} className="px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg">Cancel</button>
               <button onClick={applyT12} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg">Apply T-12 to Budget</button>
             </div>
           </div>
@@ -1916,137 +2296,137 @@ export default function DealModeler() {
       {/* ======================== LOI MODAL ======================== */}
       {showLoiModal && loiData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setShowLoiModal(false)} />
-          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-[modal-in_0.2s_ease-out]">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setShowLoiModal(false)} />
+          <div className="relative bg-[#0B0F19] border border-white/10 rounded-2xl shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col animate-[modal-in_0.2s_ease-out]">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-white/5">
               <div>
-                <h2 className="text-lg font-bold text-slate-900">Generate Letter of Intent</h2>
+                <h2 className="text-lg font-bold text-white">Generate Letter of Intent</h2>
                 <p className="text-xs text-slate-500 mt-0.5">Review and customize before downloading or sending</p>
               </div>
-              <button onClick={() => setShowLoiModal(false)} className="text-slate-400 hover:text-slate-600 text-2xl leading-none">&times;</button>
+              <button onClick={() => setShowLoiModal(false)} className="text-slate-500 hover:text-slate-300 text-2xl leading-none">&times;</button>
             </div>
 
             {/* Modal Body — two columns */}
             <div className="flex-1 overflow-hidden flex flex-col lg:flex-row">
               {/* Left: Editable form */}
-              <div className="lg:w-1/2 overflow-y-auto p-6 space-y-4 border-r border-slate-100">
+              <div className="lg:w-1/2 overflow-y-auto p-6 space-y-4 border-r border-white/5">
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Property</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Property</h3>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Property Address</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Property Address</label>
                     <input value={loiData.propertyAddress} onChange={e => setLoiData({ ...loiData, propertyAddress: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">BBL</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">BBL</label>
                     <input value={loiData.bbl} onChange={e => setLoiData({ ...loiData, bbl: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Seller</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Seller</h3>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Owner / Seller Name</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Owner / Seller Name</label>
                     <input value={loiData.ownerName} onChange={e => setLoiData({ ...loiData, ownerName: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Owner Address</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Owner Address</label>
                     <input value={loiData.ownerAddress || ""} onChange={e => setLoiData({ ...loiData, ownerAddress: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Offer Terms</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Offer Terms</h3>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Offer Price</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Offer Price</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
                       <input type="number" value={loiData.offerPrice} onChange={e => setLoiData({ ...loiData, offerPrice: parseFloat(e.target.value) || 0 })}
-                        className="w-full pl-7 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full pl-7 pr-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Earnest Money %</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Earnest Money %</label>
                       <input type="number" value={loiData.earnestMoneyPercent} onChange={e => setLoiData({ ...loiData, earnestMoneyPercent: parseFloat(e.target.value) || 0 })}
-                        step="0.5" className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        step="0.5" className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">DD Period (days)</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">DD Period (days)</label>
                       <input type="number" value={loiData.dueDiligenceDays} onChange={e => setLoiData({ ...loiData, dueDiligenceDays: parseInt(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Financing (days)</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Financing (days)</label>
                       <input type="number" value={loiData.financingContingencyDays} onChange={e => setLoiData({ ...loiData, financingContingencyDays: parseInt(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Closing (days)</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Closing (days)</label>
                       <input type="number" value={loiData.closingDays} onChange={e => setLoiData({ ...loiData, closingDays: parseInt(e.target.value) || 0 })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Buyer</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Buyer</h3>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Buyer Entity / Name</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Buyer Entity / Name</label>
                     <input value={loiData.buyerEntity} onChange={e => setLoiData({ ...loiData, buyerEntity: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Buyer Address</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Buyer Address</label>
                     <input value={loiData.buyerAddress || ""} onChange={e => setLoiData({ ...loiData, buyerAddress: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                 </div>
 
                 <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Broker Info</h3>
+                  <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Broker Info</h3>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Broker Name</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Broker Name</label>
                       <input value={loiData.brokerName || ""} onChange={e => setLoiData({ ...loiData, brokerName: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Company</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Company</label>
                       <input value={loiData.brokerage || ""} onChange={e => setLoiData({ ...loiData, brokerage: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Email</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Email</label>
                       <input value={loiData.brokerEmail || ""} onChange={e => setLoiData({ ...loiData, brokerEmail: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Phone</label>
+                      <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">Phone</label>
                       <input value={loiData.brokerPhone || ""} onChange={e => setLoiData({ ...loiData, brokerPhone: e.target.value })}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">License #</label>
+                    <label className="block text-[10px] font-medium uppercase tracking-widest text-slate-500 mb-1">License #</label>
                     <input value={loiData.brokerLicense || ""} onChange={e => setLoiData({ ...loiData, brokerLicense: e.target.value })}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                      className="w-full px-3 py-2 bg-slate-800/40 border border-white/5 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/30" />
                   </div>
                 </div>
               </div>
 
               {/* Right: Live text preview */}
-              <div className="lg:w-1/2 overflow-y-auto p-6 bg-slate-50">
-                <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-                  <pre className="whitespace-pre-wrap text-xs text-slate-700 font-[inherit] leading-relaxed">
+              <div className="lg:w-1/2 overflow-y-auto p-6 bg-white/[0.02]">
+                <div className="bg-white/[0.03] rounded-lg border border-white/5 p-6">
+                  <pre className="whitespace-pre-wrap text-xs text-slate-300 font-[inherit] leading-relaxed">
                     {generateLoiPlainText(loiData)}
                   </pre>
                 </div>
@@ -2054,22 +2434,22 @@ export default function DealModeler() {
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+            <div className="px-6 py-4 border-t border-white/5 flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 {loiMsg && (
-                  <span className={`text-sm ${loiMsg.startsWith("Error") || loiMsg.startsWith("Please") ? "text-red-600" : "text-green-600"}`}>{loiMsg}</span>
+                  <span className={`text-sm ${loiMsg.startsWith("Error") || loiMsg.startsWith("Please") ? "text-red-400" : "text-green-400"}`}>{loiMsg}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => { const pdf = generateLoiPdf(loiData); pdf.download(); }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+                  className="px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg transition-colors"
                 >
                   Download PDF
                 </button>
                 <button
                   onClick={() => { generateLoiDocx(loiData); }}
-                  className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors"
+                  className="px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg transition-colors"
                 >
                   Download DOCX
                 </button>
@@ -2134,9 +2514,9 @@ function PnlRow({ label, value, bold, indent, border, customValue }: {
   label: string; value: number; bold?: boolean; indent?: boolean; border?: boolean; customValue?: string;
 }) {
   return (
-    <tr className={border ? "border-t border-slate-200" : ""}>
-      <td className={`py-1.5 ${indent ? "pl-4" : ""} ${bold ? "font-semibold text-slate-900" : "text-slate-600"}`}>{label}</td>
-      <td className={`py-1.5 text-right ${bold ? "font-semibold text-slate-900" : ""} ${!customValue && value < 0 ? "text-red-600" : ""}`}>
+    <tr className={border ? "border-t border-white/5" : ""}>
+      <td className={`py-1.5 ${indent ? "pl-4" : ""} ${bold ? "font-semibold text-white" : "text-slate-400"}`}>{label}</td>
+      <td className={`py-1.5 text-right ${bold ? "font-semibold text-white" : ""} ${!customValue && value < 0 ? "text-red-400" : ""}`}>
         {customValue ? customValue : value < 0 ? `(${fmt(Math.abs(value))})` : fmt(value)}
       </td>
     </tr>
@@ -2148,15 +2528,15 @@ function PnlRowFull({ label, value, bold, indent, border, perUnit, note }: {
   label: string; value: number; bold?: boolean; indent?: boolean; border?: boolean; perUnit?: number; note?: string;
 }) {
   return (
-    <tr className={border ? "border-t border-slate-200" : ""}>
-      <td className={`py-1.5 ${indent ? "pl-4" : ""} ${bold ? "font-semibold text-slate-900" : "text-slate-600"}`}>{label}</td>
-      <td className={`py-1.5 text-right ${bold ? "font-semibold text-slate-900" : ""} ${value < 0 ? "text-red-600" : ""}`}>
+    <tr className={border ? "border-t border-white/5" : ""}>
+      <td className={`py-1.5 ${indent ? "pl-4" : ""} ${bold ? "font-semibold text-white" : "text-slate-400"}`}>{label}</td>
+      <td className={`py-1.5 text-right ${bold ? "font-semibold text-white" : ""} ${value < 0 ? "text-red-400" : ""}`}>
         {value < 0 ? `(${fmt(Math.abs(value))})` : fmt(value)}
       </td>
       <td className="py-1.5 text-right text-xs text-slate-500">
         {perUnit != null && perUnit > 0 ? fmt(perUnit) : ""}
       </td>
-      <td className="py-1.5 text-right text-[10px] text-slate-400">{note || ""}</td>
+      <td className="py-1.5 text-right text-[10px] text-slate-500">{note || ""}</td>
     </tr>
   );
 }
