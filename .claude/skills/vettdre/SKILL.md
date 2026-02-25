@@ -109,6 +109,8 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `ai-assumptions.ts` | AI deal assumptions: calibrates with census, builds T-12, STR context |
 | `apollo.ts` | Apollo.io: enrich person/org, search people, bulk enrich, merge logic |
 | `contact-types.ts` | Contact type interfaces: landlord, buyer, seller, renter metadata |
+| `bms-types.ts` | BMS types, labels, Excel column aliases |
+| `invoice-pdf.ts` | Commission invoice PDF (jsPDF) |
 
 ### Document Generation
 | File | Purpose |
@@ -157,6 +159,9 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `/market-intel` | Working | 4 search modes: property, ownership, name, map |
 | `/properties` | Minimal | Empty state (needs implementation) |
 | `/prospecting` | Working | Prospect lists from Market Intel |
+| `/brokerage` | Working | BMS: deal submissions, invoices, Excel upload |
+| `/brokerage/deal-submissions` | Working | Agent deal submission queue + approval |
+| `/brokerage/invoices` | Working | Invoice generation, Excel upload, batch PDF |
 | `/portfolios` | Basic | Schema + basic UI |
 | `/book/[slug]` | Working | Public showing booking (no auth) |
 
@@ -346,6 +351,18 @@ A real estate intelligence platform for NYC commercial real estate professionals
 ### System
 - **Automation**, **AutomationRun**: triggerType, conditions/actions JSON
 - **AuditLog**: userId, action, entityType, changes JSON
+
+## Brokerage Management System (BMS)
+
+- BMS adds deal submission intake + invoice generation for running a brokerage
+- 3 new models: BrokerAgent, DealSubmission, Invoice
+- 2 new enums: BmsDealType, InvoiceStatus
+- Organization has `submissionToken` for public submission links
+- Server actions follow same `getCurrentOrg()` pattern via authProviderId
+- Public submissions at `/submit-deal/[token]` — no auth, looks up org by token
+- Invoice PDF uses jsPDF (same as deal-pdf.ts and pdf-report.ts)
+- Excel upload uses SheetJS with flexible column alias mapping
+- Feature gates: bms_submissions (pro+), bms_invoices (pro+), bms_bulk_upload (team+), bms_agents (team+)
 
 ## Socrata API Patterns
 
