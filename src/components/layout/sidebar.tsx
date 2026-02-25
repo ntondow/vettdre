@@ -50,6 +50,9 @@ const nav: NavGroup[] = [
     { name: "Financing", href: "/financing", icon: "💰", feature: "nav_financing" },
     { name: "Investors", href: "/investors", icon: "🤝", feature: "nav_investors" },
   ]},
+  { label: "Brokerage", items: [
+    { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions" },
+  ]},
   { label: "Other", secondary: true, items: [
     { name: "Calendar", href: "/calendar", icon: "📅" },
     { name: "Messages", href: "/messages", icon: "📬", badge: true },

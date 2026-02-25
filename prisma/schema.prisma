@@ -202,6 +202,19 @@ enum UserPlan {
   enterprise
 }
 
+enum BmsDealType {
+  sale
+  lease
+  rental
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  void
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -249,6 +262,10 @@ model Organization {
   leadAssignmentRule   LeadAssignmentRule?
   aiSettings           AiSettings?
   brandSettings        BrandSettings?
+  submissionToken      String?              @unique @map("submission_token")
+  brokerAgents         BrokerAgent[]
+  dealSubmissions      DealSubmission[]
+  invoices             Invoice[]
 
   @@map("organizations")
 }
@@ -302,6 +319,7 @@ model User {
   phoneNumbers     PhoneNumber[]
   smsMessages      SmsMessage[]
   phoneCalls       PhoneCall[]
+  brokerAgent      BrokerAgent?
 
   @@unique([orgId, email])
   @@map("users")
@@ -1296,4 +1314,137 @@ model PhoneCall {
   @@index([phoneNumberId, createdAt(sort: Desc)])
   @@index([userId])
   @@map("phone_calls")
+}
+
+model BrokerAgent {
+  id              String    @id @default(uuid())
+  orgId           String    @map("org_id")
+  userId          String?   @unique @map("user_id")
+
+  firstName       String    @map("first_name")
+  lastName        String    @map("last_name")
+  email           String
+  phone           String?
+  licenseNumber   String?   @map("license_number")
+  licenseExpiry   DateTime? @map("license_expiry")
+
+  defaultSplitPct Decimal   @default(70) @map("default_split_pct") @db.Decimal(5, 2)
+  status          String    @default("active")
+
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  organization    Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  dealSubmissions DealSubmission[]
+  invoices        Invoice[]
+
+  @@index([orgId])
+  @@index([email])
+  @@map("broker_agents")
+}
+
+model DealSubmission {
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
+  agentId          String?      @map("agent_id")
+
+  agentFirstName   String       @map("agent_first_name")
+  agentLastName    String       @map("agent_last_name")
+  agentEmail       String       @map("agent_email")
+  agentPhone       String?      @map("agent_phone")
+  agentLicense     String?      @map("agent_license")
+
+  propertyAddress  String       @map("property_address")
+  unit             String?
+  city             String?
+  state            String       @default("NY")
+
+  dealType         BmsDealType  @default(sale) @map("deal_type")
+  transactionValue Decimal      @map("transaction_value") @db.Decimal(14, 2)
+  closingDate      DateTime?    @map("closing_date")
+
+  commissionType   String       @default("percentage") @map("commission_type")
+  commissionPct    Decimal?     @map("commission_pct") @db.Decimal(5, 2)
+  commissionFlat   Decimal?     @map("commission_flat") @db.Decimal(12, 2)
+  totalCommission  Decimal      @map("total_commission") @db.Decimal(12, 2)
+  agentSplitPct    Decimal      @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct    Decimal      @map("house_split_pct") @db.Decimal(5, 2)
+  agentPayout      Decimal      @map("agent_payout") @db.Decimal(12, 2)
+  housePayout      Decimal      @map("house_payout") @db.Decimal(12, 2)
+
+  clientName       String?      @map("client_name")
+  clientEmail      String?      @map("client_email")
+  clientPhone      String?      @map("client_phone")
+  representedSide  String?      @map("represented_side")
+
+  coBrokeAgent     String?      @map("co_broke_agent")
+  coBrokeBrokerage String?      @map("co_broke_brokerage")
+
+  status           String       @default("submitted")
+  rejectionReason  String?      @map("rejection_reason")
+  notes            String?
+
+  submissionSource String       @default("internal") @map("submission_source")
+
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
+
+  organization     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent            BrokerAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  invoice          Invoice?
+
+  @@index([orgId, status])
+  @@index([agentEmail])
+  @@map("deal_submissions")
+}
+
+model Invoice {
+  id                String        @id @default(uuid())
+  orgId             String        @map("org_id")
+  invoiceNumber     String        @unique @map("invoice_number")
+
+  dealSubmissionId  String?       @unique @map("deal_submission_id")
+  agentId           String?       @map("agent_id")
+
+  brokerageName     String        @map("brokerage_name")
+  brokerageAddress  String?       @map("brokerage_address")
+  brokeragePhone    String?       @map("brokerage_phone")
+  brokerageEmail    String?       @map("brokerage_email")
+  brokerageLicense  String?       @map("brokerage_license")
+
+  agentName         String        @map("agent_name")
+  agentEmail        String?       @map("agent_email")
+  agentLicense      String?       @map("agent_license")
+
+  propertyAddress   String        @map("property_address")
+  dealType          BmsDealType   @default(sale) @map("deal_type")
+  transactionValue  Decimal       @map("transaction_value") @db.Decimal(14, 2)
+  closingDate       DateTime?     @map("closing_date")
+  clientName        String?       @map("client_name")
+  representedSide   String?       @map("represented_side")
+
+  totalCommission   Decimal       @map("total_commission") @db.Decimal(12, 2)
+  agentSplitPct     Decimal       @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct     Decimal       @map("house_split_pct") @db.Decimal(5, 2)
+  agentPayout       Decimal       @map("agent_payout") @db.Decimal(12, 2)
+  housePayout       Decimal       @map("house_payout") @db.Decimal(12, 2)
+
+  paymentTerms      String        @default("Net 30") @map("payment_terms")
+  issueDate         DateTime      @default(now()) @map("issue_date")
+  dueDate           DateTime      @map("due_date")
+  paidDate          DateTime?     @map("paid_date")
+
+  status            InvoiceStatus @default(draft)
+
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+
+  organization      Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  dealSubmission    DealSubmission? @relation(fields: [dealSubmissionId], references: [id], onDelete: SetNull)
+  agent             BrokerAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([invoiceNumber])
+  @@map("invoices")
 }
