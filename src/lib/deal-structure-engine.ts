@@ -5,6 +5,8 @@
 // ============================================================
 
 import { calculateIRR } from "./deal-calculator";
+import type { ClosingCostBreakdown, TaxReassessment } from "./nyc-deal-costs";
+import { buildExitSensitivity } from "./cap-rate-engine";
 
 // ============================================================
 // Types
@@ -51,11 +53,21 @@ export interface DealInputsBase {
   annualExpenseGrowth: number;     // % (default 3%)
   renovationBudget: number;        // total (from renovation engine)
   closingCostsPct: number;         // % of purchase price (default 3%)
+  // NYC itemized closing costs (replaces flat % when provided)
+  closingCostBreakdown?: ClosingCostBreakdown;
+  taxReassessment?: TaxReassessment;
   // Auto-populated from existing integrations
   currentMarketRate?: number;      // from FRED
   hudFmr2br?: number;             // from HUD
   compEstimate?: number;           // from comps engine
   fannieMaeBacked?: boolean;       // from Fannie Mae lookup
+  // Benchmark engine data (optional — falls back to flat growth when absent)
+  rentProjectionData?: { yearlyProjections: Array<{ year: number; totalAnnualRent: number }> };
+  ll97AnnualPenalties?: number[];
+  stabilizedUnitCount?: number;
+  stabilizedUnitPct?: number;
+  // Market cap rate data (optional — enriches exit analysis when available)
+  capRateAnalysis?: { marketCapRate: number; range: { low: number; high: number }; median: number; suggestedExitCap: number; confidence: string; trend: string; trendBpsPerYear: number };
 }
 
 // ── Structure-Specific Inputs ──────────────────────────────
@@ -93,6 +105,7 @@ export interface BridgeRefiInputs extends DealInputsBase {
   refiAmortization: number;        // default 30
   refiTermYears: number;           // default 10
   arvOverride?: number;            // after-repair value
+  useCEMA?: boolean;               // default true — reduces MRT on refi
 }
 
 export interface AssumableMortgageInputs extends DealInputsBase {
@@ -195,6 +208,16 @@ export interface DealAnalysis {
   gpEquityMultiple?: number;
   lpEquityMultiple?: number;
   totalFees?: number;
+  // NYC Deal Costs
+  closingCostDetail?: ClosingCostBreakdown;
+  taxReassessment?: TaxReassessment;
+  mrtSavings?: number;             // for assumable deals
+  // Benchmark engine outputs
+  stabilizedUnitImpact?: { stabilizedPct: number; blendedGrowthRate: number; mciUpsideAnnual: number; iaiUpsideAnnual: number };
+  ll97Exposure?: { totalPenaltyOverHold: number; avgAnnualPenalty: number; complianceStatus: string };
+  // Cap rate analysis outputs
+  exitSensitivity?: { optimistic: { capRate: number; salePrice: number; irr: number }; base: { capRate: number; salePrice: number; irr: number }; conservative: { capRate: number; salePrice: number; irr: number } };
+  marketCapRateMeta?: { marketCapRate: number; confidence: string; trend: string; trendBpsPerYear: number };
   // Timeline
   yearlyProjections: YearlyProjection[];
 }
@@ -228,6 +251,12 @@ export function calcRemainingBalance(
   return Math.max(0, principal * (factor - factorPaid) / (factor - 1));
 }
 
+/** Resolve closing costs: use itemized breakdown if provided, else flat % */
+function resolveClosingCosts(inputs: DealInputsBase): number {
+  if (inputs.closingCostBreakdown) return inputs.closingCostBreakdown.totalBuyerCosts;
+  return inputs.purchasePrice * (inputs.closingCostsPct / 100);
+}
+
 /** Compute NOI from base inputs */
 function computeNOI(inputs: DealInputsBase): number {
   const egi = inputs.grossRentalIncome + inputs.otherIncome;
@@ -249,12 +278,23 @@ function buildProjections(
   const baseOpex = inputs.operatingExpenses + inputs.capexReserve + inputs.propertyTaxes + inputs.insurance;
 
   for (let y = 1; y <= inputs.holdPeriod; y++) {
-    const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, y - 1);
+    // Use rent projection data if available, otherwise standard growth formula
+    let grossIncome: number;
+    if (inputs.rentProjectionData?.yearlyProjections?.[y - 1]) {
+      // Rent projection provides total annual rent; add otherIncome
+      grossIncome = Math.round(inputs.rentProjectionData.yearlyProjections[y - 1].totalAnnualRent + inputs.otherIncome * Math.pow(1 + inputs.annualRentGrowth / 100, y - 1));
+    } else {
+      const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, y - 1);
+      grossIncome = Math.round(baseGross * growthFactor);
+    }
     const expGrowthFactor = Math.pow(1 + inputs.annualExpenseGrowth / 100, y - 1);
-    const grossIncome = Math.round(baseGross * growthFactor);
     const vacancy = Math.round(grossIncome * (inputs.vacancyRate / 100));
     const effectiveIncome = grossIncome - vacancy;
-    const opex = Math.round(baseOpex * expGrowthFactor);
+    let opex = Math.round(baseOpex * expGrowthFactor);
+    // Add LL97 penalty for this year if available
+    if (inputs.ll97AnnualPenalties?.[y - 1]) {
+      opex += inputs.ll97AnnualPenalties[y - 1];
+    }
     const noi = effectiveIncome - opex;
     const cashFlow = noi - annualDebtService;
     cumCf += cashFlow;
@@ -283,14 +323,67 @@ function buildProjections(
 
 /** Compute exit sale price at year N */
 function exitSalePrice(inputs: DealInputsBase): number {
-  const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod);
+  let grossFinal: number;
+  const lastYearIdx = inputs.holdPeriod - 1;
+  if (inputs.rentProjectionData?.yearlyProjections?.[lastYearIdx]) {
+    grossFinal = inputs.rentProjectionData.yearlyProjections[lastYearIdx].totalAnnualRent +
+      inputs.otherIncome * Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod);
+  } else {
+    const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod);
+    grossFinal = (inputs.grossRentalIncome + inputs.otherIncome) * growthFactor;
+  }
   const expGrowthFactor = Math.pow(1 + inputs.annualExpenseGrowth / 100, inputs.holdPeriod);
-  const grossFinal = (inputs.grossRentalIncome + inputs.otherIncome) * growthFactor;
   const vacFinal = grossFinal * (inputs.vacancyRate / 100);
   const egiFinal = grossFinal - vacFinal;
   const opexFinal = (inputs.operatingExpenses + inputs.capexReserve + inputs.propertyTaxes + inputs.insurance) * expGrowthFactor;
   const exitNoi = egiFinal - opexFinal;
   return inputs.exitCapRate > 0 ? exitNoi / (inputs.exitCapRate / 100) : 0;
+}
+
+/** Extract benchmark metadata from inputs for inclusion in analysis output */
+function extractBenchmarkMeta(inputs: DealInputsBase, exitNoi?: number, equityForIrr?: number, holdCashFlows?: number[], netSaleCalc?: (salePrice: number) => number): Pick<DealAnalysis, "stabilizedUnitImpact" | "ll97Exposure" | "exitSensitivity" | "marketCapRateMeta"> {
+  const result: Pick<DealAnalysis, "stabilizedUnitImpact" | "ll97Exposure" | "exitSensitivity" | "marketCapRateMeta"> = {};
+  if (inputs.stabilizedUnitPct != null && inputs.stabilizedUnitPct > 0) {
+    result.stabilizedUnitImpact = {
+      stabilizedPct: inputs.stabilizedUnitPct,
+      blendedGrowthRate: inputs.annualRentGrowth,
+      mciUpsideAnnual: 0,
+      iaiUpsideAnnual: 0,
+    };
+  }
+  if (inputs.ll97AnnualPenalties && inputs.ll97AnnualPenalties.length > 0) {
+    const total = inputs.ll97AnnualPenalties.reduce((s, v) => s + v, 0);
+    const avg = Math.round(total / inputs.ll97AnnualPenalties.length);
+    result.ll97Exposure = {
+      totalPenaltyOverHold: total,
+      avgAnnualPenalty: avg,
+      complianceStatus: total > 0 ? "non_compliant" : "compliant",
+    };
+  }
+  // Cap rate analysis + exit sensitivity
+  if (inputs.capRateAnalysis) {
+    result.marketCapRateMeta = {
+      marketCapRate: inputs.capRateAnalysis.marketCapRate,
+      confidence: inputs.capRateAnalysis.confidence,
+      trend: inputs.capRateAnalysis.trend,
+      trendBpsPerYear: inputs.capRateAnalysis.trendBpsPerYear,
+    };
+    // Build exit sensitivity if we have the needed exit data
+    if (exitNoi && exitNoi > 0 && equityForIrr && holdCashFlows && netSaleCalc) {
+      const irrCalc = (salePrice: number) => {
+        const ns = netSaleCalc(salePrice);
+        const flows = [-equityForIrr];
+        for (let y = 0; y < holdCashFlows.length; y++) {
+          let cf = holdCashFlows[y];
+          if (y === holdCashFlows.length - 1) cf += ns;
+          flows.push(cf);
+        }
+        return calculateIRR(flows) * 100;
+      };
+      result.exitSensitivity = buildExitSensitivity(inputs.capRateAnalysis.marketCapRate, exitNoi, irrCalc);
+    }
+  }
+  return result;
 }
 
 /** Break-even occupancy: what % occupancy covers opex + debt service */
@@ -307,7 +400,7 @@ function breakEvenOcc(inputs: DealInputsBase, debtService: number): number {
 // ============================================================
 
 export function calculateAllCash(inputs: AllCashInputs): DealAnalysis {
-  const closingCosts = inputs.purchasePrice * (inputs.closingCostsPct / 100);
+  const closingCosts = resolveClosingCosts(inputs);
   const totalProjectCost = inputs.purchasePrice + closingCosts + inputs.renovationBudget;
   const totalEquity = totalProjectCost;
   const noi = computeNOI(inputs);
@@ -332,6 +425,11 @@ export function calculateAllCash(inputs: AllCashInputs): DealAnalysis {
   const irr = calculateIRR(irrFlows) * 100;
   const annualizedReturn = inputs.holdPeriod > 0 ? (Math.pow(equityMultiple, 1 / inputs.holdPeriod) - 1) * 100 : 0;
 
+  // Exit sensitivity data
+  const exitNoiForSens = projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi;
+  const cashFlowsForSens = projections.map(p => p.cashFlow);
+  const netSaleCalcFn = (sp: number) => sp - sp * 0.05;
+
   return {
     structure: "all_cash",
     label: "All Cash",
@@ -351,12 +449,15 @@ export function calculateAllCash(inputs: AllCashInputs): DealAnalysis {
     irr: round2(irr),
     annualizedReturn: round2(annualizedReturn),
     breakEvenOccupancy: round2(breakEvenOcc(inputs, 0)),
+    closingCostDetail: inputs.closingCostBreakdown,
+    taxReassessment: inputs.taxReassessment,
+    ...extractBenchmarkMeta(inputs, exitNoiForSens, totalEquity, cashFlowsForSens, netSaleCalcFn),
     yearlyProjections: projections,
   };
 }
 
 export function calculateConventional(inputs: ConventionalDebtInputs): DealAnalysis {
-  const closingCosts = inputs.purchasePrice * (inputs.closingCostsPct / 100);
+  const closingCosts = resolveClosingCosts(inputs);
   const loanAmount = inputs.purchasePrice * (inputs.ltvPct / 100);
   const originationFee = loanAmount * (inputs.loanOriginationPct / 100);
   const totalProjectCost = inputs.purchasePrice + closingCosts + inputs.renovationBudget + originationFee;
@@ -399,6 +500,11 @@ export function calculateConventional(inputs: ConventionalDebtInputs): DealAnaly
   const irr = calculateIRR(irrFlows) * 100;
   const annualizedReturn = inputs.holdPeriod > 0 ? (Math.pow(Math.max(0.01, equityMultiple), 1 / inputs.holdPeriod) - 1) * 100 : 0;
 
+  // Exit sensitivity data
+  const exitNoiConv = projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi;
+  const cfConv = projections.map(p => p.cashFlow);
+  const netSaleConv = (sp: number) => sp - sp * 0.05 - balanceFn(inputs.holdPeriod);
+
   return {
     structure: "conventional",
     label: "Conventional",
@@ -418,12 +524,15 @@ export function calculateConventional(inputs: ConventionalDebtInputs): DealAnaly
     irr: round2(irr),
     annualizedReturn: round2(annualizedReturn),
     breakEvenOccupancy: round2(breakEvenOcc(inputs, annualDS)),
+    closingCostDetail: inputs.closingCostBreakdown,
+    taxReassessment: inputs.taxReassessment,
+    ...extractBenchmarkMeta(inputs, exitNoiConv, totalEquity, cfConv, netSaleConv),
     yearlyProjections: projections,
   };
 }
 
 export function calculateBridgeRefi(inputs: BridgeRefiInputs): DealAnalysis {
-  const closingCosts = inputs.purchasePrice * (inputs.closingCostsPct / 100);
+  const closingCosts = resolveClosingCosts(inputs);
 
   // Phase 1: Bridge loan
   const bridgeLoan = inputs.purchasePrice * (inputs.bridgeLtvPct / 100);
@@ -521,12 +630,15 @@ export function calculateBridgeRefi(inputs: BridgeRefiInputs): DealAnalysis {
     cashLeftInDeal: Math.round(cashLeftInDeal),
     refiLoanAmount: Math.round(refiLoanAmount),
     totalBridgeCost: Math.round(totalBridgeCost),
+    closingCostDetail: inputs.closingCostBreakdown,
+    taxReassessment: inputs.taxReassessment,
+    ...extractBenchmarkMeta(inputs, projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi, initialEquity, projections.map(p => p.cashFlow), (sp: number) => sp - sp * 0.05 - balanceFn(inputs.holdPeriod)),
     yearlyProjections: projections,
   };
 }
 
 export function calculateAssumable(inputs: AssumableMortgageInputs): DealAnalysis {
-  const closingCosts = inputs.purchasePrice * (inputs.closingCostsPct / 100);
+  const closingCosts = resolveClosingCosts(inputs);
   const assumeFee = inputs.existingLoanBalance * (inputs.assumptionFee / 100);
 
   // Assumed loan debt service
@@ -613,12 +725,16 @@ export function calculateAssumable(inputs: AssumableMortgageInputs): DealAnalysi
     annualRateSavings: Math.round(annualRateSavings),
     totalRateSavings: Math.round(totalRateSavings),
     blendedRate: round2(blendedRate),
+    mrtSavings: inputs.closingCostBreakdown?.mrtSavings ?? 0,
+    closingCostDetail: inputs.closingCostBreakdown,
+    taxReassessment: inputs.taxReassessment,
+    ...extractBenchmarkMeta(inputs, projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi, totalEquity, projections.map(p => p.cashFlow), (sp: number) => sp - sp * 0.05 - balanceFn(inputs.holdPeriod)),
     yearlyProjections: projections,
   };
 }
 
 export function calculateSyndication(inputs: SyndicationInputs): DealAnalysis {
-  const closingCosts = inputs.purchasePrice * (inputs.closingCostsPct / 100);
+  const closingCosts = resolveClosingCosts(inputs);
   const loanAmount = inputs.purchasePrice * (inputs.ltvPct / 100);
   const acquisitionFee = inputs.purchasePrice * (inputs.acquisitionFeePct / 100);
   const constructionMgmtFee = inputs.renovationBudget * (inputs.constructionMgmtFeePct / 100);
@@ -743,6 +859,9 @@ export function calculateSyndication(inputs: SyndicationInputs): DealAnalysis {
     gpEquityMultiple: round2(gpEquityMultiple),
     lpEquityMultiple: round2(lpEquityMultiple),
     totalFees: Math.round(totalFees),
+    closingCostDetail: inputs.closingCostBreakdown,
+    taxReassessment: inputs.taxReassessment,
+    ...extractBenchmarkMeta(inputs, projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi, totalEquityRequired, projections.map(p => p.cashFlow), (sp: number) => sp - sp * 0.05 - calcRemainingBalance(loanAmount, inputs.interestRate, inputs.amortizationYears, inputs.holdPeriod * 12)),
     yearlyProjections: projections,
   };
 }

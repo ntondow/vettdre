@@ -1240,11 +1240,63 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                       </div>
                     </div>
                     <p className="text-[10px] text-slate-400 mt-2">LL97 penalty: $268/metric ton over limit</p>
+                    {(ll97Risk.penalty2024 > 0 || ll97Risk.penalty2030 > 0) && (
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        5-year hold impact: ~${((ll97Risk.penalty2024 > 0 ? ll97Risk.penalty2024 : 0) * Math.min(5, 4) + (ll97Risk.penalty2030 > 0 ? ll97Risk.penalty2030 : 0) * Math.max(0, 5 - 4)).toLocaleString()}. See Deal Modeler for detailed projection.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
             </Section>
           )}
+
+          {/* ============================================================ */}
+          {/* EXPENSE BENCHMARK (compact card) */}
+          {/* ============================================================ */}
+          {data?.pluto && (() => {
+            const p = data.pluto;
+            const yr = parseInt(p.yearbuilt || "0");
+            const fl = parseInt(p.numfloors || "0");
+            const cls = p.bldgclass || "";
+            const units = parseInt(p.unitsres || "0");
+            const area = parseInt(p.bldgarea || "0");
+            const boro = borough || "";
+            const hasElev = fl > 5 || cls.startsWith("D");
+            if (yr <= 0 || units <= 0) return null;
+            try {
+              const { getExpenseBenchmark, CATEGORY_LABELS } = require("@/lib/expense-benchmarks");
+              const bm = getExpenseBenchmark({ yearBuilt: yr, hasElevator: hasElev, numFloors: fl, bldgClass: cls, bldgArea: area, unitsRes: units, borough: boro });
+              const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+              return (
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📊</span>
+                      <h3 className="text-sm font-bold text-slate-900">Expense Benchmark</h3>
+                    </div>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium">RGB I&E</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <div className="bg-slate-50 rounded-lg p-2.5">
+                      <p className="text-[10px] text-slate-400 uppercase">Category</p>
+                      <p className="text-sm font-semibold text-slate-900">{CATEGORY_LABELS[bm.category]}</p>
+                    </div>
+                    <div className="bg-slate-50 rounded-lg p-2.5">
+                      <p className="text-[10px] text-slate-400 uppercase">$/Unit/Year</p>
+                      <p className="text-sm font-semibold text-slate-900">${bm.totalPerUnit.toLocaleString()}</p>
+                    </div>
+                  </div>
+                  <a
+                    href={`/deals/new?bbl=${bbl}&address=${encodeURIComponent(address || "")}&borough=${encodeURIComponent(boro)}&block=${block}&lot=${lot}`}
+                    className="block mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium text-center"
+                  >
+                    Open in Deal Modeler &rarr;
+                  </a>
+                </div>
+              );
+            } catch { return null; }
+          })()}
 
           {/* ============================================================ */}
           {/* 2. AI OWNERSHIP ANALYSIS */}
@@ -2624,6 +2676,70 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                     )}
                   </div>
                 )}
+
+                {/* Market Cap Rate Card */}
+                {data?.pluto && (() => {
+                  try {
+                    const pl = data.pluto;
+                    const yr = parseInt(pl.yearbuilt || "0");
+                    const fl = parseInt(pl.numfloors || "0");
+                    const cls = pl.bldgclass || "";
+                    const units = parseInt(pl.unitsres || "0");
+                    const area = parseInt(pl.bldgarea || "0");
+                    const boro = pl.borough || borough || "Brooklyn";
+                    const hasElev = fl > 5 || cls.startsWith("D");
+                    if (yr <= 0 || units <= 0) return null;
+                    const { deriveMarketCapRate } = require("@/lib/cap-rate-engine");
+                    const capAnalysis = deriveMarketCapRate({
+                      subject: { yearBuilt: yr, hasElevator: hasElev, numFloors: fl, bldgClass: cls, bldgArea: area, unitsRes: units, borough: boro },
+                      comps: compResult.comps,
+                    });
+                    if (!capAnalysis || capAnalysis.compCount === 0) return null;
+                    const capBbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
+                    return (
+                      <div className="bg-gradient-to-r from-violet-50 to-indigo-50 rounded-xl border border-violet-200 p-4 mb-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] font-semibold uppercase tracking-wider text-violet-600">Market Cap Rate</p>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium ${
+                            capAnalysis.confidence === "high" ? "bg-emerald-100 text-emerald-700" :
+                            capAnalysis.confidence === "medium" ? "bg-amber-100 text-amber-700" :
+                            "bg-slate-100 text-slate-600"
+                          }`}>{capAnalysis.confidence} confidence</span>
+                        </div>
+                        <div className="grid grid-cols-4 gap-3">
+                          <div>
+                            <p className="text-[10px] text-violet-500">Weighted Avg</p>
+                            <p className="text-lg font-black text-violet-900">{capAnalysis.marketCapRate.toFixed(2)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-violet-500">Range</p>
+                            <p className="text-lg font-black text-violet-900">{capAnalysis.range.low.toFixed(1)}–{capAnalysis.range.high.toFixed(1)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-violet-500">Median</p>
+                            <p className="text-lg font-black text-violet-900">{capAnalysis.median.toFixed(2)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-violet-500">Trend</p>
+                            <p className={`text-lg font-black ${
+                              capAnalysis.trend === "compressing" ? "text-emerald-700" :
+                              capAnalysis.trend === "expanding" ? "text-red-700" : "text-slate-700"
+                            }`}>
+                              {capAnalysis.trend === "compressing" ? "↓" : capAnalysis.trend === "expanding" ? "↑" : "→"} {Math.abs(capAnalysis.trendBpsPerYear)}bp/yr
+                            </p>
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-violet-500 mt-2">{capAnalysis.methodology}</p>
+                        <a
+                          href={`/deals/new?bbl=${capBbl}&exitCap=${capAnalysis.suggestedExitCap}`}
+                          className="inline-block mt-2 text-[10px] text-violet-600 hover:text-violet-800 font-semibold"
+                        >
+                          Open in Deal Modeler →
+                        </a>
+                      </div>
+                    );
+                  } catch { return null; }
+                })()}
 
                 {/* Summary cards (quick stats) */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
