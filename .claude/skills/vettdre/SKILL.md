@@ -7,7 +7,7 @@ description: VettdRE is a NYC/NYS/NJ commercial real estate intelligence SaaS pl
 
 ## What is VettdRE?
 
-A real estate intelligence platform for NYC commercial real estate professionals. Users search properties across NYC, New York State, and New Jersey, view unified building profiles aggregated from 14+ public data sources, model deals with AI-powered underwriting, prospect building owners, and run outreach campaigns.
+A real estate intelligence platform for NYC commercial real estate professionals. Users search properties across NYC, New York State, and New Jersey, view unified building profiles aggregated from 17+ public data sources, model deals with AI-powered underwriting, prospect building owners, and run outreach campaigns.
 
 ## Tech Stack
 
@@ -21,149 +21,358 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | Hosting | Google Cloud Run (Docker, us-east1) |
 | Build | Cloud Build (cloudbuild.yaml) |
 | Maps | Leaflet (dynamic import, no SSR) |
-| AI | Anthropic Claude API (deal assumptions, AI underwriting) |
+| AI | Anthropic Claude API (deal assumptions, AI underwriting, email parsing) |
 | Search | Brave Search API (live listings, entity research, web comps) |
+| Enrichment | Apollo.io (people/org enrichment), People Data Labs (skip tracing) |
+| Communication | Twilio (SMS + voice), Gmail API (OAuth) |
 | Styling | Tailwind CSS + shadcn/ui components |
 
-## File Structure
+## File Structure — src/lib/ (54 files)
 
-```
-src/
-├── app/
-│   ├── (auth)/                    # Login, signup, forgot-password
-│   ├── (dashboard)/               # Main app (requires auth)
-│   │   ├── layout.tsx             # Dashboard shell — sidebar, mobile nav, UserPlanProvider
-│   │   ├── market-intel/          # Core feature — property search + building profiles
-│   │   │   ├── page.tsx           # Market Intel search page (tabs: Property, Ownership, Map, On-Market, etc.)
-│   │   │   ├── market-intel-search.tsx  # Main search UI component (NYC/NYS/NJ modes)
-│   │   │   ├── map-search.tsx     # Leaflet map component for NYC map tab
-│   │   │   ├── map-actions.ts     # Server actions for map viewport queries (PLUTO + DOB)
-│   │   │   ├── nys-actions.ts     # Server actions for NY State (data.ny.gov Socrata API)
-│   │   │   ├── nj-actions.ts      # Server actions for NJ (ArcGIS REST API)
-│   │   │   ├── building-profile.tsx           # Full building profile page
-│   │   │   └── building-profile-actions.ts    # Server actions for building data (PLUTO, HPD, DOB, ACRIS, LL84, RPIE)
-│   │   ├── deal-modeler/          # Deal modeling + AI underwriting
-│   │   ├── properties/            # Saved properties
-│   │   ├── prospecting/           # Owner prospecting
-│   │   ├── pipeline/              # Deal pipeline CRM
-│   │   ├── portfolios/            # Portfolio management
-│   │   ├── settings/              # Settings pages (billing, branding, gmail, members, etc.)
-│   │   └── ...
-│   ├── api/
-│   │   ├── stripe/
-│   │   │   ├── checkout/route.ts  # Create Stripe checkout session
-│   │   │   └── portal/route.ts    # Create Stripe billing portal session
-│   │   └── webhooks/
-│   │       └── stripe/route.ts    # Stripe webhook handler (subscription lifecycle)
-│   └── auth/callback/route.ts     # Supabase auth callback
-├── components/
-│   ├── ui/                        # shadcn/ui primitives (button, card, dialog, etc.)
-│   ├── sidebar.tsx                # Main navigation sidebar with feature gating
-│   ├── mobile-nav.tsx             # Mobile navigation
-│   ├── upgrade-modal.tsx          # Stripe upgrade/pricing modal
-│   └── providers/
-│       └── user-plan-provider.tsx  # React context for user plan + permissions
-├── lib/
-│   ├── prisma.ts                  # Prisma client singleton
-│   ├── stripe.ts                  # Stripe client (lazy init) + price-to-plan mapping
-│   ├── feature-gate.ts            # Feature permissions per plan tier (client-safe)
-│   ├── feature-gate-server.ts     # Server-side permission checks + trial management
-│   ├── data-fusion-engine.ts      # Central aggregation — 14 sources → BuildingIntelligence
-│   ├── entity-resolver.ts         # Fuzzy matching, LLC piercing, owner resolution
-│   ├── ai-assumptions.ts          # AI-powered deal assumption generation
-│   ├── brave-search.ts            # Brave Search API wrapper + budget tracking
-│   ├── brave-listings.ts          # Live listing search + parser
-│   ├── brave-comps.ts             # Web-enhanced comparable sales
-│   ├── brave-entity.ts            # Owner/entity web intelligence
-│   ├── neighborhoods.ts           # NYC neighborhoods lookup
-│   ├── neighborhoods-nys.ts       # NYS counties + municipalities
-│   ├── neighborhoods-nj.ts        # NJ counties + municipalities
-│   └── supabase/
-│       ├── client.ts              # Browser Supabase client
-│       ├── server.ts              # Server-side Supabase client
-│       └── middleware.ts          # Auth middleware
-└── middleware.ts                   # Next.js middleware (auth redirect)
-```
+### Core Infrastructure
+| File | Purpose |
+|------|---------|
+| `prisma.ts` | Prisma ORM client singleton with connection pool management |
+| `utils.ts` | cn (classname merger), formatting (currency, date, initials), color/label scoring |
+| `stripe.ts` | Stripe client (lazy init), price-to-plan mapping, checkout/portal helpers |
+| `feature-gate.ts` | Client-safe feature gating: 5 plans, 68 feature flags, upgrade messages |
+| `feature-gate-server.ts` | Server-side permission checks, daily search limits, trial management |
+| `supabase/client.ts` | Browser-side Supabase client |
+| `supabase/server.ts` | Server-side Supabase client |
+| `supabase/middleware.ts` | Auth middleware (session + approval gate) |
 
-## Data Sources
+### Gmail & Calendar
+| File | Purpose |
+|------|---------|
+| `gmail.ts` | Gmail OAuth token management & refresh (scopes: readonly, send, modify, labels, calendar) |
+| `gmail-sync.ts` | Initial & incremental Gmail sync engine with historyId tracking |
+| `gmail-send.ts` | Send & reply via Gmail API with CC/BCC, attachments, templates |
+| `google-calendar.ts` | Google Calendar 2-way sync: event CRUD, color mapping, attendees (16KB) |
 
-### NYC (Primary Market)
+### Email Processing
+| File | Purpose |
+|------|---------|
+| `email-parser.ts` | AI email parsing via Claude: extracts lead data (name, phone, budget, area) |
+| `email-categorizer.ts` | Rule-based categorization: lead, personal, newsletter, transactional |
+| `email-scoring.ts` | Engagement scoring (0-100): frequency, recency, response speed, thread depth |
+| `follow-up-checker.ts` | Auto-trigger follow-up reminders for lead threads >24h without reply |
 
-| Source | API | Dataset ID | Key Fields |
-|--------|-----|-----------|------------|
-| PLUTO | Socrata (data.cityofnewyork.us) | `64uk-42ks` | address, units, sqft, year built, FAR, zoning, owner, assessed value |
-| ACRIS | Socrata | `8h5j-fqxa` (master), `636b-3b5g` (legals), `bnx9-e6tj` (parties) | Sales history, deed holders, mortgage info |
-| HPD Registration | Socrata | `tesw-yqqr` | Owner name, managing agent, phone |
-| HPD Contacts | Socrata | `feu5-w2e2` | Contact details for registered buildings |
-| HPD Violations | Socrata | `wvxf-dwi5` | Open/closed violations by class (A/B/C) |
-| HPD Complaints | Socrata | `uwyv-629c` | Tenant complaints |
-| HPD Litigation | Socrata | `59kj-x8nc` | Housing court cases |
-| DOB Permits | Socrata | `ic3t-wcy2` | Active construction permits |
-| DOB Jobs | Socrata | `ic3t-wcy2` | New building / alteration applications |
-| DOB Violations | Socrata | `3h2n-5cm9` | Building code violations |
-| DOB ECB | Socrata | `6bgk-3dad` | Environmental control board violations |
-| DOF Rolling Sales | Socrata | `usep-8jbt` | Recent closed sales (comps) |
-| LL84 Energy | Socrata | `5zyy-y8am` | Energy Star grade, EUI, utility consumption, GHG |
-| RPIE | Socrata | `wvts-6tdf` | Income & expense filing non-compliance |
-| Rent Stabilization | Socrata | `gkh2-hj5p` | Rent stabilized unit counts |
-| Speculation Watch | Socrata | `jnm5-kvjy` | Speculative purchasing patterns |
+### Real Estate Data Sources
+| File | Purpose |
+|------|---------|
+| `nyc-opendata.ts` | 17 NYC Open Data (Socrata) API helpers: ACRIS, PLUTO, DOB, HPD, ECB, Rent Stab |
+| `entity-resolver.ts` | Fuzzy matching, address normalization, LLC piercing, owner dedup across sources |
+| `data-fusion-engine.ts` | Unified BuildingIntelligence: 14+ sources in parallel, conflict resolution, scoring |
+| `comps-engine.ts` | Comparable sales: DOF Rolling Sales + PLUTO bounding box, similarity scoring |
+| `ny-corporations.ts` | NY DOS corporate filing lookup: entity names, filings, registered agents |
+
+### Market Intelligence & Valuation
+| File | Purpose |
+|------|---------|
+| `brave-search.ts` | Brave Web Search API wrapper with budget tracking |
+| `brave-listings.ts` | Live listings search via Brave, listing parser, dedup |
+| `brave-comps.ts` | Web comps: merge Brave results with DOF Rolling Sales |
+| `brave-entity.ts` | Owner/entity web research: news, courts, corporate records |
+| `renovation-engine.ts` | Renovation cost estimator: condition assessment, 3-tier costs, ARV, ROI |
+| `airbnb-market.ts` | STR market data: InsideAirbnb neighborhood metrics, STR vs LTR projections |
+| `deal-calculator.ts` | Full underwriting model: unit mix, expenses, DCF, IRR, 10-year proforma |
+| `zillow-data.ts` | Zillow rent/sale estimates: NYC ZIP ranges, home values, rent trends |
+| `redfin-market.ts` | Redfin metrics: median price, days-on-market, inventory, market temperature |
+| `fhfa.ts` | FHFA HPI + ACRIS appreciation: metro benchmarks, zip-level 1yr/5yr trends |
+| `fannie-mae.ts` | Fannie Mae loan lookup: ROPC OAuth2, determine agency-backed mortgage |
+| `promote-engine.ts` | GP/LP promote waterfall: distribution tiers, IRR hurdles, catch-up logic |
+| `expense-analyzer.ts` | Building expense analysis: T-12 parsing, market benchmarks, anomaly detection |
+
+### Census & Demographics
+| File | Purpose |
+|------|---------|
+| `census.ts` | Census Bureau ACS API: tract-level demographics (housing, income, rent burden) |
+| `geocodio.ts` | Geocodio API: rooftop geocoding + Census data (2,500 free/day, LRU cache) |
+| `neighborhoods.ts` | NYC neighborhoods: 200+ per borough with ZIP mappings, coordinates |
+| `neighborhoods-nys.ts` | NYS counties + municipalities |
+| `neighborhoods-nj.ts` | NJ counties + municipalities |
+| `geo-utils.ts` | Radius-to-bounding-box, haversine distance, lat/lng helpers |
+| `nyc-zip-centroids.ts` | NYC ZIP code centroids & radius search |
+
+### Economic Data
+| File | Purpose |
+|------|---------|
+| `fred.ts` | FRED API: mortgage rates, unemployment, CPI, housing starts (24hr cache) |
+| `fred-actions.ts` | Server actions for FRED lookups |
+| `hud.ts` | HUD Fair Market Rents: ZIP-level FMR by unit count (30-day cache) |
+| `hud-actions.ts` | Server actions for HUD FMR lookups |
+| `market-trends-actions.ts` | Server actions for market trends aggregation |
+
+### AI & Analysis
+| File | Purpose |
+|------|---------|
+| `ai-assumptions.ts` | AI deal assumptions: calibrates with census, builds T-12, STR context |
+| `apollo.ts` | Apollo.io: enrich person/org, search people, bulk enrich, merge logic |
+| `contact-types.ts` | Contact type interfaces: landlord, buyer, seller, renter metadata |
+
+### Document Generation
+| File | Purpose |
+|------|---------|
+| `pdf-report.ts` | 4-page building intelligence PDF: comps, investment analysis, renovation, STR |
+| `deal-pdf.ts` | Deal analysis PDF: underwriting, market context, pro forma |
+| `loi-template.ts` | Letter of Intent structured content & metadata |
+| `loi-pdf.ts` | LOI PDF generation with signature fields |
+| `loi-docx.ts` | LOI Word (.docx) generation with bookmarks |
+
+### Communication
+| File | Purpose |
+|------|---------|
+| `twilio.ts` | Twilio SMS + voice API client (lazy init) |
+| `twilio-actions.ts` | Server actions for SMS sending & call management |
+
+## Route Files
+
+### API Routes
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/auth/gmail` | GET | Gmail OAuth initiation |
+| `/api/auth/gmail/callback` | GET | Gmail OAuth callback → token storage |
+| `/api/book` | POST | Public showing slot reservation |
+| `/api/stripe/checkout` | POST | Create checkout session |
+| `/api/stripe/portal` | POST | Customer billing portal |
+| `/api/webhooks/stripe` | POST | Stripe event webhooks |
+| `/api/twilio/sms` | POST | Incoming SMS webhook |
+| `/api/twilio/voice` | POST | Incoming call webhook |
+| `/api/twilio/status` | POST | Call/SMS status callback |
+| `/api/report/[bbl]` | GET | Generate building PDF report |
+
+### Dashboard Pages (Protected)
+| Route | Status | Description |
+|-------|--------|-------------|
+| `/dashboard` | Basic | Welcome + stats (needs real data) |
+| `/contacts` | Working | Contact list, filters, create/edit |
+| `/contacts/[id]` | Working | 5-tab dossier + AI enrichment |
+| `/deals` | Working | Deal management |
+| `/deals/new` | Working | Create new deal / deal modeler |
+| `/deals/promote` | Working | Promote waterfall analysis |
+| `/pipeline` | Working | Kanban board, 6 default stages |
+| `/messages` | Working | Gmail inbox: threads, compose, reply, bulk actions |
+| `/messages/templates` | Working | Email template CRUD |
+| `/calendar` | Working | Month/week/day/agenda + Google sync |
+| `/market-intel` | Working | 4 search modes: property, ownership, name, map |
+| `/properties` | Minimal | Empty state (needs implementation) |
+| `/prospecting` | Working | Prospect lists from Market Intel |
+| `/portfolios` | Basic | Schema + basic UI |
+| `/book/[slug]` | Working | Public showing booking (no auth) |
+
+### Settings (20 sub-pages)
+`/settings/profile`, `/settings/team`, `/settings/gmail`, `/settings/sync`, `/settings/api-keys`, `/settings/pipeline`, `/settings/branding`, `/settings/signature`, `/settings/notifications`, `/settings/hours`, `/settings/lead-rules`, `/settings/ai`, `/settings/export`, `/settings/templates`, `/settings/phone`, `/settings/billing`, `/settings/admin`, `/settings/admin/users`, `/settings/admin/waitlist`
+
+## Server Action Files (32 files)
+
+### Market Intelligence
+| File | Key Functions |
+|------|--------------|
+| `market-intel/actions.ts` | `searchNYCBuildings`, `searchOwnership`, `searchNamePortfolio` |
+| `market-intel/building-profile-actions.ts` | `enrichBuildingProfile`, `enrichOwner`, `generateBuildingReport` |
+| `market-intel/map-actions.ts` | `searchMap`, `getMapMarkers` |
+| `market-intel/neighborhood-actions.ts` | `getCensusContextForAI`, `getNeighborhoodTrends` |
+| `market-intel/nys-actions.ts` | `searchNYSBuildings`, `searchNYSOwnership` |
+| `market-intel/nj-actions.ts` | `searchNJBuildings`, `searchNJOwnership` |
+| `market-intel/comps-actions.ts` | `findComps`, `getComparableSales` |
+| `market-intel/renovation-actions.ts` | `estimateRenovation`, `calculateARV` |
+| `market-intel/str-actions.ts` | `fetchSTRProjection` |
+| `market-intel/recent-activity-actions.ts` | `getRecentActivity` |
+| `market-intel/new-development-actions.ts` | `searchNewDevelopments` |
+
+### Contacts & Enrichment
+| File | Key Functions |
+|------|--------------|
+| `contacts/actions.ts` | `createContact`, `updateContact`, `deleteContact`, `listContacts`, `bulkEnrich` |
+| `contacts/[id]/actions.ts` | `getContactDossier`, `addActivity`, `linkDeal` |
+| `contacts/[id]/enrich-actions.ts` | `enrichContact`, `pdlLookup`, `apolloEnrich` |
+
+### Deals & Underwriting
+| File | Key Functions |
+|------|--------------|
+| `deals/actions.ts` | `saveDealAnalysis`, `getDealAnalysis`, `underwriteDeal` |
+| `deals/promote/actions.ts` | `calculatePromote`, `generateWaterfallReport` |
+
+### Pipeline, Messages, Calendar, Prospecting, Settings
+| File | Key Functions |
+|------|--------------|
+| `pipeline/actions.ts` | `createDeal`, `updateStage`, `reorderStages` |
+| `messages/actions.ts` | `composeEmail`, `replyToThread`, `sendDraft` |
+| `messages/bulk-actions.ts` | `markRead`, `markUnread`, `star`, `pin`, `archive`, `delete` |
+| `messages/label-actions.ts` | `createLabel`, `applyLabel`, `removeLabel` |
+| `messages/follow-up-actions.ts` | `snoozeThread`, `createReminder` |
+| `messages/crm-actions.ts` | `linkToCRM`, `createContactFromEmail` |
+| `messages/template-actions.ts` | `createTemplate`, `updateTemplate`, `deleteTemplate` |
+| `calendar/actions.ts` | `createEvent`, `updateEvent`, `syncGoogleCalendar`, `createShowingSlots` |
+| `prospecting/actions.ts` | `createProspectList`, `addProspect`, `convertToContact`, `exportCSV` |
+| `settings/actions.ts` | `updateProfile`, `updateTeam`, `testApiKey`, `exportData` |
+| `settings/billing-actions.ts` | `createCheckoutSession`, `manageBilling` |
+| `settings/admin/admin-actions.ts` | `approveUser`, `updateUserRole` |
+
+## External API Integrations (18 APIs)
+
+### Core Services
+| API | Env Vars | Type |
+|-----|----------|------|
+| Supabase | `DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Essential |
+| Google OAuth | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Essential |
+| Stripe | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, 6× `STRIPE_*_PRICE_ID` | Essential |
+| Anthropic Claude | `ANTHROPIC_API_KEY` | Core |
+
+### Real Estate & Market Data
+| API | Env Vars | Type |
+|-----|----------|------|
+| NYC Open Data (Socrata) | `NYC_OPEN_DATA_APP_TOKEN` (optional) | Essential — 17 datasets |
+| Apollo.io | `APOLLO_API_KEY` | Core (credits-based) |
+| Brave Web Search | `BRAVE_SEARCH_API_KEY` | Core |
+| Census Bureau | `CENSUS_API_KEY` | Core |
+| Geocodio | `GEOCODIO_API_KEY` | Core (2.5k/day free) |
+| FRED | `FRED_API_KEY` | Core |
+| HUD | `HUD_API_TOKEN` | Core |
+| Fannie Mae | `FANNIE_CLIENT_ID`, `FANNIE_CLIENT_SECRET`, `FANNIE_API_KEY` | Optional |
+
+### Embedded Data (no API key)
+| Source | Library File | Data |
+|--------|-------------|------|
+| FHFA HPI | `fhfa.ts` | Metro house price index benchmarks |
+| Redfin | `redfin-market.ts` | Quarterly market metrics |
+| InsideAirbnb | `airbnb-market.ts` | 40 neighborhood STR averages |
+| Zillow | `zillow-data.ts` | NYC ZIP rent/sale estimates |
+
+### Communication
+| API | Env Vars | Type |
+|-----|----------|------|
+| People Data Labs | `PDL_API_KEY` | Optional (skip tracing) |
+| Twilio | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | Optional (SMS/voice) |
+| Tracerfy | `TRACERFY_API_KEY` | Optional (fallback skip trace) |
+
+## Data Sources — NYC Open Data (17 datasets)
+
+| # | Source | Dataset ID | Key Fields |
+|---|--------|-----------|------------|
+| 1 | PLUTO | `64uk-42ks` | address, units, sqft, year built, FAR, zoning, owner, assessed value |
+| 2 | ACRIS Master | `bnx9-e6tj` | Document type, amount, recorded date |
+| 3 | ACRIS Legals | `8h5j-fqxa` | BBL linkage to documents |
+| 4 | ACRIS Parties | `636b-3b5g` | Buyer/seller names, deed holders |
+| 5 | HPD Registrations | `tesw-yqqr` | Owner name, managing agent, phone |
+| 6 | HPD Contacts | `feu5-w2e2` | Contact details for registered buildings |
+| 7 | HPD Violations | `wvxf-dwi5` | Open/closed violations by class (A/B/C) |
+| 8 | HPD Complaints | `uwyv-629c` | Tenant 311 complaints |
+| 9 | HPD Litigation | `59kj-x8nc` | Housing court cases |
+| 10 | DOB Permits | `ic3t-wcy2` | Active construction permits |
+| 11 | DOB Violations | `3h2n-5cm9` | Building code violations |
+| 12 | DOB ECB | `6bgk-3dad` | Environmental control board violations |
+| 13 | DOF Rolling Sales | `usep-8jbt` | Recent closed sales (comps) |
+| 14 | LL84 Energy | `5zyy-y8am` | Energy Star grade, EUI, GHG |
+| 15 | RPIE | `wvts-6tdf` | Income & expense filing non-compliance |
+| 16 | Rent Stabilization | `35ss-ekc5` | Rent stabilized unit counts |
+| 17 | Speculation Watch | `adax-9x2w` | Speculative purchasing patterns |
 
 ### NYS (data.ny.gov)
-
 | Source | Dataset ID | Key Fields |
 |--------|-----------|------------|
-| Assessment Rolls | `7vem-aaz7` | All assessed properties statewide. Fields: `parcel_address_street`, `primary_owner_first_name`, `primary_owner_last_name`, `assessment_total`, `full_market_value`, `property_class`, `county_name`, `municipality_name`, `print_key_code` |
-
-**NYS Gotchas:**
-- Roll year is typically `getFullYear() - 2` (data lags ~2 years)
-- County/municipality names are mixed case — use `upper()` in Socrata queries
-- Owner name split across `primary_owner_first_name` + `primary_owner_last_name` + additional owner fields
-- Address built from `parcel_address_number` + `parcel_address_street` + `parcel_address_suff`
-- No `residential_units` column — use `property_class` to filter (411 = apartments, 210-280 = residential)
+| Assessment Rolls | `7vem-aaz7` | All assessed properties statewide |
+| Entity Names | `ekwr-p59j` | Corporation names, filing dates |
+| Entity Filings | `63wc-4exh` | Corporate filings, registered agents |
 
 ### NJ (ArcGIS REST)
+| Source | Service | Key Fields |
+|--------|---------|------------|
+| Parcels Composite | `Parcels_Composite_NJ_WM/FeatureServer/0` | MUN_NAME, PROP_CLASS, PROP_LOC, DWELL, YR_CONSTR, LAND_VAL |
 
-| Source | Service URL | Key Fields |
-|--------|-----------|------------|
-| Parcels Composite | `https://services2.arcgis.com/XVOqAjTOJ5P6ngMu/arcgis/rest/services/Parcels_Composite_NJ_WM/FeatureServer/0/query` | `MUN_NAME`, `PCLBLOCK`, `PCLLOT`, `PROP_CLASS`, `PROP_LOC`, `DWELL`, `YR_CONSTR`, `LAND_VAL`, `IMPRVT_VAL`, `DEED_DATE`, `CALC_ACRE` |
+## Feature Gate System (68 features, 5 plans)
 
-**NJ Gotchas:**
-- ArcGIS field names are case-sensitive
-- Service URL changes periodically — was `Parcels_and_MODIV_Composite`, now `Parcels_Composite_NJ_WM`
-- Use `f=json` and `returnGeometry=false` for data-only queries
-- Owner names often redacted in NJ public data
-- Filter multifamily: `PROP_CLASS IN ('2','4A','4C')`
+**Plans:** free ($0) → explorer ($59/mo) → pro ($219/mo) → team ($399/mo) → enterprise (custom)
+
+### Free (3 features)
+`nav_market_intel`, `market_nyc`, `bp_census_basic`
+
+### Explorer adds (14 features)
+`market_nys`, `market_nj`, `map_search`, `search_unlimited`, `bp_owner_name`, `bp_distress_score`, `bp_investment_score`, `bp_rpie`, `bp_live_listings`, `bp_web_intel`, `bp_census_full`, `bp_market_trends`, `bp_fannie_mae_loan`, `bp_renovation_basic`, `bp_str_basic`, `report_basic`, `bp_corp_basic`
+
+### Pro adds (26 features)
+`nav_deal_modeler`, `nav_prospecting`, `nav_portfolios`, `nav_campaigns`, `nav_sequences`, `nav_financing`, `nav_comp_analysis`, `bp_owner_contact`, `bp_apollo_enrichment`, `bp_census_trends`, `bp_corp_full`, `bp_renovation_full`, `bp_str_full`, `report_full`, `phone_sms`, `deal_modeler`, `prospecting`, `portfolios`, `comp_analysis`, `campaigns`, `sequences`, `financing`, `api_access`, `promote_model`, `nav_promote_model`
+
+### Team adds (5 features)
+`nav_investors`, `investors`, `phone_multi_numbers`, `promote_templates`, `promote_sensitivity`, `promote_export`
+
+### Enterprise = Team (all features)
+
+## Prisma Schema (39 models, 18 enums)
+
+### Core Multi-Tenant
+- **Organization**: name, slug, tier (free/explorer/pro/team), aiLookupsUsed/Limit
+- **User**: email, role (owner/admin/manager/agent/viewer), isApproved, plan, trialEndsAt, usageCounters, usageResetDate
+
+### CRM
+- **Contact**: firstName, lastName, email, phone, status, type, source, qualificationScore, tags[]
+- **EnrichmentProfile**: contactId, version, employer, jobTitle, linkedinUrl, rawData JSON, dataSources[]
+- **QualificationScore**: contactId, totalScore, financialCapacity, intentSignals, engagementLevel
+- **Activity**: contactId, dealId, type, direction, subject, body
+- **Task**: contactId, assignedTo, title, type, priority, dueAt, status, aiReasoning
+
+### Deals & Pipeline
+- **Pipeline**: orgId, name, pipelineType, stages JSON, isDefault
+- **Deal**: contactId, pipelineId, stageId, dealValue, status, winProbability, riskFlags JSON
+- **DealAnalysis**: orgId, bbl, address, dealType, dealSource, inputs JSON, outputs JSON
+- **PromoteModel**: dealAnalysisId, gpEquityPct, lpEquityPct, waterfallTiers JSON
+
+### Properties
+- **Property**: address, bbl, propertyType, transactionType, status, price, sqft
+- **Showing**: contactId, propertyId, scheduledAt, status, interestLevel, feedback
+- **ShowingSlot**: propertyAddress, startAt, endAt, isBooked, bookedByName/Email/Phone
+- **ContactPropertyInterest**: contactId, propertyId, interestLevel
+
+### Email
+- **GmailAccount**: userId, email, accessToken, refreshToken, historyId
+- **EmailMessage**: gmailMessageId, threadId, direction, subject, bodyHtml, aiParsed, leadSource, sentimentScore
+- **EmailLabel**, **EmailThreadLabel**, **EmailTemplate**, **FollowUpReminder**, **EmailSignature**
+
+### Calendar
+- **CalendarEvent**: googleEventId, title, startAt, endAt, eventType, contactId, attendees JSON
+
+### Prospecting & Portfolios
+- **ProspectingList**, **ProspectingItem**: address, block, lot, totalUnits, ownerName, status
+- **Portfolio**, **PortfolioBuilding**: bbl, address, units, entityNames[]
+
+### Communication
+- **PhoneNumber**: orgId, number, provider (twilio), assignedTo
+- **PhoneCall**: direction, duration, recordingUrl, status
+- **SmsMessage**: direction, body, status, sentAt
+
+### Settings
+- **NotificationPreferences**, **WorkingHours**, **SyncSettings**, **LeadAssignmentRule**, **AiSettings**, **BrandSettings**
+
+### System
+- **Automation**, **AutomationRun**: triggerType, conditions/actions JSON
+- **AuditLog**: userId, action, entityType, changes JSON
 
 ## Socrata API Patterns
 
-**CRITICAL: Never quote numeric values in $where clauses.** Socrata does string comparison on quoted values, which breaks negative longitude comparisons (all NYC longitudes are -73.x to -74.x).
+**CRITICAL: Never quote numeric values in $where clauses.** Socrata does string comparison on quoted values, which breaks negative longitude comparisons.
 
 ```typescript
 // CORRECT — unquoted numerics
 `latitude > ${swLat} AND longitude > ${swLng} AND unitsres > 0`
 
-// WRONG — quoted numerics (string comparison breaks negative numbers)
-`latitude > '${swLat}' AND longitude > '${swLng}' AND unitsres > '0'`
+// WRONG — quoted numerics (breaks negative numbers)
+`latitude > '${swLat}' AND longitude > '${swLng}'`
 ```
 
-Standard Socrata query pattern:
+Standard pattern:
 ```typescript
 const url = new URL("https://data.cityofnewyork.us/resource/DATASET_ID.json");
 url.searchParams.set("$where", conditions.join(" AND "));
 url.searchParams.set("$limit", "400");
 url.searchParams.set("$select", "field1,field2,field3");
-// Socrata auto-encodes $where as %24where — this is fine
 ```
 
 ## Server Actions Pattern
-
-All data fetching uses Next.js Server Actions with `"use server"` directive:
 
 ```typescript
 "use server";
 
 export async function fetchSomething(params: Params): Promise<Result> {
-  // Always wrap in try/catch — never let API failures crash the page
   try {
     const url = new URL("https://api.example.com/resource.json");
     url.searchParams.set("$where", buildQuery(params));
@@ -179,82 +388,39 @@ export async function fetchSomething(params: Params): Promise<Result> {
 ```
 
 **CRITICAL for `"use server"` files:**
-- Never use `export type { ... }` to re-export TypeScript interfaces — Next.js server action boundary compiler converts these to runtime value references that crash with `ReferenceError: X is not defined`
-- Use `import type { X }` for type imports (these are correctly erased)
-- If consumers need types, export them from a separate non-server file
-
-## Feature Gating / Permissions
-
-Plans: `free`, `explorer`, `pro`, `team`, `enterprise`
-
-```typescript
-// src/lib/feature-gate.ts — client-safe, no "use server"
-import { hasPermission, type Feature } from '@/lib/feature-gate';
-
-// Check in components
-if (hasPermission(userPlan, 'deal_modeler')) { ... }
-
-// Wrap UI sections
-<FeatureGate feature="contact_info" fallback={<UpgradePrompt />}>
-  <ContactDetails />
-</FeatureGate>
-```
-
-Plan hierarchy: free < explorer < pro < team = enterprise
-
-## Stripe Integration
-
-```typescript
-// src/lib/stripe.ts — LAZY initialization (required for Docker builds)
-let _stripe: Stripe | null = null;
-export function getStripe(): Stripe {
-  if (!_stripe) {
-    _stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  }
-  return _stripe;
-}
-```
-
-**Never initialize Stripe at module level** — env vars aren't available during Docker build.
-
-Price IDs are in environment variables: `STRIPE_EXPLORER_MONTHLY_PRICE_ID`, `STRIPE_PRO_YEARLY_PRICE_ID`, etc.
-
-Webhook at `/api/webhooks/stripe/route.ts` — uses `request.text()` for raw body (NOT `request.json()`).
+- Never use `export type { ... }` — crashes with `ReferenceError: X is not defined`
+- Use `import type { X }` for type imports (correctly erased)
+- Export types from separate non-server files
 
 ## Data Fusion Engine
 
-The building profile calls `fetchBuildingIntelligence(bbl)` which:
+`fetchBuildingIntelligence(bbl)` in `data-fusion-engine.ts`:
 1. Fires 14+ data source queries in parallel via `Promise.allSettled()`
 2. Cross-references entities via `entity-resolver.ts` (fuzzy matching, LLC piercing)
 3. Resolves conflicts using source priority hierarchy
 4. Calculates distress score (0-100) and investment score (0-100)
-5. Returns unified `BuildingIntelligence` object
-6. Caches results for 15 minutes (LRU, 100 entries)
+5. Includes STR projection (Phase 13b) and renovation estimates
+6. Returns unified `BuildingIntelligence` object
+7. Caches results for 15 minutes (LRU, 100 entries)
 
 ## Leaflet Map
 
-Leaflet is dynamically imported (no SSR). Key patterns:
-- Map container needs `invalidateSize()` when becoming visible after being hidden
-- Use `loadPropertiesRef.current` pattern to avoid stale closures in event handlers
-- `IntersectionObserver` detects tab visibility changes
-- Query PLUTO with map viewport bounds on `moveend` event
+Dynamically imported (no SSR). Key patterns:
+- `invalidateSize()` via IntersectionObserver when tab becomes visible
+- `loadPropertiesRef.current` pattern to avoid stale closures
+- Query PLUTO with viewport bounds on `moveend` event
+- Use `circleMarker` not `Marker` for performance
 
 ## Deployment
 
 ```bash
-# Local
-npm run dev          # starts with --turbopack
-
-# Production
-git push origin main
+npm run dev                                    # local with --turbopack
+git push origin main                           # trigger build
 gcloud builds submit --config cloudbuild.yaml --region=us-east1
-# Docker build → Cloud Run deploy
-
-# Env vars
-# .env.local (local dev)
-# Cloud Run → Edit & Deploy → Variables & Secrets (production)
-# Some env vars with special chars need to be added via Cloud Console UI, not CLI
 ```
+
+Docker: Multi-stage (Node 20-Alpine), standalone output, port 8080.
+Cloud Run: 1Gi memory, 1 CPU, 80 concurrency, 0-10 instances, 11 secrets.
 
 ## Common Bugs & Fixes
 
@@ -268,47 +434,20 @@ gcloud builds submit --config cloudbuild.yaml --region=us-east1
 | NYS returns 0 results | Wrong column names / roll year | Check dataset schema, use `getFullYear()-2` |
 | NJ returns 0 results | Dead ArcGIS service URL | Verify service URL hasn't changed |
 | Webhook signature fails | Using `request.json()` | Must use `request.text()` for raw body |
-
-## Environment Variables
-
-```
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL
-NEXT_PUBLIC_SUPABASE_ANON_KEY
-SUPABASE_SERVICE_ROLE_KEY          # Admin operations (user management)
-
-# Stripe
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-STRIPE_SECRET_KEY
-STRIPE_WEBHOOK_SECRET
-STRIPE_EXPLORER_MONTHLY_PRICE_ID
-STRIPE_EXPLORER_YEARLY_PRICE_ID
-STRIPE_PRO_MONTHLY_PRICE_ID
-STRIPE_PRO_YEARLY_PRICE_ID
-STRIPE_TEAM_MONTHLY_PRICE_ID
-
-# External APIs
-BRAVE_SEARCH_API_KEY
-ANTHROPIC_API_KEY
-
-# NYC Open Data (optional, increases rate limits)
-NYC_OPEN_DATA_APP_TOKEN
-```
-
-## Prisma Schema Key Models
-
-- **User**: plan (UserPlan enum), stripeCustomerId, stripeSubscriptionId, trialEndsAt, usageCounters
-- **Organization**: tier (OrgTier), subscriptionStatus
-- **Property**: saved properties with BBL, address, metadata
-- **Deal**: deal models with purchase price, assumptions, AI-generated projections
-- **Prospect**: prospecting targets with owner info, contact attempts
+| `as const` on ternary in JSX | TS error in typed arrays | Extract to typed variable with explicit annotation |
+| NormalizedAddress `.display` | Property doesn't exist | Use `.raw` instead |
 
 ## Coding Conventions
 
 - All data fetching via server actions (`"use server"`)
 - Graceful degradation — API failures return empty results, never crash
-- Lazy initialization for all API clients (Stripe, Brave, etc.)
+- Lazy initialization for all API clients (Stripe, Brave, Twilio, etc.)
 - Parallel fetching with `Promise.allSettled()` for building profiles
 - Feature gating checked both client-side (UI) and server-side (actions)
+- Dynamic imports for lazy-loading optional modules (`import("./str-actions")`)
+- `Array.isArray()` checks before spreading API responses (PDL returns non-arrays)
+- `JSON.parse(JSON.stringify(obj))` for Server→Client serialization (Dates, Decimals)
 - Console.log debugging must be removed before committing
 - Build must pass (`npx next build`) with zero errors before deployment
+- Default Market Intel tab is **map** (not property)
+- Market Pulse widget uses Bloomberg terminal dark theme aesthetic
