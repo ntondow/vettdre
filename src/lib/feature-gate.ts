@@ -65,7 +65,14 @@ export type Feature =
   | "nav_promote_model"
   | "promote_templates"
   | "promote_sensitivity"
-  | "promote_export";
+  | "promote_export"
+  // Deal Structures
+  | "deal_structure_all_cash"
+  | "deal_structure_conventional"
+  | "deal_structure_bridge_refi"
+  | "deal_structure_assumable"
+  | "deal_structure_syndication"
+  | "deal_structure_compare";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -94,6 +101,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "bp_str_basic",
   "report_basic",
   "bp_corp_basic",
+  "deal_structure_all_cash",
 ];
 
 const PRO_FEATURES: Feature[] = [
@@ -123,6 +131,11 @@ const PRO_FEATURES: Feature[] = [
   "api_access",
   "promote_model",
   "nav_promote_model",
+  "deal_structure_conventional",
+  "deal_structure_bridge_refi",
+  "deal_structure_assumable",
+  "deal_structure_syndication",
+  "deal_structure_compare",
 ];
 
 const TEAM_FEATURES: Feature[] = [
@@ -204,6 +217,12 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   phone_multi_numbers: "Upgrade to Team for multiple phone numbers",
   promote_model: "Upgrade to Pro to access the Promote Model",
   nav_promote_model: "Upgrade to Pro to access the Promote Model",
+  deal_structure_all_cash: "Upgrade to Explorer to use All Cash deal analysis",
+  deal_structure_conventional: "Upgrade to Pro to use Conventional debt structures",
+  deal_structure_bridge_refi: "Upgrade to Pro to use Bridge \u2192 Refi (BRRRR) analysis",
+  deal_structure_assumable: "Upgrade to Pro to use Assumable Mortgage analysis",
+  deal_structure_syndication: "Upgrade to Pro to use Syndication deal structures",
+  deal_structure_compare: "Upgrade to Pro to compare deal structures side-by-side",
   promote_templates: "Upgrade to Team for waterfall templates",
   promote_sensitivity: "Upgrade to Team for sensitivity analysis",
   promote_export: "Upgrade to Team for promote export",
