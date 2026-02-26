@@ -6,11 +6,18 @@ The BMS is a standalone toolset inside VettdRE that gives brokers everything the
 Flow: SUBMIT → APPROVE → INVOICE → PAY → REPORT
 
 ## Navigation
-Top-level sidebar item "Brokerage" (owner/admin) with sub-nav tabs:
-- Deal Submissions (agent intake queue)
-- Invoices (generate, batch, track)
-- Plans (commission plan templates)
-- Agents (roster, splits, detail pages)
+Top-level sidebar item "Brokerage" (owner/admin) opens `/brokerage/dashboard`.
+
+Brokerage uses a **vertical secondary sidebar** (matching the Settings layout pattern) with grouped sections:
+
+**OVERVIEW** — Dashboard
+**DEALS** — Submissions, Invoices, Bulk Invoices
+**MANAGEMENT** — Agents, Commission Plans, Compliance
+**FINANCE** — Payments, Reports
+**ADMIN** — Settings
+
+Mobile: horizontal scrolling pills (same as Settings mobile).
+Role-gated: each link checks `canAccessPage(role, href)` from `bms-permissions.ts`.
 
 Separate sidebar item "My Deals" (agent role) → `/brokerage/my-deals`
 
@@ -166,8 +173,11 @@ src/lib/
 - Unlinked users see "Contact your broker for setup" message
 
 ### 2E: Navigation & Role Gating
-- Brokerage sub-nav tabs: Deal Submissions, Invoices, Plans, Agents
+- Brokerage uses vertical secondary sidebar (Settings-style double-sidebar layout)
+- Grouped sections: Overview, Deals, Management, Finance, Admin
+- Mobile: horizontal scrolling pills
 - Sidebar: "Brokerage" visible to owner/admin, "My Deals" visible to agent role
+- Each nav link role-gated via `canAccessPage()` from `bms-permissions.ts`
 - User role exposed via UserPlanProvider context for sidebar role-gating
 
 ## Phase 3: Reporting, Compliance & Payments ✅
@@ -209,7 +219,8 @@ src/lib/
 - Feature gate: bms_payments (team+)
 
 ### 3E: Navigation Update
-- Brokerage sub-nav expanded to 8 tabs: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents
+- Brokerage sub-nav redesigned as vertical secondary sidebar (Settings-style double-sidebar)
+- 5 grouped sections: Overview, Deals, Management, Finance, Admin
 - Reports has its own sub-nav with 4 report tabs
 - page.tsx redirects to /brokerage/dashboard (was deal-submissions)
 
@@ -238,7 +249,7 @@ src/lib/
 - **Settings tab**: company info (name, address, phone), brand settings (company name, logo URL, primary/accent color), BMS defaults (default split %, payment terms, invoice footer, license number, company email)
 - **Audit Log tab**: full audit log viewer with filters (see 3.5E)
 - Settings persisted to Organization (bmsSettings JSON) and BrandSettings (upsert)
-- Brokerage sub-nav expanded to 9 tabs: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings
+- Brokerage sub-nav: vertical secondary sidebar with 10 links across 5 grouped sections
 
 ### 3.5C: Agent Onboarding (Invite Flow)
 - BrokerAgent gets invite fields: `inviteToken` (@unique), `invitedAt`, `inviteEmail`

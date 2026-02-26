@@ -31,6 +31,7 @@ export const PAGE_PERMISSION_MAP: Record<string, BmsPermission> = {
   "/brokerage/deal-submissions": "view_all_submissions",
   "/brokerage/invoices": "view_all_invoices",
   "/brokerage/invoices/new": "create_invoice",
+  "/brokerage/invoices/bulk": "bulk_upload_invoices",
   "/brokerage/commission-plans": "view_plans",
   "/brokerage/reports": "view_reports",
   "/brokerage/reports/pnl": "view_reports",

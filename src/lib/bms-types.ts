@@ -152,6 +152,20 @@ export interface BillToEntity {
 
 export type BillToMappings = Record<string, BillToEntity>;
 
+export interface FromInfo {
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+}
+
+export interface InvoiceSettings {
+  invoicePrefix: string;
+  invoiceNotes: string;
+  invoiceLineFormat: string;
+  defaultPaymentTerms: string;
+}
+
 export interface BrokerageSettings {
   name: string;
   address: string;

@@ -21,7 +21,7 @@ import {
   getFromInfo,
   getInvoiceSettings,
 } from "./bulk-actions";
-import type { BillToEntity, BillToMappings, FromInfo, InvoiceSettings } from "./bulk-actions";
+import type { BillToEntity, BillToMappings, FromInfo, InvoiceSettings } from "@/lib/bms-types";
 import { generateBatchInvoiceZip } from "@/lib/invoice-simple-pdf";
 import type { SimpleInvoiceData } from "@/lib/invoice-simple-pdf";
 

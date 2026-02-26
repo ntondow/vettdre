@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import type { BillToMappings, FromInfo, InvoiceSettings } from "@/lib/bms-types";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -13,17 +14,6 @@ async function getCurrentOrg() {
   if (!user) throw new Error("User not found");
   return { userId: user.id, orgId: user.orgId };
 }
-
-// ── Bill To Mapping Types ─────────────────────────────────────
-
-export interface BillToEntity {
-  companyName: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-}
-
-export type BillToMappings = Record<string, BillToEntity>;
 
 // ── Get Bill To Mappings ──────────────────────────────────────
 
@@ -109,13 +99,6 @@ export async function getNextInvoiceNumber(): Promise<string> {
 
 // ── Get From Info ─────────────────────────────────────────────
 
-export interface FromInfo {
-  name: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-}
-
 export async function getFromInfo(): Promise<FromInfo> {
   try {
     const { orgId } = await getCurrentOrg();
@@ -150,13 +133,6 @@ export async function getFromInfo(): Promise<FromInfo> {
 }
 
 // ── Get Invoice Settings ──────────────────────────────────────
-
-export interface InvoiceSettings {
-  invoicePrefix: string;
-  invoiceNotes: string;
-  invoiceLineFormat: string;
-  defaultPaymentTerms: string;
-}
 
 export async function getInvoiceSettings(): Promise<InvoiceSettings> {
   try {

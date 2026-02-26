@@ -179,9 +179,11 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `/prospecting` | Prospect lists, CSV export | Working |
 | `/portfolios` | Basic schema + UI | Basic |
 | `/properties` | Empty state | Minimal |
+| `/brokerage/*` | Vertical secondary sidebar (Settings-style), 5 grouped sections | Working |
 | `/brokerage/dashboard` | Stats cards, deal/invoice status charts, period selector | Working |
 | `/brokerage/deal-submissions` | Approval queue, status filters | Working |
 | `/brokerage/invoices` | Invoice list, inline payment recording | Working |
+| `/brokerage/invoices/bulk` | 4-step wizard: upload, map columns, Bill To, generate ZIP | Working |
 | `/brokerage/commission-plans` | Flat/volume/value tier builder | Working |
 | `/brokerage/reports/*` | P&L, agent production, 1099 prep, pipeline (4 sub-tabs) | Working |
 | `/brokerage/compliance` | Document tracking, expiry alerts, agent compliance grid | Working |
