@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { DEAL_TYPE_LABELS } from "@/lib/bms-types";
 import type { DealType, CommissionType, RepresentedSide, BrokerageConfig } from "@/lib/bms-types";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -212,9 +213,9 @@ export default function InvoiceForm({ onSubmit, brokerageConfig, defaultValues }
               onChange={e => set({ dealType: e.target.value as DealType })}
               className={INPUT}
             >
-              <option value="sale">Sale</option>
-              <option value="lease">Lease</option>
-              <option value="rental">Rental</option>
+              {Object.entries(DEAL_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </div>
           <div>

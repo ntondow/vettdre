@@ -373,8 +373,8 @@ A real estate intelligence platform for NYC commercial real estate professionals
 
 ## Brokerage Management System (BMS)
 
-- BMS adds deal submission intake, invoice generation, commission plans, agent management, compliance tracking, payment recording, and reporting for running a brokerage
-- 7 models: BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment
+- BMS adds deal submission intake, invoice generation, commission plans, agent management, compliance tracking, payment recording, reporting, role-based access, agent onboarding, file uploads, and audit logging for running a brokerage
+- 8 models: BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment
 - 5 enums: BmsDealType (sale/lease/rental), InvoiceStatus (draft/sent/paid/void), CommissionPlanType (flat/volume_based/value_based), ComplianceDocType (license/eo_insurance/continuing_education/background_check/other), PaymentMethod (check/ach/wire/cash/stripe/other)
 - Organization has `submissionToken` for public submission links
 - Server actions follow same `getCurrentOrg()` pattern via authProviderId
@@ -386,16 +386,43 @@ A real estate intelligence platform for NYC commercial real estate professionals
 - Agent roster: CRUD, detail pages, Excel/CSV import, stats aggregates
 - Agent self-service portal: `/brokerage/my-deals` — agents see own submissions + invoices, submit deals
 - Sidebar role-gating: owner/admin see "Brokerage", agents see "My Deals"
-- Brokerage sub-nav: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents
+- Brokerage sub-nav: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings
 - Reporting: dashboard summary, P&L, agent production, 1099 tax prep, deal pipeline — all with CSV export
 - Compliance: document tracking per agent (license, E&O insurance, continuing education, background check), expiry alerts (30-day window), status auto-computation
 - Payments: manual recording against invoices, partial payment tracking with progress bars, auto-status cascading (invoice → deal submission), payment history with filters, CSV export, Stripe-ready schema
-- Feature gates: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+)
 
-### BMS File Structure (31 files)
+### BMS Roles & Permissions
+- 4 roles: brokerage_admin (all), broker (all except settings), manager (view + manage submissions/compliance), agent (view own only)
+- 24 permission keys across categories: submissions, invoices, agents, commission plans, compliance, payments, reports, settings
+- `bms-auth.ts`: `getCurrentBmsUser()` returns user with brokerageRole, orgId, agentId; `requireBmsPermission()` enforces permission
+- `bms-permissions.ts`: `BMS_ROLES`, `BMS_PERMISSIONS` map, `hasPermission(role, permission)`, `getRoleLabel()`
+- BrokerAgent has `brokerageRole` field (string, defaults to "agent")
+
+### BMS Agent Onboarding
+- Admin invites agent via `inviteAgent()` → generates UUID `inviteToken` on BrokerAgent
+- Public invite page at `/join/agent/[token]` — shows brokerage info, signup/login prompt
+- Accept flow: authenticated user → `resolve-user.ts` links User to BrokerAgent, clears token
+- BrokerAgent invite fields: `inviteToken` (@unique), `invitedAt`, `inviteEmail`
+
+### BMS Audit Logging
+- Fire-and-forget pattern: `.catch()` on Prisma promise, never `await`, never throw
+- `bms-audit.ts`: `logAction()` core + 6 convenience functions (logSubmissionAction, logInvoiceAction, logPaymentAction, logAgentAction, logComplianceAction, logSettingsAction)
+- Wired into all 7 BMS action files with 24 distinct action types
+- Audit Log Viewer: filter bar, log table, relative timestamps, expandable JSON details, pagination (50/page)
+- AuditLog model fields: orgId, userId?, actorName?, actorRole?, action, entityType, entityId?, details JSON, previousValue JSON, newValue JSON
+
+### BMS File Upload
+- FileAttachment model: generic entity-polymorphic file storage (entityType + entityId)
+- `bms-files.ts`: upload, list, delete — indexed by [orgId, entityType, entityId]
+
+### BMS Feature Gates
+- bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_agent_onboarding (pro+)
+- bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+), bms_audit_log (team+), bms_file_upload (team+)
+
+### BMS File Structure (39 files)
 ```
 src/app/(dashboard)/brokerage/
-  layout.tsx                    — sub-nav tabs (Dashboard, Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents)
+  layout.tsx                    — sub-nav tabs (Dashboard, Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings)
   page.tsx                      — redirects to /brokerage/dashboard
   dashboard/
     page.tsx                    — stats cards, deal status chart, deal types, invoice status, period selector
@@ -434,10 +461,15 @@ src/app/(dashboard)/brokerage/
     actions.ts                  — recordPayment, getInvoicePayments, getPaymentHistory, deletePayment, getPaymentSummary, exportPaymentHistory
   agents/
     page.tsx                    — agent roster table + inline form + import panel
-    actions.ts                  — server actions (CRUD, bulk create, stats, user linking)
+    actions.ts                  — server actions (CRUD, bulk create, stats, user linking, role update)
     agent-import.tsx            — Excel/CSV upload + preview + bulk create
+    onboarding-actions.ts       — inviteAgent, revokeInvite, acceptInvite
     [id]/
       page.tsx                  — agent detail: stats, plan tiers, deals, invoices
+  settings/
+    page.tsx                    — 3-tab settings: Roles & Permissions, Settings, Audit Log
+    actions.ts                  — getBrokerageSettings, updateBrokerageSettings, getAuditLogs
+    audit-log.tsx               — audit log viewer (filters, table, pagination, expandable details)
   my-deals/
     page.tsx                    — agent self-service: own submissions + invoices + submit
     actions.ts                  — server actions (my agent, my submissions, my invoices, my stats)
@@ -446,19 +478,32 @@ src/app/submit-deal/[token]/
   page.tsx                      — public submission (server component, org lookup by token)
   client.tsx                    — public submission (client component, no auth)
 
+src/app/join/agent/[token]/
+  page.tsx                      — public invite landing (server component, agent lookup by token)
+  client.tsx                    — invite landing (client component, brokerage info display)
+  accept/
+    page.tsx                    — accept invite (authenticated, server component)
+    accept-client.tsx           — accept invite (client component)
+    resolve-user.ts             — link authenticated user to BrokerAgent server action
+
 src/lib/
-  bms-types.ts                  — shared types, enums, labels, colors, Excel column aliases (includes compliance + payment types)
+  bms-types.ts                  — shared types, enums, labels, colors, Excel column aliases, audit log types
+  bms-auth.ts                   — getCurrentBmsUser, requireBmsPermission (role-based access)
+  bms-permissions.ts            — BMS_ROLES, BMS_PERMISSIONS map, hasPermission, getRoleLabel
+  bms-files.ts                  — FileAttachment CRUD (upload, list, delete)
+  bms-audit.ts                  — fire-and-forget audit logging (logAction + 6 convenience functions)
   invoice-pdf.ts                — jsPDF invoice generator (single + batch)
 ```
 
 ### BMS Database Models
-- **BrokerAgent**: orgId, userId? (@unique), firstName, lastName, email, phone, licenseN, licenseExpiry?, eoInsuranceExpiry?, defaultSplitPct, commissionPlanId?, status
+- **BrokerAgent**: orgId, userId? (@unique), firstName, lastName, email, phone, licenseN, licenseExpiry?, eoInsuranceExpiry?, defaultSplitPct, commissionPlanId?, brokerageRole (string), inviteToken? (@unique), invitedAt?, inviteEmail?, status
 - **DealSubmission**: orgId, agentId?, all form fields as snapshots, status (string), invoiceId? (1:1)
 - **Invoice**: orgId, submissionId? (1:1), agentId?, invoiceNumber (INV-YYYY-NNNN), all info snapshotted, InvoiceStatus enum, payments[]
 - **CommissionPlan**: orgId, name, type (CommissionPlanType), isDefault, isActive, agents[] relation
 - **CommissionTier**: planId, tierOrder, minValue, maxValue?, agentSplitPct, houseSplitPct
 - **ComplianceDocument**: orgId, agentId, docType (ComplianceDocType), title, description?, issueDate?, expiryDate?, fileUrl?, fileName?, fileSize?, status, notes
 - **Payment**: orgId, invoiceId, agentId?, amount (Decimal 12,2), paymentMethod (PaymentMethod), paymentDate, referenceNumber?, stripePaymentId? (@unique), stripeTransferId? (@unique), notes
+- **FileAttachment**: orgId, entityType, entityId, fileName, fileType, fileSize, storagePath, publicUrl?, uploadedBy?
 
 ## Socrata API Patterns
 

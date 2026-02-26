@@ -222,5 +222,85 @@ src/lib/
 - **Invoice** addition: payments[] relation
 - **Organization** additions: complianceDocuments[] relation, payments[] relation
 
+## Phase 3.5: Roles, Permissions, Onboarding & Audit ✅
+
+### 3.5A: Role-Based Access Control
+- **BMS_PERMISSIONS** constant: 24 permission keys across 4 roles (brokerage_admin, broker, manager, agent)
+- Permission categories: submissions (view/manage/approve), invoices (view/manage/create), agents (view/manage), commission plans (view/manage), compliance (view/manage), payments (view/manage), reports (view), settings (manage)
+- `bms-auth.ts`: `getCurrentBmsUser()` — returns user with brokerageRole, orgId, agentId; `requireBmsPermission()` — throws if user lacks permission
+- `bms-permissions.ts`: `BMS_ROLES` array, `BMS_PERMISSIONS` map, `hasPermission(role, permission)` helper, `getRoleLabel()` display helper
+- Role hierarchy: brokerage_admin (all), broker (all except settings), manager (view + manage submissions/compliance), agent (view own only)
+- BrokerAgent model gets `brokerageRole` field (string, defaults to "agent")
+
+### 3.5B: Brokerage Settings Page
+- New route: `/brokerage/settings` — admin-only settings page with 3 tabs
+- **Roles & Permissions tab**: role matrix grid, assign roles to agents, role descriptions
+- **Settings tab**: company info (name, address, phone), brand settings (company name, logo URL, primary/accent color), BMS defaults (default split %, payment terms, invoice footer, license number, company email)
+- **Audit Log tab**: full audit log viewer with filters (see 3.5E)
+- Settings persisted to Organization (bmsSettings JSON) and BrandSettings (upsert)
+- Brokerage sub-nav expanded to 9 tabs: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings
+
+### 3.5C: Agent Onboarding (Invite Flow)
+- BrokerAgent gets invite fields: `inviteToken` (@unique), `invitedAt`, `inviteEmail`
+- **Invite action** (`onboarding-actions.ts`): `inviteAgent()` generates UUID token, stores on BrokerAgent, returns invite URL
+- **Revoke action**: `revokeInvite()` clears invite fields
+- **Accept flow** (`/join/agent/[token]`): public page, looks up agent by token, shows brokerage info
+  - If logged in → auto-link User to BrokerAgent, clear token
+  - If not logged in → show signup/login prompt, then link on `/join/agent/[token]/accept`
+- `resolve-user.ts`: server action that links authenticated user to BrokerAgent record
+- Audit logging on invite, revoke, and accept
+
+### 3.5D: File Upload Infrastructure
+- **FileAttachment model**: orgId, entityType, entityId, fileName, fileType, fileSize, storagePath, publicUrl?, uploadedBy?
+- `bms-files.ts`: generic file attachment CRUD — `uploadFile()`, `getFileAttachments()`, `deleteFileAttachment()`
+- Indexed by `[orgId, entityType, entityId]` for efficient lookups
+- Designed for compliance documents, deal attachments, etc.
+- Feature gate: bms_file_upload (team+)
+
+### 3.5E: Audit Logging
+- **AuditLog model** (existing): orgId, userId?, actorName?, actorRole?, action, entityType, entityId?, details JSON, previousValue JSON, newValue JSON, createdAt
+- `bms-audit.ts`: fire-and-forget logging (never await, `.catch()` on promise)
+  - `logAction()`: core logger
+  - Convenience functions: `logSubmissionAction`, `logInvoiceAction`, `logPaymentAction`, `logAgentAction`, `logComplianceAction`, `logSettingsAction`
+- Wired into all 7 BMS action files: deal-submissions, invoices, agents, onboarding, commission-plans, compliance, settings
+- 24 distinct actions tracked: CRUD, status changes, bulk operations, invites, role updates
+- **Audit Log Viewer** (`settings/audit-log.tsx`): filter bar (entity type, action search, date range), log table with relative timestamps, color-coded actions, expandable JSON details, pagination (50/page)
+- Feature gate: bms_audit_log (team+)
+
+### 3.5F: Feature Gates
+- New gates: `bms_agent_onboarding` (pro+), `bms_audit_log` (team+), `bms_file_upload` (team+)
+- Total BMS feature gates: 11
+
+### Database Additions (Phase 3.5)
+- **FileAttachment** model: generic file storage with entity polymorphism
+- **BrokerAgent** additions: `brokerageRole` (string), `inviteToken` (@unique), `invitedAt`, `inviteEmail`
+- **AuditLog** additions: `actorName`, `actorRole`, `previousValue` JSON, `newValue` JSON (fields may have existed but now actively used)
+- **Organization** additions: `fileAttachments[]` relation
+
+### File Additions (Phase 3.5)
+```
+src/app/(dashboard)/brokerage/
+  settings/
+    page.tsx          — 3-tab settings: Roles & Permissions, Settings, Audit Log
+    actions.ts        — getBrokerageSettings, updateBrokerageSettings, getAuditLogs
+    audit-log.tsx     — audit log viewer component (filters, table, pagination)
+  agents/
+    onboarding-actions.ts  — inviteAgent, revokeInvite, acceptInvite
+
+src/app/join/agent/[token]/
+  page.tsx            — public invite landing (server component)
+  client.tsx          — invite landing (client component)
+  accept/
+    page.tsx          — accept invite (authenticated)
+    accept-client.tsx — accept invite (client component)
+    resolve-user.ts   — link user to BrokerAgent server action
+
+src/lib/
+  bms-auth.ts         — getCurrentBmsUser, requireBmsPermission
+  bms-permissions.ts  — BMS_ROLES, BMS_PERMISSIONS, hasPermission, getRoleLabel
+  bms-files.ts        — FileAttachment CRUD (upload, list, delete)
+  bms-audit.ts        — fire-and-forget audit logging (7 convenience functions)
+```
+
 ## Future Phases
-Phase 4: Stripe payment integration (payouts to agents via Stripe Connect), file upload for compliance documents (S3/GCS), white-label BaaS configuration, multi-brokerage support
+Phase 4: Stripe payment integration (payouts to agents via Stripe Connect), white-label BaaS configuration, multi-brokerage support

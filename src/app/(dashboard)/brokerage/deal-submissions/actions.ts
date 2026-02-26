@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { BmsDealType } from "@prisma/client";
 import type { DealSubmissionInput } from "@/lib/bms-types";
+import { logSubmissionAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -217,7 +218,12 @@ export async function updateSubmissionStatus(
   rejectionReason?: string,
 ) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
+
+    const prev = await prisma.dealSubmission.findFirst({
+      where: { id: submissionId, orgId },
+      select: { status: true, propertyAddress: true },
+    });
 
     const submission = await prisma.dealSubmission.update({
       where: { id: submissionId, orgId },
@@ -225,6 +231,12 @@ export async function updateSubmissionStatus(
         status,
         rejectionReason: status === "rejected" ? (rejectionReason || null) : null,
       },
+    });
+
+    logSubmissionAction(orgId, { id: userId }, status, submissionId, {
+      propertyAddress: prev?.propertyAddress,
+      previousStatus: prev?.status,
+      ...(rejectionReason ? { rejectionReason } : {}),
     });
 
     return JSON.parse(JSON.stringify({ success: true, submission }));
@@ -236,10 +248,19 @@ export async function updateSubmissionStatus(
 
 export async function deleteSubmission(submissionId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
+
+    const prev = await prisma.dealSubmission.findFirst({
+      where: { id: submissionId, orgId },
+      select: { propertyAddress: true, status: true },
+    });
 
     await prisma.dealSubmission.delete({
       where: { id: submissionId, orgId },
+    });
+
+    logSubmissionAction(orgId, { id: userId }, "deleted", submissionId, {
+      propertyAddress: prev?.propertyAddress,
     });
 
     return { success: true };
@@ -318,12 +339,16 @@ export async function regenerateSubmissionToken() {
 
 export async function bulkUpdateStatus(submissionIds: string[], status: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const result = await prisma.dealSubmission.updateMany({
       where: { id: { in: submissionIds }, orgId },
       data: { status },
     });
+
+    for (const id of submissionIds) {
+      logSubmissionAction(orgId, { id: userId }, `bulk_${status}`, id);
+    }
 
     return { success: true, count: result.count };
   } catch (error) {

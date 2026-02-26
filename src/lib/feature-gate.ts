@@ -81,7 +81,10 @@ export type Feature =
   | "bms_commission_plans"
   | "bms_compliance"
   | "bms_payments"
-  | "bms_agent_portal";
+  | "bms_agent_portal"
+  | "bms_agent_onboarding"
+  | "bms_audit_log"
+  | "bms_file_upload";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -148,6 +151,7 @@ const PRO_FEATURES: Feature[] = [
   "bms_submissions",
   "bms_invoices",
   "bms_agent_portal",
+  "bms_agent_onboarding",
 ];
 
 const TEAM_FEATURES: Feature[] = [
@@ -163,6 +167,8 @@ const TEAM_FEATURES: Feature[] = [
   "bms_commission_plans",
   "bms_compliance",
   "bms_payments",
+  "bms_audit_log",
+  "bms_file_upload",
 ];
 
 // Enterprise gets everything
@@ -251,6 +257,9 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bms_compliance: "Upgrade to Team for compliance tracking",
   bms_payments: "Upgrade to Team for payment tracking",
   bms_agent_portal: "Upgrade to Pro for agent self-service portal",
+  bms_agent_onboarding: "Upgrade to Pro for agent invite & onboarding",
+  bms_audit_log: "Upgrade to Team for audit log tracking",
+  bms_file_upload: "Upgrade to Team for file uploads",
 };
 
 export function getUpgradeMessage(feature: Feature): string {

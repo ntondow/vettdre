@@ -1,15 +1,26 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function SignUpPage() {
+  return (
+    <Suspense>
+      <SignUpForm />
+    </Suspense>
+  );
+}
+
+function SignUpForm() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const supabase = createClient();
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -27,7 +38,7 @@ export default function SignUpPage() {
         <div className="max-w-md w-full text-center space-y-4">
           <h2 className="text-2xl font-bold text-slate-900">Check your email</h2>
           <p className="text-slate-500">We sent a confirmation link to <strong>{email}</strong>.</p>
-          <Link href="/login" className="inline-block mt-4 text-blue-600 font-medium text-sm">Back to sign in</Link>
+          <Link href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="inline-block mt-4 text-blue-600 font-medium text-sm">Back to sign in</Link>
         </div>
       </div>
     );
@@ -57,7 +68,7 @@ export default function SignUpPage() {
           </div>
           <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors disabled:opacity-50">{loading ? "Creating account..." : "Create account"}</button>
         </form>
-        <p className="text-center text-sm text-slate-500">Already have an account? <Link href="/login" className="text-blue-600 font-medium">Sign in</Link></p>
+        <p className="text-center text-sm text-slate-500">Already have an account? <Link href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : "/login"} className="text-blue-600 font-medium">Sign in</Link></p>
       </div>
     </div>
   );
