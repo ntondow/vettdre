@@ -27,7 +27,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | Communication | Twilio (SMS + voice), Gmail API (OAuth) |
 | Styling | Tailwind CSS + shadcn/ui components |
 
-## File Structure — src/lib/ (54 files)
+## File Structure — src/lib/ (58 files)
 
 ### Core Infrastructure
 | File | Purpose |
@@ -159,13 +159,19 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `/market-intel` | Working | 4 search modes: property, ownership, name, map |
 | `/properties` | Minimal | Empty state (needs implementation) |
 | `/prospecting` | Working | Prospect lists from Market Intel |
-| `/brokerage` | Working | BMS: deal submissions, invoices, plans, agents |
+| `/brokerage` | Working | Redirects to /brokerage/dashboard |
+| `/brokerage/dashboard` | Working | Stats cards, deal/invoice status charts, period selector |
 | `/brokerage/deal-submissions` | Working | Agent deal submission queue + approval |
-| `/brokerage/invoices` | Working | Invoice generation, Excel upload, batch PDF |
+| `/brokerage/invoices` | Working | Invoice generation, Excel upload, batch PDF, inline payments |
 | `/brokerage/commission-plans` | Working | Commission plan templates (flat/volume/value tiers) |
-| `/brokerage/agents` | Working | Agent roster, detail pages, Excel import |
+| `/brokerage/reports/*` | Working | P&L, agent production, 1099 prep, deal pipeline (4 sub-tabs) |
+| `/brokerage/compliance` | Working | Document tracking, expiry alerts, agent compliance grid |
+| `/brokerage/payments` | Working | Payment recording, history, filters, CSV export |
+| `/brokerage/agents` | Working | Agent roster, detail pages, Excel import, onboarding |
 | `/brokerage/agents/[id]` | Working | Agent detail: stats, plan tiers, deals, invoices |
+| `/brokerage/settings` | Working | Roles & permissions, brokerage settings, audit log (3 tabs) |
 | `/brokerage/my-deals` | Working | Agent self-service: own submissions + invoices |
+| `/join/agent/[token]` | Working | Public agent invite landing + accept flow |
 | `/portfolios` | Basic | Schema + basic UI |
 | `/book/[slug]` | Working | Public showing booking (no auth) |
 
@@ -211,7 +217,9 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `brokerage/deal-submissions/actions.ts` | `createSubmission`, `updateSubmissionStatus`, `approveSubmission`, `rejectSubmission`, `generatePublicLink` |
 | `brokerage/invoices/actions.ts` | `createInvoice`, `createInvoiceFromSubmission`, `markPaid`, `voidInvoice`, `validateExcelRows`, `batchCreateInvoices` |
 | `brokerage/commission-plans/actions.ts` | `createPlan`, `updatePlan`, `archivePlan`, `assignPlanToAgent`, `getAgentEffectiveSplit` |
-| `brokerage/agents/actions.ts` | `createAgent`, `updateAgent`, `deactivateAgent`, `deleteAgent`, `bulkCreateAgents`, `getAgentStats`, `linkAgentToUser` |
+| `brokerage/agents/actions.ts` | `createAgent`, `updateAgent`, `updateAgentRole`, `deactivateAgent`, `deleteAgent`, `bulkCreateAgents`, `getAgentStats`, `linkAgentToUser` |
+| `brokerage/agents/onboarding-actions.ts` | `inviteAgent`, `revokeInvite`, `acceptInvite` |
+| `brokerage/settings/actions.ts` | `getBrokerageSettings`, `updateBrokerageSettings`, `getAuditLogs` |
 | `brokerage/my-deals/actions.ts` | `getMyAgent`, `getMySubmissions`, `getMyInvoices`, `getMyStats` |
 | `brokerage/reports/actions.ts` | `getDashboardSummary`, `getPnlReport`, `getAgentProductionReport`, `get1099PrepData`, `getDealPipelineReport`, `exportReportCSV` |
 | `brokerage/compliance/actions.ts` | `getComplianceOverview`, `getAgentComplianceDocs`, `createComplianceDoc`, `updateComplianceDoc`, `deleteComplianceDoc`, `getExpiringItems`, `refreshComplianceStatuses` |
@@ -304,7 +312,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 |--------|---------|------------|
 | Parcels Composite | `Parcels_Composite_NJ_WM/FeatureServer/0` | MUN_NAME, PROP_CLASS, PROP_LOC, DWELL, YR_CONSTR, LAND_VAL |
 
-## Feature Gate System (74 features, 5 plans)
+## Feature Gate System (71 features, 5 plans)
 
 **Plans:** free ($0) → explorer ($59/mo) → pro ($219/mo) → team ($399/mo) → enterprise (custom)
 
@@ -314,15 +322,15 @@ A real estate intelligence platform for NYC commercial real estate professionals
 ### Explorer adds (18 features)
 `market_nys`, `market_nj`, `map_search`, `search_unlimited`, `bp_owner_name`, `bp_distress_score`, `bp_investment_score`, `bp_rpie`, `bp_live_listings`, `bp_web_intel`, `bp_census_full`, `bp_market_trends`, `bp_fannie_mae_loan`, `bp_renovation_basic`, `bp_str_basic`, `report_basic`, `bp_corp_basic`, `deal_structure_all_cash`
 
-### Pro adds (32 features)
-`nav_deal_modeler`, `nav_prospecting`, `nav_portfolios`, `nav_campaigns`, `nav_sequences`, `nav_financing`, `nav_comp_analysis`, `bp_owner_contact`, `bp_apollo_enrichment`, `bp_census_trends`, `bp_corp_full`, `bp_renovation_full`, `bp_str_full`, `report_full`, `phone_sms`, `deal_modeler`, `prospecting`, `portfolios`, `comp_analysis`, `campaigns`, `sequences`, `financing`, `api_access`, `promote_model`, `nav_promote_model`, `deal_structure_conventional`, `deal_structure_bridge_refi`, `deal_structure_assumable`, `deal_structure_syndication`, `deal_structure_compare`, `bms_submissions`, `bms_invoices`, `bms_agent_portal`
+### Pro adds (33 features)
+`nav_deal_modeler`, `nav_prospecting`, `nav_portfolios`, `nav_campaigns`, `nav_sequences`, `nav_financing`, `nav_comp_analysis`, `bp_owner_contact`, `bp_apollo_enrichment`, `bp_census_trends`, `bp_corp_full`, `bp_renovation_full`, `bp_str_full`, `report_full`, `phone_sms`, `deal_modeler`, `prospecting`, `portfolios`, `comp_analysis`, `campaigns`, `sequences`, `financing`, `api_access`, `promote_model`, `nav_promote_model`, `deal_structure_conventional`, `deal_structure_bridge_refi`, `deal_structure_assumable`, `deal_structure_syndication`, `deal_structure_compare`, `bms_submissions`, `bms_invoices`, `bms_agent_portal`, `bms_agent_onboarding`
 
-### Team adds (8 features)
-`nav_investors`, `investors`, `phone_multi_numbers`, `promote_templates`, `promote_sensitivity`, `promote_export`, `bms_bulk_upload`, `bms_agents`, `bms_commission_plans`
+### Team adds (14 features)
+`nav_investors`, `investors`, `phone_multi_numbers`, `promote_templates`, `promote_sensitivity`, `promote_export`, `bms_bulk_upload`, `bms_agents`, `bms_commission_plans`, `bms_compliance`, `bms_payments`, `bms_audit_log`, `bms_file_upload`
 
 ### Enterprise = Team (all features)
 
-## Prisma Schema (39 models, 18 enums)
+## Prisma Schema (42 models, 20 enums)
 
 ### Core Multi-Tenant
 - **Organization**: name, slug, tier (free/explorer/pro/team), aiLookupsUsed/Limit
@@ -369,7 +377,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 
 ### System
 - **Automation**, **AutomationRun**: triggerType, conditions/actions JSON
-- **AuditLog**: userId, action, entityType, changes JSON
+- **AuditLog**: userId, actorName, actorRole, action, entityType, entityId, details JSON, previousValue JSON, newValue JSON
 
 ## Brokerage Management System (BMS)
 

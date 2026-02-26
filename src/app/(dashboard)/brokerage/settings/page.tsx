@@ -12,7 +12,7 @@ import {
   BROKERAGE_ROLE_LABELS,
   BROKERAGE_ROLE_COLORS,
 } from "@/lib/bms-types";
-import type { BrokerageRoleType, BmsPermission, BrokerageSettings } from "@/lib/bms-types";
+import type { BrokerageRoleType, BmsPermission, BrokerageSettings, BillToEntity, BillToMappings } from "@/lib/bms-types";
 import {
   Settings,
   ShieldCheck,
@@ -32,6 +32,9 @@ import {
   Link2,
   Receipt,
   ClipboardList,
+  FileText,
+  Trash2,
+  Plus,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────
@@ -153,6 +156,13 @@ const PAYMENT_TERMS_OPTIONS = [
   "Net 30",
   "Net 45",
   "Net 60",
+];
+
+const LINE_FORMAT_OPTIONS: { value: string; label: string; preview: string }[] = [
+  { value: "rental_commission_tenant_address", label: "Rental commission - [Tenant] at [Address]", preview: "Rental commission - John Smith at 123 Main St Apt 4A" },
+  { value: "commission_lease_address", label: "Commission for lease at [Address]", preview: "Commission for lease at 123 Main St Apt 4A" },
+  { value: "tenant_address", label: "[Tenant] - [Address]", preview: "John Smith - 123 Main St Apt 4A" },
+  { value: "lease_commission_address_tenant", label: "Lease commission - [Address] ([Tenant])", preview: "Lease commission - 123 Main St Apt 4A (John Smith)" },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -287,6 +297,10 @@ export default function BrokerageSettingsPage() {
       invoiceFooterText: settingsForm.invoiceFooterText,
       companyLicenseNumber: settingsForm.companyLicenseNumber,
       companyEmail: settingsForm.companyEmail,
+      invoicePrefix: settingsForm.invoicePrefix,
+      invoiceNotes: settingsForm.invoiceNotes,
+      invoiceLineFormat: settingsForm.invoiceLineFormat,
+      billToMappings: settingsForm.billToMappings,
     });
     if (result.success) {
       setSettings({ ...settingsForm });
@@ -728,6 +742,20 @@ export default function BrokerageSettingsPage() {
                 </div>
                 <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
+                    <label className={LABEL}>Invoice Number Prefix</label>
+                    <input
+                      type="text"
+                      value={settingsForm.invoicePrefix}
+                      onChange={(e) => setField("invoicePrefix", e.target.value)}
+                      className={INPUT}
+                      placeholder="INV"
+                      maxLength={10}
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Prefix for invoice numbers (e.g., INV-2026-0001)
+                    </p>
+                  </div>
+                  <div>
                     <label className={LABEL}>Default Agent Split %</label>
                     <div className="relative">
                       <input
@@ -754,19 +782,147 @@ export default function BrokerageSettingsPage() {
                       ))}
                     </select>
                   </div>
+                  <div>
+                    <label className={LABEL}>Line Item Format</label>
+                    <select
+                      value={settingsForm.invoiceLineFormat}
+                      onChange={(e) => setField("invoiceLineFormat", e.target.value)}
+                      className={INPUT}
+                    >
+                      {LINE_FORMAT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Preview: <span className="italic">{LINE_FORMAT_OPTIONS.find(o => o.value === settingsForm.invoiceLineFormat)?.preview || ""}</span>
+                    </p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className={LABEL}>Default Notes / Payment Instructions</label>
+                    <textarea
+                      value={settingsForm.invoiceNotes}
+                      onChange={(e) => setField("invoiceNotes", e.target.value)}
+                      rows={2}
+                      className={INPUT}
+                      placeholder="Please make checks payable to Company LLC..."
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Pre-filled as notes on bulk-generated invoices (editable per batch)
+                    </p>
+                  </div>
                   <div className="md:col-span-2">
                     <label className={LABEL}>Invoice Footer Text</label>
                     <textarea
                       value={settingsForm.invoiceFooterText}
                       onChange={(e) => setField("invoiceFooterText", e.target.value)}
-                      rows={3}
+                      rows={2}
                       className={INPUT}
-                      placeholder="Thank you for your business. Please remit payment within the terms stated above."
+                      placeholder="Thank you for your business."
                     />
                     <p className="text-xs text-slate-400 mt-1">
                       Appears at the bottom of every generated invoice PDF
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* Saved Bill To Entities */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="w-5 h-5 text-slate-400" />
+                    <h2 className="font-semibold text-slate-900">Saved Bill To Entities</h2>
+                    <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                      {Object.keys(settingsForm.billToMappings || {}).length} saved
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const key = `new-entity-${Date.now()}`;
+                      setField("billToMappings", {
+                        ...settingsForm.billToMappings,
+                        [key]: { companyName: "" },
+                      });
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Entity
+                  </button>
+                </div>
+                <div className="p-5">
+                  {Object.keys(settingsForm.billToMappings || {}).length === 0 ? (
+                    <p className="text-sm text-slate-400 text-center py-6">
+                      No saved Bill To entities. Add one manually or they&apos;ll be created when using the Bulk Invoice tool.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {Object.entries(settingsForm.billToMappings || {}).map(([propKey, entity]) => (
+                        <div key={propKey} className="border border-slate-200 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">{propKey}</span>
+                            <button
+                              onClick={() => {
+                                const next = { ...settingsForm.billToMappings };
+                                delete next[propKey];
+                                setField("billToMappings", next);
+                              }}
+                              className="p-1 text-slate-400 hover:text-red-500 transition-colors"
+                              title="Remove entity"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                            <input
+                              type="text"
+                              value={entity.companyName || ""}
+                              onChange={(e) => {
+                                const next = { ...settingsForm.billToMappings };
+                                next[propKey] = { ...entity, companyName: e.target.value };
+                                setField("billToMappings", next);
+                              }}
+                              placeholder="Company name"
+                              className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <input
+                              type="text"
+                              value={entity.address || ""}
+                              onChange={(e) => {
+                                const next = { ...settingsForm.billToMappings };
+                                next[propKey] = { ...entity, address: e.target.value };
+                                setField("billToMappings", next);
+                              }}
+                              placeholder="Address"
+                              className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <input
+                              type="text"
+                              value={entity.phone || ""}
+                              onChange={(e) => {
+                                const next = { ...settingsForm.billToMappings };
+                                next[propKey] = { ...entity, phone: e.target.value };
+                                setField("billToMappings", next);
+                              }}
+                              placeholder="Phone"
+                              className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <input
+                              type="email"
+                              value={entity.email || ""}
+                              onChange={(e) => {
+                                const next = { ...settingsForm.billToMappings };
+                                next[propKey] = { ...entity, email: e.target.value };
+                                setField("billToMappings", next);
+                              }}
+                              placeholder="Email"
+                              className="border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
