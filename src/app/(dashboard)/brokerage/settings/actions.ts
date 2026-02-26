@@ -46,6 +46,10 @@ interface BmsSettingsJson {
   invoiceFooterText: string;
   companyLicenseNumber: string;
   companyEmail: string;
+  invoicePrefix: string;
+  invoiceNotes: string;
+  invoiceLineFormat: string;
+  billToMappings: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
 }
 
 const BMS_DEFAULTS: BmsSettingsJson = {
@@ -54,6 +58,10 @@ const BMS_DEFAULTS: BmsSettingsJson = {
   invoiceFooterText: "",
   companyLicenseNumber: "",
   companyEmail: "",
+  invoicePrefix: "INV",
+  invoiceNotes: "",
+  invoiceLineFormat: "rental_commission_tenant_address",
+  billToMappings: {},
 };
 
 function parseBmsSettings(raw: unknown): BmsSettingsJson {
@@ -65,6 +73,12 @@ function parseBmsSettings(raw: unknown): BmsSettingsJson {
     invoiceFooterText: typeof obj.invoiceFooterText === "string" ? obj.invoiceFooterText : BMS_DEFAULTS.invoiceFooterText,
     companyLicenseNumber: typeof obj.companyLicenseNumber === "string" ? obj.companyLicenseNumber : BMS_DEFAULTS.companyLicenseNumber,
     companyEmail: typeof obj.companyEmail === "string" ? obj.companyEmail : BMS_DEFAULTS.companyEmail,
+    invoicePrefix: typeof obj.invoicePrefix === "string" ? obj.invoicePrefix : BMS_DEFAULTS.invoicePrefix,
+    invoiceNotes: typeof obj.invoiceNotes === "string" ? obj.invoiceNotes : BMS_DEFAULTS.invoiceNotes,
+    invoiceLineFormat: typeof obj.invoiceLineFormat === "string" ? obj.invoiceLineFormat : BMS_DEFAULTS.invoiceLineFormat,
+    billToMappings: (obj.billToMappings && typeof obj.billToMappings === "object" && !Array.isArray(obj.billToMappings))
+      ? obj.billToMappings as BmsSettingsJson["billToMappings"]
+      : BMS_DEFAULTS.billToMappings,
   };
 }
 
@@ -105,7 +119,7 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
         primaryColor: null,
         accentColor: null,
         ...BMS_DEFAULTS,
-      };
+      } as BrokerageSettings;
     }
 
     const bms = parseBmsSettings(org.bmsSettings);
@@ -120,7 +134,7 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
       primaryColor: org.brandSettings?.primaryColor || null,
       accentColor: org.brandSettings?.accentColor || null,
       ...bms,
-    };
+    } as BrokerageSettings;
   } catch (error) {
     console.error("getBrokerageSettings error:", error);
     return {
@@ -133,7 +147,7 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
       primaryColor: null,
       accentColor: null,
       ...BMS_DEFAULTS,
-    };
+    } as BrokerageSettings;
   }
 }
 
@@ -152,6 +166,10 @@ export async function updateBrokerageSettings(input: {
   invoiceFooterText?: string;
   companyLicenseNumber?: string;
   companyEmail?: string;
+  invoicePrefix?: string;
+  invoiceNotes?: string;
+  invoiceLineFormat?: string;
+  billToMappings?: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId, orgId, role } = await getCurrentOrgAsAdmin();
@@ -172,7 +190,11 @@ export async function updateBrokerageSettings(input: {
       input.defaultPaymentTerms !== undefined ||
       input.invoiceFooterText !== undefined ||
       input.companyLicenseNumber !== undefined ||
-      input.companyEmail !== undefined;
+      input.companyEmail !== undefined ||
+      input.invoicePrefix !== undefined ||
+      input.invoiceNotes !== undefined ||
+      input.invoiceLineFormat !== undefined ||
+      input.billToMappings !== undefined;
 
     if (hasBmsFields) {
       const org = await prisma.organization.findUnique({
@@ -186,6 +208,10 @@ export async function updateBrokerageSettings(input: {
         invoiceFooterText: input.invoiceFooterText ?? current.invoiceFooterText,
         companyLicenseNumber: input.companyLicenseNumber ?? current.companyLicenseNumber,
         companyEmail: input.companyEmail ?? current.companyEmail,
+        invoicePrefix: input.invoicePrefix ?? current.invoicePrefix,
+        invoiceNotes: input.invoiceNotes ?? current.invoiceNotes,
+        invoiceLineFormat: input.invoiceLineFormat ?? current.invoiceLineFormat,
+        billToMappings: input.billToMappings ?? current.billToMappings,
       };
       orgUpdate.bmsSettings = merged;
     }

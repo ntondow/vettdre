@@ -233,6 +233,13 @@ export default function InvoicesPage() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => router.push("/brokerage/invoices/bulk")}
+            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            Bulk Generate
+          </button>
+          <button
             onClick={() => setShowUpload(true)}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
           >

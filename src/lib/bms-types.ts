@@ -143,6 +143,15 @@ export interface BrokerageConfig {
   logoUrl?: string;
 }
 
+export interface BillToEntity {
+  companyName: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+}
+
+export type BillToMappings = Record<string, BillToEntity>;
+
 export interface BrokerageSettings {
   name: string;
   address: string;
@@ -157,6 +166,11 @@ export interface BrokerageSettings {
   submissionToken: string | null;
   primaryColor: string | null;
   accentColor: string | null;
+  // Invoice settings
+  invoicePrefix: string;
+  invoiceNotes: string;
+  invoiceLineFormat: string;
+  billToMappings: BillToMappings;
 }
 
 export interface CommissionTierInput {
