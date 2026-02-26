@@ -2,12 +2,17 @@
 
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { FileText, Receipt, Users } from "lucide-react";
+import { BarChart3, FileText, Receipt, Layers, FileBarChart, Shield, CreditCard, Users } from "lucide-react";
 
 const NAV_ITEMS = [
+  { label: "Dashboard", href: "/brokerage/dashboard", icon: BarChart3, disabled: false },
   { label: "Deal Submissions", href: "/brokerage/deal-submissions", icon: FileText, disabled: false },
   { label: "Invoices", href: "/brokerage/invoices", icon: Receipt, disabled: false },
-  { label: "Agents", href: "/brokerage/agents", icon: Users, disabled: true },
+  { label: "Plans", href: "/brokerage/commission-plans", icon: Layers, disabled: false },
+  { label: "Reports", href: "/brokerage/reports", icon: FileBarChart, disabled: false },
+  { label: "Compliance", href: "/brokerage/compliance", icon: Shield, disabled: false },
+  { label: "Payments", href: "/brokerage/payments", icon: CreditCard, disabled: false },
+  { label: "Agents", href: "/brokerage/agents", icon: Users, disabled: false },
 ] as const;
 
 export default function BrokerageLayout({ children }: { children: React.ReactNode }) {

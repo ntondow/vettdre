@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
+import { useRouter } from "next/navigation";
 import {
   getInvoices,
   updateInvoiceStatus,
@@ -13,9 +14,11 @@ import {
   INVOICE_STATUS_LABELS,
   INVOICE_STATUS_COLORS,
   DEAL_TYPE_LABELS,
+  PAYMENT_METHOD_LABELS,
 } from "@/lib/bms-types";
 import type { BrokerageConfig } from "@/lib/bms-types";
 import { generateInvoicePDF, generateBatchInvoicePDFs } from "@/lib/invoice-pdf";
+import { recordPayment } from "../payments/actions";
 import {
   FileText,
   Download,
@@ -27,6 +30,7 @@ import {
   Upload,
   Printer,
   X,
+  DollarSign,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -47,6 +51,7 @@ const STATUS_TABS = ["all", "draft", "sent", "paid", "void"] as const;
 // ── Component ─────────────────────────────────────────────────
 
 export default function InvoicesPage() {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
@@ -57,6 +62,12 @@ export default function InvoicesPage() {
   const [showUpload, setShowUpload] = useState(false);
   const [brokerageConfig, setBrokerageConfig] = useState<BrokerageConfig | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  // Inline payment form
+  const [paymentFormId, setPaymentFormId] = useState<string | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ amount: "", method: "check", reference: "" });
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
@@ -178,6 +189,35 @@ export default function InvoicesPage() {
     loadData();
   }
 
+  function openPaymentForm(inv: any) {
+    const paidSoFar = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+    const balance = Number(inv.agentPayout) - paidSoFar;
+    setPaymentForm({ amount: balance.toFixed(2), method: "check", reference: "" });
+    setPaymentError("");
+    setPaymentFormId(inv.id);
+  }
+
+  async function handleInlineRecordPayment(inv: any) {
+    const amount = parseFloat(paymentForm.amount);
+    if (!amount || amount <= 0) { setPaymentError("Enter a valid amount"); return; }
+    setPaymentLoading(true);
+    setPaymentError("");
+    const result = await recordPayment({
+      invoiceId: inv.id,
+      agentId: inv.agentId || undefined,
+      amount,
+      paymentMethod: paymentForm.method as any,
+      referenceNumber: paymentForm.reference || undefined,
+    });
+    setPaymentLoading(false);
+    if (result.success) {
+      setPaymentFormId(null);
+      loadData();
+    } else {
+      setPaymentError(result.error || "Failed to record payment");
+    }
+  }
+
   const totalCount = Object.values(counts).reduce((s, c) => s + c, 0);
 
   // ── Render ──────────────────────────────────────────────────
@@ -200,7 +240,7 @@ export default function InvoicesPage() {
             Upload Excel
           </button>
           <button
-            onClick={() => alert("Manual invoice creation — coming next sprint")}
+            onClick={() => router.push("/brokerage/invoices/new")}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
           >
             <Plus className="h-4 w-4" />
@@ -327,8 +367,13 @@ export default function InvoicesPage() {
                 const isActing = actionLoading === inv.id;
                 const canMarkPaid = inv.status === "draft" || inv.status === "sent";
                 const canVoid = inv.status !== "void" && inv.status !== "paid";
+                const paidAmount = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+                const agentPayoutNum = Number(inv.agentPayout);
+                const hasPartialPayment = paidAmount > 0 && paidAmount < agentPayoutNum * 0.995;
+                const paidPct = agentPayoutNum > 0 ? Math.min(100, Math.round((paidAmount / agentPayoutNum) * 100)) : 0;
                 return (
-                  <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
+                  <Fragment key={inv.id}>
+                  <tr className="hover:bg-slate-50/50 transition-colors">
                     {/* Checkbox */}
                     <td className="px-3 py-3">
                       <input
@@ -365,8 +410,16 @@ export default function InvoicesPage() {
                     {/* Agent Payout */}
                     <td className="px-3 py-3 text-right">
                       <span className="text-sm font-semibold text-green-600">
-                        {fmt(Number(inv.agentPayout))}
+                        {fmt(agentPayoutNum)}
                       </span>
+                      {hasPartialPayment && (
+                        <div className="mt-1">
+                          <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${paidPct}%` }} />
+                          </div>
+                          <span className="text-[10px] text-slate-400">{fmt(paidAmount)} paid</span>
+                        </div>
+                      )}
                     </td>
 
                     {/* House */}
@@ -381,6 +434,12 @@ export default function InvoicesPage() {
                       <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${INVOICE_STATUS_COLORS[inv.status] || "bg-slate-100 text-slate-600"}`}>
                         {INVOICE_STATUS_LABELS[inv.status] || inv.status}
                       </span>
+                      {inv.status === "paid" && inv.paidDate && (
+                        <div className="text-[10px] text-slate-400 mt-0.5">{fmtDate(inv.paidDate)}</div>
+                      )}
+                      {hasPartialPayment && (
+                        <div className="text-[10px] text-amber-600 font-medium mt-0.5">Partial</div>
+                      )}
                     </td>
 
                     {/* Due Date */}
@@ -405,6 +464,15 @@ export default function InvoicesPage() {
                         >
                           <Printer className="h-4 w-4" />
                         </button>
+                        {canMarkPaid && (
+                          <button
+                            onClick={() => openPaymentForm(inv)}
+                            className="p-1.5 text-slate-400 hover:text-green-600 transition-colors"
+                            title="Record Payment"
+                          >
+                            <DollarSign className="h-4 w-4" />
+                          </button>
+                        )}
                         {canMarkPaid && (
                           <button
                             onClick={() => handleMarkPaid(inv.id)}
@@ -436,6 +504,69 @@ export default function InvoicesPage() {
                       </div>
                     </td>
                   </tr>
+                  {paymentFormId === inv.id && (
+                    <tr className="bg-green-50/50">
+                      <td colSpan={9} className="px-4 py-3">
+                        <div className="flex items-end gap-3 flex-wrap">
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Amount</label>
+                            <div className="relative">
+                              <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs">$</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={paymentForm.amount}
+                                onChange={e => setPaymentForm(f => ({ ...f, amount: e.target.value }))}
+                                className="w-32 pl-6 pr-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Method</label>
+                            <select
+                              value={paymentForm.method}
+                              onChange={e => setPaymentForm(f => ({ ...f, method: e.target.value }))}
+                              className="px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500 bg-white"
+                            >
+                              {Object.entries(PAYMENT_METHOD_LABELS).map(([val, label]) => (
+                                <option key={val} value={val}>{label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-slate-600 mb-1">Ref #</label>
+                            <input
+                              type="text"
+                              value={paymentForm.reference}
+                              onChange={e => setPaymentForm(f => ({ ...f, reference: e.target.value }))}
+                              placeholder="Optional"
+                              className="w-28 px-2 py-1.5 border border-slate-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleInlineRecordPayment(inv)}
+                              disabled={paymentLoading}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50 transition-colors"
+                            >
+                              {paymentLoading ? "..." : "Record"}
+                            </button>
+                            <button
+                              onClick={() => setPaymentFormId(null)}
+                              className="px-3 py-1.5 text-sm font-medium text-slate-600 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                          {paymentError && (
+                            <span className="text-xs text-red-600">{paymentError}</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </Fragment>
                 );
               })}
             </tbody>

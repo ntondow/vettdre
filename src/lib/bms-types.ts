@@ -10,6 +10,8 @@ export type SubmissionStatus = "submitted" | "under_review" | "approved" | "invo
 export type InvoiceStatusType = "draft" | "sent" | "paid" | "void";
 export type SubmissionSource = "internal" | "external";
 export type AgentStatus = "active" | "inactive" | "terminated";
+export type CommissionPlanType = "volume_based" | "value_based" | "flat";
+export type CommissionPlanStatus = "active" | "inactive";
 
 // ── Interfaces ────────────────────────────────────────────────
 
@@ -131,6 +133,216 @@ export interface BrokerageConfig {
   logoUrl?: string;
 }
 
+export interface CommissionTierInput {
+  tierOrder: number;
+  minThreshold: number;
+  maxThreshold?: number;
+  agentSplitPct: number;
+  houseSplitPct: number;
+  label?: string;
+}
+
+export interface CommissionTierRecord extends CommissionTierInput {
+  id: string;
+  planId: string;
+}
+
+export interface CommissionPlanInput {
+  name: string;
+  description?: string;
+  planType: CommissionPlanType;
+  isDefault?: boolean;
+  tiers: CommissionTierInput[];
+}
+
+export interface CommissionPlanRecord extends Omit<CommissionPlanInput, "tiers"> {
+  id: string;
+  orgId: string;
+  status: CommissionPlanStatus;
+  tiers: CommissionTierRecord[];
+  agentCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ── Report Types ─────────────────────────────────────────────
+
+export type ReportPeriod = "month" | "quarter" | "year";
+export type ReportGroupBy = "month" | "week";
+export type ReportExportType = "1099" | "agent_production" | "pnl";
+
+export interface DashboardSummary {
+  totalDeals: number;
+  approvedDeals: number;
+  totalVolume: number;
+  totalCommission: number;
+  houseRevenue: number;
+  agentPayouts: number;
+  pendingPayouts: number;
+  avgDealSize: number;
+  avgCommissionRate: number;
+  submissionsByStatus: Record<string, number>;
+  invoicesByStatus: Record<string, number>;
+  dealsByType: Record<string, number>;
+  periodStart: string;
+  periodEnd: string;
+}
+
+export interface PnlPeriod {
+  period: string;
+  revenue: number;
+  payouts: number;
+  netIncome: number;
+  dealCount: number;
+  volume: number;
+}
+
+export interface PnlReport {
+  periods: PnlPeriod[];
+  totals: {
+    totalRevenue: number;
+    totalPayouts: number;
+    totalNetIncome: number;
+    totalDeals: number;
+    totalVolume: number;
+  };
+}
+
+export interface AgentProductionRow {
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  dealCount: number;
+  totalVolume: number;
+  totalCommission: number;
+  agentEarnings: number;
+  houseEarnings: number;
+  avgDealSize: number;
+  avgSplitPct: number;
+  rank: number;
+}
+
+export interface AgentProductionReport {
+  agents: AgentProductionRow[];
+  orgTotals: {
+    totalDeals: number;
+    totalVolume: number;
+    totalCommission: number;
+    totalAgentPayouts: number;
+    totalHouseRevenue: number;
+  };
+}
+
+export interface Agent1099Row {
+  agentId: string;
+  agentName: string;
+  agentEmail: string;
+  agentLicense: string;
+  totalEarnings: number;
+  invoiceCount: number;
+  firstPaymentDate: string | null;
+  lastPaymentDate: string | null;
+  isAbove600: boolean;
+}
+
+export interface Report1099Data {
+  agents: Agent1099Row[];
+  summary: {
+    totalAgents: number;
+    agentsAboveThreshold: number;
+    totalPaid: number;
+  };
+}
+
+export interface PipelineReport {
+  statusCounts: Record<string, number>;
+  conversionRates: {
+    submittedToApproved: number;
+    approvedToInvoiced: number;
+    invoicedToPaid: number;
+    overallConversion: number;
+  };
+  avgDaysToApproval: number;
+  avgDaysToPayment: number;
+  bySource: Record<string, { count: number; volume: number }>;
+  byDealType: Record<string, { count: number; volume: number; avgValue: number }>;
+  recentRejections: Array<{
+    propertyAddress: string;
+    agentName: string;
+    reason: string;
+    date: string;
+  }>;
+}
+
+// ── Compliance Types ─────────────────────────────────────────
+
+export type ComplianceDocType = "license" | "eo_insurance" | "continuing_education" | "background_check" | "other";
+export type ComplianceDocStatus = "active" | "expired" | "expiring_soon";
+
+export interface ComplianceDocInput {
+  agentId: string;
+  docType: ComplianceDocType;
+  title: string;
+  description?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  notes?: string;
+}
+
+export interface ComplianceDocRecord extends ComplianceDocInput {
+  id: string;
+  orgId: string;
+  status: ComplianceDocStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AgentComplianceSummary {
+  agentId: string;
+  agentName: string;
+  licenseExpiry: string | null;
+  eoInsuranceExpiry: string | null;
+  totalDocs: number;
+  expiredDocs: number;
+  expiringSoonDocs: number;
+  isFullyCompliant: boolean;
+}
+
+// ── Payment Types ────────────────────────────────────────────
+
+export type PaymentMethodType = "check" | "ach" | "wire" | "cash" | "stripe" | "other";
+
+export interface PaymentInput {
+  invoiceId: string;
+  agentId?: string;
+  amount: number;
+  paymentMethod: PaymentMethodType;
+  paymentDate?: string;
+  referenceNumber?: string;
+  notes?: string;
+}
+
+export interface PaymentRecord extends PaymentInput {
+  id: string;
+  orgId: string;
+  stripePaymentId?: string;
+  stripeTransferId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoicePaymentSummary {
+  invoiceId: string;
+  invoiceTotal: number;
+  totalPaid: number;
+  balance: number;
+  isFullyPaid: boolean;
+  payments: PaymentRecord[];
+}
+
 // ── Excel Upload ──────────────────────────────────────────────
 
 export interface ExcelDealRow {
@@ -205,4 +417,52 @@ export const INVOICE_STATUS_COLORS: Record<string, string> = {
   sent: "bg-blue-100 text-blue-700",
   paid: "bg-green-100 text-green-700",
   void: "bg-red-100 text-red-700",
+};
+
+export const COMMISSION_PLAN_TYPE_LABELS: Record<string, string> = {
+  volume_based: "Volume-Based",
+  value_based: "Value-Based",
+  flat: "Flat Rate",
+};
+
+export const COMMISSION_PLAN_STATUS_LABELS: Record<string, string> = {
+  active: "Active",
+  inactive: "Inactive",
+};
+
+export const COMMISSION_PLAN_STATUS_COLORS: Record<string, string> = {
+  active: "bg-green-100 text-green-700",
+  inactive: "bg-gray-100 text-gray-700",
+};
+
+export const COMPLIANCE_DOC_TYPE_LABELS: Record<string, string> = {
+  license: "License",
+  eo_insurance: "E&O Insurance",
+  continuing_education: "Continuing Education",
+  background_check: "Background Check",
+  other: "Other",
+};
+
+export const COMPLIANCE_STATUS_COLORS: Record<string, string> = {
+  active: "bg-green-100 text-green-700",
+  expired: "bg-red-100 text-red-700",
+  expiring_soon: "bg-amber-100 text-amber-700",
+};
+
+export const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  check: "Check",
+  ach: "ACH Transfer",
+  wire: "Wire Transfer",
+  cash: "Cash",
+  stripe: "Stripe",
+  other: "Other",
+};
+
+export const PAYMENT_METHOD_ICONS: Record<string, string> = {
+  check: "receipt",
+  ach: "building",
+  wire: "zap",
+  cash: "banknote",
+  stripe: "credit-card",
+  other: "circle",
 };

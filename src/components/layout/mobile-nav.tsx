@@ -78,26 +78,23 @@ export default function MobileNav() {
           {tabs.map((tab) => {
             const isMore = tab.href === "#more";
             const isActive = isMore ? isMoreActive : pathname.startsWith(tab.href);
+            const cls = `flex flex-col items-center justify-center gap-0.5 min-w-[64px] h-full text-[10px] font-medium transition-colors ${
+              isActive ? "text-blue-600" : "text-slate-500"
+            }`;
 
+            if (isMore) {
+              return (
+                <button key={tab.name} onClick={() => showMore ? closeMore() : openMore()} className={cls}>
+                  <span className="text-lg leading-none">{tab.icon}</span>
+                  <span>{tab.name}</span>
+                </button>
+              );
+            }
             return (
-              <button
-                key={tab.name}
-                onClick={() => {
-                  if (isMore) {
-                    showMore ? closeMore() : openMore();
-                  } else {
-                    router.push(tab.href);
-                  }
-                }}
-                className={`flex flex-col items-center justify-center gap-0.5 min-w-[64px] h-full text-[10px] font-medium transition-colors ${
-                  isActive ? "text-blue-600" : "text-slate-500"
-                }`}
-              >
-                <span className="text-lg leading-none">
-                  {tab.icon}
-                </span>
+              <Link key={tab.name} href={tab.href} className={cls}>
+                <span className="text-lg leading-none">{tab.icon}</span>
                 <span>{tab.name}</span>
-              </button>
+              </Link>
             );
           })}
         </div>
@@ -126,23 +123,13 @@ export default function MobileNav() {
                 {moreItems.map((item) => {
                   const locked = item.feature ? !hasPermission(plan, item.feature) : false;
                   const isActive = !locked && pathname.startsWith(item.href);
-                  return (
-                    <button
-                      key={item.name}
-                      onClick={() => {
-                        if (locked && item.feature) {
-                          closeMore();
-                          setPaywallFeature(item.feature);
-                        } else {
-                          router.push(item.href);
-                        }
-                      }}
-                      className={`flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors relative ${
-                        locked
-                          ? "text-slate-400 active:bg-slate-100"
-                          : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 active:bg-slate-100"
-                      }`}
-                    >
+                  const cls = `flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors relative ${
+                    locked
+                      ? "text-slate-400 active:bg-slate-100"
+                      : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 active:bg-slate-100"
+                  }`;
+                  const inner = (
+                    <>
                       <span className={`text-2xl ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
                       <span>{item.name}</span>
                       {locked && (
@@ -152,7 +139,19 @@ export default function MobileNav() {
                           </svg>
                         </span>
                       )}
-                    </button>
+                    </>
+                  );
+                  if (locked) {
+                    return (
+                      <button key={item.name} onClick={() => { closeMore(); item.feature && setPaywallFeature(item.feature); }} className={cls}>
+                        {inner}
+                      </button>
+                    );
+                  }
+                  return (
+                    <Link key={item.name} href={item.href} className={cls}>
+                      {inner}
+                    </Link>
                   );
                 })}
               </div>

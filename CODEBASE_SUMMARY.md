@@ -37,6 +37,8 @@ A real estate intelligence SaaS platform for NYC commercial real estate professi
 ## Recent Development History (latest → oldest)
 
 ```
+BMS Phase 3: Brokerage dashboard, reporting (P&L, agent production, 1099 prep, deal pipeline), compliance tracking, payment recording + inline invoices
+BMS Phase 2: Commission plan templates, agent roster + detail pages, Excel import, agent self-service portal, sidebar role-gating
 BMS Phase 1: Brokerage Management System — agent deal submissions, approval queue, invoice generator, Excel bulk upload, public submission links
 cb88e6e Deal accuracy engine: NYC closing costs, tax reassessment, expense benchmarks, rent stabilization, LL97 penalties, market cap rates
 16424e3 Deal modeler design pass: gauges, sliders, BRRRR timeline, rate comparison, waterfall viz, tooltips, keyboard shortcuts
@@ -172,12 +174,20 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `/prospecting` | Prospect lists, CSV export | Working |
 | `/portfolios` | Basic schema + UI | Basic |
 | `/properties` | Empty state | Minimal |
-| `/brokerage` + sub-routes | Deal submissions queue, invoices, Excel upload | Working |
+| `/brokerage/dashboard` | Stats cards, deal/invoice status charts, period selector | Working |
+| `/brokerage/deal-submissions` | Approval queue, status filters | Working |
+| `/brokerage/invoices` | Invoice list, inline payment recording | Working |
+| `/brokerage/commission-plans` | Flat/volume/value tier builder | Working |
+| `/brokerage/reports/*` | P&L, agent production, 1099 prep, pipeline (4 sub-tabs) | Working |
+| `/brokerage/compliance` | Document tracking, expiry alerts, agent compliance grid | Working |
+| `/brokerage/payments` | Payment recording, history, filters, CSV export | Working |
+| `/brokerage/agents` + `[id]` | Roster, detail pages, Excel import | Working |
+| `/brokerage/my-deals` | Agent self-service portal | Working |
 | `/settings/*` (20 sub-pages) | Full settings suite | Working |
 
 ---
 
-## Database Schema (39 models, 18 enums)
+## Database Schema (41 models, 20 enums)
 
 **Core:** Organization, User (multi-tenant, RBAC with 5 roles + approval gate)
 **CRM:** Contact, EnrichmentProfile, QualificationScore, Activity, Task
@@ -189,7 +199,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 **Communication:** PhoneNumber, PhoneCall, SmsMessage
 **Settings:** NotificationPreferences, WorkingHours, SyncSettings, LeadAssignmentRule, AiSettings, BrandSettings
 **System:** Automation, AutomationRun, AuditLog
-**BMS:** BrokerAgent, DealSubmission, Invoice (BmsDealType + InvoiceStatus enums, Organization.submissionToken)
+**BMS:** BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment (BmsDealType, InvoiceStatus, CommissionPlanType, ComplianceDocType, PaymentMethod enums)
 
 ---
 
@@ -230,7 +240,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | Team | $399/mo | Investors, multi-numbers, promote templates/sensitivity/export |
 | Enterprise | Custom | All features |
 
-BMS features: bms_submissions (pro+), bms_invoices (pro+), bms_bulk_upload (team+), bms_agents (team+)
+BMS features: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+)
 
 ---
 
@@ -395,7 +405,14 @@ FANNIE_API_KEY=                  # Optional
 | Portfolios | Basic schema + UI |
 | Automations | Schema only, no UI/engine |
 | Service worker / PWA offline | Not started |
-| BMS Agent Roster | Schema ready, UI not built |
-| BMS Commission Plans | Not started |
-| BMS Compliance Tracking | Not started |
+| BMS Agent Roster | ✅ Complete (roster, detail, import) |
+| BMS Commission Plans | ✅ Complete (flat/volume/value tiers) |
+| BMS Agent Self-Service | ✅ Complete (my-deals portal) |
+| BMS Dashboard | ✅ Complete (stats, charts, period selector) |
+| BMS Reporting | ✅ Complete (P&L, agent production, 1099 prep, pipeline) |
+| BMS Compliance Tracking | ✅ Complete (documents, expiry alerts, agent grid) |
+| BMS Payment Recording | ✅ Complete (record, history, inline on invoices, CSV export) |
+| Stripe Connect Payouts | Not started (Phase 4 — agent payouts via Stripe) |
+| Compliance File Upload | Not started (Phase 4 — S3/GCS for doc storage) |
+| White-label BaaS | Not started (Phase 4) |
 | Mobile page layouts | Bottom nav done, pages need responsive |

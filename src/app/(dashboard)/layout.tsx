@@ -17,7 +17,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const dbUser = await prisma.user.findUnique({
     where: { authProviderId: user.id },
-    select: { id: true, plan: true, trialEndsAt: true, usageCounters: true },
+    select: { id: true, plan: true, role: true, trialEndsAt: true, usageCounters: true },
   });
 
   const userId = dbUser?.id ?? "";
@@ -38,7 +38,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const searchesToday = counters.lastSearchDate === today ? (counters.searchesToday || 0) : 0;
 
   return (
-    <UserPlanProvider plan={plan} userId={userId} trialEndsAt={trialEndsAt} searchesToday={searchesToday}>
+    <UserPlanProvider plan={plan} userId={userId} role={dbUser?.role || "agent"} trialEndsAt={trialEndsAt} searchesToday={searchesToday}>
       <SidebarProvider>
         <ToastProvider>
           <div className="min-h-screen bg-slate-50">

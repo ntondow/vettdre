@@ -18,6 +18,7 @@ interface NavItem {
   icon: string;
   badge?: boolean;
   feature?: Feature;
+  roles?: string[];
 }
 
 interface NavGroup {
@@ -51,7 +52,8 @@ const nav: NavGroup[] = [
     { name: "Investors", href: "/investors", icon: "🤝", feature: "nav_investors" },
   ]},
   { label: "Brokerage", items: [
-    { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions" },
+    { name: "Brokerage", href: "/brokerage/dashboard", icon: "🏛️", feature: "bms_submissions", roles: ["owner", "admin"] },
+    { name: "My Deals", href: "/brokerage/my-deals", icon: "💼", feature: "bms_submissions", roles: ["agent"] },
   ]},
   { label: "Other", secondary: true, items: [
     { name: "Calendar", href: "/calendar", icon: "📅" },
@@ -64,7 +66,7 @@ export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { collapsed, toggle } = useSidebar();
-  const { plan } = useUserPlan();
+  const { plan, role } = useUserPlan();
   const [unread, setUnread] = useState(0);
   const [followUps, setFollowUps] = useState(0);
   const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
@@ -96,24 +98,17 @@ export default function Sidebar() {
             )}
             <div className="space-y-0.5">
               {group.items.map((item) => {
+                if (item.roles && !item.roles.includes(role)) return null;
                 const locked = item.feature ? !hasPermission(plan, item.feature) : false;
                 const isActive = !locked && pathname.startsWith(item.href);
-                return (
-                  <button key={item.name}
-                    onClick={() => {
-                      if (locked && item.feature) {
-                        setPaywallFeature(item.feature);
-                      } else {
-                        router.push(item.href);
-                      }
-                    }}
-                    title={collapsed ? item.name : undefined}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group text-left ${
-                      collapsed ? "justify-center" : ""
-                    } ${locked
-                      ? "text-slate-400 hover:text-slate-500 hover:bg-slate-50"
-                      : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
-                    }`}>
+                const cls = `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group text-left ${
+                  collapsed ? "justify-center" : ""
+                } ${locked
+                  ? "text-slate-400 hover:text-slate-500 hover:bg-slate-50"
+                  : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                }`;
+                const inner = (
+                  <>
                     <span className={`${collapsed ? "text-lg" : "text-base"} ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
                     {!collapsed && (
                       <>
@@ -154,7 +149,19 @@ export default function Sidebar() {
                         {item.name}{locked ? " (Locked)" : ""}
                       </span>
                     )}
-                  </button>
+                  </>
+                );
+                if (locked) {
+                  return (
+                    <button key={item.name} onClick={() => item.feature && setPaywallFeature(item.feature)} title={collapsed ? item.name : undefined} className={cls}>
+                      {inner}
+                    </button>
+                  );
+                }
+                return (
+                  <Link key={item.name} href={item.href} title={collapsed ? item.name : undefined} className={cls}>
+                    {inner}
+                  </Link>
                 );
               })}
             </div>

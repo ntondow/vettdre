@@ -120,6 +120,7 @@ export async function getInvoices(filters?: {
         include: {
           agent: { select: { id: true, firstName: true, lastName: true, email: true } },
           dealSubmission: { select: { id: true, status: true } },
+          payments: { select: { amount: true } },
         },
         orderBy: { createdAt: "desc" },
         skip,
