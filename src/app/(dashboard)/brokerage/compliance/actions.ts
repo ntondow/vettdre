@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import type { ComplianceDocInput, AgentComplianceSummary } from "@/lib/bms-types";
+import { logComplianceAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ export async function getAgentComplianceDocs(agentId: string) {
 
 export async function createComplianceDoc(input: ComplianceDocInput) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     // Verify agent belongs to org
     const agent = await prisma.brokerAgent.findFirst({
@@ -163,6 +164,12 @@ export async function createComplianceDoc(input: ComplianceDocInput) {
         status,
         notes: input.notes || null,
       },
+    });
+
+    logComplianceAction(orgId, { id: userId }, "created", doc.id, {
+      docType: input.docType,
+      title: input.title,
+      agentId: input.agentId,
     });
 
     return JSON.parse(JSON.stringify({ success: true, doc }));
@@ -216,7 +223,7 @@ export async function updateComplianceDoc(docId: string, input: Partial<Complian
 
 export async function deleteComplianceDoc(docId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const existing = await prisma.complianceDocument.findFirst({
       where: { id: docId, orgId },
@@ -224,6 +231,11 @@ export async function deleteComplianceDoc(docId: string) {
     if (!existing) return { success: false, error: "Document not found" };
 
     await prisma.complianceDocument.delete({ where: { id: docId } });
+
+    logComplianceAction(orgId, { id: userId }, "deleted", docId, {
+      docType: existing.docType,
+      title: existing.title,
+    });
 
     return { success: true };
   } catch (error) {

@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { CommissionPlanType as PrismaCommissionPlanType } from "@prisma/client";
 import type { CommissionPlanInput, CommissionPlanRecord } from "@/lib/bms-types";
+import { logAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -141,7 +142,7 @@ export async function getCommissionPlanById(planId: string) {
 
 export async function createCommissionPlan(input: CommissionPlanInput) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const plan = await prisma.$transaction(async (tx) => {
       // If this plan is default, unset others first
@@ -178,6 +179,15 @@ export async function createCommissionPlan(input: CommissionPlanInput) {
       });
     });
 
+    logAction({
+      orgId,
+      actorId: userId,
+      action: "created",
+      entityType: "commission_plan",
+      entityId: plan.id,
+      details: { planName: input.name, planType: input.planType },
+    });
+
     return JSON.parse(JSON.stringify({ success: true, plan }));
   } catch (error) {
     console.error("createCommissionPlan error:", error);
@@ -187,7 +197,7 @@ export async function createCommissionPlan(input: CommissionPlanInput) {
 
 export async function updateCommissionPlan(planId: string, input: CommissionPlanInput) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const plan = await prisma.$transaction(async (tx) => {
       // Verify ownership
@@ -233,6 +243,15 @@ export async function updateCommissionPlan(planId: string, input: CommissionPlan
       });
     });
 
+    logAction({
+      orgId,
+      actorId: userId,
+      action: "updated",
+      entityType: "commission_plan",
+      entityId: planId,
+      details: { planName: input.name, planType: input.planType },
+    });
+
     return JSON.parse(JSON.stringify({ success: true, plan }));
   } catch (error) {
     console.error("updateCommissionPlan error:", error);
@@ -242,7 +261,7 @@ export async function updateCommissionPlan(planId: string, input: CommissionPlan
 
 export async function deleteCommissionPlan(planId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     await prisma.$transaction(async (tx) => {
       // Verify ownership
@@ -259,6 +278,14 @@ export async function deleteCommissionPlan(planId: string) {
 
       // Delete plan (tiers cascade)
       await tx.commissionPlan.delete({ where: { id: planId } });
+    });
+
+    logAction({
+      orgId,
+      actorId: userId,
+      action: "deleted",
+      entityType: "commission_plan",
+      entityId: planId,
     });
 
     return { success: true };
@@ -288,7 +315,7 @@ export async function archiveCommissionPlan(planId: string) {
 
 export async function assignPlanToAgents(planId: string, agentIds: string[]) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     // Verify plan belongs to org
     const plan = await prisma.commissionPlan.findFirst({
@@ -299,6 +326,15 @@ export async function assignPlanToAgents(planId: string, agentIds: string[]) {
     const result = await prisma.brokerAgent.updateMany({
       where: { id: { in: agentIds }, orgId },
       data: { commissionPlanId: planId },
+    });
+
+    logAction({
+      orgId,
+      actorId: userId,
+      action: "assigned_agents",
+      entityType: "commission_plan",
+      entityId: planId,
+      details: { agentCount: result.count, planName: plan.name },
     });
 
     return { success: true, count: result.count };

@@ -206,6 +206,10 @@ enum BmsDealType {
   sale
   lease
   rental
+  commercial_sale
+  commercial_lease
+  land
+  new_construction
 }
 
 enum InvoiceStatus {
@@ -236,6 +240,13 @@ enum PaymentMethod {
   cash
   stripe
   other
+}
+
+enum BrokerageRole {
+  brokerage_admin
+  broker
+  manager
+  agent
 }
 
 // ============================================================
@@ -285,6 +296,7 @@ model Organization {
   leadAssignmentRule   LeadAssignmentRule?
   aiSettings           AiSettings?
   brandSettings        BrandSettings?
+  bmsSettings          Json?                @map("bms_settings")
   submissionToken      String?              @unique @map("submission_token")
   brokerAgents         BrokerAgent[]
   dealSubmissions      DealSubmission[]
@@ -292,6 +304,7 @@ model Organization {
   commissionPlans      CommissionPlan[]
   complianceDocuments  ComplianceDocument[]
   payments             Payment[]
+  fileAttachments      FileAttachment[]
 
   @@map("organizations")
 }
@@ -736,22 +749,33 @@ model ContactPropertyInterest {
 }
 
 model AuditLog {
-  id          String   @id @default(uuid())
-  orgId       String   @map("org_id")
-  userId      String?  @map("user_id")
-  action      String
-  entityType  String   @map("entity_type")
-  entityId    String   @map("entity_id")
-  changes     Json?
-  metadata    Json     @default("{}")
-  ipAddress   String?  @map("ip_address")
-  userAgent   String?  @map("user_agent")
-  createdAt   DateTime @default(now()) @map("created_at")
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  userId        String?  @map("user_id")
+
+  actorName     String?  @map("actor_name")
+  actorRole     String?  @map("actor_role")
+
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String?  @map("entity_id")
+
+  changes       Json?
+  metadata      Json     @default("{}")
+  details       Json?
+  previousValue Json?    @map("previous_value")
+  newValue      Json?    @map("new_value")
+
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user          User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([orgId, createdAt(sort: Desc)])
-  @@index([entityType, entityId])
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, action])
   @@map("audit_log")
 }
 
@@ -1066,6 +1090,7 @@ model BrandSettings {
   orgId        String  @unique @map("org_id")
   logoUrl      String? @map("logo_url")
   primaryColor String  @default("#2563EB") @map("primary_color")
+  accentColor  String? @map("accent_color")
   companyName  String? @map("company_name")
   tagline      String?
   websiteUrl   String? @map("website_url")
@@ -1351,12 +1376,34 @@ model BrokerAgent {
   lastName        String    @map("last_name")
   email           String
   phone           String?
+
+  // Personal Info
+  address         String?
+  city            String?
+  state           String?   @default("NY")
+  zipCode         String?   @map("zip_code")
+  dateOfBirth     DateTime? @map("date_of_birth")
+
+  // Brokerage Info
+  startDate       DateTime? @map("start_date")
+  teamOrOffice    String?   @map("team_or_office")
+
+  // Tax & Compliance Flags
+  w9OnFile        Boolean   @default(false) @map("w9_on_file")
+
+  // Media
+  photoUrl        String?   @map("photo_url")
+
+  // Internal
+  notes           String?
+
   licenseNumber   String?   @map("license_number")
   licenseExpiry   DateTime? @map("license_expiry")
 
-  defaultSplitPct  Decimal   @default(70) @map("default_split_pct") @db.Decimal(5, 2)
-  status           String    @default("active")
-  commissionPlanId String?   @map("commission_plan_id")
+  defaultSplitPct  Decimal        @default(70) @map("default_split_pct") @db.Decimal(5, 2)
+  status           String         @default("active")
+  brokerageRole    BrokerageRole  @default(agent) @map("brokerage_role")
+  commissionPlanId String?        @map("commission_plan_id")
 
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
@@ -1370,6 +1417,12 @@ model BrokerAgent {
   eoInsuranceExpiry    DateTime?           @map("eo_insurance_expiry")
   complianceDocuments  ComplianceDocument[]
   payments             Payment[]
+
+  // Invitation / Onboarding
+  inviteToken          String?   @unique @map("invite_token")
+  invitedAt            DateTime? @map("invited_at")
+  inviteAcceptedAt     DateTime? @map("invite_accepted_at")
+  inviteEmail          String?   @map("invite_email")
 
   @@index([orgId])
   @@index([email])
@@ -1578,4 +1631,26 @@ model Payment {
   @@index([agentId])
   @@index([stripePaymentId])
   @@map("payments")
+}
+
+model FileAttachment {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+
+  fileName    String   @map("file_name")
+  fileType    String   @map("file_type")
+  fileSize    Int      @map("file_size")
+  storagePath String   @map("storage_path")
+  publicUrl   String?  @map("public_url")
+  uploadedBy  String?  @map("uploaded_by")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, entityType, entityId])
+  @@index([entityId])
+  @@map("file_attachments")
 }

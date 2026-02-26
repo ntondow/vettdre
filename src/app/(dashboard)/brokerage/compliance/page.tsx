@@ -29,7 +29,9 @@ import {
   ChevronDown,
   ChevronUp,
   Eye,
+  Paperclip,
 } from "lucide-react";
+import FileUpload from "@/components/bms/file-upload";
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -114,6 +116,8 @@ export default function CompliancePage() {
   const [formError, setFormError] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [showExpiring, setShowExpiring] = useState(false);
+  const [newDocId, setNewDocId] = useState<string | null>(null);
+  const [expandedDocId, setExpandedDocId] = useState<string | null>(null);
 
   // ── Load data ─────────────────────────────────────────────
 
@@ -162,6 +166,8 @@ export default function CompliancePage() {
     setShowAddDoc(false);
     setDocForm({ ...EMPTY_DOC_FORM });
     setFormError("");
+    setNewDocId(null);
+    setExpandedDocId(null);
     loadAgentDocs(agentId);
   }
 
@@ -191,8 +197,10 @@ export default function CompliancePage() {
         return;
       }
 
+      const createdId = result.doc?.id ?? null;
       setShowAddDoc(false);
       setDocForm({ ...EMPTY_DOC_FORM });
+      setNewDocId(createdId);
       loadAgentDocs(selectedAgentId);
       loadOverview();
     } finally {
@@ -507,25 +515,8 @@ export default function CompliancePage() {
                       placeholder="Optional notes"
                     />
                   </div>
-                  <div>
-                    <label className={LABEL}>File URL</label>
-                    <input
-                      type="url"
-                      value={docForm.fileUrl}
-                      onChange={(e) => setDocForm((p) => ({ ...p, fileUrl: e.target.value }))}
-                      className={INPUT}
-                      placeholder="https://..."
-                    />
-                  </div>
-                  <div>
-                    <label className={LABEL}>File Name</label>
-                    <input
-                      type="text"
-                      value={docForm.fileName}
-                      onChange={(e) => setDocForm((p) => ({ ...p, fileName: e.target.value }))}
-                      className={INPUT}
-                      placeholder="license.pdf"
-                    />
+                  <div className="md:col-span-3">
+                    <p className="text-xs text-slate-400">Files can be attached after saving the document.</p>
                   </div>
                 </div>
 
@@ -549,6 +540,27 @@ export default function CompliancePage() {
             </div>
           )}
 
+          {/* Attach files to new doc */}
+          {newDocId && !showAddDoc && (
+            <div className="px-5 py-4 border-b border-slate-100 bg-blue-50/30">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-slate-700">Attach Files to New Document</h3>
+                <button
+                  onClick={() => setNewDocId(null)}
+                  className="text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  Dismiss
+                </button>
+              </div>
+              <FileUpload
+                entityType="compliance_doc"
+                entityId={newDocId}
+                compact
+                maxFiles={5}
+              />
+            </div>
+          )}
+
           {/* Doc list */}
           {docsLoading ? (
             <div className="px-5 py-8">
@@ -564,37 +576,60 @@ export default function CompliancePage() {
           ) : (
             <div className="divide-y divide-slate-100">
               {agentDocs.map((doc) => (
-                <div key={doc.id} className="px-5 py-3 flex items-center gap-3">
-                  <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-md ${
-                    COMPLIANCE_STATUS_COLORS[doc.status] || "bg-slate-100 text-slate-600"
-                  }`}>
-                    {COMPLIANCE_DOC_TYPE_LABELS[doc.docType] || doc.docType}
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      {doc.issueDate && <span>Issued: {formatDate(doc.issueDate)}</span>}
-                      {doc.expiryDate && (
-                        <span className={expiryColor(doc.expiryDate)}>
-                          Expires: {formatDate(doc.expiryDate)}
-                        </span>
-                      )}
-                      {doc.fileName && <span>{doc.fileName}</span>}
+                <div key={doc.id}>
+                  <div className="px-5 py-3 flex items-center gap-3">
+                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-md ${
+                      COMPLIANCE_STATUS_COLORS[doc.status] || "bg-slate-100 text-slate-600"
+                    }`}>
+                      {COMPLIANCE_DOC_TYPE_LABELS[doc.docType] || doc.docType}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{doc.title}</p>
+                      <div className="flex items-center gap-3 text-xs text-slate-400">
+                        {doc.issueDate && <span>Issued: {formatDate(doc.issueDate)}</span>}
+                        {doc.expiryDate && (
+                          <span className={expiryColor(doc.expiryDate)}>
+                            Expires: {formatDate(doc.expiryDate)}
+                          </span>
+                        )}
+                        {doc.fileName && <span>{doc.fileName}</span>}
+                      </div>
                     </div>
+                    <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                      COMPLIANCE_STATUS_COLORS[doc.status] || "bg-slate-100 text-slate-600"
+                    }`}>
+                      {doc.status === "active" ? "Active" : doc.status === "expired" ? "Expired" : "Expiring"}
+                    </span>
+                    <button
+                      onClick={() => setExpandedDocId(expandedDocId === doc.id ? null : doc.id)}
+                      className={`p-1.5 transition-colors shrink-0 ${
+                        expandedDocId === doc.id
+                          ? "text-blue-500 hover:text-blue-700"
+                          : "text-slate-300 hover:text-slate-500"
+                      }`}
+                      title="Attachments"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteDoc(doc.id)}
+                      disabled={actionLoading === doc.id}
+                      className="p-1.5 text-slate-300 hover:text-red-500 disabled:opacity-50 transition-colors shrink-0"
+                      title="Delete document"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                  <span className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                    COMPLIANCE_STATUS_COLORS[doc.status] || "bg-slate-100 text-slate-600"
-                  }`}>
-                    {doc.status === "active" ? "Active" : doc.status === "expired" ? "Expired" : "Expiring"}
-                  </span>
-                  <button
-                    onClick={() => handleDeleteDoc(doc.id)}
-                    disabled={actionLoading === doc.id}
-                    className="p-1.5 text-slate-300 hover:text-red-500 disabled:opacity-50 transition-colors shrink-0"
-                    title="Delete document"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {expandedDocId === doc.id && (
+                    <div className="px-5 pb-3 pt-0 ml-8">
+                      <FileUpload
+                        entityType="compliance_doc"
+                        entityId={doc.id}
+                        compact
+                        maxFiles={5}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

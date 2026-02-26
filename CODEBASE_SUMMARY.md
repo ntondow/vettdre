@@ -37,6 +37,7 @@ A real estate intelligence SaaS platform for NYC commercial real estate professi
 ## Recent Development History (latest → oldest)
 
 ```
+BMS Phase 3.5: RBAC (4 roles, 24 permissions), brokerage settings page, agent invite/onboarding flow, file upload model, audit logging (all 7 action files), audit log viewer
 BMS Phase 3: Brokerage dashboard, reporting (P&L, agent production, 1099 prep, deal pipeline), compliance tracking, payment recording + inline invoices
 BMS Phase 2: Commission plan templates, agent roster + detail pages, Excel import, agent self-service portal, sidebar role-gating
 BMS Phase 1: Brokerage Management System — agent deal submissions, approval queue, invoice generator, Excel bulk upload, public submission links
@@ -76,7 +77,11 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `renovation-engine.ts` | 383 | Condition assessment, 3-tier cost tables, ARV, ROI |
 | `promote-engine.ts` | 314 | GP/LP waterfall: distribution tiers, IRR hurdles, catch-up |
 | `expense-analyzer.ts` | — | T-12 parsing, market benchmarks, anomaly detection |
-| `bms-types.ts` | — | BMS shared types, status labels, colors, Excel column aliases |
+| `bms-types.ts` | — | BMS shared types, status labels, colors, Excel column aliases, audit log types |
+| `bms-auth.ts` | — | getCurrentBmsUser, requireBmsPermission (role-based BMS access) |
+| `bms-permissions.ts` | — | BMS_ROLES, BMS_PERMISSIONS map, hasPermission, getRoleLabel |
+| `bms-files.ts` | — | FileAttachment CRUD (upload, list, delete) |
+| `bms-audit.ts` | — | Fire-and-forget audit logging (logAction + 6 convenience functions) |
 | `invoice-pdf.ts` | — | jsPDF commission invoice generator (single + batch) |
 
 #### Data Sources & APIs
@@ -127,7 +132,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `prisma.ts` | Prisma singleton |
 | `utils.ts` | cn, formatCurrency, getInitials |
 | `stripe.ts` | Stripe client (lazy init) |
-| `feature-gate.ts` | Client-safe: 5 plans, 68 features |
+| `feature-gate.ts` | Client-safe: 5 plans, 71 features |
 | `feature-gate-server.ts` | Server-side permission + daily limits |
 | `supabase/client.ts` / `server.ts` / `middleware.ts` | Auth + session |
 | `neighborhoods.ts` / `neighborhoods-nys.ts` / `neighborhoods-nj.ts` | Location data |
@@ -181,13 +186,15 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `/brokerage/reports/*` | P&L, agent production, 1099 prep, pipeline (4 sub-tabs) | Working |
 | `/brokerage/compliance` | Document tracking, expiry alerts, agent compliance grid | Working |
 | `/brokerage/payments` | Payment recording, history, filters, CSV export | Working |
-| `/brokerage/agents` + `[id]` | Roster, detail pages, Excel import | Working |
+| `/brokerage/agents` + `[id]` | Roster, detail pages, Excel import, onboarding | Working |
+| `/brokerage/settings` | Roles & permissions, brokerage settings, audit log (3 tabs) | Working |
 | `/brokerage/my-deals` | Agent self-service portal | Working |
+| `/join/agent/[token]` | Public agent invite landing + accept flow | Working |
 | `/settings/*` (20 sub-pages) | Full settings suite | Working |
 
 ---
 
-## Database Schema (41 models, 20 enums)
+## Database Schema (42 models, 20 enums)
 
 **Core:** Organization, User (multi-tenant, RBAC with 5 roles + approval gate)
 **CRM:** Contact, EnrichmentProfile, QualificationScore, Activity, Task
@@ -199,7 +206,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 **Communication:** PhoneNumber, PhoneCall, SmsMessage
 **Settings:** NotificationPreferences, WorkingHours, SyncSettings, LeadAssignmentRule, AiSettings, BrandSettings
 **System:** Automation, AutomationRun, AuditLog
-**BMS:** BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment (BmsDealType, InvoiceStatus, CommissionPlanType, ComplianceDocType, PaymentMethod enums)
+**BMS:** BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment (BmsDealType, InvoiceStatus, CommissionPlanType, ComplianceDocType, PaymentMethod enums)
 
 ---
 
@@ -240,7 +247,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | Team | $399/mo | Investors, multi-numbers, promote templates/sensitivity/export |
 | Enterprise | Custom | All features |
 
-BMS features: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+)
+BMS features: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_agent_onboarding (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+), bms_audit_log (team+), bms_file_upload (team+)
 
 ---
 
@@ -412,7 +419,11 @@ FANNIE_API_KEY=                  # Optional
 | BMS Reporting | ✅ Complete (P&L, agent production, 1099 prep, pipeline) |
 | BMS Compliance Tracking | ✅ Complete (documents, expiry alerts, agent grid) |
 | BMS Payment Recording | ✅ Complete (record, history, inline on invoices, CSV export) |
+| BMS Roles & Permissions | Complete (4 roles, 24 permissions, settings page) |
+| BMS Agent Onboarding | Complete (invite flow, public accept page, user linking) |
+| BMS File Upload Model | Complete (FileAttachment model + CRUD, not yet wired to UI) |
+| BMS Audit Logging | Complete (all 7 action files wired, audit log viewer) |
+| BMS Brokerage Settings | Complete (3-tab page: roles, settings, audit log) |
 | Stripe Connect Payouts | Not started (Phase 4 — agent payouts via Stripe) |
-| Compliance File Upload | Not started (Phase 4 — S3/GCS for doc storage) |
 | White-label BaaS | Not started (Phase 4) |
 | Mobile page layouts | Bottom nav done, pages need responsive |

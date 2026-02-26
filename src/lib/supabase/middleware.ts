@@ -28,6 +28,8 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/auth") ||
     pathname.startsWith("/pending-approval") ||
     pathname.startsWith("/book") ||
+    pathname.startsWith("/join") ||
+    pathname.startsWith("/submit-deal") ||
     pathname === "/";
 
   // Redirect unauthenticated users to login (except public pages)
@@ -37,10 +39,16 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages (unless they have a redirect param)
   if (user && (pathname.startsWith("/login") || pathname.startsWith("/signup"))) {
+    const redirectTo = request.nextUrl.searchParams.get("redirect");
     const url = request.nextUrl.clone();
-    url.pathname = "/market-intel";
+    if (redirectTo && redirectTo.startsWith("/")) {
+      url.pathname = redirectTo;
+      url.search = "";
+    } else {
+      url.pathname = "/market-intel";
+    }
     return NextResponse.redirect(url);
   }
 

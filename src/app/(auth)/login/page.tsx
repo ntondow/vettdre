@@ -1,22 +1,32 @@
 "use client";
-import { useState } from "react";
+import { useState, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect");
   const supabase = createClient();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); }
-    else { router.push("/market-intel"); router.refresh(); }
+    else { router.push(redirectTo && redirectTo.startsWith("/") ? redirectTo : "/market-intel"); router.refresh(); }
   };
 
   return (
@@ -39,7 +49,7 @@ export default function LoginPage() {
           </div>
           <button type="submit" disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors disabled:opacity-50">{loading ? "Signing in..." : "Sign in"}</button>
         </form>
-        <p className="text-center text-sm text-slate-500">Don&apos;t have an account? <Link href="/signup" className="text-blue-600 font-medium">Create one</Link></p>
+        <p className="text-center text-sm text-slate-500">Don&apos;t have an account? <Link href={redirectTo ? `/signup?redirect=${encodeURIComponent(redirectTo)}` : "/signup"} className="text-blue-600 font-medium">Create one</Link></p>
       </div>
     </div>
   );

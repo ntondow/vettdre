@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { logAgentAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -151,9 +152,19 @@ export async function createAgent(input: {
   defaultSplitPct?: number;
   commissionPlanId?: string;
   status?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  dateOfBirth?: string;
+  startDate?: string;
+  teamOrOffice?: string;
+  w9OnFile?: boolean;
+  photoUrl?: string;
+  notes?: string;
 }) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     // Duplicate email check within org
     const existing = await prisma.brokerAgent.findFirst({
@@ -175,7 +186,22 @@ export async function createAgent(input: {
         defaultSplitPct: input.defaultSplitPct ?? 70,
         commissionPlanId: input.commissionPlanId || null,
         status: input.status || "active",
+        address: input.address || null,
+        city: input.city || null,
+        state: input.state || null,
+        zipCode: input.zipCode || null,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        teamOrOffice: input.teamOrOffice || null,
+        w9OnFile: input.w9OnFile ?? false,
+        photoUrl: input.photoUrl || null,
+        notes: input.notes || null,
       },
+    });
+
+    logAgentAction(orgId, { id: userId }, "created", agent.id, {
+      agentName: `${input.firstName} ${input.lastName}`,
+      email: input.email,
     });
 
     return JSON.parse(JSON.stringify({ success: true, agent }));
@@ -195,6 +221,16 @@ export async function updateAgent(agentId: string, input: {
   defaultSplitPct?: number;
   commissionPlanId?: string;
   status?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  dateOfBirth?: string;
+  startDate?: string;
+  teamOrOffice?: string;
+  w9OnFile?: boolean;
+  photoUrl?: string;
+  notes?: string;
 }) {
   try {
     const { orgId } = await getCurrentOrg();
@@ -231,6 +267,16 @@ export async function updateAgent(agentId: string, input: {
         defaultSplitPct: input.defaultSplitPct ?? 70,
         commissionPlanId: input.commissionPlanId || null,
         status: input.status || current.status,
+        address: input.address || null,
+        city: input.city || null,
+        state: input.state || null,
+        zipCode: input.zipCode || null,
+        dateOfBirth: input.dateOfBirth ? new Date(input.dateOfBirth) : null,
+        startDate: input.startDate ? new Date(input.startDate) : null,
+        teamOrOffice: input.teamOrOffice || null,
+        w9OnFile: input.w9OnFile ?? current.w9OnFile,
+        photoUrl: input.photoUrl || null,
+        notes: input.notes || null,
       },
     });
 
@@ -241,16 +287,52 @@ export async function updateAgent(agentId: string, input: {
   }
 }
 
+// ── Role Management ──────────────────────────────────────────
+
+export async function updateAgentRole(agentId: string, brokerageRole: string) {
+  try {
+    const { userId, orgId } = await getCurrentOrg();
+
+    const agent = await prisma.brokerAgent.findFirst({
+      where: { id: agentId, orgId },
+    });
+    if (!agent) return { success: false, error: "Agent not found" };
+
+    const validRoles = ["brokerage_admin", "broker", "manager", "agent"];
+    if (!validRoles.includes(brokerageRole)) {
+      return { success: false, error: "Invalid role" };
+    }
+
+    await prisma.brokerAgent.update({
+      where: { id: agentId },
+      data: { brokerageRole: brokerageRole as "brokerage_admin" | "broker" | "manager" | "agent" },
+    });
+
+    logAgentAction(orgId, { id: userId }, "role_updated", agentId, {
+      agentName: `${agent.firstName} ${agent.lastName}`,
+      previousRole: agent.brokerageRole,
+      newRole: brokerageRole,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("updateAgentRole error:", error);
+    return { success: false, error: "Failed to update agent role" };
+  }
+}
+
 // ── Status Management ─────────────────────────────────────────
 
 export async function deactivateAgent(agentId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     await prisma.brokerAgent.updateMany({
       where: { id: agentId, orgId },
       data: { status: "inactive" },
     });
+
+    logAgentAction(orgId, { id: userId }, "deactivated", agentId);
 
     return { success: true };
   } catch (error) {
@@ -261,12 +343,14 @@ export async function deactivateAgent(agentId: string) {
 
 export async function reactivateAgent(agentId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     await prisma.brokerAgent.updateMany({
       where: { id: agentId, orgId },
       data: { status: "active" },
     });
+
+    logAgentAction(orgId, { id: userId }, "reactivated", agentId);
 
     return { success: true };
   } catch (error) {
@@ -277,7 +361,7 @@ export async function reactivateAgent(agentId: string) {
 
 export async function deleteAgent(agentId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -296,6 +380,10 @@ export async function deleteAgent(agentId: string) {
     }
 
     await prisma.brokerAgent.delete({ where: { id: agentId } });
+
+    logAgentAction(orgId, { id: userId }, "deleted", agentId, {
+      agentName: `${agent.firstName} ${agent.lastName}`,
+    });
 
     return { success: true };
   } catch (error) {

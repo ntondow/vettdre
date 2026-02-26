@@ -6,6 +6,7 @@ import { BmsDealType, InvoiceStatus } from "@prisma/client";
 import type { ExcelDealRow } from "@/lib/bms-types";
 import { EXCEL_COLUMN_ALIASES } from "@/lib/bms-types";
 import type { InvoiceInput, BrokerageConfig } from "@/lib/bms-types";
+import { logInvoiceAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ export async function getInvoices(filters?: {
 
 export async function createInvoice(input: InvoiceInput) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const invoiceNumber = await generateInvoiceNumber(orgId);
 
@@ -223,6 +224,12 @@ export async function createInvoice(input: InvoiceInput) {
         data: { status: "invoiced" },
       }).catch(() => {}); // Non-critical
     }
+
+    logInvoiceAction(orgId, { id: userId }, "created", invoice.id, {
+      invoiceNumber: invoice.invoiceNumber,
+      propertyAddress: input.propertyAddress,
+      agentName: input.agentName,
+    });
 
     return JSON.parse(JSON.stringify({ success: true, invoice }));
   } catch (error) {
@@ -291,7 +298,12 @@ export async function updateInvoiceStatus(
   paidDate?: string,
 ) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
+
+    const prev = await prisma.invoice.findFirst({
+      where: { id: invoiceId, orgId },
+      select: { status: true, invoiceNumber: true },
+    });
 
     const data: Record<string, unknown> = {
       status: status as InvoiceStatus,
@@ -314,6 +326,11 @@ export async function updateInvoiceStatus(
       }).catch(() => {});
     }
 
+    logInvoiceAction(orgId, { id: userId }, status, invoice.id, {
+      invoiceNumber: prev?.invoiceNumber,
+      previousStatus: prev?.status,
+    });
+
     return JSON.parse(JSON.stringify({ success: true, invoice }));
   } catch (error) {
     console.error("updateInvoiceStatus error:", error);
@@ -325,11 +342,11 @@ export async function updateInvoiceStatus(
 
 export async function deleteInvoice(invoiceId: string) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
 
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, orgId },
-      select: { dealSubmissionId: true },
+      select: { dealSubmissionId: true, invoiceNumber: true },
     });
 
     if (!invoice) {
@@ -346,6 +363,10 @@ export async function deleteInvoice(invoiceId: string) {
 
     await prisma.invoice.delete({
       where: { id: invoiceId, orgId },
+    });
+
+    logInvoiceAction(orgId, { id: userId }, "deleted", invoiceId, {
+      invoiceNumber: invoice.invoiceNumber,
     });
 
     return { success: true };
@@ -546,7 +567,7 @@ function parseNumeric(value: unknown): number {
 
 export async function bulkMarkPaid(invoiceIds: string[]) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg();
     const now = new Date();
 
     const result = await prisma.invoice.updateMany({
@@ -569,6 +590,10 @@ export async function bulkMarkPaid(invoiceIds: string[]) {
         where: { id: { in: submissionIds }, orgId },
         data: { status: "paid" },
       });
+    }
+
+    for (const id of invoiceIds) {
+      logInvoiceAction(orgId, { id: userId }, "bulk_paid", id);
     }
 
     return { success: true, count: result.count };

@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { ChevronDown } from "lucide-react";
+import { DEAL_TYPE_LABELS } from "@/lib/bms-types";
 import type { DealType, CommissionType, RepresentedSide } from "@/lib/bms-types";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -254,9 +255,9 @@ export default function SubmissionForm({ onSubmit, defaultAgentInfo, defaultSpli
               onChange={e => set({ dealType: e.target.value as DealType })}
               className={INPUT}
             >
-              <option value="sale">Sale</option>
-              <option value="lease">Lease</option>
-              <option value="rental">Rental</option>
+              {Object.entries(DEAL_TYPE_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
             </select>
           </div>
           <div>
