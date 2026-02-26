@@ -7,6 +7,7 @@ import { FREE_DAILY_SEARCH_LIMIT } from "@/lib/feature-gate";
 interface UserPlanContextValue {
   plan: UserPlan;
   userId: string;
+  role: string;
   trialEndsAt: string | null;
   isTrialing: boolean;
   trialDaysRemaining: number;
@@ -16,6 +17,7 @@ interface UserPlanContextValue {
 const UserPlanContext = createContext<UserPlanContextValue>({
   plan: "free",
   userId: "",
+  role: "agent",
   trialEndsAt: null,
   isTrialing: false,
   trialDaysRemaining: 0,
@@ -25,12 +27,13 @@ const UserPlanContext = createContext<UserPlanContextValue>({
 interface UserPlanProviderProps {
   plan: UserPlan;
   userId: string;
+  role: string;
   trialEndsAt: string | null;
   searchesToday: number;
   children: React.ReactNode;
 }
 
-export function UserPlanProvider({ plan, userId, trialEndsAt, searchesToday, children }: UserPlanProviderProps) {
+export function UserPlanProvider({ plan, userId, role, trialEndsAt, searchesToday, children }: UserPlanProviderProps) {
   const value = useMemo(() => {
     const now = new Date();
     const trialEnd = trialEndsAt ? new Date(trialEndsAt) : null;
@@ -42,8 +45,8 @@ export function UserPlanProvider({ plan, userId, trialEndsAt, searchesToday, chi
       ? Math.max(0, FREE_DAILY_SEARCH_LIMIT - (searchesToday || 0))
       : Infinity;
 
-    return { plan, userId, trialEndsAt, isTrialing, trialDaysRemaining, searchesRemaining };
-  }, [plan, userId, trialEndsAt, searchesToday]);
+    return { plan, userId, role, trialEndsAt, isTrialing, trialDaysRemaining, searchesRemaining };
+  }, [plan, userId, role, trialEndsAt, searchesToday]);
 
   return <UserPlanContext.Provider value={value}>{children}</UserPlanContext.Provider>;
 }

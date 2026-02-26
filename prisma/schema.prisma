@@ -215,6 +215,29 @@ enum InvoiceStatus {
   void
 }
 
+enum CommissionPlanType {
+  volume_based
+  value_based
+  flat
+}
+
+enum ComplianceDocType {
+  license
+  eo_insurance
+  continuing_education
+  background_check
+  other
+}
+
+enum PaymentMethod {
+  check
+  ach
+  wire
+  cash
+  stripe
+  other
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -266,6 +289,9 @@ model Organization {
   brokerAgents         BrokerAgent[]
   dealSubmissions      DealSubmission[]
   invoices             Invoice[]
+  commissionPlans      CommissionPlan[]
+  complianceDocuments  ComplianceDocument[]
+  payments             Payment[]
 
   @@map("organizations")
 }
@@ -1328,16 +1354,22 @@ model BrokerAgent {
   licenseNumber   String?   @map("license_number")
   licenseExpiry   DateTime? @map("license_expiry")
 
-  defaultSplitPct Decimal   @default(70) @map("default_split_pct") @db.Decimal(5, 2)
-  status          String    @default("active")
+  defaultSplitPct  Decimal   @default(70) @map("default_split_pct") @db.Decimal(5, 2)
+  status           String    @default("active")
+  commissionPlanId String?   @map("commission_plan_id")
 
-  createdAt       DateTime  @default(now()) @map("created_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   organization    Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user            User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  dealSubmissions DealSubmission[]
-  invoices        Invoice[]
+  dealSubmissions  DealSubmission[]
+  invoices         Invoice[]
+  commissionPlan   CommissionPlan?  @relation(fields: [commissionPlanId], references: [id], onDelete: SetNull)
+
+  eoInsuranceExpiry    DateTime?           @map("eo_insurance_expiry")
+  complianceDocuments  ComplianceDocument[]
+  payments             Payment[]
 
   @@index([orgId])
   @@index([email])
@@ -1443,8 +1475,107 @@ model Invoice {
   organization      Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   dealSubmission    DealSubmission? @relation(fields: [dealSubmissionId], references: [id], onDelete: SetNull)
   agent             BrokerAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  payments          Payment[]
 
   @@index([orgId, status])
   @@index([invoiceNumber])
   @@map("invoices")
+}
+
+model CommissionPlan {
+  id          String             @id @default(uuid())
+  orgId       String             @map("org_id")
+  name        String
+  description String?
+  planType    CommissionPlanType  @default(flat) @map("plan_type")
+  isDefault   Boolean            @default(false) @map("is_default")
+  status      String             @default("active")
+
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tiers        CommissionTier[]
+  agents       BrokerAgent[]
+
+  @@index([orgId])
+  @@map("commission_plans")
+}
+
+model CommissionTier {
+  id               String         @id @default(uuid())
+  planId           String         @map("plan_id")
+  tierOrder        Int            @default(0) @map("tier_order")
+  minThreshold     Decimal        @default(0) @map("min_threshold") @db.Decimal(14, 2)
+  maxThreshold     Decimal?       @map("max_threshold") @db.Decimal(14, 2)
+  agentSplitPct    Decimal        @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct    Decimal        @map("house_split_pct") @db.Decimal(5, 2)
+  label            String?
+
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+
+  plan             CommissionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, tierOrder])
+  @@map("commission_tiers")
+}
+
+model ComplianceDocument {
+  id            String            @id @default(uuid())
+  orgId         String            @map("org_id")
+  agentId       String            @map("agent_id")
+
+  docType       ComplianceDocType @map("doc_type")
+  title         String
+  description   String?
+  issueDate     DateTime?         @map("issue_date")
+  expiryDate    DateTime?         @map("expiry_date")
+
+  fileUrl       String?           @map("file_url")
+  fileName      String?           @map("file_name")
+  fileSize      Int?              @map("file_size")
+
+  status        String            @default("active")
+  notes         String?
+
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  organization  Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent         BrokerAgent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, agentId])
+  @@index([expiryDate])
+  @@map("compliance_documents")
+}
+
+model Payment {
+  id               String        @id @default(uuid())
+  orgId            String        @map("org_id")
+  invoiceId        String        @map("invoice_id")
+  agentId          String?       @map("agent_id")
+
+  amount           Decimal       @db.Decimal(12, 2)
+  paymentMethod    PaymentMethod @default(check) @map("payment_method")
+  paymentDate      DateTime      @default(now()) @map("payment_date")
+
+  referenceNumber  String?       @map("reference_number")
+  stripePaymentId  String?       @unique @map("stripe_payment_id")
+  stripeTransferId String?       @unique @map("stripe_transfer_id")
+
+  notes            String?
+
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  organization     Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoice          Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  agent            BrokerAgent?  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([invoiceId])
+  @@index([agentId])
+  @@index([stripePaymentId])
+  @@map("payments")
 }

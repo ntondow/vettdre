@@ -159,9 +159,13 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `/market-intel` | Working | 4 search modes: property, ownership, name, map |
 | `/properties` | Minimal | Empty state (needs implementation) |
 | `/prospecting` | Working | Prospect lists from Market Intel |
-| `/brokerage` | Working | BMS: deal submissions, invoices, Excel upload |
+| `/brokerage` | Working | BMS: deal submissions, invoices, plans, agents |
 | `/brokerage/deal-submissions` | Working | Agent deal submission queue + approval |
 | `/brokerage/invoices` | Working | Invoice generation, Excel upload, batch PDF |
+| `/brokerage/commission-plans` | Working | Commission plan templates (flat/volume/value tiers) |
+| `/brokerage/agents` | Working | Agent roster, detail pages, Excel import |
+| `/brokerage/agents/[id]` | Working | Agent detail: stats, plan tiers, deals, invoices |
+| `/brokerage/my-deals` | Working | Agent self-service: own submissions + invoices |
 | `/portfolios` | Basic | Schema + basic UI |
 | `/book/[slug]` | Working | Public showing booking (no auth) |
 
@@ -196,7 +200,22 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | File | Key Functions |
 |------|--------------|
 | `deals/actions.ts` | `saveDealAnalysis`, `getDealAnalysis`, `underwriteDeal` |
+| `deals/closing-cost-actions.ts` | `fetchClosingCosts`, `fetchTaxReassessment` |
+| `deals/benchmark-actions.ts` | `fetchExpenseBenchmark`, `fetchRentProjection`, `fetchLL97Projection` |
+| `deals/caprate-actions.ts` | `fetchMarketCapRate` |
 | `deals/promote/actions.ts` | `calculatePromote`, `generateWaterfallReport` |
+
+### Brokerage Management System
+| File | Key Functions |
+|------|--------------|
+| `brokerage/deal-submissions/actions.ts` | `createSubmission`, `updateSubmissionStatus`, `approveSubmission`, `rejectSubmission`, `generatePublicLink` |
+| `brokerage/invoices/actions.ts` | `createInvoice`, `createInvoiceFromSubmission`, `markPaid`, `voidInvoice`, `validateExcelRows`, `batchCreateInvoices` |
+| `brokerage/commission-plans/actions.ts` | `createPlan`, `updatePlan`, `archivePlan`, `assignPlanToAgent`, `getAgentEffectiveSplit` |
+| `brokerage/agents/actions.ts` | `createAgent`, `updateAgent`, `deactivateAgent`, `deleteAgent`, `bulkCreateAgents`, `getAgentStats`, `linkAgentToUser` |
+| `brokerage/my-deals/actions.ts` | `getMyAgent`, `getMySubmissions`, `getMyInvoices`, `getMyStats` |
+| `brokerage/reports/actions.ts` | `getDashboardSummary`, `getPnlReport`, `getAgentProductionReport`, `get1099PrepData`, `getDealPipelineReport`, `exportReportCSV` |
+| `brokerage/compliance/actions.ts` | `getComplianceOverview`, `getAgentComplianceDocs`, `createComplianceDoc`, `updateComplianceDoc`, `deleteComplianceDoc`, `getExpiringItems`, `refreshComplianceStatuses` |
+| `brokerage/payments/actions.ts` | `recordPayment`, `getInvoicePayments`, `getPaymentHistory`, `deletePayment`, `getPaymentSummary`, `exportPaymentHistory` |
 
 ### Pipeline, Messages, Calendar, Prospecting, Settings
 | File | Key Functions |
@@ -285,21 +304,21 @@ A real estate intelligence platform for NYC commercial real estate professionals
 |--------|---------|------------|
 | Parcels Composite | `Parcels_Composite_NJ_WM/FeatureServer/0` | MUN_NAME, PROP_CLASS, PROP_LOC, DWELL, YR_CONSTR, LAND_VAL |
 
-## Feature Gate System (68 features, 5 plans)
+## Feature Gate System (74 features, 5 plans)
 
 **Plans:** free ($0) → explorer ($59/mo) → pro ($219/mo) → team ($399/mo) → enterprise (custom)
 
 ### Free (3 features)
 `nav_market_intel`, `market_nyc`, `bp_census_basic`
 
-### Explorer adds (14 features)
-`market_nys`, `market_nj`, `map_search`, `search_unlimited`, `bp_owner_name`, `bp_distress_score`, `bp_investment_score`, `bp_rpie`, `bp_live_listings`, `bp_web_intel`, `bp_census_full`, `bp_market_trends`, `bp_fannie_mae_loan`, `bp_renovation_basic`, `bp_str_basic`, `report_basic`, `bp_corp_basic`
+### Explorer adds (18 features)
+`market_nys`, `market_nj`, `map_search`, `search_unlimited`, `bp_owner_name`, `bp_distress_score`, `bp_investment_score`, `bp_rpie`, `bp_live_listings`, `bp_web_intel`, `bp_census_full`, `bp_market_trends`, `bp_fannie_mae_loan`, `bp_renovation_basic`, `bp_str_basic`, `report_basic`, `bp_corp_basic`, `deal_structure_all_cash`
 
-### Pro adds (26 features)
-`nav_deal_modeler`, `nav_prospecting`, `nav_portfolios`, `nav_campaigns`, `nav_sequences`, `nav_financing`, `nav_comp_analysis`, `bp_owner_contact`, `bp_apollo_enrichment`, `bp_census_trends`, `bp_corp_full`, `bp_renovation_full`, `bp_str_full`, `report_full`, `phone_sms`, `deal_modeler`, `prospecting`, `portfolios`, `comp_analysis`, `campaigns`, `sequences`, `financing`, `api_access`, `promote_model`, `nav_promote_model`
+### Pro adds (32 features)
+`nav_deal_modeler`, `nav_prospecting`, `nav_portfolios`, `nav_campaigns`, `nav_sequences`, `nav_financing`, `nav_comp_analysis`, `bp_owner_contact`, `bp_apollo_enrichment`, `bp_census_trends`, `bp_corp_full`, `bp_renovation_full`, `bp_str_full`, `report_full`, `phone_sms`, `deal_modeler`, `prospecting`, `portfolios`, `comp_analysis`, `campaigns`, `sequences`, `financing`, `api_access`, `promote_model`, `nav_promote_model`, `deal_structure_conventional`, `deal_structure_bridge_refi`, `deal_structure_assumable`, `deal_structure_syndication`, `deal_structure_compare`, `bms_submissions`, `bms_invoices`, `bms_agent_portal`
 
-### Team adds (5 features)
-`nav_investors`, `investors`, `phone_multi_numbers`, `promote_templates`, `promote_sensitivity`, `promote_export`
+### Team adds (8 features)
+`nav_investors`, `investors`, `phone_multi_numbers`, `promote_templates`, `promote_sensitivity`, `promote_export`, `bms_bulk_upload`, `bms_agents`, `bms_commission_plans`
 
 ### Enterprise = Team (all features)
 
@@ -354,15 +373,92 @@ A real estate intelligence platform for NYC commercial real estate professionals
 
 ## Brokerage Management System (BMS)
 
-- BMS adds deal submission intake + invoice generation for running a brokerage
-- 3 new models: BrokerAgent, DealSubmission, Invoice
-- 2 new enums: BmsDealType, InvoiceStatus
+- BMS adds deal submission intake, invoice generation, commission plans, agent management, compliance tracking, payment recording, and reporting for running a brokerage
+- 7 models: BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment
+- 5 enums: BmsDealType (sale/lease/rental), InvoiceStatus (draft/sent/paid/void), CommissionPlanType (flat/volume_based/value_based), ComplianceDocType (license/eo_insurance/continuing_education/background_check/other), PaymentMethod (check/ach/wire/cash/stripe/other)
 - Organization has `submissionToken` for public submission links
 - Server actions follow same `getCurrentOrg()` pattern via authProviderId
+- Agent self-service uses `getCurrentUserAndAgent()` — verifies User→BrokerAgent link
 - Public submissions at `/submit-deal/[token]` — no auth, looks up org by token
 - Invoice PDF uses jsPDF (same as deal-pdf.ts and pdf-report.ts)
 - Excel upload uses SheetJS with flexible column alias mapping
-- Feature gates: bms_submissions (pro+), bms_invoices (pro+), bms_bulk_upload (team+), bms_agents (team+)
+- Commission plans: flat/volume_based/value_based with tiered agent splits
+- Agent roster: CRUD, detail pages, Excel/CSV import, stats aggregates
+- Agent self-service portal: `/brokerage/my-deals` — agents see own submissions + invoices, submit deals
+- Sidebar role-gating: owner/admin see "Brokerage", agents see "My Deals"
+- Brokerage sub-nav: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents
+- Reporting: dashboard summary, P&L, agent production, 1099 tax prep, deal pipeline — all with CSV export
+- Compliance: document tracking per agent (license, E&O insurance, continuing education, background check), expiry alerts (30-day window), status auto-computation
+- Payments: manual recording against invoices, partial payment tracking with progress bars, auto-status cascading (invoice → deal submission), payment history with filters, CSV export, Stripe-ready schema
+- Feature gates: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+)
+
+### BMS File Structure (31 files)
+```
+src/app/(dashboard)/brokerage/
+  layout.tsx                    — sub-nav tabs (Dashboard, Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents)
+  page.tsx                      — redirects to /brokerage/dashboard
+  dashboard/
+    page.tsx                    — stats cards, deal status chart, deal types, invoice status, period selector
+  deal-submissions/
+    page.tsx                    — approval queue UI (filter tabs, search, expandable cards)
+    actions.ts                  — server actions (CRUD, approve/reject, public link)
+    submission-form.tsx         — reusable form (used in deal-submissions + my-deals)
+  invoices/
+    page.tsx                    — invoice list + management (table, bulk actions, inline payment recording)
+    actions.ts                  — server actions (create, batch, mark paid, excel validation)
+    excel-upload.tsx            — upload + parse + preview component
+    invoice-form.tsx            — manual invoice creation form
+    new/
+      page.tsx                  — standalone manual invoice page
+  commission-plans/
+    page.tsx                    — plan list + CRUD (card grid, archive)
+    actions.ts                  — server actions (CRUD, assign to agents, effective split calc)
+    plan-builder.tsx            — dynamic tier builder + preview (flat/volume/value)
+  reports/
+    layout.tsx                  — reports sub-nav (P&L, Production, 1099 Prep, Pipeline)
+    page.tsx                    — redirects to /brokerage/reports/pnl
+    actions.ts                  — getDashboardSummary, getPnlReport, getAgentProductionReport, get1099PrepData, getDealPipelineReport, exportReportCSV
+    pnl/
+      page.tsx                  — P&L report: revenue, payouts, net income, period chart, CSV export
+    production/
+      page.tsx                  — agent leaderboard: rankings, top agent highlight, org totals, sort toggle
+    tax-prep/
+      page.tsx                  — 1099-NEC prep: tax year select, $600 threshold, agent earnings, CSV export
+    pipeline/
+      page.tsx                  — CSS funnel, conversion rates, speed metrics, source/type breakdowns, rejections
+  compliance/
+    page.tsx                    — status cards, expiring banner, agent compliance table, doc management side panel
+    actions.ts                  — getComplianceOverview, CRUD, getExpiringItems, refreshComplianceStatuses
+  payments/
+    page.tsx                    — summary cards, filter bar, record payment panel, payment history table, CSV export
+    actions.ts                  — recordPayment, getInvoicePayments, getPaymentHistory, deletePayment, getPaymentSummary, exportPaymentHistory
+  agents/
+    page.tsx                    — agent roster table + inline form + import panel
+    actions.ts                  — server actions (CRUD, bulk create, stats, user linking)
+    agent-import.tsx            — Excel/CSV upload + preview + bulk create
+    [id]/
+      page.tsx                  — agent detail: stats, plan tiers, deals, invoices
+  my-deals/
+    page.tsx                    — agent self-service: own submissions + invoices + submit
+    actions.ts                  — server actions (my agent, my submissions, my invoices, my stats)
+
+src/app/submit-deal/[token]/
+  page.tsx                      — public submission (server component, org lookup by token)
+  client.tsx                    — public submission (client component, no auth)
+
+src/lib/
+  bms-types.ts                  — shared types, enums, labels, colors, Excel column aliases (includes compliance + payment types)
+  invoice-pdf.ts                — jsPDF invoice generator (single + batch)
+```
+
+### BMS Database Models
+- **BrokerAgent**: orgId, userId? (@unique), firstName, lastName, email, phone, licenseN, licenseExpiry?, eoInsuranceExpiry?, defaultSplitPct, commissionPlanId?, status
+- **DealSubmission**: orgId, agentId?, all form fields as snapshots, status (string), invoiceId? (1:1)
+- **Invoice**: orgId, submissionId? (1:1), agentId?, invoiceNumber (INV-YYYY-NNNN), all info snapshotted, InvoiceStatus enum, payments[]
+- **CommissionPlan**: orgId, name, type (CommissionPlanType), isDefault, isActive, agents[] relation
+- **CommissionTier**: planId, tierOrder, minValue, maxValue?, agentSplitPct, houseSplitPct
+- **ComplianceDocument**: orgId, agentId, docType (ComplianceDocType), title, description?, issueDate?, expiryDate?, fileUrl?, fileName?, fileSize?, status, notes
+- **Payment**: orgId, invoiceId, agentId?, amount (Decimal 12,2), paymentMethod (PaymentMethod), paymentDate, referenceNumber?, stripePaymentId? (@unique), stripeTransferId? (@unique), notes
 
 ## Socrata API Patterns
 
