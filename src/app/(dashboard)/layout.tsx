@@ -15,10 +15,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const dbUser = await prisma.user.findUnique({
+  // Primary lookup by authProviderId, fallback to email (covers newly provisioned users)
+  let dbUser = await prisma.user.findUnique({
     where: { authProviderId: user.id },
     select: { id: true, plan: true, role: true, trialEndsAt: true, usageCounters: true },
   });
+
+  if (!dbUser && user.email) {
+    dbUser = await prisma.user.findFirst({
+      where: { email: user.email },
+      select: { id: true, plan: true, role: true, trialEndsAt: true, usageCounters: true },
+    });
+  }
 
   const userId = dbUser?.id ?? "";
   let plan = (dbUser?.plan || "free") as UserPlan;

@@ -3,7 +3,7 @@
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import type { FilterState, Market, MainTab } from "./types";
-import { URL_KEYS, countActiveFilters } from "./types";
+import { URL_KEYS, countActiveFilters, LEGACY_TAB_MAP } from "./types";
 
 const DEFAULTS: FilterState = {
   market: "nyc",
@@ -67,7 +67,9 @@ export function useFilterState() {
   );
 
   const market = filters.market as Market;
-  const tab = filters.tab as MainTab;
+  // Redirect legacy tab names to new tabs
+  const rawTab = filters.tab;
+  const tab = (LEGACY_TAB_MAP[rawTab] ?? rawTab) as MainTab;
 
   const setFilters = useCallback(
     (updates: Partial<FilterState>) => {

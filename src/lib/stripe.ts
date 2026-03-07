@@ -58,3 +58,21 @@ export function getPlanFromPriceId(priceId: string): UserPlan {
 export function isValidPriceId(priceId: string): boolean {
   return priceId in getPriceToPlan();
 }
+
+// ── Leasing tier price ID mapping ─────────────────────────────
+// Env vars: STRIPE_LEASING_PRO_PRICE_ID, STRIPE_LEASING_TEAM_PRICE_ID
+// These must be pre-created in Stripe Dashboard as subscription products.
+
+export type LeasingTier = "free" | "pro" | "team";
+
+export function getLeasingPriceId(tier: LeasingTier): string | null {
+  if (tier === "pro") return process.env.STRIPE_LEASING_PRO_PRICE_ID || null;
+  if (tier === "team") return process.env.STRIPE_LEASING_TEAM_PRICE_ID || null;
+  return null;
+}
+
+export function getLeasingTierFromPriceId(priceId: string): LeasingTier {
+  if (process.env.STRIPE_LEASING_PRO_PRICE_ID && priceId === process.env.STRIPE_LEASING_PRO_PRICE_ID) return "pro";
+  if (process.env.STRIPE_LEASING_TEAM_PRICE_ID && priceId === process.env.STRIPE_LEASING_TEAM_PRICE_ID) return "team";
+  return "free";
+}

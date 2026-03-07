@@ -53,16 +53,40 @@ const BORO_CODE: Record<string, string> = {
 // ADDRESS ABBREVIATION NORMALIZATION
 // ============================================================
 const STREET_ABBREVS: Record<string, string> = {
-  "ST": "STREET", "AVE": "AVENUE", "AV": "AVENUE", "BLVD": "BOULEVARD",
-  "DR": "DRIVE", "PL": "PLACE", "CT": "COURT", "RD": "ROAD",
-  "LN": "LANE", "TER": "TERRACE", "PKWY": "PARKWAY", "CIR": "CIRCLE",
-  "HWY": "HIGHWAY", "SQ": "SQUARE", "EXPY": "EXPRESSWAY", "TPKE": "TURNPIKE",
-  "N": "NORTH", "S": "SOUTH", "E": "EAST", "W": "WEST",
+  ST: "STREET", AVE: "AVENUE", AV: "AVENUE", BLVD: "BOULEVARD",
+  DR: "DRIVE", PL: "PLACE", CT: "COURT", RD: "ROAD",
+  LN: "LANE", TER: "TERRACE", PKWY: "PARKWAY", CIR: "CIRCLE",
+  HWY: "HIGHWAY", SQ: "SQUARE", EXPY: "EXPRESSWAY", TPKE: "TURNPIKE",
+};
+
+const DIRECTIONAL_ABBREVS_TA: Record<string, string> = {
+  N: "NORTH", S: "SOUTH", E: "EAST", W: "WEST",
 };
 
 function normalizeAddress(raw: string): string {
-  const upper = raw.toUpperCase().trim();
-  return upper.split(/\s+/).map(w => STREET_ABBREVS[w] || w).join(" ");
+  const words = raw.toUpperCase().trim().split(/\s+/);
+  const result: string[] = [];
+  const hasHouseNum = words.length > 0 && /^\d+$/.test(words[0]);
+
+  for (let i = 0; i < words.length; i++) {
+    const w = words[i];
+    // Single-letter directional — only expand when immediately after house number
+    // and not the last word. Preserves "AVENUE Z", "AVENUE E" etc.
+    if (DIRECTIONAL_ABBREVS_TA[w] && w.length === 1) {
+      if (hasHouseNum && i === 1 && i < words.length - 1) {
+        result.push(DIRECTIONAL_ABBREVS_TA[w]);
+      } else {
+        result.push(w);
+      }
+      continue;
+    }
+    if (STREET_ABBREVS[w]) {
+      result.push(STREET_ABBREVS[w]);
+      continue;
+    }
+    result.push(w);
+  }
+  return result.join(" ");
 }
 
 // ============================================================

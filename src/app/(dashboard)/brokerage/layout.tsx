@@ -15,7 +15,12 @@ import {
   FileBarChart,
   Settings,
   Briefcase,
+  FolderOpen,
+  Home,
+  Building2,
+  Trophy,
 } from "lucide-react";
+import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { getCurrentBrokerageRole } from "@/lib/bms-auth";
 import { canAccessPage } from "@/lib/bms-permissions";
 import type { BrokerageRoleType } from "@/lib/bms-types";
@@ -42,11 +47,19 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
+    group: "Inventory",
+    items: [
+      { href: "/brokerage/listings", icon: Home, label: "Listings" },
+      { href: "/brokerage/listings/properties", icon: Building2, label: "Properties" },
+    ],
+  },
+  {
     group: "Deals",
     items: [
       { href: "/brokerage/deal-submissions", icon: FileText, label: "Submissions" },
       { href: "/brokerage/invoices", icon: Receipt, label: "Invoices" },
       { href: "/brokerage/invoices/bulk", icon: Package, label: "Bulk Invoices" },
+      { href: "/brokerage/transactions", icon: FolderOpen, label: "Transactions" },
     ],
   },
   {
@@ -65,6 +78,12 @@ const ADMIN_NAV: NavGroup[] = [
     ],
   },
   {
+    group: "Performance",
+    items: [
+      { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
+    ],
+  },
+  {
     group: "Admin",
     items: [
       { href: "/brokerage/settings", icon: Settings, label: "Settings" },
@@ -77,14 +96,19 @@ const AGENT_NAV: NavGroup[] = [
     group: "My Brokerage",
     items: [
       { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
+      { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
     ],
   },
 ];
 
 // ── Helpers ──────────────────────────────────────────────────
 
-function getVisibleNav(role: BrokerageRoleType | null): NavGroup[] {
-  if (!role || role === "agent") return AGENT_NAV;
+const ADMIN_ROLES = new Set<BrokerageRoleType>(["brokerage_admin", "broker", "manager"]);
+
+function getVisibleNav(role: BrokerageRoleType | null | undefined): NavGroup[] {
+  // Explicit positive match: only known admin roles get the full nav.
+  // null, undefined, "agent", or any unexpected value → agent nav.
+  if (!role || !ADMIN_ROLES.has(role)) return AGENT_NAV;
 
   // Filter each group's items by page permission, drop empty groups
   return ADMIN_NAV
@@ -99,11 +123,19 @@ function getVisibleNav(role: BrokerageRoleType | null): NavGroup[] {
 
 export default function BrokerageLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { role: orgRole } = useUserPlan();
   const [role, setRole] = useState<BrokerageRoleType | null | undefined>(undefined);
 
   useEffect(() => {
-    getCurrentBrokerageRole().then(setRole);
-  }, []);
+    // Org owners/admins always get brokerage_admin — use context role directly
+    // (avoids server action that may fail silently due to cookies/RPC issues)
+    if (orgRole === "owner" || orgRole === "admin") {
+      setRole("brokerage_admin");
+      return;
+    }
+    // Other users: check BrokerAgent record via server action
+    getCurrentBrokerageRole().then(setRole).catch(() => setRole(null));
+  }, [orgRole]);
 
   const loading = role === undefined;
   const nav = loading ? [] : getVisibleNav(role);

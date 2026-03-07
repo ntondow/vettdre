@@ -29,6 +29,8 @@ const SERIES_CONFIG: Record<string, string> = {
   CPIAUCSL: "CPI (All Urban)",
   HOUST: "Housing Starts",
   DGS30: "30-Year Treasury",
+  DGS10: "10-Year Treasury",
+  DFF: "Fed Funds Rate",
 };
 
 // ============================================================
@@ -149,4 +151,89 @@ export async function fetchAllFredSeries(): Promise<FredSeries> {
 export async function getCurrentMortgageRate(): Promise<number | null> {
   const obs = await fetchFredSeries("MORTGAGE30US", "30-Year Fixed Mortgage");
   return obs?.value ?? null;
+}
+
+// ============================================================
+// Sparkline support — fetch N recent observations for mini charts
+// ============================================================
+
+const SPARK_CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
+
+export interface FredSparklineData {
+  seriesId: string;
+  title: string;
+  current: number;
+  observations: { date: string; value: number }[];
+}
+
+export async function fetchFredSparkline(
+  seriesId: string,
+  title: string,
+  count: number = 12,
+): Promise<FredSparklineData | null> {
+  const apiKey = getApiKey();
+  if (!apiKey) return null;
+
+  const cacheKey = `fred-spark:${seriesId}:${count}`;
+  const entry = cache.get(cacheKey);
+  if (entry && Date.now() - entry.ts < SPARK_CACHE_TTL) {
+    return entry.data as FredSparklineData;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+
+    // Fetch recent observations in ascending order for sparkline
+    const url = `${FRED_BASE}/series/observations?series_id=${seriesId}&sort_order=desc&limit=${count}&file_type=json&api_key=${apiKey}`;
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const raw = json.observations;
+    if (!Array.isArray(raw) || raw.length === 0) return null;
+
+    // Filter valid, sort ascending by date for sparkline rendering
+    const observations = raw
+      .filter((o: any) => o.value !== ".")
+      .map((o: any) => ({ date: o.date as string, value: parseFloat(o.value) }))
+      .filter((o) => !isNaN(o.value))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    if (observations.length === 0) return null;
+
+    const result: FredSparklineData = {
+      seriesId,
+      title,
+      current: observations[observations.length - 1].value,
+      observations,
+    };
+
+    setCache(cacheKey, result);
+    return result;
+  } catch {
+    return null;
+  }
+}
+
+const SPARKLINE_SERIES: [string, string][] = [
+  ["MORTGAGE30US", "30-Yr Mortgage"],
+  ["MORTGAGE15US", "15-Yr Mortgage"],
+  ["DGS10", "10-Yr Treasury"],
+  ["DFF", "Fed Funds Rate"],
+  ["CPIAUCSL", "CPI"],
+];
+
+export async function fetchAllFredSparklines(): Promise<Record<string, FredSparklineData | null>> {
+  const results = await Promise.allSettled(
+    SPARKLINE_SERIES.map(([id, title]) => fetchFredSparkline(id, title)),
+  );
+
+  const out: Record<string, FredSparklineData | null> = {};
+  SPARKLINE_SERIES.forEach(([id], i) => {
+    out[id] = results[i].status === "fulfilled" ? results[i].value : null;
+  });
+  return out;
 }

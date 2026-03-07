@@ -188,11 +188,11 @@ export default function CRMSidebar({
       {/* Deals */}
       <CollapsibleSection title="Deals" count={deals.length}>
         {deals.length === 0 ? (
-          <p className="text-xs text-slate-400 italic">No deals yet — <Link href="/pipeline" className="text-blue-600 hover:underline">Create Deal</Link></p>
+          <p className="text-xs text-slate-400 italic">No deals yet — <Link href="/contacts" className="text-blue-600 hover:underline">Create Deal</Link></p>
         ) : (
           <div className="space-y-1.5">
             {deals.map(d => (
-              <Link key={d.id} href="/pipeline"
+              <Link key={d.id} href="/contacts"
                 className="block bg-slate-50 rounded-lg border border-slate-100 px-2.5 py-2 hover:bg-slate-100 transition-colors">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-slate-700 truncate">{d.name || "Untitled Deal"}</span>

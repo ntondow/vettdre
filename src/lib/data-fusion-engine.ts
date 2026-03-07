@@ -20,8 +20,42 @@ import {
   normalizeName,
   resolveValue,
 } from "./entity-resolver";
+import { cacheManager, SOURCE_CONFIG } from "./cache-manager";
 
-// Types available from entity-resolver.ts directly if needed by consumers
+// ---- Performance Profiling ----
+
+export interface SourceTiming {
+  source: string;
+  durationMs: number;
+  cached: boolean;   // true = served from Tier 2/3 cache
+  timedOut: boolean;
+  error: boolean;
+}
+
+interface TimingTracker {
+  entries: SourceTiming[];
+  startTime: number;
+  add(source: string, durationMs: number, cached: boolean, timedOut?: boolean, error?: boolean): void;
+  summary(): { totalMs: number; sources: SourceTiming[]; cacheHitRate: number };
+}
+
+function createTimingTracker(): TimingTracker {
+  const entries: SourceTiming[] = [];
+  const startTime = performance.now();
+  return {
+    entries,
+    startTime,
+    add(source, durationMs, cached, timedOut = false, error = false) {
+      entries.push({ source, durationMs: Math.round(durationMs), cached, timedOut, error });
+    },
+    summary() {
+      const totalMs = Math.round(performance.now() - startTime);
+      const cacheHits = entries.filter(e => e.cached).length;
+      const cacheHitRate = entries.length > 0 ? Math.round((cacheHits / entries.length) * 100) : 0;
+      return { totalMs, sources: entries, cacheHitRate };
+    },
+  };
+}
 
 // ---- BuildingIntelligence Types ----
 
@@ -296,26 +330,66 @@ export interface BuildingIntelligence {
   dataFreshness: Record<string, string>;
   overallConfidence: number;
   lastUpdated: string;
+
+  timing?: {
+    totalMs: number;
+    cacheHitRate: number;
+    sources: SourceTiming[];
+  };
 }
 
-// ---- In-memory cache (15 min TTL) ----
+// ---- Phase 1 source name mapping (index → SOURCE_CONFIG key) ----
 
-const cache = new Map<string, { data: BuildingIntelligence; ts: number }>();
-const CACHE_TTL = 15 * 60 * 1000;
+const PHASE1_SOURCES = [
+  "PLUTO",          // 0
+  "HPD_VIOLATIONS",  // 1
+  "HPD_COMPLAINTS",  // 2
+  "DOB_PERMITS",     // 3
+  "HPD_REG",         // 4
+  "HPD_LITIGATION",  // 5
+  "DOB_ECB",         // 6
+  "RENT_STAB",       // 7
+  "SPECULATION",     // 8
+  "DOB_JOBS",        // 9
+  "DOB_NOW",         // 10
+  "RPIE",            // 11
+  "LL84",            // 12
+  "ROLLING_SALES",   // 13
+] as const;
 
-function getCached(bbl: string): BuildingIntelligence | null {
-  const entry = cache.get(bbl);
-  if (!entry) return null;
-  if (Date.now() - entry.ts > CACHE_TTL) { cache.delete(bbl); return null; }
-  return entry.data;
-}
+// Cache-aware query wrapper — checks Tier 2 before network, stores on fresh fetch
+async function cachedQueryNYC(
+  bbl: string,
+  source: string,
+  dataset: string,
+  where: string,
+  opts?: { select?: string; limit?: number; order?: string; timeout?: number },
+  timing?: TimingTracker,
+): Promise<any[]> {
+  const t0 = performance.now();
 
-function setCache(bbl: string, data: BuildingIntelligence) {
-  cache.set(bbl, { data, ts: Date.now() });
-  // Evict old entries if cache grows too large
-  if (cache.size > 100) {
-    const oldest = [...cache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0];
-    if (oldest) cache.delete(oldest[0]);
+  // Tier 2 check (also contains promoted Tier 3 results from batch pre-fetch)
+  const cached = cacheManager.getSource(bbl, source);
+  if (cached !== null) {
+    timing?.add(source, performance.now() - t0, true);
+    return cached as any[];
+  }
+
+  // Use per-source timeout from SOURCE_CONFIG, fallback to opts or 8s
+  const sourceTimeout = SOURCE_CONFIG[source]?.timeoutMs || opts?.timeout || 8000;
+
+  // Fresh fetch from NYC Open Data
+  try {
+    const data = await queryNYC(dataset, where, { ...opts, timeout: sourceTimeout });
+    timing?.add(source, performance.now() - t0, false);
+
+    // Store in Tier 2 + fire-and-forget Tier 3
+    cacheManager.setSource(bbl, source, data);
+    cacheManager.setSourceInDB(bbl, source, data);
+    return data;
+  } catch {
+    timing?.add(source, performance.now() - t0, false, true, true);
+    return [];
   }
 }
 
@@ -398,11 +472,16 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   const boroName = BORO_NAMES[boroCode] || "";
   const boroUpper = BORO_UPPER[boroCode] || "";
 
-  // Check cache
-  const cached = getCached(bbl10);
-  if (cached) return cached;
+  // Tier 1: Full BuildingIntelligence cache check
+  const cached = cacheManager.getBuilding(bbl10);
+  if (cached) {
+    if (process.env.NODE_ENV === "development") console.log(`[Cache] T1 HIT for BBL ${bbl10}`);
+    return cached;
+  }
 
   console.log(`=== DATA FUSION ENGINE === BBL: ${bbl10} (${boroName} blk ${block} lot ${lot})`);
+
+  const timing = createTimingTracker();
 
   // Prepare results containers
   let plutoData: any = null;
@@ -426,60 +505,73 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   const rawPhoneEntries: { phone: string; name: string; isOwnerPhone: boolean; filingDate: string; source: string }[] = [];
 
   // ============================================================
+  // PHASE 0.5: Batch Tier 3 pre-fetch — single DB query for all sources
+  // ============================================================
+
+  const tier2Missing = PHASE1_SOURCES.filter(source => cacheManager.getSource(bbl10, source) === null);
+  if (tier2Missing.length > 0) {
+    const tier3Results = await cacheManager.getSourcesFromDB(bbl10, [...tier2Missing]);
+    for (const [source, data] of tier3Results) {
+      cacheManager.setSource(bbl10, source, data);
+    }
+  }
+
+  // ============================================================
   // PHASE 1: Parallel data source queries (Promise.allSettled)
+  //           Each call checks Tier 2 cache before network fetch
   // ============================================================
 
   const queries = await Promise.allSettled([
     // 0. PLUTO
-    queryNYC(DATASETS.PLUTO, `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 1 }),
+    cachedQueryNYC(bbl10, "PLUTO", DATASETS.PLUTO, `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 1 }, timing),
 
     // 1. HPD Violations
-    queryNYC(DATASETS.HPD_VIOLATIONS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "inspectiondate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_VIOLATIONS", DATASETS.HPD_VIOLATIONS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "inspectiondate DESC" }, timing),
 
     // 2. HPD Complaints
-    queryNYC(DATASETS.HPD_COMPLAINTS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "receiveddate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_COMPLAINTS", DATASETS.HPD_COMPLAINTS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "receiveddate DESC" }, timing),
 
     // 3. DOB Permits
-    queryNYC(DATASETS.DOB_PERMITS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+    cachedQueryNYC(bbl10, "DOB_PERMITS", DATASETS.DOB_PERMITS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
       select: "owner_s_first_name,owner_s_last_name,owner_s_phone__,owner_s_business_name,permittee_s_first_name,permittee_s_last_name,permittee_s_phone__,permit_type,permit_status,filing_date,job_description",
       limit: 20, order: "filing_date DESC",
-    }),
+    }, timing),
 
     // 4. HPD Registrations
-    queryNYC(DATASETS.HPD_REG, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "registrationenddate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_REG", DATASETS.HPD_REG, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "registrationenddate DESC" }, timing),
 
     // 5. HPD Litigation
-    queryNYC(DATASETS.HPD_LITIGATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 50, order: "caseopendate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_LITIGATION", DATASETS.HPD_LITIGATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 50, order: "caseopendate DESC" }, timing),
 
     // 6. DOB ECB Violations
-    queryNYC(DATASETS.DOB_ECB, `boro='${boroCode}' AND block='${blockPad}' AND lot='${lotPad}'`, { limit: 50, order: "issueddate DESC" }),
+    cachedQueryNYC(bbl10, "DOB_ECB", DATASETS.DOB_ECB, `boro='${boroCode}' AND block='${blockPad}' AND lot='${lotPad}'`, { limit: 50, order: "issueddate DESC" }, timing),
 
     // 7. Rent Stabilization
-    queryNYC(DATASETS.RENT_STAB, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }),
+    cachedQueryNYC(bbl10, "RENT_STAB", DATASETS.RENT_STAB, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }, timing),
 
     // 8. Speculation Watch List
-    queryNYC(DATASETS.SPECULATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }),
+    cachedQueryNYC(bbl10, "SPECULATION", DATASETS.SPECULATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }, timing),
 
     // 9. DOB Job Applications
-    queryNYC(DATASETS.DOB_JOBS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+    cachedQueryNYC(bbl10, "DOB_JOBS", DATASETS.DOB_JOBS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
       select: "owner_s_first_name,owner_s_last_name,owner_sphone__,owner_s_business_name,owner_type,latest_action_date,job_type,house__,street_name",
       limit: 10, order: "latest_action_date DESC",
-    }),
+    }, timing),
 
     // 10. DOB NOW Filings
-    queryNYC(DATASETS.DOB_NOW, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+    cachedQueryNYC(bbl10, "DOB_NOW", DATASETS.DOB_NOW, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
       select: "job_filing_number,job_type,filing_date,filing_status,owner_first_name,owner_last_name,owner_business_name,owner_phone,permittee_first_name,permittee_last_name,permittee_business_name,permittee_phone,proposed_dwelling_units,proposed_no_of_stories,estimated_job_costs,job_description",
       limit: 15, order: "filing_date DESC",
-    }),
+    }, timing),
 
     // 11. RPIE Non-Compliance
-    queryNYC(DATASETS.RPIE, `bbl='${bbl10}'`, { limit: 10 }),
+    cachedQueryNYC(bbl10, "RPIE", DATASETS.RPIE, `bbl='${bbl10}'`, { limit: 10 }, timing),
 
     // 12. LL84 Energy
-    queryNYC(DATASETS.LL84, `bbl_10_digits='${bbl10}'`, { limit: 1, order: "year_ending DESC" }),
+    cachedQueryNYC(bbl10, "LL84", DATASETS.LL84, `bbl_10_digits='${bbl10}'`, { limit: 1, order: "year_ending DESC" }, timing),
 
     // 13. Rolling Sales (comps in same zip — fetched after PLUTO but we start it here with boro)
-    queryNYC(DATASETS.ROLLING_SALES, `borough='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "sale_date DESC" }),
+    cachedQueryNYC(bbl10, "ROLLING_SALES", DATASETS.ROLLING_SALES, `borough='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "sale_date DESC" }, timing),
   ]);
 
   // ============================================================
@@ -582,10 +674,10 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   if (hpdRegistrations.length > 0) {
     dataSources.push("HPD Registration");
     dataFreshness["HPD Registration"] = "Live";
-    // Fetch contacts for these registrations
+    // Fetch contacts for these registrations (cached by BBL)
     const regIds = hpdRegistrations.map((r: any) => `'${r.registrationid}'`).join(",");
     try {
-      hpdContacts = await queryNYC(DATASETS.HPD_CONTACTS, `registrationid in(${regIds})`, { limit: 30 });
+      hpdContacts = await cachedQueryNYC(bbl10, "HPD_CONTACTS", DATASETS.HPD_CONTACTS, `registrationid in(${regIds})`, { limit: 30 });
     } catch { /* contacts fetch failed, continue without */ }
   }
 
@@ -1036,7 +1128,8 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch {}
 
   // ============================================================
-  // PHASE 13: Lead Verification + Apollo Enrichment
+  // PHASES 13-13.9: Parallel Enrichment + Intelligence
+  // All 5 phases run concurrently. Score adjustments applied sequentially after.
   // ============================================================
 
   let pdlEnrichment: any = null;
@@ -1044,7 +1137,16 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   let apolloOrgEnrichment: any = null;
   let apolloKeyPeople: any[] = [];
   let leadVerification: any = null;
+  let liveListings: BuildingIntelligence["liveListings"] = null;
+  let webIntelligence: BuildingIntelligence["webIntelligence"] = null;
+  let compsAnalysis: BuildingIntelligence["comps"] = null;
+  let marketTrendsData: BuildingIntelligence["marketTrends"] = null;
+  let fannieMaeLoanData: BuildingIntelligence["fannieMaeLoan"] = null;
 
+  await Promise.allSettled([
+  // Phase 13: Lead Verification + Apollo Enrichment
+  (async () => {
+  const t13 = performance.now();
   try {
     // Run enrichment + verification (imports to avoid circular deps)
     const { verifyLead } = await import("@/app/(dashboard)/market-intel/lead-verification");
@@ -1054,7 +1156,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     const topIndividual = rankedContacts.find(r => !r.name.toUpperCase().match(/LLC|CORP|INC|L\.P\.|TRUST/) && r.name.includes(" "));
     const topCorp = rankedContacts.find(r => r.name.toUpperCase().match(/LLC|CORP|INC/));
 
-    await Promise.all([
+    await Promise.allSettled([
       // PDL if no phones
       (async () => {
         const hasPhone = rankedContacts.some(r => r.phone);
@@ -1066,7 +1168,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
               if (pdl.phones?.[0]?.number) { topIndividual.phone = pdl.phones[0].number; topIndividual.source += " + PDL"; topIndividual.score = 95; }
               if (pdl.emails?.[0]) topIndividual.email = pdl.emails[0];
             }
-          } catch {}
+          } catch (err) { console.warn("PDL enrichment failed:", err instanceof Error ? err.message : err); }
         }
       })(),
       // Apollo person + org
@@ -1084,12 +1186,11 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
             const orgResult = await apolloEnrichOrganization(topCorp.name);
             if (orgResult) {
               apolloOrgEnrichment = orgResult;
-              // Only search for key people if org enrichment found a relevant match
               const keyPeople = await apolloFindPeopleAtOrg(orgResult.name);
               if (keyPeople.length > 0) apolloKeyPeople = keyPeople;
             }
           }
-        } catch {}
+        } catch (err) { console.warn("Apollo enrichment failed:", err instanceof Error ? err.message : err); }
       })(),
     ]);
 
@@ -1104,14 +1205,12 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
       } catch {}
     }
   } catch {}
+  timing.add("PDL_APOLLO", performance.now() - t13, false);
+  })(),
 
-  // ============================================================
-  // PHASE 13.5: Brave Web Intelligence (parallel, non-blocking)
-  // ============================================================
-
-  let liveListings: BuildingIntelligence["liveListings"] = null;
-  let webIntelligence: BuildingIntelligence["webIntelligence"] = null;
-
+  // Phase 13.5: Brave Web Intelligence
+  (async () => {
+  const t135 = performance.now();
   try {
     const { isBraveSearchAvailable } = await import("./brave-search");
     const braveAvailable = await isBraveSearchAvailable();
@@ -1177,8 +1276,6 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
           marketTrend: enhancedComps?.marketTrend || "unknown",
           marketInsight: enhancedComps?.marketInsight || "",
         };
-        dataSources.push("Brave Web Search");
-        dataFreshness["Brave Web Search"] = "Live";
       }
 
       if (entityCheckResult && (entityCheckResult.articleCount > 0)) {
@@ -1206,13 +1303,12 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch (err) {
     console.warn("Brave integration skipped:", err);
   }
+  timing.add("BRAVE_WEB", performance.now() - t135, false);
+  })(),
 
-  // ============================================================
-  // PHASE 13.7: Comparable Sales Valuation (non-blocking)
-  // ============================================================
-
-  let compsAnalysis: BuildingIntelligence["comps"] = null;
-
+  // Phase 13.7: Comparable Sales Valuation
+  (async () => {
+  const t137 = performance.now();
   try {
     if (plutoData && plutoData.latitude && plutoData.longitude && (plutoData.unitsRes >= 2 || plutoData.unitsTot >= 2)) {
       const { findComparableSales } = await import("./comps-engine");
@@ -1243,7 +1339,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
           count: compResult.comps.length,
           avgPricePerUnit: compResult.valuation.pricePerUnit,
           medianPricePerUnit: compResult.comps.length > 0
-            ? (() => { const ppu = compResult.comps.map(c => c.pricePerUnit).filter(v => v > 0).sort((a, b) => a - b); const m = Math.floor(ppu.length / 2); return ppu.length % 2 ? ppu[m] : Math.round((ppu[m - 1] + ppu[m]) / 2); })()
+            ? (() => { const ppu = compResult.comps.map(c => c.pricePerUnit).filter(v => v > 0).sort((a, b) => a - b); if (ppu.length === 0) return 0; const m = Math.floor(ppu.length / 2); return ppu.length % 2 ? ppu[m] : Math.round((ppu[m - 1] + ppu[m]) / 2); })()
             : 0,
           avgPricePerSqft: compResult.valuation.pricePerSqft || 0,
           subjectVsMarket,
@@ -1257,11 +1353,12 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch (err) {
     console.warn("Comps analysis skipped:", err);
   }
+  timing.add("COMPS", performance.now() - t137, false);
+  })(),
 
-  // ============================================================
-  // PHASE 13.8: Market Trends (FHFA + Redfin)
-  // ============================================================
-  let marketTrendsData: BuildingIntelligence["marketTrends"] = null;
+  // Phase 13.8: Market Trends — fetch only, score adjustments applied after
+  (async () => {
+  const t138 = performance.now();
   try {
     const trendZip = plutoData?.zipCode || hpdRegistrations?.[0]?.zip || "";
     if (trendZip) {
@@ -1281,29 +1378,17 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
           marketTemperature: temp?.temperature ?? null,
           trend: appreciation.trend,
         };
-        dataSources.push("FHFA/ACRIS");
       }
     }
   } catch (err) {
     console.warn("Market trends skipped:", err);
   }
+  timing.add("MARKET_TRENDS", performance.now() - t138, false);
+  })(),
 
-  // Adjust investment/distress scores based on market trends
-  if (marketTrendsData) {
-    if (marketTrendsData.marketTemperature === "hot" && marketTrendsData.trend === "appreciating") {
-      investmentSignals.score = Math.min(100, investmentSignals.score + 5);
-      investmentSignals.signals.push({ type: "hot_market", description: "Hot appreciating market — strong buyer demand", estimatedUpside: "Quick sale at premium pricing" });
-    }
-    if (marketTrendsData.marketTemperature === "cold" && marketTrendsData.trend === "declining") {
-      distressSignals.score = Math.min(100, distressSignals.score + 5);
-      distressSignals.signals.push({ type: "cold_market", severity: "medium", description: "Cold declining market — sellers may be more motivated", source: "FHFA/Redfin" });
-    }
-  }
-
-  // ============================================================
-  // PHASE 13.9: Fannie Mae Loan Lookup
-  // ============================================================
-  let fannieMaeLoanData: BuildingIntelligence["fannieMaeLoan"] = null;
+  // Phase 13.9: Fannie Mae Loan Lookup — fetch only, score adjustments applied after
+  (async () => {
+  const t139 = performance.now();
   try {
     if (primaryAddress && primaryAddress.street) {
       const { lookupLoanByAddress } = await import("./fannie-mae");
@@ -1321,26 +1406,52 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
           servicerName: fannieResult.servicerName,
           lookupDate: fannieResult.lookupDate,
         };
-        dataSources.push("Fannie Mae");
-
-        // Scoring adjustments
-        if (fannieResult.isOwnedByFannieMae) {
-          investmentSignals.score = Math.min(100, investmentSignals.score + 3);
-          investmentSignals.signals.push({ type: "fannie_mae_loan", description: "Fannie Mae-backed mortgage — standardized terms, potentially assumable", estimatedUpside: "More transparent financing for acquisition" });
-        } else {
-          distressSignals.score = Math.min(100, distressSignals.score + 3);
-          distressSignals.signals.push({ type: "non_agency_loan", severity: "low", description: "Non-agency loan — may be portfolio, private, or hard money lending", source: "Fannie Mae" });
-        }
       }
     }
   } catch (err) {
     console.warn("Fannie Mae lookup skipped:", err);
   }
+  timing.add("FANNIE_MAE", performance.now() - t139, false);
+  })(),
+  ]); // END Promise.allSettled — Phases 13-13.9
+
+  // Post-parallel: TypeScript CFA can't track mutations inside async callbacks,
+  // so re-alias the variables to restore their full union types.
+  const _marketTrends = marketTrendsData as BuildingIntelligence["marketTrends"];
+  const _fannieLoan = fannieMaeLoanData as BuildingIntelligence["fannieMaeLoan"];
+  const _comps = compsAnalysis as BuildingIntelligence["comps"];
+
+  // Post-parallel: data source tracking
+  if (liveListings) { dataSources.push("Brave Web Search"); dataFreshness["Brave Web Search"] = "Live"; }
+  if (_marketTrends) dataSources.push("FHFA/ACRIS");
+  if (_fannieLoan) dataSources.push("Fannie Mae");
+
+  // Post-parallel: sequential score adjustments (these mutate shared state)
+  if (_marketTrends) {
+    if (_marketTrends.marketTemperature === "hot" && _marketTrends.trend === "appreciating") {
+      investmentSignals.score = Math.min(100, investmentSignals.score + 5);
+      investmentSignals.signals.push({ type: "hot_market", description: "Hot appreciating market — strong buyer demand", estimatedUpside: "Quick sale at premium pricing" });
+    }
+    if (_marketTrends.marketTemperature === "cold" && _marketTrends.trend === "declining") {
+      distressSignals.score = Math.min(100, distressSignals.score + 5);
+      distressSignals.signals.push({ type: "cold_market", severity: "medium", description: "Cold declining market — sellers may be more motivated", source: "FHFA/Redfin" });
+    }
+  }
+  if (_fannieLoan) {
+    if (_fannieLoan.isOwnedByFannieMae) {
+      investmentSignals.score = Math.min(100, investmentSignals.score + 3);
+      investmentSignals.signals.push({ type: "fannie_mae_loan", description: "Fannie Mae-backed mortgage — standardized terms, potentially assumable", estimatedUpside: "More transparent financing for acquisition" });
+    } else {
+      distressSignals.score = Math.min(100, distressSignals.score + 3);
+      distressSignals.signals.push({ type: "non_agency_loan", severity: "low", description: "Non-agency loan — may be portfolio, private, or hard money lending", source: "Fannie Mae" });
+    }
+  }
 
   // ============================================================
-  // PHASE 13.10: Renovation Cost Estimate
+  // PHASE 13.10: Renovation Cost Estimate (sequential — needs compsAnalysis from Phase 13.7)
   // ============================================================
   let renovationEstimateData: BuildingIntelligence["renovationEstimate"] = null;
+  const t1310 = performance.now();
   try {
     const renoUnits = totalUnits?.value || 0;
     const renoSqft = grossSqft?.value || 0;
@@ -1350,8 +1461,8 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     if (renoUnits > 0 && renoYear > 0) {
       const { estimateRenovationCost } = await import("./renovation-engine");
       const renoHasElevator = renoFloors > 5 || renoBldgClass.toUpperCase().startsWith("D");
-      const compValue = compsAnalysis ? compsAnalysis.avgPricePerUnit * renoUnits : 0;
-      const assessedVal = plutoData?.assessTot || 0;
+      const compValue = _comps ? _comps.avgPricePerUnit * renoUnits : 0;
+      const assessedVal = plutoData?.assessTotal || 0;
       const renoEst = estimateRenovationCost({
         units: renoUnits,
         sqft: renoSqft,
@@ -1359,9 +1470,9 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
         buildingClass: renoBldgClass,
         floors: renoFloors,
         hasElevator: renoHasElevator,
-        hpdViolations: hpdViolations.filter((v: any) => v.currentstatus === "OPEN").length,
+        hpdViolations: hpdViolations.filter((v: any) => v.currentStatus === "VIOLATION OPEN" || v.status === "Open").length,
         dobPermitsRecent: dobPermits.filter((p: any) => {
-          const d = p.issuance_date || p.filing_date || "";
+          const d = p.filingDate || p.issuanceDate || "";
           return d > `${new Date().getFullYear() - 5}-01-01`;
         }).length,
         ll84Grade: energyIntel?.energyStarGrade || undefined,
@@ -1394,14 +1505,16 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch (err) {
     console.warn("Renovation estimate skipped:", err);
   }
+  timing.add("RENOVATION", performance.now() - t1310, false);
 
   // ============================================================
   // PHASE 13b: STR (Airbnb) Projection
   // ============================================================
   let strProjectionData: BuildingIntelligence["strProjection"] = null;
+  const t13b = performance.now();
   try {
     const units = totalUnits?.value || resUnits?.value || 0;
-    const zip = plutoData?.zipcode || "";
+    const zip = plutoData?.zipCode || "";
     const borough = primaryAddress?.borough || "";
     if (units > 0 && borough) {
       const { matchNeighborhood, projectSTRIncome } = await import("./airbnb-market");
@@ -1425,6 +1538,7 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
   } catch (err) {
     console.warn("STR projection skipped:", err);
   }
+  timing.add("STR_AIRBNB", performance.now() - t13b, false);
 
   // ============================================================
   // PHASE 14: Build Contacts
@@ -1502,13 +1616,13 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     compliance,
     distressSignals,
     investmentSignals,
-    comps: compsAnalysis,
-    marketTrends: marketTrendsData,
-    fannieMaeLoan: fannieMaeLoanData,
+    comps: _comps,
+    marketTrends: _marketTrends,
+    fannieMaeLoan: _fannieLoan,
     renovationEstimate: renovationEstimateData,
     strProjection: strProjectionData,
-    liveListings,
-    webIntelligence,
+    liveListings: liveListings as BuildingIntelligence["liveListings"],
+    webIntelligence: webIntelligence as BuildingIntelligence["webIntelligence"],
 
     contacts: {
       ownerContacts: ownerContactsResolved,
@@ -1549,10 +1663,446 @@ export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIn
     lastUpdated: new Date().toISOString(),
   };
 
-  console.log(`=== DATA FUSION COMPLETE === ${dataSources.length} sources, confidence: ${overallConfidence}%, distress: ${distressSignals.score}, investment: ${investmentSignals.score}`);
+  // Attach timing data
+  const timingSummary = timing.summary();
+  result.timing = timingSummary;
 
-  setCache(bbl10, result);
+  // Log completion + timing + cache stats
+  const stats = cacheManager.getStats();
+  const slowSources = timingSummary.sources.filter(s => !s.cached && s.durationMs > 2000).map(s => `${s.source}(${s.durationMs}ms)`);
+  console.log(
+    `=== DATA FUSION COMPLETE === BBL:${bbl10} ${timingSummary.totalMs}ms | ${dataSources.length} sources | cache:${timingSummary.cacheHitRate}% | T1:${stats.tier1Size} T2:${stats.tier2Size}` +
+    (slowSources.length > 0 ? ` | SLOW: ${slowSources.join(", ")}` : "") +
+    ` | conf:${overallConfidence}% dist:${distressSignals.score} inv:${investmentSignals.score}`
+  );
+
+  cacheManager.setBuilding(bbl10, result);
   return result;
+}
+
+// ============================================================
+// BBL Normalization Helper (shared by phased fetchers)
+// ============================================================
+
+function normalizeBBLParts(bbl: string) {
+  const bbl10 = bbl.replace(/\D/g, "").padEnd(10, "0").slice(0, 10);
+  const boroCode = bbl10[0];
+  const block = bbl10.slice(1, 6).replace(/^0+/, "") || "0";
+  const lot = bbl10.slice(6, 10).replace(/^0+/, "") || "0";
+  const blockPad = block.padStart(5, "0");
+  const lotPad = lot.padStart(4, "0");
+  const lotPad5 = lot.padStart(5, "0");
+  const boroUpper = BORO_UPPER[boroCode] || "";
+  return { bbl10, boroCode, block, lot, blockPad, lotPad, lotPad5, boroUpper };
+}
+
+// ============================================================
+// PHASED FETCHING — Progressive Building Profile Loading
+//
+// 3 server actions that fetch subsets of NYC data sources,
+// enabling the UI to render critical sections in ~1-2s while
+// secondary data loads in background. Each phase does:
+//   1. BBL normalization
+//   2. Batch Tier 3 pre-fetch for its sources
+//   3. cachedQueryNYC calls (Tier 2 → network → store)
+//   4. Raw data processing matching the `data` shape the UI expects
+//
+// fetchBuildingIntelligence continues to run in parallel for
+// the full intelligence layer (entity resolution, scoring,
+// enrichments). The cache layer deduplicates network calls —
+// phased fetchers prime the cache for fetchBuildingIntelligence.
+// ============================================================
+
+/**
+ * Phase 1 — Critical sources: PLUTO, HPD Violations, HPD Registrations + Contacts
+ * Returns enough data to render: property overview, violations, ownership, contacts
+ * Enables secondary useEffects (census, HUD, comps, renovation, STR) to fire
+ */
+export async function fetchBuildingCritical(bbl: string): Promise<{
+  pluto: any;
+  violations: any[];
+  violationSummary: { total: number; open: number; classA: number; classB: number; classC: number };
+  registrations: any[];
+  hpdContacts: any[];
+}> {
+  const { bbl10, boroCode, block, lot } = normalizeBBLParts(bbl);
+  const t0 = Date.now();
+
+  // Batch Tier 3 pre-fetch for critical sources
+  const CRITICAL_SOURCES = ["PLUTO", "HPD_VIOLATIONS", "HPD_REG", "HPD_CONTACTS"];
+  const missing = CRITICAL_SOURCES.filter(s => cacheManager.getSource(bbl10, s) === null);
+  if (missing.length > 0) {
+    const t3 = await cacheManager.getSourcesFromDB(bbl10, missing);
+    for (const [source, d] of t3) cacheManager.setSource(bbl10, source, d);
+  }
+
+  // Parallel fetch critical sources — use allSettled so one API failure doesn't block all
+  const [plutoResult, violationsResult, regsResult] = await Promise.allSettled([
+    cachedQueryNYC(bbl10, "PLUTO", DATASETS.PLUTO, `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 1 }),
+    cachedQueryNYC(bbl10, "HPD_VIOLATIONS", DATASETS.HPD_VIOLATIONS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "inspectiondate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_REG", DATASETS.HPD_REG, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "registrationenddate DESC" }),
+  ]);
+  const plutoRaw = plutoResult.status === "fulfilled" ? plutoResult.value : [];
+  const violationsRaw = violationsResult.status === "fulfilled" ? violationsResult.value : [];
+  const regsRaw = regsResult.status === "fulfilled" ? regsResult.value : [];
+
+  // Process PLUTO
+  let pluto: any = null;
+  if (plutoRaw.length > 0) {
+    const p = plutoRaw[0];
+    pluto = {
+      address: p.address || "", ownerName: p.ownername || "",
+      unitsRes: parseInt(p.unitsres || "0"), unitsTot: parseInt(p.unitstotal || "0"),
+      yearBuilt: parseInt(p.yearbuilt || "0"), yearAlter1: parseInt(p.yearalter1 || "0"), yearAlter2: parseInt(p.yearalter2 || "0"),
+      numFloors: parseInt(p.numfloors || "0"), bldgArea: parseInt(p.bldgarea || "0"), lotArea: parseInt(p.lotarea || "0"),
+      assessTotal: parseInt(p.assesstot || "0"), assessLand: parseInt(p.assessland || "0"),
+      zoneDist1: p.zonedist1 || "", zoneDist2: p.zonedist2 || "", bldgClass: p.bldgclass || "",
+      landUse: p.landuse || "", condoNo: p.condono || "",
+      builtFAR: parseFloat(p.builtfar || "0"), residFAR: parseFloat(p.residfar || "0"),
+      commFAR: parseFloat(p.commfar || "0"), facilFAR: parseFloat(p.facilfar || "0"),
+      borough: BORO_NAMES[boroCode] || "", block, lot, boroCode,
+      zipCode: p.zipcode || "", latitude: parseFloat(p.latitude || "0"), longitude: parseFloat(p.longitude || "0"),
+    };
+  }
+
+  // Process HPD violations
+  const violations = violationsRaw.map((v: any) => ({
+    violationId: v.violationid || "", class: v.class || "",
+    inspectionDate: v.inspectiondate || "", approvedDate: v.approveddate || "",
+    status: v.violationstatus || "", currentStatus: v.currentstatus || "",
+    novDescription: v.novdescription || "",
+  }));
+  const violationSummary = {
+    total: violations.length,
+    open: violations.filter((v: any) => v.currentStatus === "VIOLATION OPEN" || v.status === "Open").length,
+    classA: violations.filter((v: any) => v.class === "A").length,
+    classB: violations.filter((v: any) => v.class === "B").length,
+    classC: violations.filter((v: any) => v.class === "C").length,
+  };
+
+  // Fetch HPD contacts from registrations
+  let hpdContacts: any[] = [];
+  if (regsRaw.length > 0) {
+    const regIds = regsRaw.map((r: any) => `'${r.registrationid}'`).join(",");
+    try {
+      const rawContacts = await cachedQueryNYC(bbl10, "HPD_CONTACTS", DATASETS.HPD_CONTACTS, `registrationid in(${regIds})`, { limit: 30 });
+      hpdContacts = rawContacts.map((c: any) => ({
+        type: c.type || c.contactdescription || "", corporateName: c.corporationname || "",
+        firstName: c.firstname || "", lastName: c.lastname || "", title: c.title || "",
+        businessAddress: [c.businesshousenumber, c.businessstreetname].filter(Boolean).join(" "),
+        businessCity: c.businesscity || "", businessState: c.businessstate || "", businessZip: c.businesszip || "",
+      }));
+    } catch { /* continue without contacts */ }
+  }
+
+  if (process.env.NODE_ENV === "development") console.log(`[Phase 1] Critical data fetched in ${Date.now() - t0}ms`);
+  return { pluto, violations, violationSummary, registrations: regsRaw, hpdContacts };
+}
+
+/**
+ * Phase 2 — Standard sources: DOB Permits, HPD Complaints, HPD Litigation, DOB ECB, DOB Jobs, DOB NOW, Rolling Sales
+ * Returns: permits, complaints, litigation, ECB violations, DOB filings, rolling sales
+ */
+export async function fetchBuildingStandard(bbl: string): Promise<{
+  permits: any[];
+  complaints: any[];
+  complaintSummary: { total: number; recent: number; topTypes: { type: string; count: number }[] };
+  litigation: any[];
+  litigationSummary: { total: number; open: number; types: { type: string; count: number }[] };
+  ecbViolations: any[];
+  ecbSummary: { total: number; active: number; totalPenalty: number };
+  dobFilings: any[];
+  rollingSales: any[];
+}> {
+  const { bbl10, boroCode, block, lot, blockPad, lotPad, lotPad5, boroUpper } = normalizeBBLParts(bbl);
+  const t0 = Date.now();
+
+  // Batch Tier 3 pre-fetch
+  const STANDARD_SOURCES = ["DOB_PERMITS", "HPD_COMPLAINTS", "HPD_LITIGATION", "DOB_ECB", "DOB_JOBS", "DOB_NOW", "ROLLING_SALES"];
+  const missing = STANDARD_SOURCES.filter(s => cacheManager.getSource(bbl10, s) === null);
+  if (missing.length > 0) {
+    const t3 = await cacheManager.getSourcesFromDB(bbl10, missing);
+    for (const [source, d] of t3) cacheManager.setSource(bbl10, source, d);
+  }
+
+  // Parallel fetch all standard sources — use allSettled for resilience
+  const standardResults = await Promise.allSettled([
+    cachedQueryNYC(bbl10, "DOB_PERMITS", DATASETS.DOB_PERMITS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+      select: "owner_s_first_name,owner_s_last_name,owner_s_phone__,owner_s_business_name,permittee_s_first_name,permittee_s_last_name,permittee_s_phone__,permit_type,permit_status,filing_date,job_description",
+      limit: 20, order: "filing_date DESC",
+    }),
+    cachedQueryNYC(bbl10, "HPD_COMPLAINTS", DATASETS.HPD_COMPLAINTS, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 200, order: "receiveddate DESC" }),
+    cachedQueryNYC(bbl10, "HPD_LITIGATION", DATASETS.HPD_LITIGATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 50, order: "caseopendate DESC" }),
+    cachedQueryNYC(bbl10, "DOB_ECB", DATASETS.DOB_ECB, `boro='${boroCode}' AND block='${blockPad}' AND lot='${lotPad}'`, { limit: 50, order: "issueddate DESC" }),
+    cachedQueryNYC(bbl10, "DOB_JOBS", DATASETS.DOB_JOBS, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+      select: "owner_s_first_name,owner_s_last_name,owner_sphone__,owner_s_business_name,owner_type,latest_action_date,job_type,house__,street_name",
+      limit: 10, order: "latest_action_date DESC",
+    }),
+    cachedQueryNYC(bbl10, "DOB_NOW", DATASETS.DOB_NOW, `borough='${boroUpper}' AND block='${blockPad}' AND lot='${lotPad5}'`, {
+      select: "job_filing_number,job_type,filing_date,filing_status,owner_first_name,owner_last_name,owner_business_name,owner_phone,permittee_first_name,permittee_last_name,permittee_business_name,permittee_phone,proposed_dwelling_units,proposed_no_of_stories,estimated_job_costs,job_description",
+      limit: 15, order: "filing_date DESC",
+    }),
+    cachedQueryNYC(bbl10, "ROLLING_SALES", DATASETS.ROLLING_SALES, `borough='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5, order: "sale_date DESC" }),
+  ]);
+  const extractResult = (r: PromiseSettledResult<any[]>) => r.status === "fulfilled" ? r.value : [];
+  const [permitsRaw, complaintsRaw, litigationRaw, ecbRaw, jobsRaw, nowRaw, salesRaw] = standardResults.map(extractResult);
+
+  // Process permits
+  const permits = permitsRaw.map((p: any) => ({
+    permitType: p.permit_type || "", permitStatus: p.permit_status || "",
+    filingDate: p.filing_date || "", jobDescription: p.job_description || "",
+    ownerName: [p.owner_s_first_name, p.owner_s_last_name].filter(Boolean).join(" ").trim(),
+    ownerBusiness: p.owner_s_business_name || "",
+  }));
+
+  // Process complaints
+  const complaints = complaintsRaw.map((c: any) => ({
+    complaintId: c.complaintid || "", status: c.status || "",
+    receivedDate: c.receiveddate || "", type: c.majorcategory || c.majorcategoryid || "",
+    minorCategory: c.minorcategory || "",
+  }));
+  const threeYearsAgo = new Date();
+  threeYearsAgo.setFullYear(threeYearsAgo.getFullYear() - 3);
+  const recentComplaints = complaints.filter((c: any) => c.receivedDate && new Date(c.receivedDate) > threeYearsAgo).length;
+  const typeCounts = new Map<string, number>();
+  complaints.forEach((c: any) => { const t = c.type || "Unknown"; typeCounts.set(t, (typeCounts.get(t) || 0) + 1); });
+  const topComplaintTypes = Array.from(typeCounts.entries()).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count).slice(0, 5);
+  const complaintSummary = { total: complaints.length, recent: recentComplaints, topTypes: topComplaintTypes };
+
+  // Process litigation
+  const litigation = litigationRaw.map((l: any) => ({
+    litigationId: l.litigationid || "", caseType: l.casetype || "",
+    caseOpenDate: l.caseopendate || "", caseStatus: l.casestatus || "",
+    penalty: l.penalty || "", respondent: l.respondent || "",
+    findingOfHarassment: l.findingofharassment || "",
+  }));
+  const litigationOpen = litigation.filter((l: any) => l.caseStatus === "OPEN" || l.caseStatus === "Open").length;
+  const ltc = new Map<string, number>();
+  litigation.forEach((l: any) => { const t = l.caseType || "Unknown"; ltc.set(t, (ltc.get(t) || 0) + 1); });
+  const litigationSummary = {
+    total: litigation.length, open: litigationOpen,
+    types: Array.from(ltc.entries()).map(([type, count]) => ({ type, count })).sort((a, b) => b.count - a.count),
+  };
+
+  // Process ECB
+  const ecbViolations = ecbRaw.map((e: any) => ({
+    ecbNumber: e.ecbviolationnumber || e.isn_dob_bis_extract || "",
+    violationType: e.violationtype || "", issuedDate: e.issueddate || "",
+    status: e.ecbviolationstatus || "",
+    penaltyApplied: parseFloat(e.penaltyapplied || "0"),
+    penaltyBalance: parseFloat(e.penaltybalancedue || "0"),
+    respondent: e.respondentname || "",
+  }));
+  const ecbPenalty = ecbViolations.reduce((sum: number, e: any) => sum + (e.penaltyBalance || 0), 0);
+  const ecbSummary = { total: ecbViolations.length, active: ecbViolations.filter((e: any) => e.status !== "RESOLVE").length, totalPenalty: ecbPenalty };
+
+  // Process DOB filings (jobs + NOW)
+  const dobFilings: any[] = [];
+  jobsRaw.forEach((d: any) => {
+    dobFilings.push({
+      jobType: d.job_type || "", filingDate: d.latest_action_date || "",
+      ownerName: [d.owner_s_first_name, d.owner_s_last_name].filter(Boolean).join(" ").trim(),
+      ownerBusiness: d.owner_s_business_name || "", ownerPhone: (d.owner_sphone__ || "").trim(),
+      permittee: "", permitteePhone: "", units: 0, stories: 0, status: "", cost: "", description: "",
+      source: "DOB BIS",
+    });
+  });
+  nowRaw.forEach((d: any) => {
+    const ownerName = (d.owner_business_name && d.owner_business_name !== "N/A")
+      ? d.owner_business_name : [d.owner_first_name, d.owner_last_name].filter(Boolean).join(" ").trim();
+    const permittee = (d.permittee_business_name && d.permittee_business_name !== "N/A")
+      ? d.permittee_business_name : [d.permittee_first_name, d.permittee_last_name].filter(Boolean).join(" ").trim();
+    dobFilings.push({
+      jobType: d.job_type || "", filingDate: d.filing_date || "", ownerName,
+      ownerBusiness: d.owner_business_name || "", ownerPhone: (d.owner_phone || "").trim(),
+      permittee, permitteePhone: (d.permittee_phone || "").trim(),
+      units: parseInt(d.proposed_dwelling_units || "0"), stories: parseInt(d.proposed_no_of_stories || "0"),
+      status: d.filing_status || "", cost: d.estimated_job_costs || "", description: d.job_description || "",
+      source: "DOB NOW",
+    });
+  });
+
+  // Process rolling sales
+  const rollingSales = salesRaw.map((s: any) => ({
+    price: parseFloat(s.sale_price || "0"), date: s.sale_date || "",
+    buyer: "", seller: "", docType: "Sale",
+    units: parseInt(s.residential_units || s.total_units || "0"),
+    sqft: parseInt(s.gross_square_feet || "0"),
+  })).filter((s: any) => s.price > 0);
+
+  if (process.env.NODE_ENV === "development") console.log(`[Phase 2] Standard data fetched in ${Date.now() - t0}ms`);
+  return { permits, complaints, complaintSummary, litigation, litigationSummary, ecbViolations, ecbSummary, dobFilings, rollingSales };
+}
+
+/**
+ * Phase 3 — Background sources: LL84 Energy, RPIE, Rent Stabilization, Speculation Watch List
+ * Returns: energy data, rent stabilization history, speculation status, RPIE records
+ */
+export async function fetchBuildingBackground(bbl: string): Promise<{
+  rentStabilized: any;
+  speculation: any;
+  rpieRecords: any[];
+  ll84Data: any;
+}> {
+  const { bbl10, boroCode, block, lot } = normalizeBBLParts(bbl);
+  const t0 = Date.now();
+
+  // Batch Tier 3 pre-fetch
+  const BG_SOURCES = ["LL84", "RPIE", "RENT_STAB", "SPECULATION"];
+  const missing = BG_SOURCES.filter(s => cacheManager.getSource(bbl10, s) === null);
+  if (missing.length > 0) {
+    const t3 = await cacheManager.getSourcesFromDB(bbl10, missing);
+    for (const [source, d] of t3) cacheManager.setSource(bbl10, source, d);
+  }
+
+  const bgResults = await Promise.allSettled([
+    cachedQueryNYC(bbl10, "LL84", DATASETS.LL84, `bbl_10_digits='${bbl10}'`, { limit: 1, order: "year_ending DESC" }),
+    cachedQueryNYC(bbl10, "RPIE", DATASETS.RPIE, `bbl='${bbl10}'`, { limit: 10 }),
+    cachedQueryNYC(bbl10, "RENT_STAB", DATASETS.RENT_STAB, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }),
+    cachedQueryNYC(bbl10, "SPECULATION", DATASETS.SPECULATION, `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 }),
+  ]);
+  const extractBg = (r: PromiseSettledResult<any[]>) => r.status === "fulfilled" ? r.value : [];
+  const [ll84Raw_, rpieRaw, rentStabRaw, specRaw] = bgResults.map(extractBg);
+
+  // Process LL84 energy
+  let ll84Data: any = null;
+  if (ll84Raw_.length > 0) {
+    const d = ll84Raw_[0];
+    ll84Data = {
+      bbl: bbl10,
+      propertyName: d.property_name || d.largest_property_use_type || "",
+      address: d.address_1_self_reported || d.street_address || "",
+      primaryUse: d.largest_property_use_type || d.primary_property_type_self_selected || "",
+      grossFloorArea: parseFloat(d.property_gfa_self_reported || d.largest_property_use_type_gross_floor_area || "0"),
+      yearBuilt: parseInt(d.year_built || "0"),
+      energyStarScore: parseInt(d.energy_star_score || "0"),
+      energyStarGrade: d.energy_star_certification || d.letter_grade || "",
+      siteEui: parseFloat(d.site_eui_kbtu_ft || d.weather_normalized_site_eui_kbtu_ft || "0"),
+      sourceEui: parseFloat(d.source_eui_kbtu_ft || d.weather_normalized_source_eui_kbtu_ft || "0"),
+      electricityUse: parseFloat(d.electricity_use_grid_purchase_kwh || "0"),
+      naturalGasUse: parseFloat(d.natural_gas_use_therms || "0"),
+      waterUse: parseFloat(d.water_use_all_water_sources_kgal || d.water_use_kgal || "0"),
+      fuelOilUse: parseFloat(d.fuel_oil_2_use_gallons || d.fuel_oil_4_use_gallons || "0"),
+      ghgEmissions: parseFloat(d.total_ghg_emissions_metric_tons_co2e || d.direct_ghg_emissions_metric_tons_co2e || "0"),
+      ghgIntensity: parseFloat(d.ghg_intensity_kgco2e_ft || "0"),
+      reportingYear: parseInt(d.year_ending || "0"),
+    };
+  }
+
+  // Process rent stabilization
+  let rentStabilized: any = null;
+  if (rentStabRaw.length > 0) {
+    const r = rentStabRaw[0];
+    rentStabilized = {
+      status: "Yes",
+      uc2007: parseInt(r.uc2007 || "0"), uc2008: parseInt(r.uc2008 || "0"),
+      uc2009: parseInt(r.uc2009 || "0"), uc2010: parseInt(r.uc2010 || "0"),
+      uc2011: parseInt(r.uc2011 || "0"), uc2012: parseInt(r.uc2012 || "0"),
+      uc2013: parseInt(r.uc2013 || "0"), uc2014: parseInt(r.uc2014 || "0"),
+      uc2015: parseInt(r.uc2015 || "0"), uc2016: parseInt(r.uc2016 || "0"),
+      uc2017: parseInt(r.uc2017 || "0"), uc2018: parseInt(r.uc2018 || "0"),
+      uc2019: parseInt(r.uc2019 || "0"), uc2020: parseInt(r.uc2020 || "0"),
+      uc2021: parseInt(r.uc2021 || "0"), uc2022: parseInt(r.uc2022 || "0"),
+      uc2023: parseInt(r.uc2023 || "0"), uc2024: parseInt(r.uc2024 || "0"),
+      buildingId: r.buildingid || "",
+    };
+  }
+
+  // Process speculation watch list
+  let speculation: any = null;
+  if (specRaw.length > 0) {
+    speculation = {
+      onWatchList: true,
+      deedDate: specRaw[0].deeddate || "",
+      salePrice: parseFloat(specRaw[0].saleprice || "0"),
+      capRate: specRaw[0].caprate || "",
+      boroughMedianCap: specRaw[0].boroughmedian || "",
+    };
+  }
+
+  if (process.env.NODE_ENV === "development") console.log(`[Phase 3] Background data fetched in ${Date.now() - t0}ms`);
+  return { rentStabilized, speculation, rpieRecords: rpieRaw, ll84Data };
+}
+
+/**
+ * Prefetch — Warms cache for a BBL by fetching critical sources only.
+ * Used by hover-prefetch and search-result prefetch to ensure
+ * that when the user opens a profile, Phase 1 data is already cached.
+ * Returns quickly and does NOT block on the result.
+ */
+export async function prefetchBuildingCritical(bbl: string): Promise<void> {
+  const bbl10 = bbl.replace(/\D/g, "").padEnd(10, "0").slice(0, 10);
+
+  // Skip if already fully cached (Tier 1)
+  if (cacheManager.getBuilding(bbl10)) return;
+
+  // Check if critical sources are already in Tier 2
+  const CRITICAL = ["PLUTO", "HPD_VIOLATIONS", "HPD_REG"];
+  const allCached = CRITICAL.every(s => cacheManager.getSource(bbl10, s) !== null);
+  if (allCached) return;
+
+  // Fetch critical data (primes Tier 2 + Tier 3 via cachedQueryNYC)
+  await fetchBuildingCritical(bbl).catch(() => {});
+}
+
+/**
+ * Warms the in-process cache for a building's Standard-tier data
+ * (DOB Permits, HPD Complaints, HPD Litigation, DOB ECB, etc.)
+ * so that when the user opens a profile, Phase 2 data is already cached.
+ */
+export async function prefetchBuildingStandard(bbl: string): Promise<void> {
+  const bbl10 = bbl.replace(/\D/g, "").padEnd(10, "0").slice(0, 10);
+
+  // Skip if already fully cached (Tier 1)
+  if (cacheManager.getBuilding(bbl10)) return;
+
+  // Check if standard sources are already in Tier 2
+  const STANDARD = ["DOB_PERMITS", "HPD_COMPLAINTS", "HPD_LITIGATION", "DOB_ECB"];
+  const allCached = STANDARD.every(s => cacheManager.getSource(bbl10, s) !== null);
+  if (allCached) return;
+
+  // Fetch standard data (primes Tier 2 + Tier 3 via cachedQueryNYC)
+  await fetchBuildingStandard(bbl).catch(() => {});
+}
+
+/**
+ * getPlutoBasics — Lightweight PLUTO-only fetch for tooltip previews.
+ * Returns basic property info or null if not found.
+ */
+export async function getPlutoBasics(bbl: string): Promise<{
+  address: string; ownerName: string; units: number; yearBuilt: number;
+  stories: number; assessedValue: number; zoning: string; borough: string;
+} | null> {
+  const { bbl10, boroCode, block, lot } = normalizeBBLParts(bbl);
+
+  // Check Tier 2 first
+  const cached = cacheManager.getSource(bbl10, "PLUTO");
+  if (cached && Array.isArray(cached) && cached.length > 0) {
+    const p = cached[0];
+    return {
+      address: p.address || "", ownerName: p.ownername || "",
+      units: parseInt(p.unitstotal || p.unitsres || "0"),
+      yearBuilt: parseInt(p.yearbuilt || "0"),
+      stories: parseInt(p.numfloors || "0"),
+      assessedValue: parseInt(p.assesstot || "0"),
+      zoning: p.zonedist1 || "",
+      borough: BORO_NAMES[boroCode] || "",
+    };
+  }
+
+  // Fetch from NYC Open Data
+  const data = await cachedQueryNYC(bbl10, "PLUTO", DATASETS.PLUTO, `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 1 });
+  if (data.length === 0) return null;
+  const p = data[0];
+  return {
+    address: p.address || "", ownerName: p.ownername || "",
+    units: parseInt(p.unitstotal || p.unitsres || "0"),
+    yearBuilt: parseInt(p.yearbuilt || "0"),
+    stories: parseInt(p.numfloors || "0"),
+    assessedValue: parseInt(p.assesstot || "0"),
+    zoning: p.zonedist1 || "",
+    borough: BORO_NAMES[boroCode] || "",
+  };
 }
 
 // ============================================================

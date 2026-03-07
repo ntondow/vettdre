@@ -35,6 +35,7 @@ interface ContactData {
 // Main clustering job
 // ============================================================
 export async function runPortfolioClustering(
+  orgId: string,
   bounds: { minLat: number; maxLat: number; minLng: number; maxLng: number },
   minUnits: number = 20
 ) {
@@ -64,7 +65,7 @@ export async function runPortfolioClustering(
   let saved = 0;
   for (const component of multiBuilding) {
     try {
-      await savePortfolio(component, buildings, contacts);
+      await savePortfolio(orgId, component, buildings, contacts);
       saved++;
     } catch (err) {
       console.error("Error saving portfolio:", err);
@@ -314,7 +315,7 @@ function findConnectedComponents(graph: Graph): Component[] {
 // ============================================================
 // Save portfolio to database
 // ============================================================
-async function savePortfolio(component: Component, buildings: BuildingData[], contacts: ContactData[]) {
+async function savePortfolio(orgId: string, component: Component, buildings: BuildingData[], contacts: ContactData[]) {
   const buildingMap = new Map(buildings.map(b => [b.bbl, b]));
 
   const portfolioBuildings = component.buildings
@@ -368,6 +369,7 @@ async function savePortfolio(component: Component, buildings: BuildingData[], co
   await prisma.portfolio.upsert({
     where: { slug },
     create: {
+      orgId,
       name: portfolioName,
       slug,
       totalBuildings: portfolioBuildings.length,

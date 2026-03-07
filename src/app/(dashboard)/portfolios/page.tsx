@@ -1,10 +1,5 @@
-import PortfolioDashboard from "./portfolio-dashboard";
-import PortfolioGateWrapper from "./portfolio-gate-wrapper";
+import { redirect } from "next/navigation";
 
-export default function PortfoliosPage() {
-  return (
-    <PortfolioGateWrapper>
-      <PortfolioDashboard />
-    </PortfolioGateWrapper>
-  );
+export default function PortfoliosRedirect() {
+  redirect("/market-intel");
 }

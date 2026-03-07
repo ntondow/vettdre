@@ -21,6 +21,7 @@ export const prisma =
     datasourceUrl: getDatasourceUrl(),
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Cache singleton in ALL environments to prevent connection pool exhaustion on Cloud Run
+globalForPrisma.prisma = prisma;
 
 export default prisma;

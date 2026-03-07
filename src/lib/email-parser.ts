@@ -34,12 +34,53 @@ function detectSource(fromEmail: string, bodyText: string): string | null {
 }
 
 /** Parse an inbound email with Claude AI */
+// In-memory rate limiter for AI parsing costs
+const aiParseTracker = {
+  count: 0,
+  windowStart: Date.now(),
+  maxPerHour: parseInt(process.env.AI_PARSE_MAX_PER_HOUR || "100"),
+};
+
+/** Skip list: emails that don't need AI parsing */
+const SKIP_DOMAINS = [
+  "noreply@", "no-reply@", "mailer-daemon@", "notifications@",
+  "updates@", "newsletter@", "marketing@", "billing@", "support@",
+  "@github.com", "@linkedin.com", "@twitter.com", "@facebook.com",
+  "@google.com", "@amazonses.com", "@slack.com",
+];
+
 export async function parseEmailWithAI(emailMessageId: string, input: EmailInput) {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.log("  Skipping AI parse — no ANTHROPIC_API_KEY");
     return;
   }
+
+  // Skip automated/system emails that won't contain leads
+  const fromLower = input.fromEmail.toLowerCase();
+  if (SKIP_DOMAINS.some(d => fromLower.includes(d))) {
+    // Still set source deterministically without AI
+    const detectedSource = detectSource(input.fromEmail, input.bodyText);
+    if (detectedSource) {
+      await prisma.emailMessage.update({
+        where: { id: emailMessageId },
+        data: { leadSource: detectedSource, aiParsed: true },
+      });
+    }
+    return;
+  }
+
+  // Rate limit: max N parses per hour
+  const now = Date.now();
+  if (now - aiParseTracker.windowStart > 3600_000) {
+    aiParseTracker.count = 0;
+    aiParseTracker.windowStart = now;
+  }
+  if (aiParseTracker.count >= aiParseTracker.maxPerHour) {
+    console.warn(`  AI parse rate limit reached (${aiParseTracker.maxPerHour}/hr), skipping ${emailMessageId}`);
+    return;
+  }
+  aiParseTracker.count++;
 
   // Quick source detection first (no AI cost)
   const detectedSource = detectSource(input.fromEmail, input.bodyText);

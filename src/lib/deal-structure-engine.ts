@@ -7,6 +7,8 @@
 import { calculateIRR } from "./deal-calculator";
 import type { ClosingCostBreakdown, TaxReassessment } from "./nyc-deal-costs";
 import { buildExitSensitivity } from "./cap-rate-engine";
+import { calculatePreStabilization } from "./pre-stabilization-engine";
+import type { PreStabSummary } from "./pre-stabilization-engine";
 
 // ============================================================
 // Types
@@ -96,9 +98,22 @@ export interface BridgeRefiInputs extends DealInputsBase {
   bridgeTermMonths: number;        // default 24
   bridgeOriginationPts: number;    // default 2
   bridgeInterestOnly: boolean;     // default true
+  // LTC-based sizing (alternative to LTV)
+  useLtc?: boolean;                // default false (uses LTV when false)
+  ltcPercent?: number;             // e.g., 80 for 80% of total cost
+  // Interest reserve
+  interestReserveMonths?: number;  // months of interest held in escrow
+  // Fee detail
+  bridgeExitFee?: number;          // % (default 0)
+  bridgeLegalFee?: number;         // flat $ (default 0)
   // Phase 2: Stabilization
   stabilizationMonths: number;     // default 6
   postRehabRentBump: number;       // % increase after reno
+  // Lease-up inputs (for pre-stabilization engine)
+  renovationMonths?: number;       // construction duration
+  leaseUpMonths?: number;          // months to reach stabilized occupancy
+  startingOccupancy?: number;      // % at start of lease-up (default 0)
+  leaseUpCurve?: 'linear' | 'front_loaded' | 'back_loaded';
   // Phase 3: Permanent refi
   refiLtvPct: number;              // default 75 of ARV
   refiRate: number;                // from FRED
@@ -196,6 +211,13 @@ export interface DealAnalysis {
   cashLeftInDeal?: number;
   refiLoanAmount?: number;
   totalBridgeCost?: number;
+  interestReserve?: number;
+  bridgeExitFee?: number;
+  ltcBasis?: number;          // total cost used for LTC calculation
+  refiEquityReturn?: number;  // cash returned to investor at refi
+  // Pre-stabilization
+  preStabSummary?: PreStabSummary;
+  bridgeLoan?: number;
   // Assumable specific
   annualRateSavings?: number;
   totalRateSavings?: number;
@@ -208,6 +230,14 @@ export interface DealAnalysis {
   gpEquityMultiple?: number;
   lpEquityMultiple?: number;
   totalFees?: number;
+  feeSchedule?: {
+    acquisitionFee: number;
+    assetMgmtFeeAnnual: number;
+    dispositionFee: number;
+    constructionMgmtFee: number;
+    refinanceFee: number;
+    totalFees: number;
+  };
   // NYC Deal Costs
   closingCostDetail?: ClosingCostBreakdown;
   taxReassessment?: TaxReassessment;
@@ -299,8 +329,8 @@ function buildProjections(
     const cashFlow = noi - annualDebtService;
     cumCf += cashFlow;
 
-    const exitNoi = noi * (1 + inputs.annualRentGrowth / 100);
-    const propertyValue = inputs.exitCapRate > 0 ? Math.round(exitNoi / (inputs.exitCapRate / 100)) : 0;
+    // Use trailing NOI (current year) for property value — matches Engine A convention
+    const propertyValue = inputs.exitCapRate > 0 ? Math.round(noi / (inputs.exitCapRate / 100)) : 0;
     const bal = loanBalance(y);
     const equity = propertyValue - bal;
 
@@ -325,14 +355,15 @@ function buildProjections(
 function exitSalePrice(inputs: DealInputsBase): number {
   let grossFinal: number;
   const lastYearIdx = inputs.holdPeriod - 1;
+  // Trailing convention: use holdPeriod - 1 growth (year N-1 NOI, matching Engine A)
   if (inputs.rentProjectionData?.yearlyProjections?.[lastYearIdx]) {
     grossFinal = inputs.rentProjectionData.yearlyProjections[lastYearIdx].totalAnnualRent +
-      inputs.otherIncome * Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod);
+      inputs.otherIncome * Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod - 1);
   } else {
-    const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod);
+    const growthFactor = Math.pow(1 + inputs.annualRentGrowth / 100, inputs.holdPeriod - 1);
     grossFinal = (inputs.grossRentalIncome + inputs.otherIncome) * growthFactor;
   }
-  const expGrowthFactor = Math.pow(1 + inputs.annualExpenseGrowth / 100, inputs.holdPeriod);
+  const expGrowthFactor = Math.pow(1 + inputs.annualExpenseGrowth / 100, inputs.holdPeriod - 1);
   const vacFinal = grossFinal * (inputs.vacancyRate / 100);
   const egiFinal = grossFinal - vacFinal;
   const opexFinal = (inputs.operatingExpenses + inputs.capexReserve + inputs.propertyTaxes + inputs.insurance) * expGrowthFactor;
@@ -534,16 +565,31 @@ export function calculateConventional(inputs: ConventionalDebtInputs): DealAnaly
 export function calculateBridgeRefi(inputs: BridgeRefiInputs): DealAnalysis {
   const closingCosts = resolveClosingCosts(inputs);
 
-  // Phase 1: Bridge loan
-  const bridgeLoan = inputs.purchasePrice * (inputs.bridgeLtvPct / 100);
+  // Phase 1: Bridge loan — LTC or LTV based sizing
+  let bridgeLoan: number;
+  if (inputs.useLtc && inputs.ltcPercent) {
+    const totalCostBasis = inputs.purchasePrice + inputs.renovationBudget + closingCosts;
+    bridgeLoan = totalCostBasis * (inputs.ltcPercent / 100);
+  } else {
+    bridgeLoan = inputs.purchasePrice * (inputs.bridgeLtvPct / 100);
+  }
   const bridgeOrigFee = bridgeLoan * (inputs.bridgeOriginationPts / 100);
   const bridgeMonthlyInterest = bridgeLoan * (inputs.bridgeRate / 100 / 12);
   const bridgeTermYears = inputs.bridgeTermMonths / 12;
   const totalBridgeInterest = bridgeMonthlyInterest * inputs.bridgeTermMonths;
-  const totalBridgeCost = totalBridgeInterest + bridgeOrigFee;
 
-  // Total initial investment
-  const totalProjectCost = inputs.purchasePrice + closingCosts + inputs.renovationBudget + bridgeOrigFee;
+  // Interest reserve
+  const interestReserveMonths = inputs.interestReserveMonths || 0;
+  const interestReserve = bridgeMonthlyInterest * interestReserveMonths;
+
+  // Exit & legal fees
+  const bridgeExitFeeAmt = bridgeLoan * ((inputs.bridgeExitFee || 0) / 100);
+  const bridgeLegalFeeAmt = inputs.bridgeLegalFee || 0;
+
+  const totalBridgeCost = totalBridgeInterest + bridgeOrigFee + interestReserve + bridgeExitFeeAmt + bridgeLegalFeeAmt;
+
+  // Total initial investment (interest reserve added to project cost)
+  const totalProjectCost = inputs.purchasePrice + closingCosts + inputs.renovationBudget + bridgeOrigFee + interestReserve;
   const initialEquity = totalProjectCost - bridgeLoan;
 
   // Phase 2: Post-rehab stabilized income
@@ -607,6 +653,26 @@ export function calculateBridgeRefi(inputs: BridgeRefiInputs): DealAnalysis {
   const equityMultiple = initialEquity > 0 ? totalReturns / initialEquity : 0;
   const annualizedReturn = inputs.holdPeriod > 0 ? (Math.pow(Math.max(0.01, equityMultiple), 1 / inputs.holdPeriod) - 1) * 100 : 0;
 
+  // Pre-stabilization timeline (when renovation/lease-up months specified)
+  const renoMonths = inputs.renovationMonths || 0;
+  const leaseUpMo = inputs.leaseUpMonths || 0;
+  let preStabSummary: PreStabSummary | undefined;
+  if (renoMonths > 0 || leaseUpMo > 0) {
+    const monthlyStabilizedGross = stabilizedGross / 12;
+    const monthlyOpex = (inputs.operatingExpenses + inputs.propertyTaxes + inputs.insurance) / 12;
+    preStabSummary = calculatePreStabilization({
+      renovationMonths: renoMonths,
+      leaseUpMonths: leaseUpMo,
+      startingOccupancy: inputs.startingOccupancy ?? 0,
+      targetOccupancy: 100 - (inputs.vacancyRate || 5),
+      leaseUpCurve: inputs.leaseUpCurve || 'linear',
+      monthlyBridgeInterest: bridgeMonthlyInterest,
+      monthlyOpex,
+      monthlyStabilizedGross,
+      renovationBudget: inputs.renovationBudget,
+    });
+  }
+
   return {
     structure: "bridge_refi",
     label: "Bridge \u2192 Refi",
@@ -630,6 +696,12 @@ export function calculateBridgeRefi(inputs: BridgeRefiInputs): DealAnalysis {
     cashLeftInDeal: Math.round(cashLeftInDeal),
     refiLoanAmount: Math.round(refiLoanAmount),
     totalBridgeCost: Math.round(totalBridgeCost),
+    interestReserve: interestReserve > 0 ? Math.round(interestReserve) : undefined,
+    bridgeExitFee: bridgeExitFeeAmt > 0 ? Math.round(bridgeExitFeeAmt) : undefined,
+    ltcBasis: inputs.useLtc ? Math.round(inputs.purchasePrice + inputs.renovationBudget + closingCosts) : undefined,
+    refiEquityReturn: cashOutOnRefi > 0 ? Math.round(cashOutOnRefi) : undefined,
+    preStabSummary,
+    bridgeLoan: Math.round(bridgeLoan),
     closingCostDetail: inputs.closingCostBreakdown,
     taxReassessment: inputs.taxReassessment,
     ...extractBenchmarkMeta(inputs, projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi, initialEquity, projections.map(p => p.cashFlow), (sp: number) => sp - sp * 0.05 - balanceFn(inputs.holdPeriod)),
@@ -859,6 +931,14 @@ export function calculateSyndication(inputs: SyndicationInputs): DealAnalysis {
     gpEquityMultiple: round2(gpEquityMultiple),
     lpEquityMultiple: round2(lpEquityMultiple),
     totalFees: Math.round(totalFees),
+    feeSchedule: {
+      acquisitionFee: Math.round(acquisitionFee),
+      assetMgmtFeeAnnual: Math.round(assetMgmtFee),
+      dispositionFee: Math.round(dispositionFee),
+      constructionMgmtFee: Math.round(constructionMgmtFee),
+      refinanceFee: 0,
+      totalFees: Math.round(totalFees),
+    },
     closingCostDetail: inputs.closingCostBreakdown,
     taxReassessment: inputs.taxReassessment,
     ...extractBenchmarkMeta(inputs, projections.length > 0 ? projections[projections.length - 1].noi * (1 + inputs.annualRentGrowth / 100) : noi, totalEquityRequired, projections.map(p => p.cashFlow), (sp: number) => sp - sp * 0.05 - calcRemainingBalance(loanAmount, inputs.interestRate, inputs.amortizationYears, inputs.holdPeriod * 12)),

@@ -3,13 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, Loader2, AlertCircle, UserPlus, LogIn } from "lucide-react";
-import { getInviteDetails } from "@/app/(dashboard)/brokerage/agents/onboarding-actions";
-
-interface InviteDetails {
-  agentName: string;
-  brokerageName: string;
-  agentEmail: string;
-}
+import { getInviteDetails, tryAutoLinkByEmail } from "@/app/(dashboard)/brokerage/agents/onboarding-actions";
+import type { InviteDetails } from "@/lib/bms-types";
 
 export default function AgentJoinClient({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
@@ -19,6 +14,14 @@ export default function AgentJoinClient({ token }: { token: string }) {
   useEffect(() => {
     async function load() {
       try {
+        // Try auto-link first (if agent email matches an existing User)
+        const autoLink = await tryAutoLinkByEmail(token);
+        if (autoLink.autoLinked) {
+          // Agent was auto-linked — redirect to dashboard
+          router.replace("/brokerage/my-deals");
+          return;
+        }
+
         const result = await getInviteDetails(token);
         setDetails(result);
       } catch {
@@ -28,7 +31,7 @@ export default function AgentJoinClient({ token }: { token: string }) {
       }
     }
     load();
-  }, [token]);
+  }, [token, router]);
 
   const acceptPath = `/join/agent/${token}/accept`;
 
@@ -70,35 +73,50 @@ export default function AgentJoinClient({ token }: { token: string }) {
 
   // ── Valid Invite ────────────────────────────────────────────
 
+  const brandColor = details.brokerageColor || "#2563EB";
+
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="max-w-md w-full bg-white rounded-xl border border-slate-200 p-8">
-        {/* Logo / Header */}
+        {/* Brokerage Branding */}
         <div className="text-center mb-6">
-          <div className="w-14 h-14 rounded-xl bg-blue-600 flex items-center justify-center mx-auto mb-4">
-            <Building2 className="h-7 w-7 text-white" />
-          </div>
-          <h1 className="text-3xl font-bold text-slate-900">
-            Vettd<span className="text-blue-600">RE</span>
+          {details.brokerageLogo ? (
+            <img
+              src={details.brokerageLogo}
+              alt={details.brokerageName}
+              className="h-14 mx-auto mb-4 object-contain"
+            />
+          ) : (
+            <div
+              className="w-14 h-14 rounded-xl flex items-center justify-center mx-auto mb-4"
+              style={{ backgroundColor: brandColor }}
+            >
+              <Building2 className="h-7 w-7 text-white" />
+            </div>
+          )}
+          <h1 className="text-2xl font-bold text-slate-900">
+            {details.brokerageName}
           </h1>
         </div>
 
         {/* Invite message */}
         <div className="text-center mb-8">
-          <h2 className="text-xl font-bold text-slate-900 mb-2">
-            You&apos;ve been invited!
+          <h2 className="text-lg font-semibold text-slate-900 mb-2">
+            You&apos;ve been invited to join {details.brokerageName}
           </h2>
-          <p className="text-sm text-slate-600">
-            <span className="font-semibold text-slate-800">{details.brokerageName}</span>{" "}
-            has invited you to join as an agent.
+          <p className="text-sm text-slate-500">
+            Accept this invitation to access your deals, transactions, and earnings.
           </p>
         </div>
 
         {/* Agent info card */}
         <div className="bg-slate-50 rounded-lg border border-slate-200 p-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center shrink-0">
-              <span className="text-sm font-semibold text-blue-600">
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
+              style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
+            >
+              <span className="text-sm font-semibold">
                 {details.agentName.split(" ").map(n => n[0]).join("").slice(0, 2)}
               </span>
             </div>
@@ -113,7 +131,8 @@ export default function AgentJoinClient({ token }: { token: string }) {
         <div className="space-y-3">
           <button
             onClick={() => router.push(`/login?redirect=${encodeURIComponent(acceptPath)}`)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-sm font-medium rounded-lg transition-colors"
+            style={{ backgroundColor: brandColor }}
           >
             <LogIn className="h-4 w-4" />
             I already have an account

@@ -134,6 +134,17 @@ export async function updateUserPlan(userId: string, plan: string) {
   return { success: true };
 }
 
+export async function updateUserRole(userId: string, role: string) {
+  await requireAdmin();
+  const validRoles = ["owner", "admin", "manager", "agent", "viewer"];
+  if (!validRoles.includes(role)) throw new Error("Invalid role");
+  await prisma.user.update({
+    where: { id: userId },
+    data: { role: role as any },
+  });
+  return { success: true };
+}
+
 export async function deleteUser(userId: string) {
   await requireAdmin();
   await prisma.user.delete({ where: { id: userId } });

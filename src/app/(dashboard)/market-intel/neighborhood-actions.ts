@@ -252,3 +252,158 @@ export async function getCensusContextForAI(address: string): Promise<string | n
 
   return parts.join("\n");
 }
+
+/* ------------------------------------------------------------------ */
+/*  NTA boundary polygons from NYC Open Data                          */
+/* ------------------------------------------------------------------ */
+
+// In-memory cache — NTA boundaries are static, fetch once per server lifetime
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let ntaBoundaryCache: any = null;
+
+const NTA_ENDPOINTS = [
+  "https://data.cityofnewyork.us/resource/9nt8-h7nd.geojson?$limit=500",
+  "https://data.cityofnewyork.us/resource/d3c1-ddgc.geojson?$limit=500",
+];
+
+export async function fetchNTABoundaries(): Promise<{ type: string; features: any[] } | null> {
+  if (ntaBoundaryCache) return ntaBoundaryCache;
+
+  for (const url of NTA_ENDPOINTS) {
+    try {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+      if (!resp.ok) continue;
+
+      const data = await resp.json();
+      if (!data?.type || !Array.isArray(data.features) || data.features.length < 50) continue;
+
+      // Filter to standard neighborhoods (skip parks, airports, cemeteries)
+      const filtered = {
+        type: "FeatureCollection" as const,
+        features: data.features.filter((f: any) => {
+          const t = f?.properties?.ntatype ?? f?.properties?.ntaType;
+          if (t !== undefined && t !== null) return String(t) === "0";
+          return true;
+        }),
+      };
+
+      ntaBoundaryCache = filtered;
+      return filtered;
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+/* ------------------------------------------------------------------ */
+/*  NTA name list with bounding boxes — for dropdown filter            */
+/* ------------------------------------------------------------------ */
+
+export interface NTAEntry {
+  ntaName: string;
+  boroName: string;
+  swLat: number;
+  swLng: number;
+  neLat: number;
+  neLng: number;
+}
+
+// Cache — computed once from the GeoJSON
+let ntaNameListCache: NTAEntry[] | null = null;
+
+export async function fetchNTANameList(): Promise<NTAEntry[]> {
+  if (ntaNameListCache) return ntaNameListCache;
+
+  const data = await fetchNTABoundaries();
+  if (!data?.features) return [];
+
+  const entries: NTAEntry[] = [];
+
+  for (const f of data.features) {
+    const props = f?.properties;
+    const ntaName = props?.ntaname || props?.NTAName || "";
+    const boroName = props?.boroname || props?.boro_name || props?.BoroName || "";
+    if (!ntaName || !boroName) continue;
+
+    // Compute bounding box from polygon coordinates
+    const coords = extractAllCoords(f?.geometry);
+    if (coords.length === 0) continue;
+
+    let swLat = Infinity, swLng = Infinity, neLat = -Infinity, neLng = -Infinity;
+    for (const [lng, lat] of coords) {
+      if (lat < swLat) swLat = lat;
+      if (lat > neLat) neLat = lat;
+      if (lng < swLng) swLng = lng;
+      if (lng > neLng) neLng = lng;
+    }
+
+    entries.push({ ntaName, boroName, swLat, swLng, neLat, neLng });
+  }
+
+  // Sort by borough then name
+  entries.sort((a, b) => a.boroName.localeCompare(b.boroName) || a.ntaName.localeCompare(b.ntaName));
+
+  ntaNameListCache = entries;
+  return entries;
+}
+
+/* ------------------------------------------------------------------ */
+/*  NTA polygon coordinates — for precise spatial filtering            */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Returns the polygon coordinates for a given NTA neighborhood as [lat, lng][] pairs.
+ * Used for point-in-polygon filtering after bounding-box pre-filter from PLUTO.
+ * Returns the outer ring of the first polygon (or first polygon of MultiPolygon).
+ */
+export async function fetchNTAPolygon(ntaName: string): Promise<[number, number][] | null> {
+  const data = await fetchNTABoundaries();
+  if (!data?.features) return null;
+
+  for (const f of data.features) {
+    const props = f?.properties;
+    const name = props?.ntaname || props?.NTAName || "";
+    if (name !== ntaName) continue;
+
+    const geometry = f?.geometry;
+    if (!geometry) return null;
+
+    // Extract outer ring coordinates and convert from [lng, lat] to [lat, lng]
+    if (geometry.type === "Polygon" && geometry.coordinates?.[0]) {
+      return geometry.coordinates[0].map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+    }
+    if (geometry.type === "MultiPolygon" && geometry.coordinates?.[0]?.[0]) {
+      // Use the largest polygon (most points) for MultiPolygon
+      let largest = geometry.coordinates[0][0];
+      for (const poly of geometry.coordinates) {
+        if (poly[0] && poly[0].length > largest.length) largest = poly[0];
+      }
+      return largest.map(([lng, lat]: [number, number]) => [lat, lng] as [number, number]);
+    }
+    return null;
+  }
+  return null;
+}
+
+/** Recursively extract [lng, lat] coordinate pairs from a GeoJSON geometry */
+function extractAllCoords(geometry: any): number[][] {
+  if (!geometry) return [];
+  const coords: number[][] = [];
+  const type = geometry.type;
+
+  if (type === "Polygon") {
+    for (const ring of geometry.coordinates || []) {
+      for (const pt of ring) coords.push(pt);
+    }
+  } else if (type === "MultiPolygon") {
+    for (const polygon of geometry.coordinates || []) {
+      for (const ring of polygon) {
+        for (const pt of ring) coords.push(pt);
+      }
+    }
+  }
+
+  return coords;
+}

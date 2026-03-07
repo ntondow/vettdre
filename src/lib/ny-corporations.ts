@@ -198,9 +198,46 @@ export async function findRelatedEntities(agentName: string): Promise<CorpRecord
   if (cached) return cached;
 
   const escaped = escapeSoql(agentName.trim());
-  // Search both dos_process_name and registered_agent_name
-  const where = `upper(dos_process_name) like upper('%${escaped}%')`;
-  const results = await soqlQuery(where, 50, "initial_dos_filing_date DESC");
+
+  // Search BOTH dos_process_name AND registered_agent_name in parallel
+  const [byProcess, byAgent] = await Promise.all([
+    soqlQuery(`upper(dos_process_name) like upper('%${escaped}%')`, 50, "initial_dos_filing_date DESC"),
+    soqlQuery(`upper(registered_agent_name) like upper('%${escaped}%')`, 50, "initial_dos_filing_date DESC"),
+  ]);
+
+  // Merge and deduplicate by dosId
+  const seen = new Set<string>();
+  const merged: CorpRecord[] = [];
+  for (const rec of [...byProcess, ...byAgent]) {
+    if (!seen.has(rec.dosId)) {
+      seen.add(rec.dosId);
+      merged.push(rec);
+    }
+  }
+
+  cacheSet(cacheKey, merged);
+  return merged;
+}
+
+/** Find entities sharing the same process/agent address (address-based cross-reference) */
+export async function findEntitiesByAddress(address: string): Promise<CorpRecord[]> {
+  if (!address || address.length < 5) return [];
+
+  const cacheKey = `addr:${address.toUpperCase()}`;
+  const cached = cacheGet<CorpRecord[]>(cacheKey);
+  if (cached) return cached;
+
+  // Extract street number + street name for matching (avoid matching on city/state/zip alone)
+  const streetMatch = address.match(/^(\d+\s+\S+(?:\s+\S+)?)/);
+  if (!streetMatch) return [];
+  const streetPart = escapeSoql(streetMatch[1].trim());
+
+  const results = await soqlQuery(
+    `upper(dos_process_address_1) like upper('%${streetPart}%')`,
+    30,
+    "initial_dos_filing_date DESC",
+  );
+
   cacheSet(cacheKey, results);
   return results;
 }

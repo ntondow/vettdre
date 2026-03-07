@@ -33,23 +33,19 @@ export default function MarketIntelHeader({
   const tabs =
     market === "nyc"
       ? [
-          { key: "property" as const, label: "Property" },
-          { key: "ownership" as const, label: "Ownership" },
-          { key: "name" as const, label: "Name / Portfolio" },
-          { key: "map" as const, label: "Map" },
-          { key: "new-development" as const, label: "New Dev" },
-          { key: "distressed" as const, label: "Distressed" },
-          { key: "on-market" as const, label: "On-Market" },
+          { key: "map" as const, label: "Map", icon: "🗺️" },
+          { key: "search" as const, label: "Search", icon: "🔍" },
+          { key: "listings" as const, label: "Listings", icon: "🏠" },
         ]
       : market === "nj"
         ? [
-            { key: "property" as const, label: "Property Search" },
-            { key: "map" as const, label: "Map" },
-            { key: "on-market" as const, label: "On-Market" },
+            { key: "map" as const, label: "Map", icon: "🗺️" },
+            { key: "search" as const, label: "Search", icon: "🔍" },
+            { key: "listings" as const, label: "Listings", icon: "🏠" },
           ]
         : [
-            { key: "property" as const, label: "Property Search" },
-            { key: "on-market" as const, label: "On-Market" },
+            { key: "search" as const, label: "Search", icon: "🔍" },
+            { key: "listings" as const, label: "Listings", icon: "🏠" },
           ];
 
   return (
@@ -153,7 +149,7 @@ export default function MarketIntelHeader({
                   : "border-transparent text-slate-500 hover:text-slate-700"
               } ${isMapLocked ? "opacity-60" : ""}`}
             >
-              {t.label}
+              <span className="mr-1.5">{t.icon}</span>{t.label}
               {isMapLocked && <LockIcon />}
             </button>
           );

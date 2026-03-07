@@ -146,6 +146,82 @@ export async function logComplianceAction(
   });
 }
 
+export async function logTransactionAction(
+  orgId: string,
+  actor: ActorInfo,
+  action: string,
+  transactionId: string,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  logAction({
+    orgId,
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action,
+    entityType: "transaction",
+    entityId: transactionId,
+    details,
+  });
+}
+
+export async function logListingAction(
+  orgId: string,
+  actor: ActorInfo,
+  action: string,
+  listingId: string,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  logAction({
+    orgId,
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action,
+    entityType: "listing",
+    entityId: listingId,
+    details,
+  });
+}
+
+export async function logPropertyAction(
+  orgId: string,
+  actor: ActorInfo,
+  action: string,
+  propertyId: string,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  logAction({
+    orgId,
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action,
+    entityType: "property",
+    entityId: propertyId,
+    details,
+  });
+}
+
+export async function logGoalAction(
+  orgId: string,
+  actor: ActorInfo,
+  action: string,
+  goalId: string,
+  details?: Record<string, unknown>,
+): Promise<void> {
+  logAction({
+    orgId,
+    actorId: actor.id,
+    actorName: actor.name,
+    actorRole: actor.role,
+    action,
+    entityType: "agent_goal",
+    entityId: goalId,
+    details,
+  });
+}
+
 export async function logSettingsAction(
   orgId: string,
   actor: ActorInfo,

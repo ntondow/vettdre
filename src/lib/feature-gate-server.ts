@@ -1,8 +1,8 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { FREE_DAILY_SEARCH_LIMIT } from "@/lib/feature-gate";
-import type { UserPlan } from "@/lib/feature-gate";
+import { FREE_DAILY_SEARCH_LIMIT, hasPermission } from "@/lib/feature-gate";
+import type { UserPlan, Feature } from "@/lib/feature-gate";
 
 interface UsageCounters {
   searchesToday?: number;
@@ -106,4 +106,17 @@ export async function checkAndExpireTrial(userId: string): Promise<boolean> {
 function normalizeCounters(raw: UsageCounters | null): UsageCounters {
   if (!raw || typeof raw !== "object") return {};
   return { ...raw };
+}
+
+/**
+ * Server-side feature access check. Returns the user's plan and whether
+ * they have permission for the given feature. Use in server actions to
+ * enforce feature gates before doing expensive work.
+ */
+export async function checkFeatureAccess(
+  userId: string,
+  feature: Feature,
+): Promise<{ allowed: boolean; plan: UserPlan }> {
+  const { plan } = await getUserPlan(userId);
+  return { allowed: hasPermission(plan, feature), plan };
 }

@@ -42,6 +42,11 @@ export const PAGE_PERMISSION_MAP: Record<string, BmsPermission> = {
   "/brokerage/payments": "view_payments",
   "/brokerage/agents": "view_agents",
   "/brokerage/my-deals": "view_own_submissions",
+  "/brokerage/transactions": "transactions_view",
+  "/brokerage/listings": "listings_view",
+  "/brokerage/listings/bulk": "listings_bulk_upload",
+  "/brokerage/listings/properties": "properties_view",
+  "/brokerage/leaderboard": "leaderboard_view",
   "/brokerage/settings": "manage_brokerage_settings",
 };
 

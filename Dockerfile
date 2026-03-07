@@ -3,11 +3,16 @@ FROM node:20-alpine AS builder
 RUN apk add --no-cache openssl openssl-dev
 WORKDIR /app
 
+# 1. Install dependencies first (cached unless package.json changes)
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-COPY . .
+# 2. Copy and generate Prisma client (cached unless schema changes)
+COPY prisma ./prisma
 RUN npx prisma generate
+
+# 3. Copy source code last (invalidates cache on every code change, but deps are cached)
+COPY . .
 
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -33,15 +38,19 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma schema + generated client
+# Copy Prisma schema + generated client + CLI (for migrate deploy at startup)
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # Copy runtime data (Zillow)
 COPY --from=builder /app/data ./data
 
+# Copy entrypoint script (runs migrations then starts server)
+COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
+
 USER nextjs
 EXPOSE 8080
 
-CMD ["node", "server.js"]
+ENTRYPOINT ["sh", "./docker-entrypoint.sh"]

@@ -13,15 +13,27 @@ import {
   X,
   ChevronDown,
   Trash2,
+  Info,
+  Pencil,
+  Check,
+  Lock,
+  Plus,
 } from "lucide-react";
 import {
   getBillToMappings,
   saveBillToMappings,
-  getNextInvoiceNumber,
   getFromInfo,
   getInvoiceSettings,
+  getPaymentInstructions,
+  getBrokerageLogo,
+  lookupAgentsByName,
+  getInvoiceNumberFormat,
+  saveInvoiceNumberFormat,
+  getNextInvoiceSequence,
 } from "./bulk-actions";
-import type { BillToEntity, BillToMappings, FromInfo, InvoiceSettings } from "@/lib/bms-types";
+import type { BillToEntity, BillToMappings, FromInfo, InvoiceSettings, PaymentInstructions } from "@/lib/bms-types";
+import { resolveInvoiceNumber, INVOICE_NUMBER_TOKENS, DEFAULT_INVOICE_FORMAT } from "@/lib/bms-types";
+import type { InvoiceFormatRowData } from "@/lib/bms-types";
 import { generateBatchInvoiceZip } from "@/lib/invoice-simple-pdf";
 import type { SimpleInvoiceData } from "@/lib/invoice-simple-pdf";
 
@@ -34,8 +46,13 @@ interface ParsedRow {
 interface MappedRow {
   agentName: string;
   propertyAddress: string;
+  propertyName?: string;
+  billTo?: string;
   tenantName: string;
   amount: number;
+  rentalPrice?: number;
+  moveInDate?: string;
+  invoiceNumber?: string;
   notes?: string;
   _raw: ParsedRow;
   _errors?: string[];
@@ -49,8 +66,13 @@ type Step = "upload" | "map-columns" | "bill-to" | "preview";
 const STANDARD_COLUMNS = [
   { key: "agentName", label: "Agent Name", required: true },
   { key: "propertyAddress", label: "Property Address", required: true },
-  { key: "tenantName", label: "Tenant / Client Name", required: false },
+  { key: "propertyName", label: "Property / Complex Name", required: false },
+  { key: "billTo", label: "Bill To", required: false },
+  { key: "tenantName", label: "Tenant / Client Name", required: true },
   { key: "amount", label: "Commission Amount", required: true },
+  { key: "rentalPrice", label: "Rental Price", required: false },
+  { key: "moveInDate", label: "Move-In Date", required: false },
+  { key: "invoiceNumber", label: "Invoice #", required: false },
   { key: "notes", label: "Notes", required: false },
 ] as const;
 
@@ -58,9 +80,14 @@ type StandardColumnKey = (typeof STANDARD_COLUMNS)[number]["key"];
 
 const COLUMN_ALIASES: Record<StandardColumnKey, string[]> = {
   agentName: ["agent name", "agent", "salesperson", "rep", "representative", "agent_name"],
-  propertyAddress: ["property address", "address", "property", "location", "property_address", "unit address"],
-  tenantName: ["tenant", "tenant name", "client", "client name", "buyer", "lessee", "tenant_name", "client_name"],
-  amount: ["amount", "commission", "commission amount", "fee", "total", "commission_amount", "comm amount", "commission amt"],
+  propertyAddress: ["property address", "address", "location", "property_address", "unit address", "street address"],
+  propertyName: ["property name", "property", "complex", "complex name", "building", "building name", "property_name"],
+  billTo: ["bill to", "bill to name", "billed to", "billing entity", "landlord", "management", "management company", "owner", "payee", "bill_to", "bill_to_name", "billing_entity", "management_company"],
+  tenantName: ["tenant", "tenant name", "client", "client name", "buyer", "lessee", "tenant_name", "client_name", "tenant name(s)", "tenant names"],
+  amount: ["amount", "commission", "commission amount", "fee", "total", "commission_amount", "comm amount", "commission amt", "invoiced", "invoiced $", "invoiced amount"],
+  rentalPrice: ["rent", "rent price", "monthly rent", "rental price", "rental amount", "rent amount", "rent_price", "monthly_rent"],
+  moveInDate: ["move in", "move in date", "move-in date", "lease start", "lease start date", "start date", "move_in_date", "lease_start_date", "date"],
+  invoiceNumber: ["invoice #", "invoice number", "invoice no", "invoice_number", "invoice_no", "deal id", "deal_id", "listing id", "listing_id", "listing #", "ref", "reference", "deal code", "deal_code", "inv #", "inv no", "id"],
   notes: ["notes", "note", "memo", "comments", "remarks", "description"],
 };
 
@@ -68,6 +95,34 @@ const COLUMN_ALIASES: Record<StandardColumnKey, string[]> = {
 
 const fmt = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 }).format(n);
+
+/** Convert Excel serial number (e.g. 46032) or date string to MM/DD/YYYY */
+function parseExcelDate(val: string | number | undefined): string {
+  if (val === undefined || val === null || val === "") return "";
+
+  // Numeric → Excel serial date (days since 1/1/1900, with the 1900 leap-year bug)
+  if (typeof val === "number" || /^\d{4,6}$/.test(String(val).trim())) {
+    const serial = typeof val === "number" ? val : parseInt(String(val), 10);
+    if (serial > 1 && serial < 200000) {
+      // Excel epoch: 1899-12-30 (accounts for the 1900 leap-year bug)
+      const epoch = new Date(1899, 11, 30);
+      const d = new Date(epoch.getTime() + serial * 86400000);
+      if (!isNaN(d.getTime())) {
+        return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
+      }
+    }
+  }
+
+  // Already a readable date string — try to parse and reformat
+  const str = String(val).trim();
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime()) && parsed.getFullYear() > 1970) {
+    return `${String(parsed.getMonth() + 1).padStart(2, "0")}/${String(parsed.getDate()).padStart(2, "0")}/${parsed.getFullYear()}`;
+  }
+
+  // Return as-is if we can't parse
+  return str;
+}
 
 function normalizePropertyName(name: string): string {
   return name
@@ -90,32 +145,6 @@ function deduplicatePropertyNames(rows: MappedRow[]): string[] {
   return Array.from(seen.values()).sort();
 }
 
-function formatLineDescription(
-  format: string,
-  tenantName: string,
-  propertyAddress: string,
-  agentName: string,
-): string {
-  switch (format) {
-    case "rental_commission_tenant_address":
-      return tenantName
-        ? `Rental commission - ${tenantName} at ${propertyAddress}`
-        : `Commission for lease at ${propertyAddress}`;
-    case "commission_address_only":
-      return `Commission for lease at ${propertyAddress}`;
-    case "agent_commission_address":
-      return tenantName
-        ? `${agentName} - Rental commission - ${tenantName} at ${propertyAddress}`
-        : `${agentName} - Commission for lease at ${propertyAddress}`;
-    case "custom_short":
-      return `Lease commission - ${propertyAddress}`;
-    default:
-      return tenantName
-        ? `Rental commission - ${tenantName} at ${propertyAddress}`
-        : `Commission for lease at ${propertyAddress}`;
-  }
-}
-
 function autoMatchColumn(headers: string[], targetKey: StandardColumnKey): string | null {
   const aliases = COLUMN_ALIASES[targetKey];
   for (const header of headers) {
@@ -127,6 +156,37 @@ function autoMatchColumn(headers: string[], targetKey: StandardColumnKey): strin
     }
   }
   return null;
+}
+
+/** Build an invoice number from format + row data, or use mapped value if present */
+function invoiceNumberForRow(row: MappedRow, format: string, seq: number): string {
+  // If the row has a user-supplied invoice number from the spreadsheet, use it as-is
+  if (row.invoiceNumber) return row.invoiceNumber;
+  return resolveInvoiceNumber(format, {
+    propertyName: row.propertyName,
+    propertyAddress: row.propertyAddress,
+    agentName: row.agentName,
+  }, seq);
+}
+
+/** Deduplicate invoice numbers within a batch by appending "2", "3", etc. */
+function deduplicateInvoiceNumbers(rows: MappedRow[], format: string, startSeq: number): string[] {
+  const usedCounts = new Map<string, number>();
+  const result: string[] = [];
+  let seq = startSeq;
+  for (const row of rows) {
+    if (row._errors && row._errors.length > 0) {
+      result.push("—");
+      continue;
+    }
+    const base = invoiceNumberForRow(row, format, seq);
+    const count = (usedCounts.get(base) ?? 0) + 1;
+    usedCounts.set(base, count);
+    result.push(count === 1 ? base : `${base}${count}`);
+    // Only increment sequence for auto-generated numbers (not user-supplied)
+    if (!row.invoiceNumber) seq++;
+  }
+  return result;
 }
 
 // ── Component ─────────────────────────────────────────────────
@@ -141,8 +201,13 @@ export default function BulkInvoicePage() {
   const [columnMap, setColumnMap] = useState<Record<StandardColumnKey, string | null>>({
     agentName: null,
     propertyAddress: null,
+    propertyName: null,
+    billTo: null,
     tenantName: null,
     amount: null,
+    rentalPrice: null,
+    moveInDate: null,
+    invoiceNumber: null,
     notes: null,
   });
   const [mappedRows, setMappedRows] = useState<MappedRow[]>([]);
@@ -155,12 +220,21 @@ export default function BulkInvoicePage() {
     invoiceLineFormat: "rental_commission_tenant_address",
     defaultPaymentTerms: "Net 30",
   });
-  const [nextInvoiceNum, setNextInvoiceNum] = useState("");
+  // nextInvoiceNum state removed — invoice numbers are now generated per-row from property/tenant data
   const [invoiceDate] = useState(() => new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }));
   const [defaultNotes, setDefaultNotes] = useState("");
   const [notesInitialized, setNotesInitialized] = useState(false);
+  const [paymentInstructions, setPaymentInstructions] = useState<PaymentInstructions | null>(null);
+  const [brokerageLogo, setBrokerageLogo] = useState<string | null>(null);
+  const [agentLicenseMap, setAgentLicenseMap] = useState<Record<string, { licenseNumber?: string }>>({});
+  const [billToOverrides, setBillToOverrides] = useState<Record<number, string>>({});
+  const [editingFrom, setEditingFrom] = useState(false);
+  const [fromInfoLoaded, setFromInfoLoaded] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
+  const [invoiceFormat, setInvoiceFormat] = useState(DEFAULT_INVOICE_FORMAT);
+  const [invoiceFormatLoaded, setInvoiceFormatLoaded] = useState(false);
+  const [baseSeq, setBaseSeq] = useState(1);
   const [dragOver, setDragOver] = useState(false);
   const [parsing, setParsing] = useState(false);
 
@@ -169,8 +243,22 @@ export default function BulkInvoicePage() {
   // ── Load server data on mount ─────────────────────────────
   useEffect(() => {
     getBillToMappings().then(m => setBillToMappings(m)).catch(() => {});
-    getFromInfo().then(f => setFromInfo(f)).catch(() => {});
-    getNextInvoiceNumber().then(n => setNextInvoiceNum(n)).catch(() => {});
+    getFromInfo().then(f => {
+      setFromInfo(f);
+      setFromInfoLoaded(true);
+      // Auto-open edit mode if settings are empty/incomplete
+      if (!f.name && !f.address && !f.phone && !f.email) {
+        setEditingFrom(true);
+      }
+    }).catch(() => { setFromInfoLoaded(true); });
+    // Load saved invoice number format + next sequence
+    getInvoiceNumberFormat().then(f => {
+      if (f) setInvoiceFormat(f);
+      setInvoiceFormatLoaded(true);
+    }).catch(() => { setInvoiceFormatLoaded(true); });
+    getNextInvoiceSequence().then(n => setBaseSeq(n)).catch(() => {});
+    getPaymentInstructions().then(pi => setPaymentInstructions(pi)).catch(() => {});
+    getBrokerageLogo().then(url => setBrokerageLogo(url)).catch(() => {});
     getInvoiceSettings().then(s => {
       setInvoiceSettings(s);
       if (!notesInitialized && s.invoiceNotes) {
@@ -189,7 +277,7 @@ export default function BulkInvoicePage() {
     try {
       const XLSX = await import("xlsx");
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: "array" });
+      const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       if (!firstSheet) throw new Error("No data found in file");
 
@@ -205,8 +293,13 @@ export default function BulkInvoicePage() {
       const autoMap: Record<StandardColumnKey, string | null> = {
         agentName: autoMatchColumn(hdrs, "agentName"),
         propertyAddress: autoMatchColumn(hdrs, "propertyAddress"),
+        propertyName: autoMatchColumn(hdrs, "propertyName"),
+        billTo: autoMatchColumn(hdrs, "billTo"),
         tenantName: autoMatchColumn(hdrs, "tenantName"),
         amount: autoMatchColumn(hdrs, "amount"),
+        rentalPrice: autoMatchColumn(hdrs, "rentalPrice"),
+        moveInDate: autoMatchColumn(hdrs, "moveInDate"),
+        invoiceNumber: autoMatchColumn(hdrs, "invoiceNumber"),
         notes: autoMatchColumn(hdrs, "notes"),
       };
       setColumnMap(autoMap);
@@ -243,15 +336,29 @@ export default function BulkInvoicePage() {
 
       const agentName = columnMap.agentName ? String(raw[columnMap.agentName] || "").trim() : "";
       const propertyAddress = columnMap.propertyAddress ? String(raw[columnMap.propertyAddress] || "").trim() : "";
+      const propertyName = columnMap.propertyName ? String(raw[columnMap.propertyName] || "").trim() : "";
+      const billTo = columnMap.billTo ? String(raw[columnMap.billTo] || "").trim() : "";
       const tenantName = columnMap.tenantName ? String(raw[columnMap.tenantName] || "").trim() : "";
       const amountRaw = columnMap.amount ? raw[columnMap.amount] : undefined;
       const notes = columnMap.notes ? String(raw[columnMap.notes] || "").trim() : "";
+      const moveInDate = columnMap.moveInDate ? parseExcelDate(raw[columnMap.moveInDate]) : "";
+      const invoiceNumber = columnMap.invoiceNumber ? String(raw[columnMap.invoiceNumber] || "").trim() : "";
 
       let amount = 0;
       if (typeof amountRaw === "number") {
         amount = amountRaw;
       } else if (typeof amountRaw === "string") {
         amount = parseFloat(amountRaw.replace(/[$,\s]/g, "")) || 0;
+      }
+
+      // Parse rental price
+      const rentRaw = columnMap.rentalPrice ? raw[columnMap.rentalPrice] : undefined;
+      let rentalPrice: number | undefined;
+      if (typeof rentRaw === "number") {
+        rentalPrice = rentRaw;
+      } else if (typeof rentRaw === "string") {
+        const parsed = parseFloat(rentRaw.replace(/[$,\s]/g, ""));
+        if (!isNaN(parsed) && parsed > 0) rentalPrice = parsed;
       }
 
       if (!agentName) errors.push("Missing agent name");
@@ -261,8 +368,13 @@ export default function BulkInvoicePage() {
       mapped.push({
         agentName,
         propertyAddress,
+        propertyName: propertyName || undefined,
+        billTo: billTo || undefined,
         tenantName,
         amount,
+        rentalPrice,
+        moveInDate: moveInDate || undefined,
+        invoiceNumber: invoiceNumber || undefined,
         notes: notes || undefined,
         _raw: raw,
         _errors: errors.length > 0 ? errors : undefined,
@@ -272,6 +384,44 @@ export default function BulkInvoicePage() {
 
     setMappedRows(mapped);
     setPropertyNames(deduplicatePropertyNames(mapped));
+
+    // Pre-populate Bill To mappings from spreadsheet values
+    if (columnMap.billTo) {
+      setBillToMappings(prev => {
+        const next = { ...prev };
+        // Build a lookup of existing saved entity names for fuzzy matching
+        const savedNames = new Map<string, string>(); // lowercase name → original normKey
+        for (const [normKey, entity] of Object.entries(prev)) {
+          if (entity?.companyName) {
+            savedNames.set(entity.companyName.toLowerCase().trim(), normKey);
+          }
+        }
+        // For each property, find the first non-empty Bill To value from its rows
+        const propertyBillTo = new Map<string, string>(); // normAddr → billTo value
+        for (const row of mapped) {
+          if (!row.billTo || !row.propertyAddress) continue;
+          const normAddr = normalizePropertyName(row.propertyAddress);
+          if (!propertyBillTo.has(normAddr)) {
+            propertyBillTo.set(normAddr, row.billTo);
+          }
+        }
+        for (const [normAddr, billToValue] of propertyBillTo) {
+          // Skip if there's already a saved mapping with a company name for this property
+          if (next[normAddr]?.companyName) continue;
+          // Check if this Bill To value matches an existing saved entity
+          const matchKey = savedNames.get(billToValue.toLowerCase().trim());
+          if (matchKey && next[matchKey]) {
+            // Copy the matched entity's full details to this property
+            next[normAddr] = { ...next[matchKey] };
+          } else {
+            // Pre-fill with just the company name for user confirmation
+            next[normAddr] = { companyName: billToValue };
+          }
+        }
+        return next;
+      });
+    }
+
     setStep("bill-to");
   }
 
@@ -298,6 +448,15 @@ export default function BulkInvoicePage() {
 
   async function saveMappingsAndContinue() {
     await saveBillToMappings(billToMappings).catch(() => {});
+
+    // Lookup agent license numbers
+    const uniqueAgentNames = [...new Set(mappedRows.map(r => r.agentName).filter(Boolean))];
+    if (uniqueAgentNames.length > 0) {
+      lookupAgentsByName(uniqueAgentNames)
+        .then(map => setAgentLicenseMap(map))
+        .catch(() => {});
+    }
+
     setStep("preview");
   }
 
@@ -317,9 +476,15 @@ export default function BulkInvoicePage() {
 
       // Build SimpleInvoiceData array
       const invoices: SimpleInvoiceData[] = [];
-      const baseNum = parseInt(nextInvoiceNum.replace(/\D/g, "").slice(-4), 10) || 1;
+
       const year = new Date().getFullYear();
-      const prefix = invoiceSettings.invoicePrefix || "INV";
+
+      // Generate descriptive invoice numbers for all rows (with dedup)
+      const allInvoiceNumbers = deduplicateInvoiceNumbers(mappedRows, invoiceFormat, baseSeq);
+      const validInvoiceNumbers = mappedRows
+        .map((r, i) => ({ row: r, num: allInvoiceNumbers[i] }))
+        .filter(({ row: r }) => !r._errors || r._errors.length === 0)
+        .map(({ num }) => num);
 
       // Calculate due date from payment terms
       const dueDate = (() => {
@@ -331,43 +496,53 @@ export default function BulkInvoicePage() {
         return d.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
       })();
 
+      // Build payment instructions for PDFs (only if enabled and has data)
+      const piForPdf = paymentInstructions && paymentInstructions.enabled !== false
+        ? paymentInstructions
+        : undefined;
+
       for (let i = 0; i < validRows.length; i++) {
         const row = validRows[i];
-        const invoiceNumber = `${prefix}-${year}-${String(baseNum + i).padStart(4, "0")}`;
+        const invoiceNumber = validInvoiceNumbers[i];
 
-        // Look up Bill To entity for this property
+        // Look up Bill To entity for this property, with per-row override
         const normAddr = normalizePropertyName(row.propertyAddress);
         const billTo = billToMappings[normAddr];
+        const billToName = billToOverrides[row._rowIndex] ?? billTo?.companyName ?? "";
 
-        // Build description based on invoice line format setting
-        const description = formatLineDescription(
-          invoiceSettings.invoiceLineFormat,
-          row.tenantName,
-          row.propertyAddress,
-          row.agentName,
-        );
+        // Look up agent license number
+        const agentLicense = row.agentName ? agentLicenseMap[row.agentName]?.licenseNumber : undefined;
 
         invoices.push({
-          fromName: fromInfo.name,
-          fromAddress: fromInfo.address,
-          fromPhone: fromInfo.phone,
-          fromEmail: fromInfo.email,
+          brokerageName: fromInfo.name,
+          brokerageAddress: fromInfo.address,
+          brokeragePhone: fromInfo.phone,
+          brokerageEmail: fromInfo.email,
+          brokerageLogo: brokerageLogo || undefined,
 
-          billToName: billTo?.companyName || "",
+          billToName,
           billToAddress: billTo?.address,
           billToPhone: billTo?.phone,
           billToEmail: billTo?.email,
 
-          invoiceNumber,
+          invoiceNr: invoiceNumber,
           invoiceDate,
           dueDate,
 
-          description,
-          amount: row.amount,
+          moveInDate: row.moveInDate,
+          propertyAddress: row.propertyAddress,
+          propertyName: row.propertyName,
+          tenantName: row.tenantName,
+          rentalPrice: row.rentalPrice,
+          commissionAmount: row.amount,
+
+          agentName: row.agentName,
+          agentLicenseNumber: agentLicense,
+
+          paymentInstructions: piForPdf,
 
           notes: defaultNotes || undefined,
-          agentName: row.agentName,
-          propertyName: row.propertyAddress,
+          year: String(year),
         });
       }
 
@@ -501,7 +676,7 @@ export default function BulkInvoicePage() {
           <div className="flex items-center gap-4 text-sm">
             <button
               onClick={() => {
-                const csv = "Agent Name,Property Address,Tenant Name,Amount,Notes\nJane Smith,123 Main St Apt 4A,John Buyer,5000,First month rent\nMike Jones,456 Park Ave,ABC Corp,7500,Commercial lease\n";
+                const csv = "Agent Name,Property Address,Tenant Name,Commission Amount,Rental Price,Move-In Date,Notes\nJane Smith,123 Main St Apt 4A,John Buyer,5000,2500,03/01/2026,First month rent\nMike Jones,456 Park Ave,ABC Corp,7500,3750,04/01/2026,Commercial lease\n";
                 const blob = new Blob([csv], { type: "text/csv" });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement("a");
@@ -568,8 +743,11 @@ export default function BulkInvoicePage() {
                       <tr className="bg-slate-50">
                         <th className="text-left px-3 py-1.5 text-xs font-medium text-slate-500">Agent</th>
                         <th className="text-left px-3 py-1.5 text-xs font-medium text-slate-500">Property</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-slate-500">Bill To</th>
                         <th className="text-left px-3 py-1.5 text-xs font-medium text-slate-500">Tenant</th>
-                        <th className="text-right px-3 py-1.5 text-xs font-medium text-slate-500">Amount</th>
+                        <th className="text-left px-3 py-1.5 text-xs font-medium text-slate-500">Move-In</th>
+                        <th className="text-right px-3 py-1.5 text-xs font-medium text-slate-500">Rent</th>
+                        <th className="text-right px-3 py-1.5 text-xs font-medium text-slate-500">Commission</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -577,7 +755,12 @@ export default function BulkInvoicePage() {
                         <tr key={i}>
                           <td className="px-3 py-1.5 text-slate-700">{columnMap.agentName ? String(row[columnMap.agentName] || "—") : "—"}</td>
                           <td className="px-3 py-1.5 text-slate-700">{columnMap.propertyAddress ? String(row[columnMap.propertyAddress] || "—") : "—"}</td>
+                          <td className="px-3 py-1.5 text-slate-500">{columnMap.billTo ? String(row[columnMap.billTo] || "—") : "—"}</td>
                           <td className="px-3 py-1.5 text-slate-500">{columnMap.tenantName ? String(row[columnMap.tenantName] || "—") : "—"}</td>
+                          <td className="px-3 py-1.5 text-slate-500">{columnMap.moveInDate ? (parseExcelDate(row[columnMap.moveInDate]) || "—") : "—"}</td>
+                          <td className="px-3 py-1.5 text-right text-slate-500">
+                            {columnMap.rentalPrice ? fmt(parseFloat(String(row[columnMap.rentalPrice] || "0").replace(/[$,\s]/g, "")) || 0) : "—"}
+                          </td>
                           <td className="px-3 py-1.5 text-right text-slate-700">
                             {columnMap.amount ? fmt(parseFloat(String(row[columnMap.amount] || "0").replace(/[$,\s]/g, "")) || 0) : "—"}
                           </td>
@@ -587,6 +770,116 @@ export default function BulkInvoicePage() {
                   </table>
                 </div>
               </div>
+            )}
+          </div>
+
+          {/* ── Invoice Number Format ─────────────────────────── */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-slate-800 mb-1">Invoice Number Format</h2>
+            <p className="text-sm text-slate-500 mb-4">
+              Drag tokens to build your invoice number pattern. Click a token to remove it.
+            </p>
+
+            {/* Token chips */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {INVOICE_NUMBER_TOKENS.filter(t => !invoiceFormat.includes(t.token)).map(t => (
+                <button
+                  key={t.token}
+                  onClick={() => setInvoiceFormat(prev => prev + t.token)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full border border-slate-300 bg-slate-50 text-slate-600 hover:bg-blue-50 hover:border-blue-300 hover:text-blue-700 transition-colors"
+                  title={t.description}
+                >
+                  <Plus className="h-3 w-3" />
+                  {t.label}
+                </button>
+              ))}
+              {INVOICE_NUMBER_TOKENS.filter(t => !invoiceFormat.includes(t.token)).length === 0 && (
+                <span className="text-xs text-slate-400 italic">All tokens in use</span>
+              )}
+            </div>
+
+            {/* Format builder strip */}
+            <div className="flex items-center gap-1 flex-wrap min-h-[40px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg mb-3">
+              {(() => {
+                // Parse format into segments: tokens and literal text
+                const segments: { type: "token" | "text"; value: string; tokenLabel?: string; locked?: boolean }[] = [];
+                let remaining = invoiceFormat;
+                while (remaining.length > 0) {
+                  const tokenMatch = remaining.match(/^\{(SEQ|YEAR|PROP|AGENT|ADDR|MONTH)\}/);
+                  if (tokenMatch) {
+                    const tok = INVOICE_NUMBER_TOKENS.find(t => t.token === tokenMatch[0]);
+                    segments.push({ type: "token", value: tokenMatch[0], tokenLabel: tok?.label, locked: tok && "locked" in tok && tok.locked });
+                    remaining = remaining.slice(tokenMatch[0].length);
+                  } else {
+                    // Collect literal text until next token or end
+                    const nextToken = remaining.search(/\{(SEQ|YEAR|PROP|AGENT|ADDR|MONTH)\}/);
+                    const textEnd = nextToken === -1 ? remaining.length : nextToken;
+                    segments.push({ type: "text", value: remaining.slice(0, textEnd) });
+                    remaining = remaining.slice(textEnd);
+                  }
+                }
+                return segments.map((seg, idx) => (
+                  seg.type === "token" ? (
+                    <span
+                      key={idx}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-mono font-semibold rounded ${
+                        seg.locked
+                          ? "bg-blue-100 text-blue-700 border border-blue-200"
+                          : "bg-indigo-100 text-indigo-700 border border-indigo-200 cursor-pointer hover:bg-red-50 hover:text-red-600 hover:border-red-200"
+                      }`}
+                      title={seg.locked ? "Required — cannot remove" : "Click to remove"}
+                      onClick={() => {
+                        if (seg.locked) return;
+                        setInvoiceFormat(prev => prev.replace(seg.value, ""));
+                      }}
+                    >
+                      {seg.locked && <Lock className="h-3 w-3" />}
+                      {seg.tokenLabel}
+                      {!seg.locked && <X className="h-3 w-3" />}
+                    </span>
+                  ) : (
+                    <input
+                      key={idx}
+                      type="text"
+                      value={seg.value}
+                      onChange={e => {
+                        // Replace this literal segment in the format string
+                        const before = invoiceFormat.slice(0, invoiceFormat.indexOf(seg.value, segments.slice(0, idx).reduce((acc, s) => acc + s.value.length, 0)));
+                        const after = invoiceFormat.slice(before.length + seg.value.length);
+                        setInvoiceFormat(before + e.target.value + after);
+                      }}
+                      className="w-12 px-1 py-0.5 text-xs font-mono bg-white border border-slate-200 rounded text-center focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      placeholder="-"
+                      style={{ width: `${Math.max(2, seg.value.length + 1)}ch` }}
+                    />
+                  )
+                ));
+              })()}
+            </div>
+
+            {/* Live preview */}
+            <div className="flex items-center gap-3">
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Preview:</span>
+              <code className="px-3 py-1.5 text-sm font-mono bg-slate-100 border border-slate-200 rounded-lg text-slate-800">
+                {rawRows.length > 0 && columnMap.propertyAddress
+                  ? resolveInvoiceNumber(invoiceFormat, {
+                      propertyName: columnMap.propertyName ? String(rawRows[0][columnMap.propertyName] || "") : undefined,
+                      propertyAddress: String(rawRows[0][columnMap.propertyAddress] || ""),
+                      agentName: columnMap.agentName ? String(rawRows[0][columnMap.agentName] || "") : undefined,
+                    }, baseSeq)
+                  : resolveInvoiceNumber(invoiceFormat, { propertyAddress: "123 Main St" }, baseSeq)
+                }
+              </code>
+            </div>
+
+            {/* Reset to default */}
+            {invoiceFormat !== DEFAULT_INVOICE_FORMAT && (
+              <button
+                onClick={() => setInvoiceFormat(DEFAULT_INVOICE_FORMAT)}
+                className="mt-3 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                Reset to default ({DEFAULT_INVOICE_FORMAT})
+              </button>
             )}
           </div>
 
@@ -600,7 +893,11 @@ export default function BulkInvoicePage() {
               Back
             </button>
             <button
-              onClick={applyColumnMapping}
+              onClick={() => {
+                // Save format in background before proceeding
+                saveInvoiceNumberFormat(invoiceFormat).catch(() => {});
+                applyColumnMapping();
+              }}
               disabled={!columnMap.agentName || !columnMap.propertyAddress || !columnMap.amount}
               className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
@@ -735,15 +1032,68 @@ export default function BulkInvoicePage() {
             </div>
           )}
 
-          {/* From info */}
+          {/* From info — read-only by default, click to edit */}
           <div className="bg-white border border-slate-200 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-slate-700 mb-2">From (Brokerage)</h3>
-            <div className="text-sm text-slate-600">
-              <div className="font-medium">{fromInfo.name || "—"}</div>
-              {fromInfo.address && <div>{fromInfo.address}</div>}
-              {fromInfo.phone && <div>{fromInfo.phone}</div>}
-              {fromInfo.email && <div>{fromInfo.email}</div>}
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-semibold text-slate-700">From (Brokerage)</h3>
+              <button
+                onClick={() => setEditingFrom(!editingFrom)}
+                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                {editingFrom ? (
+                  <><Check className="h-3.5 w-3.5" /> Done</>
+                ) : (
+                  <><Pencil className="h-3.5 w-3.5" /> Edit</>
+                )}
+              </button>
             </div>
+
+            {editingFrom ? (
+              <div className="space-y-2">
+                {fromInfoLoaded && !fromInfo.name && !fromInfo.address && (
+                  <p className="text-xs text-amber-600 mb-1">
+                    Set up your brokerage info in <a href="/brokerage/settings" className="underline hover:text-amber-700">Settings</a> for faster invoicing
+                  </p>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={fromInfo.name || ""}
+                    onChange={e => setFromInfo(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Brokerage name"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="text"
+                    value={fromInfo.address || ""}
+                    onChange={e => setFromInfo(prev => ({ ...prev, address: e.target.value }))}
+                    placeholder="Address"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="text"
+                    value={fromInfo.phone || ""}
+                    onChange={e => setFromInfo(prev => ({ ...prev, phone: e.target.value }))}
+                    placeholder="Phone"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <input
+                    type="email"
+                    value={fromInfo.email || ""}
+                    onChange={e => setFromInfo(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Email"
+                    className="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="text-sm text-slate-600">
+                <div className="font-medium text-slate-800">{fromInfo.name || "—"}</div>
+                {fromInfo.address && <div>{fromInfo.address}</div>}
+                {fromInfo.phone && <div>{fromInfo.phone}</div>}
+                {fromInfo.email && <div>{fromInfo.email}</div>}
+              </div>
+            )}
           </div>
 
           {/* Default notes */}
@@ -758,6 +1108,26 @@ export default function BulkInvoicePage() {
             />
           </div>
 
+          {/* Payment instructions status */}
+          <div className="flex items-center gap-2 text-sm">
+            <Info className="h-4 w-4 text-slate-400 flex-shrink-0" />
+            {paymentInstructions && paymentInstructions.enabled !== false && (
+              paymentInstructions.achBankName || paymentInstructions.wireBankName || paymentInstructions.checkPayableTo
+            ) ? (
+              <span className="text-green-600">
+                Payment instructions: {[
+                  paymentInstructions.achBankName && "ACH",
+                  paymentInstructions.wireBankName && "Wire",
+                  paymentInstructions.checkPayableTo && "Check",
+                ].filter(Boolean).join(" + ")} configured
+              </span>
+            ) : (
+              <span className="text-amber-600">
+                No payment instructions configured — <a href="/brokerage/settings" className="underline hover:text-amber-700">add in Settings</a>
+              </span>
+            )}
+          </div>
+
           {/* Invoice preview table */}
           <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -766,35 +1136,55 @@ export default function BulkInvoicePage() {
                   <tr className="bg-slate-50 border-b border-slate-200">
                     <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">#</th>
                     <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Invoice #</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Agent</th>
-                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Property</th>
                     <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Bill To</th>
-                    <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Amount</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Tenant</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Property</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Move-In</th>
+                    <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Rent</th>
+                    <th className="text-right px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Commission</th>
+                    <th className="text-left px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Agent</th>
                     <th className="text-center px-3 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {mappedRows.map((row, i) => {
+                  {(() => {
+                    const previewInvNums = deduplicateInvoiceNumbers(mappedRows, invoiceFormat, baseSeq);
+                    return mappedRows.map((row, i) => {
                     const hasErrors = row._errors && row._errors.length > 0;
                     const normAddr = normalizePropertyName(row.propertyAddress);
                     const billTo = billToMappings[normAddr];
-                    const baseNum = parseInt(nextInvoiceNum.replace(/\D/g, "").slice(-4), 10) || 1;
-                    const year = new Date().getFullYear();
-                    const pfx = invoiceSettings.invoicePrefix || "INV";
-                    const invNum = hasErrors ? "—" : `${pfx}-${year}-${String(baseNum + mappedRows.filter((r, j) => j < i && !r._errors).length).padStart(4, "0")}`;
+                    const billToDisplay = billToOverrides[row._rowIndex] ?? billTo?.companyName ?? "";
+                    const invNum = previewInvNums[i];
 
                     return (
                       <tr key={i} className={hasErrors ? "bg-red-50/40" : ""}>
                         <td className="px-3 py-2 text-slate-400">{i + 1}</td>
                         <td className="px-3 py-2 font-mono text-xs text-slate-700">{invNum}</td>
-                        <td className="px-3 py-2 text-slate-800">{row.agentName || "—"}</td>
-                        <td className="px-3 py-2 text-slate-800 max-w-[180px] truncate" title={row.propertyAddress}>
+                        <td className="px-3 py-1">
+                          <input
+                            type="text"
+                            value={billToDisplay}
+                            onChange={e => setBillToOverrides(prev => ({ ...prev, [row._rowIndex]: e.target.value }))}
+                            placeholder="Bill To"
+                            className="w-full min-w-[100px] border border-transparent hover:border-slate-300 focus:border-blue-400 rounded px-1.5 py-1 text-sm text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-transparent transition-colors"
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-slate-800 max-w-[140px] truncate" title={row.tenantName}>
+                          {row.tenantName || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-slate-800 max-w-[160px] truncate" title={row.propertyAddress}>
                           {row.propertyAddress || "—"}
                         </td>
-                        <td className="px-3 py-2 text-slate-600">
-                          {billTo?.companyName || <span className="text-slate-300">Not set</span>}
+                        <td className="px-3 py-2 text-slate-500 text-xs whitespace-nowrap">
+                          {row.moveInDate || "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right text-slate-600">
+                          {row.rentalPrice ? fmt(row.rentalPrice) : "—"}
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-green-600">{fmt(row.amount)}</td>
+                        <td className="px-3 py-2 text-slate-800 max-w-[120px] truncate" title={row.agentName}>
+                          {row.agentName || "—"}
+                        </td>
                         <td className="px-3 py-2 text-center">
                           {hasErrors ? (
                             <span className="inline-flex items-center gap-1 text-xs text-red-600" title={row._errors!.join("; ")}>
@@ -808,7 +1198,8 @@ export default function BulkInvoicePage() {
                         </td>
                       </tr>
                     );
-                  })}
+                  });
+                  })()}
                 </tbody>
               </table>
             </div>

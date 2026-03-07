@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import { enrichBuilding } from "./enrichment";
 import { buildOwnershipGraph } from "./graph-engine";
 import BuildingProfile from "./building-profile";
+import ProfileModal from "./building-profile-modal";
 import { analyzeOwnership } from "./ai-analysis";
-import { addBuildingToList } from "../prospecting/actions";
-import { getLists } from "../prospecting/actions";
+import { addBuildingToList, getLists } from "./prospecting-actions";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 
 interface Props {
@@ -55,6 +55,7 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
   const [saved, setSaved] = useState(false);
   const [portfolio, setPortfolio] = useState<any>(null);
   const [viewingProperty, setViewingProperty] = useState<any>(null);
+  const [portfolioPhone, setPortfolioPhone] = useState<string | null>(null);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<any>(null);
   const [loadingAI, setLoadingAI] = useState(false);
@@ -249,7 +250,7 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
               ) : (
                 <p className="text-sm text-slate-400 text-center py-4">
                   No lists yet.{" "}
-                  <a href="/prospecting" className="text-blue-600 hover:underline">
+                  <a href="/market-intel" className="text-blue-600 hover:underline">
                     Create one
                   </a>
                 </p>
@@ -655,17 +656,34 @@ export default function BuildingDetail({ building, onClose, onNameClick }: Props
               {activeTab === "portfolio" && (
                 <>
                   {viewingProperty && (
-                    <BuildingProfile
-                      boroCode={viewingProperty.boroCode}
-                      block={viewingProperty.block}
-                      lot={viewingProperty.lot}
+                    <ProfileModal
                       address={viewingProperty.address}
                       borough={viewingProperty.borough}
-                      ownerName={viewingProperty.ownerName || viewingProperty.ownerNamePluto}
-                      connectedVia={viewingProperty.connectedVia}
+                      primaryPhone={portfolioPhone}
                       onClose={() => setViewingProperty(null)}
-                      onNameClick={(name) => { setViewingProperty(null); if (onNameClick) onNameClick(name); }}
-                    />
+                    >
+                      <BuildingProfile
+                        boroCode={viewingProperty.boroCode}
+                        block={viewingProperty.block}
+                        lot={viewingProperty.lot}
+                        address={viewingProperty.address}
+                        borough={viewingProperty.borough}
+                        ownerName={viewingProperty.ownerName || viewingProperty.ownerNamePluto}
+                        connectedVia={viewingProperty.connectedVia}
+                        onClose={() => setViewingProperty(null)}
+                        onNameClick={(name) => { setViewingProperty(null); if (onNameClick) onNameClick(name); }}
+                        onPrimaryPhoneChange={setPortfolioPhone}
+                        plutoData={viewingProperty.units != null ? {
+                          address: viewingProperty.address || "", ownerName: viewingProperty.ownerName || viewingProperty.ownerNamePluto || "",
+                          unitsRes: viewingProperty.unitsRes || viewingProperty.units || 0, unitsTot: viewingProperty.unitsTot || viewingProperty.units || 0,
+                          yearBuilt: viewingProperty.yearBuilt || 0, numFloors: viewingProperty.numFloors || viewingProperty.floors || 0,
+                          bldgArea: viewingProperty.bldgArea || viewingProperty.sqft || 0, lotArea: viewingProperty.lotArea || 0,
+                          assessTotal: viewingProperty.assessTotal || viewingProperty.assessedValue || 0, bldgClass: viewingProperty.bldgClass || viewingProperty.buildingClass || "",
+                          zoneDist: viewingProperty.zoneDist || viewingProperty.zoning || "", borough: viewingProperty.borough || "",
+                          zip: viewingProperty.zip || "", lat: viewingProperty.lat || 0, lng: viewingProperty.lng || 0,
+                        } : undefined}
+                      />
+                    </ProfileModal>
                   )}
                   {loadingPortfolio ? (
                     <div className="text-center py-8">

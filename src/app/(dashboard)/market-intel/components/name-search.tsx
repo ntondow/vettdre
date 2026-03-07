@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { searchByName } from "../actions";
 import BuildingProfile from "../building-profile";
+import ProfileModal from "../building-profile-modal";
 import { incrementSearchCount } from "@/lib/feature-gate-server";
 import type { FilterState } from "../types";
 
@@ -35,6 +36,7 @@ export default function NameSearch({
 }: NameSearchProps) {
   const [nameResults, setNameResults] = useState<any | null>(null);
   const [nameDetailBuilding, setNameDetailBuilding] = useState<any>(null);
+  const [primaryPhone, setPrimaryPhone] = useState<string | null>(null);
   const [nameQuery, setNameQuery] = useState(initialQuery || "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -201,30 +203,24 @@ export default function NameSearch({
       )}
 
       {nameDetailBuilding && (
-        <div className="fixed inset-0 z-[2000] flex">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setNameDetailBuilding(null)} />
-          <div className="relative ml-auto w-full md:max-w-3xl bg-white shadow-2xl overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">{nameDetailBuilding.address}</h2>
-                <p className="text-xs text-slate-500">{nameDetailBuilding.borough}</p>
-              </div>
-              <button onClick={() => setNameDetailBuilding(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg">&times;</button>
-            </div>
-            <div className="p-5">
-              <BuildingProfile
-                boroCode={nameDetailBuilding.boroCode}
-                block={nameDetailBuilding.block}
-                lot={nameDetailBuilding.lot}
-                address={nameDetailBuilding.address}
-                borough={nameDetailBuilding.borough}
-                ownerName={nameDetailBuilding.ownerName}
-                onClose={() => setNameDetailBuilding(null)}
-                onNameClick={(name) => { setNameDetailBuilding(null); searchOwnerName(name); }}
-              />
-            </div>
-          </div>
-        </div>
+        <ProfileModal
+          address={nameDetailBuilding.address}
+          borough={nameDetailBuilding.borough}
+          primaryPhone={primaryPhone}
+          onClose={() => setNameDetailBuilding(null)}
+        >
+          <BuildingProfile
+            boroCode={nameDetailBuilding.boroCode}
+            block={nameDetailBuilding.block}
+            lot={nameDetailBuilding.lot}
+            address={nameDetailBuilding.address}
+            borough={nameDetailBuilding.borough}
+            ownerName={nameDetailBuilding.ownerName}
+            onClose={() => setNameDetailBuilding(null)}
+            onNameClick={(name) => { setNameDetailBuilding(null); searchOwnerName(name); }}
+            onPrimaryPhoneChange={setPrimaryPhone}
+          />
+        </ProfileModal>
       )}
 
       {!nameResults && !loading && (

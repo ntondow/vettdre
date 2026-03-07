@@ -174,6 +174,9 @@ export async function createAgent(input: {
       return { success: false, error: "An agent with this email already exists in your brokerage" };
     }
 
+    // Auto-generate invite token at creation time
+    const inviteToken = crypto.randomUUID();
+
     const agent = await prisma.brokerAgent.create({
       data: {
         orgId,
@@ -185,7 +188,7 @@ export async function createAgent(input: {
         licenseExpiry: input.licenseExpiry ? new Date(input.licenseExpiry) : null,
         defaultSplitPct: input.defaultSplitPct ?? 70,
         commissionPlanId: input.commissionPlanId || null,
-        status: input.status || "active",
+        status: "pending",
         address: input.address || null,
         city: input.city || null,
         state: input.state || null,
@@ -196,6 +199,9 @@ export async function createAgent(input: {
         w9OnFile: input.w9OnFile ?? false,
         photoUrl: input.photoUrl || null,
         notes: input.notes || null,
+        inviteToken,
+        invitedAt: new Date(),
+        inviteEmail: input.email,
       },
     });
 
@@ -204,7 +210,8 @@ export async function createAgent(input: {
       email: input.email,
     });
 
-    return JSON.parse(JSON.stringify({ success: true, agent }));
+    const inviteUrl = `/join/agent/${inviteToken}`;
+    return JSON.parse(JSON.stringify({ success: true, agent, inviteUrl }));
   } catch (error) {
     console.error("createAgent error:", error);
     return { success: false, error: "Failed to create agent" };
@@ -345,9 +352,16 @@ export async function reactivateAgent(agentId: string) {
   try {
     const { userId, orgId } = await getCurrentOrg();
 
+    // If agent has a linked user, set to active; otherwise set to pending
+    const agent = await prisma.brokerAgent.findFirst({
+      where: { id: agentId, orgId },
+      select: { userId: true },
+    });
+    const newStatus = agent?.userId ? "active" : "pending";
+
     await prisma.brokerAgent.updateMany({
       where: { id: agentId, orgId },
-      data: { status: "active" },
+      data: { status: newStatus },
     });
 
     logAgentAction(orgId, { id: userId }, "reactivated", agentId);
@@ -432,7 +446,10 @@ export async function bulkCreateAgents(agents: Array<{
             phone: input.phone || null,
             licenseNumber: input.licenseNumber || null,
             defaultSplitPct: input.defaultSplitPct ?? 70,
-            status: "active",
+            status: "pending",
+            inviteToken: crypto.randomUUID(),
+            invitedAt: new Date(),
+            inviteEmail: input.email,
           },
         });
 
@@ -560,7 +577,12 @@ export async function linkAgentToUser(agentId: string, userId: string) {
 
     await prisma.brokerAgent.update({
       where: { id: agentId },
-      data: { userId },
+      data: {
+        userId,
+        status: "active",
+        inviteAcceptedAt: new Date(),
+        inviteToken: null,
+      },
     });
 
     return { success: true };

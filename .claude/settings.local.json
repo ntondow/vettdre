@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(tail:*)",
+      "Bash(git status:*)",
+      "Bash(head:*)",
+      "Bash(grep:*)",
+      "Bash(npx next:*)",
+      "Bash(npx tsc:*)",
+      "Bash(git:*)",
+      "Bash(gcloud builds:*)",
+      "Bash(python3:*)",
+      "Bash(done)",
+      "Bash(npx prisma:*)",
+      "Bash(sort:*)",
+      "WebFetch(domain:vettdre-970057752563.us-east1.run.app)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm install:*)",
+      "Bash(sleep 8 && curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3111/brokerage/dashboard 2>&1)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:data.cityofnewyork.us)",
+      "Bash(curl:*)",
+      "Bash(echo Service not found:*)",
+      "Bash(# Check available layers\ncurl -sL \"https://services.arcgis.com/VTyQ9soqVukalItT/arcgis/rest/services/Opportunity_Zones/FeatureServer?f=json\" 2>/dev/null | python3 -c \"\nimport sys,json\nd=json.load\\(sys.stdin\\)\nfor l in d.get\\('layers',[]\\):\n    print\\(f'Layer {l.get\\(\\\\\"id\\\\\",\\\\\"\\\\\"\\)}: {l.get\\(\\\\\"name\\\\\",\\\\\"\\\\\"\\)}'\\)\n\" 2>/dev/null)",
+      "Bash(cp:*)",
+      "Bash(node:*)",
+      "Bash(test:*)",
+      "Bash(pandoc:*)",
+      "Bash(pip3 install:*)",
+      "Bash(mkdir:*)",
+      "WebSearch",
+      "WebFetch(domain:skillsmp.com)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(lsof:*)",
+      "Bash(gcloud secrets:*)",
+      "mcp__claude_ai_Supabase__execute_sql"
+    ]
+  }
+}

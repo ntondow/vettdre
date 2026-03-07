@@ -659,7 +659,9 @@ export function generateDealPdf(options: DealPdfOptions) {
     ["Hold Period", `${inputs.holdPeriodYears} years`],
     ["Exit Cap Rate", `${inputs.exitCapRate}%`],
     ["Selling Costs", `${inputs.sellingCostPercent}%`],
-    ["Closing Costs", fmt(inputs.closingCosts)],
+    ["Closing Costs", fmt(inputs.acquisitionCosts
+      ? inputs.acquisitionCosts.titleInsurance + inputs.acquisitionCosts.mortgageRecordingTax + inputs.acquisitionCosts.mansionTax + inputs.acquisitionCosts.transferTax + inputs.acquisitionCosts.legalFees + inputs.acquisitionCosts.inspections + inputs.acquisitionCosts.appraisal + inputs.acquisitionCosts.miscClosing
+      : inputs.closingCosts)],
     ["Origination Fee", `${inputs.originationFeePercent}%`],
   ];
   if (inputs.renovationBudget > 0) {

@@ -6,6 +6,7 @@ import {
   updateUserApproval,
   updateUserActive,
   updateUserPlan,
+  updateUserRole,
   deleteUser,
   getAuthStatuses,
   adminSendPasswordReset,
@@ -123,6 +124,18 @@ export default function AdminUsersClient() {
       await updateUserPlan(userId, plan);
       setUsers(prev => prev.map(u => u.id === userId ? { ...u, plan } : u));
       showToast(`Plan updated to ${plan}`);
+    } catch (e: any) {
+      showToast("Error: " + e.message, "error");
+    }
+    setUpdating(null);
+  };
+
+  const handleRoleChange = async (userId: string, role: string) => {
+    setUpdating(userId);
+    try {
+      await updateUserRole(userId, role);
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
+      showToast(`Role updated to ${role}`);
     } catch (e: any) {
       showToast("Error: " + e.message, "error");
     }
@@ -339,10 +352,10 @@ export default function AdminUsersClient() {
       )}
 
       <h1 className="text-2xl font-bold text-slate-900 mb-1">User Management</h1>
-      <p className="text-sm text-slate-500 mb-6">Manage user accounts, plans, and approval status.</p>
+      <p className="text-sm text-slate-500 mb-4">Manage user accounts, plans, roles, and approval status.</p>
 
       {/* Filters */}
-      <div className="bg-white rounded-xl border border-slate-200 p-4 mb-6">
+      <div className="bg-white rounded-xl border border-slate-200 p-3 mb-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="flex-1">
             <input
@@ -388,17 +401,17 @@ export default function AdminUsersClient() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-auto">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Name</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Email</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Plan</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Approved</th>
-                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Active</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Created</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Last Login</th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Actions</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Name</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Email</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Plan</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Role</th>
+                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Approved</th>
+                  <th className="text-center px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Active</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Created</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold text-slate-500 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -406,11 +419,11 @@ export default function AdminUsersClient() {
                   const auth = getAuthStatus(user.email);
                   return (
                     <tr key={user.id} className="hover:bg-slate-50">
-                      <td className="px-4 py-3">
-                        <p className="text-sm font-medium text-slate-900">{user.fullName}</p>
-                        <p className="text-xs text-slate-400">{user.orgName}</p>
+                      <td className="px-3 py-2.5">
+                        <p className="text-sm font-medium text-slate-900 leading-tight">{user.fullName}</p>
+                        <p className="text-[11px] text-slate-400">{user.orgName}</p>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm text-slate-600">{user.email}</span>
                           {auth ? (
@@ -436,13 +449,14 @@ export default function AdminUsersClient() {
                           )}
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 py-2.5">
                         <select
                           value={user.plan}
                           onChange={(e) => handlePlanChange(user.id, e.target.value)}
                           disabled={updating === user.id}
-                          className={`text-xs font-medium px-2 py-1 rounded-lg border ${
+                          className={`text-xs font-medium px-2 py-1 rounded-lg border cursor-pointer ${
                             user.plan === "free" ? "bg-slate-50 border-slate-200 text-slate-600" :
+                            user.plan === "explorer" ? "bg-emerald-50 border-emerald-200 text-emerald-700" :
                             user.plan === "pro" ? "bg-blue-50 border-blue-200 text-blue-700" :
                             user.plan === "team" ? "bg-violet-50 border-violet-200 text-violet-700" :
                             "bg-amber-50 border-amber-200 text-amber-700"
@@ -455,7 +469,27 @@ export default function AdminUsersClient() {
                           <option value="enterprise">Enterprise</option>
                         </select>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5">
+                        <select
+                          value={user.role}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value)}
+                          disabled={updating === user.id}
+                          className={`text-xs font-medium px-2 py-1 rounded-lg border cursor-pointer ${
+                            user.role === "owner" ? "bg-amber-50 border-amber-200 text-amber-700" :
+                            user.role === "admin" ? "bg-purple-50 border-purple-200 text-purple-700" :
+                            user.role === "manager" ? "bg-blue-50 border-blue-200 text-blue-700" :
+                            user.role === "agent" ? "bg-slate-50 border-slate-200 text-slate-600" :
+                            "bg-slate-50 border-slate-200 text-slate-400"
+                          }`}
+                        >
+                          <option value="owner">Owner</option>
+                          <option value="admin">Admin</option>
+                          <option value="manager">Manager</option>
+                          <option value="agent">Agent</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => handleToggleApproval(user.id, user.isApproved)}
                           disabled={updating === user.id}
@@ -468,7 +502,7 @@ export default function AdminUsersClient() {
                           {user.isApproved ? "Approved" : "Pending"}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-center">
+                      <td className="px-3 py-2.5 text-center">
                         <button
                           onClick={() => handleToggleActive(user.id, user.isActive)}
                           disabled={updating === user.id}
@@ -481,27 +515,28 @@ export default function AdminUsersClient() {
                           {user.isActive ? "Active" : "Inactive"}
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.createdAt)}</td>
-                      <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(user.lastLoginAt)}</td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-2">
+                      <td className="px-3 py-2.5 text-xs text-slate-500 whitespace-nowrap">{fmtDate(user.createdAt)}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-end gap-1.5">
                           <button
                             onClick={() => handleSendReset(user.email)}
                             disabled={updating === user.email || !auth}
                             title={!auth ? "User must have an Auth account first (use Set Password)" : "Send password reset link"}
-                            className="text-xs text-blue-600 hover:text-blue-800 font-medium disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                            className="text-[11px] text-blue-600 hover:text-blue-800 font-medium disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
                           >
-                            Reset Pwd
+                            Reset
                           </button>
+                          <span className="text-slate-200">|</span>
                           <button
                             onClick={() => setPasswordModal({ email: user.email, authId: auth?.authId })}
-                            className="text-xs text-violet-600 hover:text-violet-800 font-medium whitespace-nowrap"
+                            className="text-[11px] text-violet-600 hover:text-violet-800 font-medium whitespace-nowrap"
                           >
                             Set Pwd
                           </button>
+                          <span className="text-slate-200">|</span>
                           <button
                             onClick={() => setConfirmDelete(user.id)}
-                            className="text-xs text-red-500 hover:text-red-700 font-medium"
+                            className="text-[11px] text-red-500 hover:text-red-700 font-medium"
                           >
                             Delete
                           </button>

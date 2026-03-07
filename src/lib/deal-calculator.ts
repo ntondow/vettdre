@@ -8,6 +8,9 @@ export interface UnitMixRow {
   type: string;       // e.g., "Studio", "1BR", "2BR"
   count: number;
   monthlyRent: number;
+  sqft?: number;
+  marketRent?: number;        // market rent for comparison (stabilized view)
+  notes?: string;
 }
 
 // ============================================================
@@ -34,6 +37,12 @@ export interface CommercialTenant {
   id: string;
   name: string;
   rentAnnual: number;
+  sqft?: number;
+  leaseType?: 'NNN' | 'gross' | 'modified_gross';
+  leaseExpiry?: string;       // ISO date
+  escalation?: number;        // annual % increase
+  vacancyRate?: number;       // per-space vacancy override
+  notes?: string;
 }
 
 // ============================================================
@@ -126,6 +135,18 @@ export interface DealInputs {
   exitCapRate: number;              // e.g., 5.5 for 5.5%
   sellingCostPercent: number;       // e.g., 5 for 5%
 
+  // Acquisition cost breakdown (optional — sum replaces flat closingCosts when provided)
+  acquisitionCosts?: {
+    titleInsurance: number;
+    mortgageRecordingTax: number;
+    mansionTax: number;
+    transferTax: number;
+    legalFees: number;
+    inspections: number;
+    appraisal: number;
+    miscClosing: number;
+  };
+
   // T-12 Actuals — keyed by expense field name
   t12Actuals?: Record<string, number>;
   t12GrowthFactors?: Record<string, number>;  // per-field growth factor (default 1.03)
@@ -137,6 +158,14 @@ export interface DealInputs {
   _assumptions?: Record<string, boolean>;
   // Census calibration context (for display in deal notes)
   _censusContext?: string;
+  // RGB expense validation warnings (set by AI assumptions engine)
+  _expenseWarnings?: string[];
+  // RGB benchmark comparison data (set by AI assumptions engine)
+  _rgbBenchmarkComparison?: {
+    expenseRatio: { ai: number; benchmark: number };
+    taxesPerUnit: { ai: number; benchmark: number };
+    totalPerUnit: { ai: number; benchmark: number };
+  };
 }
 
 export interface CashFlowYear {
@@ -219,6 +248,9 @@ export interface DealOutputs {
   exitValue: number;
   loanBalanceAtExit: number;
   exitProceeds: number;
+
+  // Cap rate on total project cost (incl. reno + closing)
+  capRateOnCost: number;
 
   // Sensitivity
   sensitivity: {
@@ -450,10 +482,20 @@ export function calculateNOI(inputs: DealInputs) {
 // ============================================================
 // Debt Service Calculation
 // ============================================================
+/** Resolve closing costs: use itemized acquisitionCosts if provided, else flat closingCosts */
+function resolveAcquisitionCosts(inputs: DealInputs): number {
+  if (inputs.acquisitionCosts) {
+    const ac = inputs.acquisitionCosts;
+    return ac.titleInsurance + ac.mortgageRecordingTax + ac.mansionTax + ac.transferTax + ac.legalFees + ac.inspections + ac.appraisal + ac.miscClosing;
+  }
+  return inputs.closingCosts;
+}
+
 export function calculateDebtService(inputs: DealInputs) {
   const loanAmount = inputs.purchasePrice * (inputs.ltvPercent / 100);
   const originationFee = loanAmount * (inputs.originationFeePercent / 100);
-  const totalEquity = inputs.purchasePrice - loanAmount + inputs.closingCosts + inputs.renovationBudget + originationFee;
+  const effectiveClosingCosts = resolveAcquisitionCosts(inputs);
+  const totalEquity = inputs.purchasePrice - loanAmount + effectiveClosingCosts + inputs.renovationBudget + originationFee;
 
   // Interest-only payment
   const ioMonthlyPayment = loanAmount * (inputs.interestRate / 100 / 12);
@@ -686,6 +728,10 @@ export function calculateAll(inputs: DealInputs): DealOutputs {
   const cashFlows = calculateCashFlowWaterfall(inputs);
   const sensitivity = calculateSensitivity(inputs);
 
+  const effectiveClosing = resolveAcquisitionCosts(inputs);
+  const totalProjectCost = inputs.purchasePrice + effectiveClosing + inputs.renovationBudget;
+  const capRateOnCost = totalProjectCost > 0 ? (noiResult.noi / totalProjectCost) * 100 : 0;
+
   const sources: { label: string; amount: number }[] = [
     { label: "Senior Debt", amount: Math.round(debtResult.loanAmount) },
     { label: "Equity", amount: Math.round(debtResult.totalEquity) },
@@ -693,9 +739,21 @@ export function calculateAll(inputs: DealInputs): DealOutputs {
 
   const uses: { label: string; amount: number }[] = [
     { label: "Purchase Price", amount: inputs.purchasePrice },
-    { label: "Closing Costs", amount: Math.round(inputs.closingCosts) },
-    { label: "Origination Fee", amount: Math.round(debtResult.originationFee) },
   ];
+
+  // Itemize closing costs when acquisitionCosts breakdown is available
+  if (inputs.acquisitionCosts) {
+    const ac = inputs.acquisitionCosts;
+    if (ac.transferTax > 0) uses.push({ label: "Transfer Taxes", amount: Math.round(ac.transferTax) });
+    if (ac.mansionTax > 0) uses.push({ label: "Mansion Tax", amount: Math.round(ac.mansionTax) });
+    if (ac.mortgageRecordingTax > 0) uses.push({ label: "Mortgage Recording Tax", amount: Math.round(ac.mortgageRecordingTax) });
+    const titleLegal = ac.titleInsurance + ac.legalFees + ac.inspections + ac.appraisal + ac.miscClosing;
+    if (titleLegal > 0) uses.push({ label: "Title + Legal + Other", amount: Math.round(titleLegal) });
+  } else {
+    uses.push({ label: "Closing Costs", amount: Math.round(inputs.closingCosts) });
+  }
+
+  uses.push({ label: "Origination Fee", amount: Math.round(debtResult.originationFee) });
   if (inputs.renovationBudget > 0) {
     uses.push({ label: "Renovation", amount: inputs.renovationBudget });
   }
@@ -746,6 +804,8 @@ export function calculateAll(inputs: DealInputs): DealOutputs {
     netIncomeAmort: Math.round(returnsResult.netIncomeAmort),
 
     cashFlows,
+
+    capRateOnCost: Math.round(capRateOnCost * 100) / 100,
 
     exitNoi: Math.round(returnsResult.exitNoi),
     exitValue: Math.round(returnsResult.exitValue),

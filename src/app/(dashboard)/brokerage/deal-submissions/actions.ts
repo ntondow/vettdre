@@ -55,6 +55,7 @@ export async function getDealSubmissions(filters?: {
         include: {
           agent: true,
           invoice: { select: { id: true, invoiceNumber: true, status: true } },
+          transaction: { select: { id: true, stage: true } },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -130,6 +131,7 @@ export async function createDealSubmission(input: DealSubmissionInput & { submis
 
         coBrokeAgent: input.coBrokeAgent || null,
         coBrokeBrokerage: input.coBrokeBrokerage || null,
+        coAgents: input.coAgents && input.coAgents.length > 0 ? JSON.parse(JSON.stringify(input.coAgents)) : undefined,
 
         notes: input.notes || null,
 
@@ -197,6 +199,7 @@ export async function createPublicDealSubmission(
 
         coBrokeAgent: input.coBrokeAgent || null,
         coBrokeBrokerage: input.coBrokeBrokerage || null,
+        coAgents: input.coAgents && input.coAgents.length > 0 ? JSON.parse(JSON.stringify(input.coAgents)) : undefined,
 
         notes: input.notes || null,
 

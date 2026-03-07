@@ -4,6 +4,12 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updateDealAnalysisStatus, deleteDealAnalysis } from "./actions";
+import { generateInvestmentSummaryPdf } from "@/lib/investment-summary-pdf";
+import { assembleInvestmentSummary } from "./investment-summary-actions";
+import { hasPermission, getUpgradeMessage } from "@/lib/feature-gate";
+import { useUserPlan } from "@/components/providers/user-plan-provider";
+import { useToast } from "@/components/ui/toast";
+import { sanitizeFilename } from "@/lib/pdf-utils";
 
 interface DealItem {
   id: string;
@@ -57,9 +63,12 @@ const fmtPct = (n: number) => `${n.toFixed(1)}%`;
 
 export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[] }) {
   const router = useRouter();
+  const { plan } = useUserPlan();
+  const { toast } = useToast();
   const [view, setView] = useState<"kanban" | "table">("kanban");
   const [movingDeal, setMovingDeal] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [generatingSummaryId, setGeneratingSummaryId] = useState<string | null>(null);
 
   // Drag state
   const dragItem = useRef<string | null>(null);
@@ -92,6 +101,30 @@ export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[
       await deleteDealAnalysis(dealId);
       router.refresh();
     } catch {}
+  };
+
+  const handleGenerateSummary = async (deal: DealItem) => {
+    if (!hasPermission(plan, "investment_summary")) {
+      toast(getUpgradeMessage("investment_summary"), "info");
+      return;
+    }
+    setGeneratingSummaryId(deal.id);
+    try {
+      const payload = await assembleInvestmentSummary(deal.id);
+      const blob = generateInvestmentSummaryPdf(payload);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `Investment-Summary-${sanitizeFilename(deal.address || deal.name || "Deal")}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("Investment Summary downloaded", "success");
+    } catch (e) {
+      console.error("Summary generation failed:", e);
+      toast("Failed to generate summary", "error");
+    } finally {
+      setGeneratingSummaryId(null);
+    }
   };
 
   // Drag handlers
@@ -211,6 +244,14 @@ export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[
               title="Move to stage"
             >
               ↔
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); handleGenerateSummary(deal); }}
+              disabled={generatingSummaryId === deal.id}
+              className="text-xs text-slate-400 hover:text-emerald-600 px-1.5 py-0.5 rounded hover:bg-emerald-50 transition-colors"
+              title="Generate Investment Summary"
+            >
+              {generatingSummaryId === deal.id ? "..." : "\uD83D\uDCCA"}
             </button>
             <Link href={`/deals/new?id=${deal.id}`} className="text-xs text-slate-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors" title="Edit">
               ✎
@@ -430,6 +471,14 @@ export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[
                             <Link href={`/deals/new?id=${deal.id}`} className="text-xs text-slate-400 hover:text-blue-600 px-1.5 py-0.5 rounded hover:bg-blue-50" title="Edit">
                               ✎
                             </Link>
+                            <button
+                              onClick={() => handleGenerateSummary(deal)}
+                              disabled={generatingSummaryId === deal.id}
+                              className="text-xs text-slate-400 hover:text-emerald-600 px-1.5 py-0.5 rounded hover:bg-emerald-50"
+                              title="Generate Investment Summary"
+                            >
+                              {generatingSummaryId === deal.id ? "..." : "\uD83D\uDCCA"}
+                            </button>
                             <button onClick={() => handleDelete(deal.id)} className="text-xs text-slate-400 hover:text-red-500 px-1.5 py-0.5 rounded hover:bg-red-50" title="Delete">
                               🗑
                             </button>

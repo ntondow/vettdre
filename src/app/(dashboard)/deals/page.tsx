@@ -1,7 +1,5 @@
-import { getDealAnalyses } from "./actions";
-import DealPipeline from "./deal-pipeline";
+import { redirect } from "next/navigation";
 
-export default async function DealsPage() {
-  const deals = await getDealAnalyses();
-  return <DealPipeline initialDeals={deals} />;
+export default function DealsPage() {
+  redirect("/deals/pipeline");
 }

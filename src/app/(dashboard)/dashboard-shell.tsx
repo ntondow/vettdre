@@ -2,13 +2,15 @@
 
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
+import RouteProgress from "@/components/ui/route-progress";
 
 export default function DashboardShell({ children }: { children: React.ReactNode }) {
   const { collapsed } = useSidebar();
   const { isTrialing, trialDaysRemaining, plan, searchesRemaining } = useUserPlan();
 
   return (
-    <main className={`pb-16 md:pb-0 transition-all duration-200 ${collapsed ? "md:pl-[60px]" : "md:pl-60"}`}>
+    <main className={`min-h-dvh flex flex-col pb-16 md:pb-0 transition-all duration-200 ${collapsed ? "md:pl-[60px]" : "md:pl-60"}`}>
+      <RouteProgress />
       {/* Trial Banner */}
       {isTrialing && (
         <div className="bg-emerald-600 text-white text-center py-1.5 text-xs font-medium">

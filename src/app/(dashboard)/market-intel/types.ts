@@ -4,13 +4,19 @@
 export type Market = "nyc" | "nys" | "nj";
 
 export type MainTab =
-  | "property"
-  | "ownership"
-  | "name"
   | "map"
-  | "new-development"
-  | "distressed"
-  | "on-market";
+  | "search"
+  | "listings";
+
+// Legacy tab names → new tab redirects (for URL backwards compat)
+export const LEGACY_TAB_MAP: Record<string, MainTab> = {
+  property: "search",
+  ownership: "search",
+  name: "search",
+  "new-development": "map",
+  distressed: "map",
+  "on-market": "listings",
+};
 
 export interface FilterState {
   // Core

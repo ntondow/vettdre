@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { PaymentMethod, InvoiceStatus } from "@prisma/client";
 import type { PaymentInput } from "@/lib/bms-types";
+import { syncTransactionFromInvoice } from "@/app/(dashboard)/brokerage/transactions/actions";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -88,6 +89,11 @@ export async function recordPayment(input: PaymentInput) {
         where: { id: input.invoiceId, orgId },
         data: { status: "sent" },
       });
+    }
+
+    // Sync linked transaction when fully paid (fire-and-forget)
+    if (isFullyPaid) {
+      syncTransactionFromInvoice(input.invoiceId, "paid").catch(() => {});
     }
 
     return JSON.parse(JSON.stringify({ success: true, payment, isFullyPaid }));

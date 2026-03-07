@@ -81,7 +81,7 @@ export async function createContact(formData: FormData) {
   return { success: true };
 }
 
-export async function getContacts() {
+export async function getContacts(limit = 200, offset = 0) {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
   if (!authUser) return [];
@@ -92,6 +92,8 @@ export async function getContacts() {
     where: { orgId: org.id },
     orderBy: { createdAt: "desc" },
     include: { assignedAgent: { select: { fullName: true } } },
+    take: Math.min(limit, 500), // Cap at 500 to prevent unbounded queries
+    skip: offset,
   });
 }
 

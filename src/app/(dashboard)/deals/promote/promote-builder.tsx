@@ -241,8 +241,8 @@ export default function PromoteBuilder() {
           <Link href="/deals/new" className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors">
             Open Deal Modeler
           </Link>
-          <Link href="/pipeline" className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors">
-            View Pipeline
+          <Link href="/brokerage/transactions" className="px-4 py-2 border border-slate-200 hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-lg transition-colors">
+            View Transactions
           </Link>
         </div>
       </div>

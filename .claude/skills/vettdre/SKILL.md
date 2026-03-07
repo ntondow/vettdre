@@ -111,6 +111,8 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `contact-types.ts` | Contact type interfaces: landlord, buyer, seller, renter metadata |
 | `bms-types.ts` | BMS types, labels, Excel column aliases |
 | `invoice-pdf.ts` | Commission invoice PDF (jsPDF) |
+| `invoice-simple-pdf.ts` | Simplified invoice PDF generator |
+| `transaction-templates.ts` | Default checklist templates per transaction type (rental/sale stage→tasks) |
 
 ### Document Generation
 | File | Purpose |
@@ -160,7 +162,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `/properties` | Minimal | Empty state (needs implementation) |
 | `/prospecting` | Working | Prospect lists from Market Intel |
 | `/brokerage` | Working | Redirects to /brokerage/dashboard |
-| `/brokerage/dashboard` | Working | Stats cards, deal/invoice status charts, period selector |
+| `/brokerage/dashboard` | Working | Stats cards, deal/invoice status charts, transaction stats, period selector |
 | `/brokerage/deal-submissions` | Working | Agent deal submission queue + approval |
 | `/brokerage/invoices` | Working | Invoice generation, Excel upload, batch PDF, inline payments |
 | `/brokerage/commission-plans` | Working | Commission plan templates (flat/volume/value tiers) |
@@ -170,7 +172,9 @@ A real estate intelligence platform for NYC commercial real estate professionals
 | `/brokerage/agents` | Working | Agent roster, detail pages, Excel import, onboarding |
 | `/brokerage/agents/[id]` | Working | Agent detail: stats, plan tiers, deals, invoices |
 | `/brokerage/settings` | Working | Roles & permissions, brokerage settings, audit log (3 tabs) |
-| `/brokerage/my-deals` | Working | Agent self-service: own submissions + invoices |
+| `/brokerage/transactions` | Working | Transaction list: stats, type/stage filters, search, create modal |
+| `/brokerage/transactions/[id]` | Working | Transaction detail: stage stepper, checklist, parties, dates, notes, quick actions |
+| `/brokerage/my-deals` | Working | Agent self-service: own submissions, invoices, transactions tab |
 | `/join/agent/[token]` | Working | Public agent invite landing + accept flow |
 | `/portfolios` | Basic | Schema + basic UI |
 | `/book/[slug]` | Working | Public showing booking (no auth) |
@@ -214,13 +218,14 @@ A real estate intelligence platform for NYC commercial real estate professionals
 ### Brokerage Management System
 | File | Key Functions |
 |------|--------------|
-| `brokerage/deal-submissions/actions.ts` | `createSubmission`, `updateSubmissionStatus`, `approveSubmission`, `rejectSubmission`, `generatePublicLink` |
+| `brokerage/deal-submissions/actions.ts` | `createSubmission`, `updateSubmissionStatus`, `approveSubmission`, `rejectSubmission`, `generatePublicLink` (includes transaction relation) |
 | `brokerage/invoices/actions.ts` | `createInvoice`, `createInvoiceFromSubmission`, `markPaid`, `voidInvoice`, `validateExcelRows`, `batchCreateInvoices` |
 | `brokerage/commission-plans/actions.ts` | `createPlan`, `updatePlan`, `archivePlan`, `assignPlanToAgent`, `getAgentEffectiveSplit` |
 | `brokerage/agents/actions.ts` | `createAgent`, `updateAgent`, `updateAgentRole`, `deactivateAgent`, `deleteAgent`, `bulkCreateAgents`, `getAgentStats`, `linkAgentToUser` |
 | `brokerage/agents/onboarding-actions.ts` | `inviteAgent`, `revokeInvite`, `acceptInvite` |
 | `brokerage/settings/actions.ts` | `getBrokerageSettings`, `updateBrokerageSettings`, `getAuditLogs` |
-| `brokerage/my-deals/actions.ts` | `getMyAgent`, `getMySubmissions`, `getMyInvoices`, `getMyStats` |
+| `brokerage/transactions/actions.ts` | `createTransaction`, `getTransactions`, `getTransactionStats`, `updateTransaction`, `advanceStage`, `revertStage`, `cancelTransaction`, `addTask`, `toggleTask`, `deleteTask`, `createTransactionFromSubmission`, `getRecentActiveTransactions` |
+| `brokerage/my-deals/actions.ts` | `getMyAgent`, `getMySubmissions`, `getMyInvoices`, `getMyStats`, `getMyTransactions` |
 | `brokerage/reports/actions.ts` | `getDashboardSummary`, `getPnlReport`, `getAgentProductionReport`, `get1099PrepData`, `getDealPipelineReport`, `exportReportCSV` |
 | `brokerage/compliance/actions.ts` | `getComplianceOverview`, `getAgentComplianceDocs`, `createComplianceDoc`, `updateComplianceDoc`, `deleteComplianceDoc`, `getExpiringItems`, `refreshComplianceStatuses` |
 | `brokerage/payments/actions.ts` | `recordPayment`, `getInvoicePayments`, `getPaymentHistory`, `deletePayment`, `getPaymentSummary`, `exportPaymentHistory` |
@@ -330,7 +335,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 
 ### Enterprise = Team (all features)
 
-## Prisma Schema (42 models, 20 enums)
+## Prisma Schema (46 models, 22 enums)
 
 ### Core Multi-Tenant
 - **Organization**: name, slug, tier (free/explorer/pro/team), aiLookupsUsed/Limit
@@ -354,6 +359,12 @@ A real estate intelligence platform for NYC commercial real estate professionals
 - **Showing**: contactId, propertyId, scheduledAt, status, interestLevel, feedback
 - **ShowingSlot**: propertyAddress, startAt, endAt, isBooked, bookedByName/Email/Phone
 - **ContactPropertyInterest**: contactId, propertyId, interestLevel
+
+### Transactions
+- **Transaction**: orgId, agentId?, dealSubmissionId? (@unique), type (BmsTransactionType), stage (TransactionStage), propertyAddress, propertyName?, clientName?, clientEmail?, clientPhone?, otherPartyName?, otherPartyEmail?, otherPartyPhone?, dealValue?, commissionAmount?, leaseStartDate?, leaseEndDate?, closingDate?, contractDate?, notes, cancelReason?, tasks[]
+- **TransactionTask**: transactionId, title, stage (TransactionStage), isRequired, isCompleted, dueDate?, sortOrder
+- **TransactionTemplate**: orgId, name, type (BmsTransactionType), isDefault, tasks[]
+- **TransactionTemplateTask**: templateId, title, stage (TransactionStage), isRequired, dueDaysFromStart?, sortOrder
 
 ### Email
 - **GmailAccount**: userId, email, accessToken, refreshToken, historyId
@@ -381,9 +392,9 @@ A real estate intelligence platform for NYC commercial real estate professionals
 
 ## Brokerage Management System (BMS)
 
-- BMS adds deal submission intake, invoice generation, commission plans, agent management, compliance tracking, payment recording, reporting, role-based access, agent onboarding, file uploads, and audit logging for running a brokerage
-- 8 models: BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment
-- 5 enums: BmsDealType (sale/lease/rental), InvoiceStatus (draft/sent/paid/void), CommissionPlanType (flat/volume_based/value_based), ComplianceDocType (license/eo_insurance/continuing_education/background_check/other), PaymentMethod (check/ach/wire/cash/stripe/other)
+- BMS adds deal submission intake, invoice generation, commission plans, agent management, compliance tracking, payment recording, reporting, transaction management, role-based access, agent onboarding, file uploads, and audit logging for running a brokerage
+- 12 models: BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment, Transaction, TransactionTask, TransactionTemplate, TransactionTemplateTask
+- 7 enums: BmsDealType (sale/lease/rental), BmsTransactionType (rental/sale), TransactionStage (10 stages), InvoiceStatus (draft/sent/paid/void), CommissionPlanType (flat/volume_based/value_based), ComplianceDocType (license/eo_insurance/continuing_education/background_check/other), PaymentMethod (check/ach/wire/cash/stripe/other)
 - Organization has `submissionToken` for public submission links
 - Server actions follow same `getCurrentOrg()` pattern via authProviderId
 - Agent self-service uses `getCurrentUserAndAgent()` — verifies User→BrokerAgent link
@@ -394,7 +405,7 @@ A real estate intelligence platform for NYC commercial real estate professionals
 - Agent roster: CRUD, detail pages, Excel/CSV import, stats aggregates
 - Agent self-service portal: `/brokerage/my-deals` — agents see own submissions + invoices, submit deals
 - Sidebar role-gating: owner/admin see "Brokerage", agents see "My Deals"
-- Brokerage sub-nav: Dashboard, Deal Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings
+- Brokerage sub-nav: Dashboard, Deal Submissions, Invoices, Transactions, Plans, Reports, Compliance, Payments, Agents, Settings
 - Reporting: dashboard summary, P&L, agent production, 1099 tax prep, deal pipeline — all with CSV export
 - Compliance: document tracking per agent (license, E&O insurance, continuing education, background check), expiry alerts (30-day window), status auto-computation
 - Payments: manual recording against invoices, partial payment tracking with progress bars, auto-status cascading (invoice → deal submission), payment history with filters, CSV export, Stripe-ready schema
@@ -423,14 +434,28 @@ A real estate intelligence platform for NYC commercial real estate professionals
 - FileAttachment model: generic entity-polymorphic file storage (entityType + entityId)
 - `bms-files.ts`: upload, list, delete — indexed by [orgId, entityType, entityId]
 
+### BMS Transaction Management
+- Tracks real estate transactions from deal submission through closing with stage-based workflow
+- Two transaction types: **rental** (application→approved→lease_signing→move_in→closed) and **sale** (offer_accepted→under_contract→due_diligence→closing→closed)
+- 10 stages in `TransactionStage` enum: application, approved, lease_signing, move_in, offer_accepted, under_contract, due_diligence, closing, closed, cancelled
+- `getStagesForType(type)` returns type-appropriate stage sequence (5 stages each)
+- Checklist system: tasks grouped by stage, required/optional, optimistic toggle UI
+- Stage advancement blocked if required tasks incomplete; `advanceStage()` returns `incompleteTasks` list
+- `createTransactionFromSubmission()` maps DealSubmission data → Transaction with template tasks
+- Default templates in `transaction-templates.ts` (rental: 16 tasks, sale: 18 tasks)
+- Transaction → DealSubmission one-to-one relation via `dealSubmissionId` (@unique)
+- Integrated into: deal submissions page (create/view transaction), agent portal (My Transactions tab), brokerage dashboard (transaction stats + recent activity)
+- Quick actions on detail page: Generate Invoice (pre-fills invoice form), View Submission (links back to source deal)
+- Permission: `transactions_view` in `bms-permissions.ts`
+
 ### BMS Feature Gates
 - bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_agent_onboarding (pro+)
 - bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+), bms_audit_log (team+), bms_file_upload (team+)
 
-### BMS File Structure (39 files)
+### BMS File Structure (45 files)
 ```
 src/app/(dashboard)/brokerage/
-  layout.tsx                    — sub-nav tabs (Dashboard, Submissions, Invoices, Plans, Reports, Compliance, Payments, Agents, Settings)
+  layout.tsx                    — sub-nav tabs (Dashboard, Submissions, Invoices, Transactions, Plans, Reports, Compliance, Payments, Agents, Settings)
   page.tsx                      — redirects to /brokerage/dashboard
   dashboard/
     page.tsx                    — stats cards, deal status chart, deal types, invoice status, period selector
@@ -478,9 +503,14 @@ src/app/(dashboard)/brokerage/
     page.tsx                    — 3-tab settings: Roles & Permissions, Settings, Audit Log
     actions.ts                  — getBrokerageSettings, updateBrokerageSettings, getAuditLogs
     audit-log.tsx               — audit log viewer (filters, table, pagination, expandable details)
+  transactions/
+    page.tsx                    — transaction list: stats, type/stage filters, search, create modal
+    actions.ts                  — server actions (CRUD, stage mgmt, task ops, stats, from-submission)
+    [id]/
+      page.tsx                  — transaction detail: stepper, checklist, parties, dates, notes, quick actions
   my-deals/
-    page.tsx                    — agent self-service: own submissions + invoices + submit
-    actions.ts                  — server actions (my agent, my submissions, my invoices, my stats)
+    page.tsx                    — agent self-service: own submissions + invoices + transactions tabs
+    actions.ts                  — server actions (my agent, my submissions, my invoices, my stats, my transactions)
 
 src/app/submit-deal/[token]/
   page.tsx                      — public submission (server component, org lookup by token)
@@ -501,6 +531,8 @@ src/lib/
   bms-files.ts                  — FileAttachment CRUD (upload, list, delete)
   bms-audit.ts                  — fire-and-forget audit logging (logAction + 6 convenience functions)
   invoice-pdf.ts                — jsPDF invoice generator (single + batch)
+  invoice-simple-pdf.ts         — simplified invoice PDF generator
+  transaction-templates.ts      — default checklist templates per transaction type (rental/sale stage→tasks)
 ```
 
 ### BMS Database Models
@@ -512,6 +544,10 @@ src/lib/
 - **ComplianceDocument**: orgId, agentId, docType (ComplianceDocType), title, description?, issueDate?, expiryDate?, fileUrl?, fileName?, fileSize?, status, notes
 - **Payment**: orgId, invoiceId, agentId?, amount (Decimal 12,2), paymentMethod (PaymentMethod), paymentDate, referenceNumber?, stripePaymentId? (@unique), stripeTransferId? (@unique), notes
 - **FileAttachment**: orgId, entityType, entityId, fileName, fileType, fileSize, storagePath, publicUrl?, uploadedBy?
+- **Transaction**: orgId, agentId?, dealSubmissionId? (@unique), type (BmsTransactionType), stage (TransactionStage), propertyAddress, propertyName?, clientName/Email/Phone?, otherPartyName/Email/Phone?, dealValue?, commissionAmount?, leaseStartDate?, leaseEndDate?, closingDate?, contractDate?, notes, cancelReason?, tasks[]
+- **TransactionTask**: transactionId, title, stage (TransactionStage), isRequired, isCompleted, dueDate?, sortOrder
+- **TransactionTemplate**: orgId, name, type (BmsTransactionType), isDefault, tasks[]
+- **TransactionTemplateTask**: templateId, title, stage (TransactionStage), isRequired, dueDaysFromStart?, sortOrder
 
 ## Socrata API Patterns
 

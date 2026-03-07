@@ -42,7 +42,26 @@ function checkPublicOwner(name: string): boolean {
 }
 
 export async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
-  // Try Geocodio first for rooftop accuracy
+  // Try NYC GeoSearch first — free, no key, NYC-optimized with rooftop accuracy
+  try {
+    const q = encodeURIComponent(query.trim());
+    const res = await fetch(
+      `https://geosearch.planninglabs.nyc/v2/search?text=${q}&size=1`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const feat = data?.features?.[0];
+      if (feat?.geometry?.coordinates) {
+        const [lng, lat] = feat.geometry.coordinates;
+        if (lat && lng) return { lat, lng };
+      }
+    }
+  } catch (err) {
+    console.error("NYC GeoSearch fallback:", err);
+  }
+
+  // Fallback to Geocodio for rooftop accuracy
   try {
     const { geocodeAddress: geocodioGeocode, getGeocodioBudget } = await import("@/lib/geocodio");
     const budget = getGeocodioBudget();
@@ -75,6 +94,20 @@ export async function geocodeAddress(query: string): Promise<{ lat: number; lng:
   }
 }
 
+// Ray-casting point-in-polygon algorithm
+// polygon is an array of [lat, lng] pairs defining the polygon boundary
+function isPointInPolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i]; // [lat, lng]
+    const [yj, xj] = polygon[j];
+    const intersect = ((xi > lng) !== (xj > lng)) &&
+      (lat < (yi - yj) * (lng - xj) / (xi - xj) + yj);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 export async function fetchPropertiesInBounds(
   swLat: number, swLng: number, neLat: number, neLng: number,
   filters?: {
@@ -89,18 +122,20 @@ export async function fetchPropertiesInBounds(
     zoneDist?: string;
     excludePublic?: boolean;
     ownerName?: string;
-  }
+  },
+  polygons?: [number, number][][], // Optional polygons for precise spatial filtering (point-in-any-polygon OR logic)
 ) {
-  console.log("=== MAP FETCH ===", swLat, swLng, "to", neLat, neLng);
-
   // IMPORTANT: Do NOT quote numeric values — Socrata SODA does string comparison
   // on quoted values, which breaks negative longitude comparisons entirely.
   const conditions: string[] = [
+    `unitsres > 0`,
+    `address IS NOT NULL`,
+    `address != ''`,
+    `NOT starts_with(address, '0 ')`,
     `latitude > ${swLat}`,
     `latitude < ${neLat}`,
     `longitude > ${swLng}`,
     `longitude < ${neLng}`,
-    `unitsres > 0`,
   ];
 
   if (filters?.minUnits) conditions.push(`unitsres >= ${filters.minUnits}`);
@@ -118,7 +153,7 @@ export async function fetchPropertiesInBounds(
     const url = new URL(NYC + "/" + PLUTO + ".json");
     url.searchParams.set("$where", conditions.join(" AND "));
     url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea,zipcode");
-    url.searchParams.set("$limit", "400");
+    url.searchParams.set("$limit", "2000");
     url.searchParams.set("$order", "unitsres DESC");
 
     const res = await fetch(url.toString());
@@ -126,7 +161,7 @@ export async function fetchPropertiesInBounds(
 
     const data = await res.json();
 
-    const properties = data.map((p: any) => ({
+    let properties = data.map((p: any) => ({
       address: p.address || "",
       ownerName: p.ownername || "",
       unitsRes: parseInt(p.unitsres || "0"),
@@ -145,8 +180,16 @@ export async function fetchPropertiesInBounds(
       lotArea: parseInt(p.lotarea || "0"),
       borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
       zip: p.zipcode || "",
+      ntaName: "",
     })).filter((p: any) => p.lat !== 0 && p.lng !== 0)
       .filter((p: any) => filters?.excludePublic ? !checkPublicOwner(p.ownerName) : true);
+
+    // Post-filter by polygons if provided (precision spatial filtering — OR logic)
+    if (polygons && polygons.length > 0) {
+      properties = properties.filter((p: any) =>
+        polygons.some(poly => poly.length >= 3 && isPointInPolygon(p.lat, p.lng, poly)),
+      );
+    }
 
     const total = properties.length;
 
@@ -154,6 +197,66 @@ export async function fetchPropertiesInBounds(
   } catch (err) {
     console.error("Map fetch error:", err);
     return { properties: [], total: 0 };
+  }
+}
+
+// ============================================================
+// Single property lookup by lat/lng — no filters, for address search override
+// ============================================================
+
+export async function fetchPropertyAtLocation(
+  lat: number, lng: number,
+): Promise<{
+  address: string; ownerName: string; unitsRes: number; unitsTot: number;
+  yearBuilt: number; numFloors: number; assessTotal: number; bldgClass: string;
+  zoneDist: string; boroCode: string; block: string; lot: string;
+  lat: number; lng: number; bldgArea: number; lotArea: number; borough: string;
+  zip: string; ntaName: string;
+} | null> {
+  const RADIUS = 0.001; // ~110m — covers geocoder-to-PLUTO centroid offset
+  try {
+    const url = new URL(NYC + "/" + PLUTO + ".json");
+    url.searchParams.set("$where", [
+      `latitude > ${lat - RADIUS}`,
+      `latitude < ${lat + RADIUS}`,
+      `longitude > ${lng - RADIUS}`,
+      `longitude < ${lng + RADIUS}`,
+    ].join(" AND "));
+    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea,zipcode");
+    url.searchParams.set("$limit", "1");
+    url.searchParams.set("$order", "unitsres DESC");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+
+    const p = data[0];
+    return {
+      address: p.address || "",
+      ownerName: p.ownername || "",
+      unitsRes: parseInt(p.unitsres || "0"),
+      unitsTot: parseInt(p.unitstotal || "0"),
+      yearBuilt: parseInt(p.yearbuilt || "0"),
+      numFloors: parseInt(p.numfloors || "0"),
+      assessTotal: parseInt(p.assesstot || "0"),
+      bldgClass: p.bldgclass || "",
+      zoneDist: p.zonedist1 || "",
+      boroCode: p.borocode || "",
+      block: p.block || "",
+      lot: p.lot || "",
+      lat: parseFloat(p.latitude || "0"),
+      lng: parseFloat(p.longitude || "0"),
+      bldgArea: parseInt(p.bldgarea || "0"),
+      lotArea: parseInt(p.lotarea || "0"),
+      borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+      zip: p.zipcode || "",
+      ntaName: "",
+    };
+  } catch (err) {
+    console.error("Fetch property at location error:", err);
+    return null;
   }
 }
 

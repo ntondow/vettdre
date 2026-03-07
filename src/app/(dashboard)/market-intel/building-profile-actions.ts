@@ -354,17 +354,17 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
           issuedDate: e.issueddate || "",
           violationNumber: e.violationnumber || "",
           status: e.ecbviolationstatus || "",
-          penaltyApplied: parseFloat(e.penaltyapplied || "0"),
-          penaltyBalance: parseFloat(e.penaltybalancedue || "0"),
-          amountPaid: parseFloat(e.amountpaid || "0"),
-          amountBalDue: parseFloat(e.amountbaldue || "0"),
+          penaltyApplied: parseFloat(e.penaltyapplied || "0") || 0,
+          penaltyBalance: parseFloat(e.penaltybalancedue || "0") || 0,
+          amountPaid: parseFloat(e.amountpaid || "0") || 0,
+          amountBalDue: parseFloat(e.amountbaldue || "0") || 0,
           infraction: e.infraction_codes || e.section_of_law || "",
           respondent: e.respondentname || "",
           severity: e.severity || "",
         }));
         results.ecbSummary.total = data.length;
         results.ecbSummary.active = data.filter((e: any) => e.ecbviolationstatus === "RESOLVE" ? false : true).length;
-        results.ecbSummary.totalPenalty = data.reduce((sum: number, e: any) => sum + parseFloat(e.penaltybalancedue || "0"), 0);
+        results.ecbSummary.totalPenalty = data.reduce((sum: number, e: any) => sum + (parseFloat(e.penaltybalancedue || "0") || 0), 0);
       }
     } catch (err) { console.error("DOB ECB error:", err); }
   })());
@@ -420,7 +420,7 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
           results.speculation = {
             onWatchList: true,
             deedDate: data[0].deeddate || "",
-            salePrice: parseFloat(data[0].saleprice || "0"),
+            salePrice: parseFloat(data[0].saleprice || "0") || 0,
             capRate: data[0].caprate || "",
             boroughMedianCap: data[0].boroughmedian || "",
           };
@@ -1552,4 +1552,33 @@ export async function searchByEnergyGrade(filters: {
     console.error("LL84 search error:", err);
     return [];
   }
+}
+
+// ============================================================
+// Prefetch — Cache warming for hover-prefetch and search results
+// ============================================================
+
+/**
+ * Warms the in-process cache for a building so that when the user
+ * opens the profile, Phase 1 data is already available.
+ * Called on hover (debounced 300ms) and for top-N search results.
+ */
+export async function prefetchBuilding(bbl: string): Promise<void> {
+  const { prefetchBuildingCritical, prefetchBuildingStandard } = await import("@/lib/data-fusion-engine");
+  await Promise.all([
+    prefetchBuildingCritical(bbl),
+    prefetchBuildingStandard(bbl),
+  ]);
+}
+
+/**
+ * Lightweight PLUTO-only lookup for tooltip previews on map markers.
+ * Returns basic property summary or null if not found.
+ */
+export async function getPlutoPreview(bbl: string): Promise<{
+  address: string; ownerName: string; units: number; yearBuilt: number;
+  stories: number; assessedValue: number; zoning: string; borough: string;
+} | null> {
+  const { getPlutoBasics } = await import("@/lib/data-fusion-engine");
+  return getPlutoBasics(bbl);
 }

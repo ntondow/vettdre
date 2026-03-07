@@ -4,7 +4,7 @@ import { useState } from "react";
 import { searchNewDevelopments } from "../new-development-actions";
 import type { NewDevelopment } from "../new-development-actions";
 import { createContactFromBuilding } from "../building-profile-actions";
-import { getLists, addBuildingToList } from "../../prospecting/actions";
+import { getLists, addBuildingToList } from "../prospecting-actions";
 import { getNeighborhoodNameByZip, getZipCodesForNeighborhoods } from "@/lib/neighborhoods";
 import NeighborhoodDropdown from "../neighborhood-dropdown";
 import type { FilterState } from "../types";
@@ -145,7 +145,7 @@ export default function NewDevelopmentSearch({ filters }: NewDevelopmentSearchPr
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/prospecting" className="text-blue-600 hover:underline">Create one first</a></p>
+                <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/market-intel" className="text-blue-600 hover:underline">Create one first</a></p>
               )}
             </div>
           </div>

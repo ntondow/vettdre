@@ -3,16 +3,19 @@
 import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { getAgentById, getAgentStats, updateAgent, deactivateAgent, reactivateAgent } from "../actions";
+import { inviteAgent, revokeInvite } from "../onboarding-actions";
 import { getCommissionPlans } from "../../commission-plans/actions";
 import { getBrokerageConfig } from "../../invoices/actions";
 import { getAgentComplianceDocs, createComplianceDoc, deleteComplianceDoc } from "../../compliance/actions";
+import { getAgentDashboard } from "../../leaderboard/actions";
 import { generateInvoicePDF } from "@/lib/invoice-pdf";
+import { BADGE_DEFINITIONS } from "@/lib/agent-badges";
 import {
   COMMISSION_PLAN_TYPE_LABELS,
   COMPLIANCE_DOC_TYPE_LABELS,
   COMPLIANCE_STATUS_COLORS,
 } from "@/lib/bms-types";
-import type { BrokerageConfig, ComplianceDocType } from "@/lib/bms-types";
+import type { BrokerageConfig, ComplianceDocType, AgentDashboardData } from "@/lib/bms-types";
 import {
   ArrowLeft,
   Edit3,
@@ -43,6 +46,11 @@ import {
   Search,
   ChevronLeft,
   ChevronRight,
+  Trophy,
+  Flame,
+  Target,
+  Copy,
+  Link2,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -85,8 +93,8 @@ function dateStatus(d: string | null | undefined): "active" | "expired" | "expir
 const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
-const STATUS_LABELS: Record<string, string> = { active: "Active", inactive: "Inactive", terminated: "Terminated" };
-const STATUS_COLORS: Record<string, string> = { active: "bg-green-100 text-green-700", inactive: "bg-gray-100 text-gray-700", terminated: "bg-red-100 text-red-700" };
+const STATUS_LABELS: Record<string, string> = { pending: "Pending", active: "Active", inactive: "Inactive", terminated: "Terminated" };
+const STATUS_COLORS: Record<string, string> = { pending: "bg-amber-100 text-amber-700", active: "bg-green-100 text-green-700", inactive: "bg-gray-100 text-gray-700", terminated: "bg-red-100 text-red-700" };
 
 const DEAL_STATUS_COLORS: Record<string, string> = {
   submitted: "bg-blue-100 text-blue-700",
@@ -104,9 +112,9 @@ const INVOICE_STATUS_COLORS: Record<string, string> = {
   void: "bg-red-100 text-red-700",
 };
 
-const TABS = ["overview", "deals", "invoices", "compliance", "notes"] as const;
+const TABS = ["overview", "deals", "invoices", "compliance", "performance", "notes"] as const;
 type TabId = (typeof TABS)[number];
-const TAB_LABELS: Record<TabId, string> = { overview: "Overview", deals: "Deals", invoices: "Invoices", compliance: "Compliance", notes: "Notes" };
+const TAB_LABELS: Record<TabId, string> = { overview: "Overview", deals: "Deals", invoices: "Invoices", compliance: "Compliance", performance: "Performance", notes: "Notes" };
 
 const DEAL_STATUS_TABS = ["all", "submitted", "under_review", "approved", "invoiced", "paid", "rejected"] as const;
 const INVOICE_STATUS_TABS = ["all", "draft", "sent", "paid", "void"] as const;
@@ -188,6 +196,14 @@ export default function AgentDetailPage({
   const [compForm, setCompForm] = useState({ docType: "license" as ComplianceDocType, title: "", issueDate: "", expiryDate: "", notes: "" });
   const [compFormSubmitting, setCompFormSubmitting] = useState(false);
 
+  // Performance data
+  const [perfData, setPerfData] = useState<AgentDashboardData | null>(null);
+  const [perfLoading, setPerfLoading] = useState(true);
+
+  // Invite management
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const [inviteActionLoading, setInviteActionLoading] = useState(false);
+
   // ── Load ──────────────────────────────────────────────────
 
   async function loadAgent() {
@@ -213,9 +229,22 @@ export default function AgentDetailPage({
     }
   }
 
+  async function loadPerformance() {
+    setPerfLoading(true);
+    try {
+      const data = await getAgentDashboard(id);
+      setPerfData(data);
+    } catch {
+      setPerfData(null);
+    } finally {
+      setPerfLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadAgent();
     loadCompliance();
+    loadPerformance();
     getBrokerageConfig().then((c) => setBrokerageConfig(c)).catch(() => {});
     getCommissionPlans().then((r) => setPlans(r.plans || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,13 +329,46 @@ export default function AgentDetailPage({
   async function handleToggleStatus() {
     if (!agent) return;
     setActionLoading(true);
-    if (agent.status === "active") {
+    if (agent.status === "active" || agent.status === "pending") {
       await deactivateAgent(id);
     } else {
       await reactivateAgent(id);
     }
     setActionLoading(false);
     loadAgent();
+  }
+
+  async function handleCopyInviteLink() {
+    if (!agent?.inviteToken) return;
+    const url = `${window.location.origin}/join/agent/${agent.inviteToken}`;
+    await navigator.clipboard.writeText(url);
+    setInviteCopied(true);
+    setTimeout(() => setInviteCopied(false), 2000);
+  }
+
+  async function handleRegenerateInvite() {
+    setInviteActionLoading(true);
+    try {
+      const result = await inviteAgent(id);
+      if (result.inviteUrl) {
+        await navigator.clipboard.writeText(result.inviteUrl);
+        setInviteCopied(true);
+        setTimeout(() => setInviteCopied(false), 2000);
+      }
+      loadAgent();
+    } finally {
+      setInviteActionLoading(false);
+    }
+  }
+
+  async function handleRevokeInvite() {
+    setInviteActionLoading(true);
+    try {
+      await revokeInvite(id);
+      loadAgent();
+    } finally {
+      setInviteActionLoading(false);
+    }
   }
 
   function downloadInvoicePDF(inv: any) {
@@ -668,12 +730,12 @@ export default function AgentDetailPage({
               onClick={handleToggleStatus}
               disabled={actionLoading}
               className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium rounded-lg disabled:opacity-50 transition-colors ${
-                agent.status === "active"
+                agent.status === "active" || agent.status === "pending"
                   ? "text-amber-700 bg-amber-50 border border-amber-200 hover:bg-amber-100"
                   : "text-green-700 bg-green-50 border border-green-200 hover:bg-green-100"
               }`}
             >
-              {agent.status === "active" ? (
+              {agent.status === "active" || agent.status === "pending" ? (
                 <><UserX className="h-4 w-4" /> Deactivate</>
               ) : (
                 <><UserCheck className="h-4 w-4" /> Reactivate</>
@@ -682,6 +744,78 @@ export default function AgentDetailPage({
           </div>
         </div>
       </div>
+
+      {/* ── Pending Invite Banner ──────────────────────── */}
+      {agent.status === "pending" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <Link2 className="h-4.5 w-4.5 text-amber-600" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-amber-800 mb-1">Pending Onboarding</h3>
+              <p className="text-sm text-amber-700 mb-3">
+                This agent hasn&apos;t accepted their invite yet.
+              </p>
+
+              {agent.inviteToken ? (
+                <>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="flex-1 min-w-0 bg-white border border-amber-200 rounded-lg px-3 py-2">
+                      <p className="text-xs text-slate-500 truncate font-mono">
+                        {typeof window !== "undefined"
+                          ? `${window.location.origin}/join/agent/${agent.inviteToken}`
+                          : `/join/agent/${agent.inviteToken}`}
+                      </p>
+                    </div>
+                    <button
+                      onClick={handleCopyInviteLink}
+                      className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-white border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors flex-shrink-0"
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                      {inviteCopied ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={handleRegenerateInvite}
+                      disabled={inviteActionLoading}
+                      className="text-xs font-medium text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                    >
+                      Regenerate Link
+                    </button>
+                    <span className="text-amber-300">|</span>
+                    <button
+                      onClick={handleRevokeInvite}
+                      disabled={inviteActionLoading}
+                      className="text-xs font-medium text-red-600 hover:text-red-800 disabled:opacity-50"
+                    >
+                      Revoke Invite
+                    </button>
+                    {agent.invitedAt && (
+                      <>
+                        <span className="text-amber-300">|</span>
+                        <span className="text-xs text-amber-600">
+                          Invited {fmtDate(agent.invitedAt)}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <button
+                  onClick={handleRegenerateInvite}
+                  disabled={inviteActionLoading}
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-amber-700 bg-white border border-amber-300 rounded-lg hover:bg-amber-50 transition-colors disabled:opacity-50"
+                >
+                  <Link2 className="h-3.5 w-3.5" />
+                  {inviteActionLoading ? "Generating..." : "Generate Invite Link"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Stats Cards ──────────────────────────────────── */}
       {stats && (
@@ -1196,6 +1330,160 @@ export default function AgentDetailPage({
       )}
 
       {/* ── Tab: Notes & Activity ────────────────────────── */}
+      {/* ── Performance Tab ────────────────────────────────── */}
+      {activeTab === "performance" && (
+        <div className="space-y-6">
+          {perfLoading && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-28 bg-slate-100 animate-pulse rounded-xl" />
+                ))}
+              </div>
+              <div className="h-40 bg-slate-100 animate-pulse rounded-xl" />
+            </div>
+          )}
+
+          {!perfLoading && !perfData && (
+            <div className="text-center py-12">
+              <Target className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 font-medium">No performance data</p>
+              <p className="text-sm text-slate-400 mt-1">Set goals for this agent to see performance data</p>
+            </div>
+          )}
+
+          {!perfLoading && perfData && (
+            <>
+              {/* Summary stats */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Trophy className="h-4 w-4 text-amber-500" />
+                    <span className="text-xs font-medium text-slate-500 uppercase">Rank</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">
+                    {perfData.currentRank > 0 ? `#${perfData.currentRank}` : "—"}
+                    {perfData.totalAgents > 0 && (
+                      <span className="text-sm font-normal text-slate-400"> / {perfData.totalAgents}</span>
+                    )}
+                  </p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Flame className="h-4 w-4 text-orange-500" />
+                    <span className="text-xs font-medium text-slate-500 uppercase">Streak</span>
+                  </div>
+                  <p className="text-xl font-bold text-orange-600">{perfData.streak > 0 ? `${perfData.streak} mo` : "—"}</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="h-4 w-4 text-blue-500" />
+                    <span className="text-xs font-medium text-slate-500 uppercase">Lifetime Deals</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{perfData.lifetimeStats.totalDeals}</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <DollarSign className="h-4 w-4 text-green-500" />
+                    <span className="text-xs font-medium text-slate-500 uppercase">Lifetime Rev</span>
+                  </div>
+                  <p className="text-xl font-bold text-slate-900">{fmt(perfData.lifetimeStats.totalRevenue)}</p>
+                </div>
+              </div>
+
+              {/* Current goals progress */}
+              {perfData.currentGoals && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-4">Current Month Goals</h3>
+                  <div className="space-y-3">
+                    {perfData.currentGoals.dealsClosedTarget !== null && (
+                      <GoalProgressRow
+                        label="Deals Closed"
+                        actual={perfData.currentGoals.dealsClosedActual}
+                        target={perfData.currentGoals.dealsClosedTarget}
+                        color="bg-blue-500"
+                      />
+                    )}
+                    {perfData.currentGoals.revenueTarget !== null && (
+                      <GoalProgressRow
+                        label="Revenue"
+                        actual={perfData.currentGoals.revenueActual}
+                        target={perfData.currentGoals.revenueTarget}
+                        color="bg-violet-500"
+                        isCurrency
+                      />
+                    )}
+                    {perfData.currentGoals.listingsLeasedTarget !== null && (
+                      <GoalProgressRow
+                        label="Listings Leased"
+                        actual={perfData.currentGoals.listingsLeasedActual}
+                        target={perfData.currentGoals.listingsLeasedTarget}
+                        color="bg-amber-500"
+                      />
+                    )}
+                    {perfData.currentGoals.listingsAddedTarget !== null && (
+                      <GoalProgressRow
+                        label="Listings Added"
+                        actual={perfData.currentGoals.listingsAddedActual}
+                        target={perfData.currentGoals.listingsAddedTarget}
+                        color="bg-teal-500"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Badges */}
+              <div className="bg-white border border-slate-200 rounded-xl p-5">
+                <h3 className="text-sm font-semibold text-slate-800 mb-3">Badges</h3>
+                {perfData.badges.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {perfData.badges.map((b) => (
+                      <span key={b.id} className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5">
+                        <span className="text-base">{b.icon}</span>
+                        <span className="text-xs font-medium text-slate-700">{b.name}</span>
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-slate-400">No badges earned yet</p>
+                )}
+              </div>
+
+              {/* Monthly History */}
+              {perfData.monthlyHistory.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-xl p-5">
+                  <h3 className="text-sm font-semibold text-slate-800 mb-3">Monthly History</h3>
+                  <div className="flex items-end gap-1 h-28">
+                    {perfData.monthlyHistory.slice().reverse().map((m, i) => {
+                      const maxDeals = Math.max(...perfData.monthlyHistory.map((h) => h.dealsClosed), 1);
+                      const barH = (m.dealsClosed / maxDeals) * 100;
+                      const MONTHS_SHORT = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
+                      return (
+                        <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                          <div className="w-full flex justify-center">
+                            <div
+                              className={`w-full max-w-[28px] rounded-t ${m.hitTargets ? "bg-green-500" : "bg-blue-400"}`}
+                              style={{ height: `${Math.max(barH, 4)}%` }}
+                              title={`${m.dealsClosed} deals, ${fmt(m.revenue)} rev`}
+                            />
+                          </div>
+                          <span className="text-[10px] text-slate-400">{MONTHS_SHORT[m.month - 1]}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-[10px] text-slate-500">
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-green-500 rounded-sm" /> Hit targets</div>
+                    <div className="flex items-center gap-1"><div className="w-2 h-2 bg-blue-400 rounded-sm" /> Missed</div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {activeTab === "notes" && (
         <div className="space-y-6">
           {/* Notes editor */}
@@ -1297,6 +1585,44 @@ function ComplianceRow({ label, value, expiry, status }: { label: string; value:
       <div className="flex items-center gap-1.5">
         <span className="text-slate-700 text-sm">{value}</span>
         <StatusIcon className={`h-4 w-4 ${statusColor}`} />
+      </div>
+    </div>
+  );
+}
+
+function GoalProgressRow({
+  label,
+  actual,
+  target,
+  color,
+  isCurrency,
+}: {
+  label: string;
+  actual: number;
+  target: number;
+  color: string;
+  isCurrency?: boolean;
+}) {
+  const fmtCur = (n: number) =>
+    new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(n);
+  const pct = target > 0 ? Math.round((actual / target) * 100) : 0;
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <span className="text-sm text-slate-600">{label}</span>
+        <span className="text-sm font-medium text-slate-800">
+          {isCurrency ? fmtCur(actual) : actual}
+          <span className="text-slate-400 font-normal"> / {isCurrency ? fmtCur(target) : target}</span>
+          <span className={`ml-2 text-xs font-bold ${pct >= 100 ? "text-green-600" : "text-slate-500"}`}>
+            {pct}%
+          </span>
+        </span>
+      </div>
+      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${pct >= 100 ? "bg-green-500" : color}`}
+          style={{ width: `${Math.min(pct, 100)}%` }}
+        />
       </div>
     </div>
   );

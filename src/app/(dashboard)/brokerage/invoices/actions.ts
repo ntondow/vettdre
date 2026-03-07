@@ -5,8 +5,10 @@ import { createClient } from "@/lib/supabase/server";
 import { BmsDealType, InvoiceStatus } from "@prisma/client";
 import type { ExcelDealRow } from "@/lib/bms-types";
 import { EXCEL_COLUMN_ALIASES } from "@/lib/bms-types";
-import type { InvoiceInput, BrokerageConfig } from "@/lib/bms-types";
+import type { InvoiceInput, BrokerageConfig, InvoiceNumberInput } from "@/lib/bms-types";
+import { buildInvoiceNumber } from "@/lib/bms-types";
 import { logInvoiceAction } from "@/lib/bms-audit";
+import { syncTransactionFromInvoice } from "@/app/(dashboard)/brokerage/transactions/actions";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -21,23 +23,26 @@ async function getCurrentOrg() {
 
 // ── Private Helpers ───────────────────────────────────────────
 
-async function generateInvoiceNumber(orgId: string): Promise<string> {
-  const year = new Date().getFullYear();
-  const prefix = `INV-${year}-`;
+async function generateInvoiceNumber(orgId: string, input?: InvoiceNumberInput): Promise<string> {
+  const baseNumber = buildInvoiceNumber(input ?? {});
 
-  const lastInvoice = await prisma.invoice.findFirst({
-    where: { orgId, invoiceNumber: { startsWith: prefix } },
-    orderBy: { invoiceNumber: "desc" },
-    select: { invoiceNumber: true },
+  // Ensure uniqueness within org
+  const existing = await prisma.invoice.findFirst({
+    where: { orgId, invoiceNumber: baseNumber },
+    select: { id: true },
   });
+  if (!existing) return baseNumber;
 
-  let nextNum = 1;
-  if (lastInvoice) {
-    const lastNum = parseInt(lastInvoice.invoiceNumber.replace(prefix, ""), 10);
-    if (!isNaN(lastNum)) nextNum = lastNum + 1;
+  for (let i = 2; i <= 99; i++) {
+    const candidate = `${baseNumber}${i}`;
+    const dup = await prisma.invoice.findFirst({
+      where: { orgId, invoiceNumber: candidate },
+      select: { id: true },
+    });
+    if (!dup) return candidate;
   }
 
-  return `${prefix}${String(nextNum).padStart(4, "0")}`;
+  return `${baseNumber}${Date.now().toString(36).toUpperCase()}`;
 }
 
 function addDays(date: Date, days: number): Date {
@@ -122,6 +127,7 @@ export async function getInvoices(filters?: {
           agent: { select: { id: true, firstName: true, lastName: true, email: true } },
           dealSubmission: { select: { id: true, status: true } },
           payments: { select: { amount: true } },
+          transaction: { select: { id: true, stage: true } },
         },
         orderBy: { createdAt: "desc" },
         skip,
@@ -159,7 +165,13 @@ export async function createInvoice(input: InvoiceInput) {
   try {
     const { userId, orgId } = await getCurrentOrg();
 
-    const invoiceNumber = await generateInvoiceNumber(orgId);
+    const invoiceNumber = await generateInvoiceNumber(orgId, {
+      propertyName: input.propertyName,
+      propertyAddress: input.propertyAddress,
+      unit: input.unit,
+      moveInDate: input.moveInDate || input.closingDate || undefined,
+      tenantName: input.clientName || undefined,
+    });
 
     const termsDays = parsePaymentTermsDays(input.paymentTerms || "Net 30");
     const issueDate = new Date();
@@ -324,6 +336,13 @@ export async function updateInvoiceStatus(
         where: { id: invoice.dealSubmissionId, orgId },
         data: { status: "paid" },
       }).catch(() => {});
+    }
+
+    // Sync linked transaction (fire-and-forget)
+    if (status === "sent") {
+      syncTransactionFromInvoice(invoiceId, "sent").catch(() => {});
+    } else if (status === "paid") {
+      syncTransactionFromInvoice(invoiceId, "paid").catch(() => {});
     }
 
     logInvoiceAction(orgId, { id: userId }, status, invoice.id, {
@@ -594,6 +613,8 @@ export async function bulkMarkPaid(invoiceIds: string[]) {
 
     for (const id of invoiceIds) {
       logInvoiceAction(orgId, { id: userId }, "bulk_paid", id);
+      // Sync linked transactions (fire-and-forget)
+      syncTransactionFromInvoice(id, "paid").catch(() => {});
     }
 
     return { success: true, count: result.count };

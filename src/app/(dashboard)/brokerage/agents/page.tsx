@@ -41,21 +41,23 @@ import {
 
 // ── Helpers ───────────────────────────────────────────────────
 
-const STATUS_TABS = ["all", "active", "inactive", "terminated"] as const;
+const STATUS_TABS = ["all", "active", "pending", "inactive", "terminated"] as const;
 
 const STATUS_LABELS: Record<string, string> = {
+  pending: "Pending",
   active: "Active",
   inactive: "Inactive",
   terminated: "Terminated",
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  pending: "bg-amber-100 text-amber-700",
   active: "bg-green-100 text-green-700",
   inactive: "bg-gray-100 text-gray-700",
   terminated: "bg-red-100 text-red-700",
 };
 
-const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
 interface AgentFormData {
@@ -251,6 +253,12 @@ export default function AgentsPage() {
         return;
       }
 
+      // Show invite URL after creating a new agent
+      if (showForm === "new" && result.inviteUrl) {
+        const fullUrl = `${window.location.origin}${result.inviteUrl}`;
+        setInviteUrl(fullUrl);
+      }
+
       closeForm();
       loadData();
     } finally {
@@ -353,7 +361,8 @@ export default function AgentsPage() {
   }
 
   const totalCount = Object.values(counts).reduce((s, c) => s + c, 0);
-  const uninvitedCount = agents.filter((a: any) => !a.userId && !a.inviteToken).length;
+  // Agents without inviteToken AND without userId (only happens if invite was revoked)
+  const uninvitedCount = agents.filter((a: any) => !a.userId && !a.inviteToken && a.status !== "inactive" && a.status !== "terminated").length;
 
   // ── Render ────────────────────────────────────────────────
 
@@ -361,14 +370,14 @@ export default function AgentsPage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Agent Roster</h1>
           <p className="text-sm text-slate-500 mt-1">
             Manage your brokerage agents, splits, and commission plans
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {uninvitedCount > 0 && (
             <button
               onClick={handleInviteAll}
@@ -435,7 +444,7 @@ export default function AgentsPage() {
                   {copied === "modal" ? "Copied" : "Copy"}
                 </button>
               </div>
-              <p className="text-xs text-blue-500 mt-1">Share this link with the agent. They&apos;ll sign up and be automatically linked.</p>
+              <p className="text-xs text-blue-500 mt-1">Share this link with the agent to activate their account. They&apos;ll sign up and be automatically linked.</p>
             </div>
             <button onClick={() => setInviteUrl(null)} className="text-blue-400 hover:text-blue-600 shrink-0">
               <X className="h-4 w-4" />
@@ -801,7 +810,7 @@ export default function AgentsPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search by name, email, or license..."
-          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
@@ -835,9 +844,55 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* Agent table */}
+      {/* Agent cards — mobile */}
       {!loading && agents.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:hidden">
+          {agents.map((agent: any) => {
+            const dealCount = agent._count?.dealSubmissions || 0;
+            const splitPct = Number(agent.defaultSplitPct) || 70;
+            const housePct = 100 - splitPct;
+            return (
+              <div
+                key={agent.id}
+                className="bg-white border border-slate-200 rounded-xl p-4"
+              >
+                <Link href={`/brokerage/agents/${agent.id}`} className="active:bg-slate-50 transition-colors">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-800 truncate">{agent.firstName} {agent.lastName}</p>
+                      <p className="text-xs text-slate-500 truncate">{agent.email}</p>
+                    </div>
+                    <span className={`flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[agent.status] || "bg-slate-100 text-slate-600"}`}>
+                      {STATUS_LABELS[agent.status] || agent.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-500">
+                    <span>Split: <span className="font-medium text-green-600">{splitPct}</span>/<span className="font-medium text-blue-600">{housePct}</span></span>
+                    <span>{dealCount} deal{dealCount !== 1 ? "s" : ""}</span>
+                    {agent.teamOrOffice && <span className="truncate">{agent.teamOrOffice}</span>}
+                  </div>
+                  {agent.phone && <p className="text-xs text-slate-500 mt-1">{agent.phone}</p>}
+                </Link>
+                {agent.status === "pending" && agent.inviteToken && (
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => copyInviteLink(agent.id, agent.inviteToken)}
+                      className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 transition-colors"
+                    >
+                      {copied === agent.id ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                      {copied === agent.id ? "Copied!" : "Copy Invite Link"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Agent table — desktop */}
+      {!loading && agents.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
@@ -932,16 +987,21 @@ export default function AgentsPage() {
                         </span>
                       ) : agent.inviteToken ? (
                         <div className="inline-flex items-center gap-1">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700">
-                            <Clock className="h-3 w-3" />
-                            Pending
-                          </span>
                           <button
                             onClick={() => copyInviteLink(agent.id, agent.inviteToken)}
-                            className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors"
                             title="Copy invite link"
                           >
-                            {copied === agent.id ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
+                            {copied === agent.id ? <CheckCircle2 className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                            {copied === agent.id ? "Copied" : "Copy Link"}
+                          </button>
+                          <button
+                            onClick={() => handleRevoke(agent.id)}
+                            disabled={inviteLoading === agent.id}
+                            className="p-1 text-slate-300 hover:text-red-500 disabled:opacity-50 transition-colors"
+                            title="Revoke invite"
+                          >
+                            <XCircle className="h-3.5 w-3.5" />
                           </button>
                         </div>
                       ) : (
@@ -949,10 +1009,10 @@ export default function AgentsPage() {
                           onClick={() => handleInvite(agent.id)}
                           disabled={inviteLoading === agent.id}
                           className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full text-blue-600 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 transition-colors"
-                          title="Send invite"
+                          title="Generate invite link"
                         >
                           <Mail className="h-3 w-3" />
-                          Invite
+                          Re-invite
                         </button>
                       )}
                     </td>
@@ -975,7 +1035,7 @@ export default function AgentsPage() {
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
-                        {agent.status === "active" ? (
+                        {(agent.status === "active" || agent.status === "pending") ? (
                           <button
                             onClick={() => handleDeactivate(agent.id)}
                             disabled={isActing}

@@ -31,7 +31,12 @@ import {
   Printer,
   X,
   DollarSign,
+  FolderOpen,
 } from "lucide-react";
+import {
+  STAGE_LABELS,
+} from "@/lib/transaction-templates";
+import type { TransactionStageType } from "@/lib/bms-types";
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -226,12 +231,12 @@ export default function InvoicesPage() {
     <div className="max-w-6xl mx-auto px-4 py-8">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Invoices</h1>
           <p className="text-sm text-slate-500 mt-1">Generate, track, and manage commission invoices</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => router.push("/brokerage/invoices/bulk")}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -291,7 +296,7 @@ export default function InvoicesPage() {
       </div>
 
       {/* Search + bulk actions */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -299,7 +304,7 @@ export default function InvoicesPage() {
             value={search}
             onChange={e => setSearch(e.target.value)}
             placeholder="Search by invoice #, agent, or property..."
-            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
         {selected.size > 0 && (
@@ -345,9 +350,9 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Invoice table */}
+      {/* Invoice table — desktop */}
       {!loading && invoices.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden hidden md:block">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
@@ -446,6 +451,17 @@ export default function InvoicesPage() {
                       )}
                       {hasPartialPayment && (
                         <div className="text-[10px] text-amber-600 font-medium mt-0.5">Partial</div>
+                      )}
+                      {inv.transaction && (
+                        <a
+                          href={`/brokerage/transactions/${inv.transaction.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-0.5 mt-1 text-[10px] text-teal-600 hover:text-teal-700"
+                          title={`Transaction: ${STAGE_LABELS[inv.transaction.stage as TransactionStageType] || inv.transaction.stage}`}
+                        >
+                          <FolderOpen className="h-2.5 w-2.5" />
+                          {STAGE_LABELS[inv.transaction.stage as TransactionStageType] || "Linked"}
+                        </a>
                       )}
                     </td>
 
@@ -578,6 +594,83 @@ export default function InvoicesPage() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Invoice cards — mobile */}
+      {!loading && invoices.length > 0 && (
+        <div className="space-y-3 md:hidden">
+          {invoices.map((inv: any) => {
+            const agentPayoutNum = Number(inv.agentPayout);
+            const paidAmount = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const hasPartialPayment = paidAmount > 0 && paidAmount < agentPayoutNum * 0.995;
+            const paidPct = agentPayoutNum > 0 ? Math.min(100, Math.round((paidAmount / agentPayoutNum) * 100)) : 0;
+            const canMarkPaid = inv.status === "draft" || inv.status === "sent";
+            const isActing = actionLoading === inv.id;
+            return (
+              <div key={inv.id} className="bg-white border border-slate-200 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0">
+                    <span className="font-mono font-medium text-sm text-slate-800">{inv.invoiceNumber}</span>
+                    <p className="text-sm text-slate-800 truncate mt-0.5">{inv.propertyAddress}</p>
+                    <p className="text-xs text-slate-500">{inv.agentName}</p>
+                  </div>
+                  <span className={`flex-shrink-0 px-2 py-0.5 text-xs font-medium rounded-full ${INVOICE_STATUS_COLORS[inv.status] || "bg-slate-100 text-slate-600"}`}>
+                    {INVOICE_STATUS_LABELS[inv.status] || inv.status}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm mb-2">
+                  <div>
+                    <span className="text-xs text-slate-500">Agent Payout</span>
+                    <p className="font-semibold text-green-600">{fmt(agentPayoutNum)}</p>
+                    {hasPartialPayment && (
+                      <div className="mt-1 w-24">
+                        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-green-400 rounded-full" style={{ width: `${paidPct}%` }} />
+                        </div>
+                        <span className="text-[10px] text-slate-400">{fmt(paidAmount)} paid</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs text-slate-500">House</span>
+                    <p className="text-slate-600">{fmt(Number(inv.housePayout))}</p>
+                  </div>
+                  {inv.dueDate && (
+                    <div className="text-right">
+                      <span className="text-xs text-slate-500">Due</span>
+                      <p className="text-slate-500">{fmtDate(inv.dueDate)}</p>
+                    </div>
+                  )}
+                </div>
+                {inv.transaction && (
+                  <a
+                    href={`/brokerage/transactions/${inv.transaction.id}`}
+                    className="inline-flex items-center gap-1 text-xs text-teal-600 hover:text-teal-700 mb-2"
+                  >
+                    <FolderOpen className="h-3 w-3" />
+                    Txn: {STAGE_LABELS[inv.transaction.stage as TransactionStageType] || "Linked"}
+                  </a>
+                )}
+                <div className="flex items-center gap-1 pt-2 border-t border-slate-100">
+                  <button onClick={() => downloadPDF(inv)} className="p-2 text-slate-400 hover:text-blue-600" title="Download PDF">
+                    <Download className="h-4 w-4" />
+                  </button>
+                  <button onClick={() => printPDF(inv)} className="p-2 text-slate-400 hover:text-slate-600" title="Print">
+                    <Printer className="h-4 w-4" />
+                  </button>
+                  {canMarkPaid && (
+                    <button onClick={() => handleMarkPaid(inv.id)} disabled={isActing} className="p-2 text-slate-400 hover:text-green-600 disabled:opacity-50" title="Mark Paid">
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button onClick={() => handleDelete(inv.id)} disabled={isActing} className="p-2 text-slate-400 hover:text-red-500 disabled:opacity-50 ml-auto" title="Delete">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

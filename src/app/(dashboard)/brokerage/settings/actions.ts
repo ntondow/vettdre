@@ -40,6 +40,20 @@ async function getCurrentOrg() {
 
 // ── BMS Settings Defaults ────────────────────────────────────
 
+interface PaymentInstructionsJson {
+  enabled: boolean;
+  achBankName?: string;
+  achAccountName?: string;
+  achAccountNumber?: string;
+  achRoutingNumber?: string;
+  wireBankName?: string;
+  wireAccountName?: string;
+  wireAccountNumber?: string;
+  wireRoutingNumber?: string;
+  checkPayableTo?: string;
+  otherInstructions?: string;
+}
+
 interface BmsSettingsJson {
   defaultSplitPct: number;
   defaultPaymentTerms: string;
@@ -50,7 +64,10 @@ interface BmsSettingsJson {
   invoiceNotes: string;
   invoiceLineFormat: string;
   billToMappings: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
+  paymentInstructions: PaymentInstructionsJson;
 }
+
+const DEFAULT_PAYMENT_INSTRUCTIONS: PaymentInstructionsJson = { enabled: true };
 
 const BMS_DEFAULTS: BmsSettingsJson = {
   defaultSplitPct: 70,
@@ -62,6 +79,7 @@ const BMS_DEFAULTS: BmsSettingsJson = {
   invoiceNotes: "",
   invoiceLineFormat: "rental_commission_tenant_address",
   billToMappings: {},
+  paymentInstructions: DEFAULT_PAYMENT_INSTRUCTIONS,
 };
 
 function parseBmsSettings(raw: unknown): BmsSettingsJson {
@@ -79,6 +97,9 @@ function parseBmsSettings(raw: unknown): BmsSettingsJson {
     billToMappings: (obj.billToMappings && typeof obj.billToMappings === "object" && !Array.isArray(obj.billToMappings))
       ? obj.billToMappings as BmsSettingsJson["billToMappings"]
       : BMS_DEFAULTS.billToMappings,
+    paymentInstructions: (obj.paymentInstructions && typeof obj.paymentInstructions === "object" && !Array.isArray(obj.paymentInstructions))
+      ? obj.paymentInstructions as PaymentInstructionsJson
+      : DEFAULT_PAYMENT_INSTRUCTIONS,
   };
 }
 
@@ -170,6 +191,7 @@ export async function updateBrokerageSettings(input: {
   invoiceNotes?: string;
   invoiceLineFormat?: string;
   billToMappings?: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
+  paymentInstructions?: PaymentInstructionsJson;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId, orgId, role } = await getCurrentOrgAsAdmin();
@@ -194,7 +216,8 @@ export async function updateBrokerageSettings(input: {
       input.invoicePrefix !== undefined ||
       input.invoiceNotes !== undefined ||
       input.invoiceLineFormat !== undefined ||
-      input.billToMappings !== undefined;
+      input.billToMappings !== undefined ||
+      input.paymentInstructions !== undefined;
 
     if (hasBmsFields) {
       const org = await prisma.organization.findUnique({
@@ -212,6 +235,7 @@ export async function updateBrokerageSettings(input: {
         invoiceNotes: input.invoiceNotes ?? current.invoiceNotes,
         invoiceLineFormat: input.invoiceLineFormat ?? current.invoiceLineFormat,
         billToMappings: input.billToMappings ?? current.billToMappings,
+        paymentInstructions: input.paymentInstructions ?? current.paymentInstructions,
       };
       orgUpdate.bmsSettings = merged;
     }
@@ -258,6 +282,118 @@ export async function updateBrokerageSettings(input: {
   } catch (error) {
     console.error("updateBrokerageSettings error:", error);
     return { success: false, error: "Failed to update settings" };
+  }
+}
+
+// ── Save Brokerage Logo ─────────────────────────────────────
+
+export async function saveBrokerageLogo(
+  logoUrl: string | null,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId, orgId, role } = await getCurrentOrgAsAdmin();
+
+    if (role !== "brokerage_admin") {
+      return { success: false, error: "Only brokerage administrators can update the logo" };
+    }
+
+    await prisma.brandSettings.upsert({
+      where: { orgId },
+      create: {
+        orgId,
+        logoUrl: logoUrl || null,
+      },
+      update: {
+        logoUrl: logoUrl || null,
+      },
+    });
+
+    logSettingsAction(orgId, { id: userId }, "logo_updated", {
+      logoUrl: logoUrl ? "set" : "removed",
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("saveBrokerageLogo error:", error);
+    return { success: false, error: "Failed to save logo" };
+  }
+}
+
+// ── Team Members ────────────────────────────────────────────
+
+export async function getOrgTeamMembers(): Promise<{
+  members: { id: string; fullName: string; email: string; role: string; createdAt: string }[];
+  error?: string;
+}> {
+  try {
+    const { orgId, role } = await getCurrentOrgAsAdmin();
+    if (role !== "brokerage_admin") {
+      return { members: [], error: "Only brokerage administrators can view team members" };
+    }
+
+    const users = await prisma.user.findMany({
+      where: { orgId },
+      select: { id: true, fullName: true, email: true, role: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    return JSON.parse(JSON.stringify({
+      members: users.map((u) => ({
+        id: u.id,
+        fullName: u.fullName || "",
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+      })),
+    }));
+  } catch (error) {
+    console.error("getOrgTeamMembers error:", error);
+    return { members: [], error: "Failed to load team members" };
+  }
+}
+
+export async function updateUserRole(
+  targetUserId: string,
+  newRole: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { userId, orgId, role } = await getCurrentOrgAsAdmin();
+    if (role !== "brokerage_admin") {
+      return { success: false, error: "Only brokerage administrators can change roles" };
+    }
+
+    const validRoles = ["admin", "manager", "agent", "viewer"];
+    if (!validRoles.includes(newRole)) {
+      return { success: false, error: "Invalid role" };
+    }
+
+    const target = await prisma.user.findUnique({
+      where: { id: targetUserId },
+      select: { id: true, orgId: true, role: true },
+    });
+    if (!target || target.orgId !== orgId) {
+      return { success: false, error: "User not found in your organization" };
+    }
+    if (target.role === "owner") {
+      return { success: false, error: "Cannot change the owner role" };
+    }
+
+    const oldRole = target.role;
+    await prisma.user.update({
+      where: { id: targetUserId },
+      data: { role: newRole as "admin" | "manager" | "agent" | "viewer" },
+    });
+
+    logSettingsAction(orgId, { id: userId }, "user_role_changed", {
+      userId: targetUserId,
+      oldRole,
+      newRole,
+    });
+
+    return { success: true };
+  } catch (error) {
+    console.error("updateUserRole error:", error);
+    return { success: false, error: "Failed to update role" };
   }
 }
 

@@ -45,6 +45,9 @@ export type Feature =
   // Corporate Filing
   | "bp_corp_basic"
   | "bp_corp_full"
+  // Ownership Chain & Portfolio
+  | "bp_ownership_chain"
+  | "bp_portfolio_deep"
   // Map
   | "map_search"
   // Phone & SMS
@@ -84,38 +87,81 @@ export type Feature =
   | "bms_agent_portal"
   | "bms_agent_onboarding"
   | "bms_audit_log"
-  | "bms_file_upload";
+  | "bms_file_upload"
+  // Motivation Scoring
+  | "motivation_basic"
+  | "motivation_scoring"
+  // Neighborhood Vitality
+  | "vitality_basic"
+  | "vitality_overlay"
+  // Street Intelligence
+  | "street_intel_construction"
+  | "street_intel_sales"
+  | "street_intel_violations"
+  | "street_intel_311"
+  | "building_labels"
+  | "street_view"
+  // Quick Screen
+  | "quick_screen"
+  // BOV Generation
+  | "bov_generation"
+  // Investment Summary
+  | "investment_summary"
+  // Phase 2 — granular intelligence gates
+  | "ai_ownership"
+  | "contact_enrichment"
+  | "deep_ownership"
+  | "cap_rate_analysis"
+  | "expense_benchmarks"
+  | "distress_scores";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
+// ── Free: genuine daily-use value ────────────────────────────
+// Market Intel (all 4 search modes + map), building profile basics
+// (PLUTO + HPD owner + condition + market), core BMS, CRM basics
 const FREE_FEATURES: Feature[] = [
   "nav_market_intel",
   "market_nyc",
+  "map_search",
+  "bp_owner_name",
   "bp_census_basic",
+  "bp_live_listings",
+  "bp_market_trends",
+  "bp_rpie",
+  // BMS core
+  "bms_submissions",
+  "bms_invoices",
+  "bms_agent_portal",
+  "bms_agent_onboarding",
 ];
 
+// ── Explorer: expanded research ──────────────────────────────
 const EXPLORER_FEATURES: Feature[] = [
   ...FREE_FEATURES,
   "market_nys",
   "market_nj",
-  "map_search",
   "search_unlimited",
-  "bp_owner_name",
   "bp_distress_score",
   "bp_investment_score",
-  "bp_rpie",
-  "bp_live_listings",
   "bp_web_intel",
   "bp_census_full",
-  "bp_market_trends",
   "bp_fannie_mae_loan",
   "bp_renovation_basic",
   "bp_str_basic",
   "report_basic",
   "bp_corp_basic",
+  "bp_ownership_chain",
   "deal_structure_all_cash",
+  "motivation_basic",
+  "vitality_basic",
+  "street_intel_construction",
+  "street_intel_sales",
+  "building_labels",
+  "quick_screen",
 ];
 
+// ── Pro: full intelligence suite ─────────────────────────────
 const PRO_FEATURES: Feature[] = [
   ...EXPLORER_FEATURES,
   "nav_deal_modeler",
@@ -129,6 +175,7 @@ const PRO_FEATURES: Feature[] = [
   "bp_apollo_enrichment",
   "bp_census_trends",
   "bp_corp_full",
+  "bp_portfolio_deep",
   "bp_renovation_full",
   "bp_str_full",
   "report_full",
@@ -148,12 +195,23 @@ const PRO_FEATURES: Feature[] = [
   "deal_structure_assumable",
   "deal_structure_syndication",
   "deal_structure_compare",
-  "bms_submissions",
-  "bms_invoices",
-  "bms_agent_portal",
-  "bms_agent_onboarding",
+  "motivation_scoring",
+  "vitality_overlay",
+  "street_intel_violations",
+  "street_intel_311",
+  "street_view",
+  "bov_generation",
+  "investment_summary",
+  // Phase 2 intelligence gates
+  "ai_ownership",
+  "contact_enrichment",
+  "deep_ownership",
+  "cap_rate_analysis",
+  "expense_benchmarks",
+  "distress_scores",
 ];
 
+// ── Team: brokerage management ───────────────────────────────
 const TEAM_FEATURES: Feature[] = [
   ...PRO_FEATURES,
   "nav_investors",
@@ -199,17 +257,12 @@ export function getRequiredPlan(feature: Feature): UserPlan {
 const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   market_nys: "Upgrade to Explorer to unlock NYS & NJ markets",
   market_nj: "Upgrade to Explorer to unlock NYS & NJ markets",
-  map_search: "Upgrade to Explorer to unlock Map Search",
-  bp_owner_name: "Upgrade to Explorer to see owner names",
   bp_owner_contact: "Upgrade to Pro to access owner contact info",
   bp_distress_score: "Upgrade to Explorer to see distress scores",
   bp_investment_score: "Upgrade to Explorer to see investment scores",
-  bp_rpie: "Upgrade to Explorer to see RPIE status",
-  bp_live_listings: "Upgrade to Explorer to see live listings",
   bp_web_intel: "Upgrade to Explorer to see web intelligence",
   bp_apollo_enrichment: "Upgrade to Pro to access Apollo enrichment",
   bp_census_full: "Upgrade to Explorer for full census demographics",
-  bp_market_trends: "Upgrade to Explorer for market trends and appreciation data",
   bp_fannie_mae_loan: "Upgrade to Explorer to see Fannie Mae loan status",
   bp_renovation_basic: "Upgrade to Explorer for renovation cost estimates",
   bp_renovation_full: "Upgrade to Pro for full renovation analysis, ARV, and ROI",
@@ -220,6 +273,8 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   bp_census_trends: "Upgrade to Pro for neighborhood trend data",
   bp_corp_basic: "Upgrade to Explorer to see corporate filing data",
   bp_corp_full: "Upgrade to Pro to see related entities & LLC piercing",
+  bp_ownership_chain: "Upgrade to Explorer to see ownership history timeline",
+  bp_portfolio_deep: "Upgrade to Pro for deep portfolio discovery with match sources",
   deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   nav_deal_modeler: "Upgrade to Pro to access the Deal Modeler",
   prospecting: "Upgrade to Pro to access Prospecting",
@@ -249,17 +304,33 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   promote_templates: "Upgrade to Team for waterfall templates",
   promote_sensitivity: "Upgrade to Team for sensitivity analysis",
   promote_export: "Upgrade to Team for promote export",
-  bms_submissions: "Upgrade to Pro to manage deal submissions",
-  bms_invoices: "Upgrade to Pro to generate commission invoices",
   bms_bulk_upload: "Upgrade to Team for bulk Excel invoice uploads",
   bms_agents: "Upgrade to Team for agent management",
   bms_commission_plans: "Upgrade to Team for commission plan templates",
   bms_compliance: "Upgrade to Team for compliance tracking",
   bms_payments: "Upgrade to Team for payment tracking",
-  bms_agent_portal: "Upgrade to Pro for agent self-service portal",
-  bms_agent_onboarding: "Upgrade to Pro for agent invite & onboarding",
   bms_audit_log: "Upgrade to Team for audit log tracking",
   bms_file_upload: "Upgrade to Team for file uploads",
+  motivation_basic: "Upgrade to Explorer to see seller motivation scores",
+  motivation_scoring: "Upgrade to Pro for Hot Leads and batch motivation scoring",
+  vitality_basic: "Upgrade to Explorer to see neighborhood vitality scores",
+  vitality_overlay: "Upgrade to Pro for the neighborhood vitality heatmap overlay",
+  street_intel_construction: "Upgrade to Explorer to see street-level construction activity",
+  street_intel_sales: "Upgrade to Explorer to see recent sale prices on the map",
+  building_labels: "Upgrade to Explorer to see building owner labels on the map",
+  street_intel_violations: "Upgrade to Pro to see violation density heatmap",
+  street_intel_311: "Upgrade to Pro to see 311 quality-of-life complaints",
+  street_view: "Upgrade to Pro to see Google Street View in building profiles",
+  quick_screen: "Upgrade to Explorer to screen deals instantly",
+  bov_generation: "Upgrade to Pro to generate Broker Opinion of Value reports",
+  investment_summary: "Upgrade to Pro to generate Investment Summary reports",
+  // Phase 2 intelligence gates
+  ai_ownership: "Upgrade to Pro for AI-powered ownership analysis with LLC piercing",
+  contact_enrichment: "Upgrade to Pro for direct phone numbers and verified email addresses",
+  deep_ownership: "Upgrade to Pro for ACRIS deed history, corporate filings, and ownership chain",
+  cap_rate_analysis: "Upgrade to Pro for market cap rate derivation from comparable sales",
+  expense_benchmarks: "Upgrade to Pro for RGB expense benchmarks and proforma modeling",
+  distress_scores: "Upgrade to Pro for distress scoring and investment opportunity signals",
 };
 
 export function getUpgradeMessage(feature: Feature): string {

@@ -4,7 +4,8 @@ import { useState } from "react";
 import { searchDistressedProperties } from "../building-profile-actions";
 import type { RPIERecord } from "../building-profile-actions";
 import BuildingProfile from "../building-profile";
-import { getLists, addBuildingToList } from "../../prospecting/actions";
+import ProfileModal from "../building-profile-modal";
+import { getLists, addBuildingToList } from "../prospecting-actions";
 import type { FilterState } from "../types";
 
 interface DistressedSearchProps {
@@ -19,6 +20,7 @@ export default function DistressedSearch({ filters, onNameClick }: DistressedSea
   const [distressedMinUnits, setDistressedMinUnits] = useState(filters.minUnits || "");
   const [distressedMinValue, setDistressedMinValue] = useState(filters.minValue || "");
   const [selectedProperty, setSelectedProperty] = useState<any>(null);
+  const [primaryPhone, setPrimaryPhone] = useState<string | null>(null);
   const [prospectLists, setProspectLists] = useState<any[]>([]);
   const [saveModal, setSaveModal] = useState<any>(null);
   const [saving, setSaving] = useState(false);
@@ -88,7 +90,7 @@ export default function DistressedSearch({ filters, onNameClick }: DistressedSea
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/prospecting" className="text-blue-600 hover:underline">Create one first</a></p>
+                <p className="text-sm text-slate-400 text-center py-4">No lists yet. <a href="/market-intel" className="text-blue-600 hover:underline">Create one first</a></p>
               )}
             </div>
           </div>
@@ -189,15 +191,23 @@ export default function DistressedSearch({ filters, onNameClick }: DistressedSea
       )}
 
       {selectedProperty && (
-        <BuildingProfile
-          boroCode={selectedProperty.boroCode}
-          block={selectedProperty.block}
-          lot={selectedProperty.lot}
+        <ProfileModal
           address={selectedProperty.address}
           borough={selectedProperty.borough}
+          primaryPhone={primaryPhone}
           onClose={() => setSelectedProperty(null)}
-          onNameClick={(name) => { onNameClick?.(name); }}
-        />
+        >
+          <BuildingProfile
+            boroCode={selectedProperty.boroCode}
+            block={selectedProperty.block}
+            lot={selectedProperty.lot}
+            address={selectedProperty.address}
+            borough={selectedProperty.borough}
+            onClose={() => setSelectedProperty(null)}
+            onNameClick={(name) => { onNameClick?.(name); }}
+            onPrimaryPhoneChange={setPrimaryPhone}
+          />
+        </ProfileModal>
       )}
     </>
   );

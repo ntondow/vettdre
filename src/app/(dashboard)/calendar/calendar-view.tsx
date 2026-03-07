@@ -1230,7 +1230,7 @@ function UnifiedEventModal({
               {event.dealName && (
                 <div className="flex items-center gap-2.5 text-sm">
                   <span className="text-slate-400 flex-shrink-0 text-xs w-4 text-center">💰</span>
-                  <Link href="/pipeline" className="text-purple-600 font-medium hover:underline">
+                  <Link href="/brokerage/transactions" className="text-purple-600 font-medium hover:underline">
                     {event.dealName}
                   </Link>
                 </div>

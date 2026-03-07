@@ -8,7 +8,9 @@ import {
   getPublicSubmissionLink,
   createDealSubmission,
 } from "./actions";
+import { useRouter } from "next/navigation";
 import { createInvoiceFromSubmission } from "../invoices/actions";
+import { createTransactionFromSubmission } from "../transactions/actions";
 import SubmissionForm from "./submission-form";
 import type { SubmissionFormData } from "./submission-form";
 import {
@@ -16,6 +18,11 @@ import {
   SUBMISSION_STATUS_COLORS,
   DEAL_TYPE_LABELS,
 } from "@/lib/bms-types";
+import {
+  STAGE_LABELS,
+  STAGE_COLORS,
+} from "@/lib/transaction-templates";
+import type { TransactionStageType } from "@/lib/bms-types";
 import {
   CheckCircle,
   XCircle,
@@ -27,6 +34,8 @@ import {
   Trash2,
   ChevronDown,
   X,
+  ClipboardList,
+  ExternalLink,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -47,6 +56,7 @@ const STATUS_TABS = ["all", "submitted", "approved", "invoiced", "paid", "reject
 // ── Component ─────────────────────────────────────────────────
 
 export default function DealSubmissionsPage() {
+  const router = useRouter();
   const [submissions, setSubmissions] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
@@ -123,6 +133,17 @@ export default function DealSubmissionsPage() {
     loadData();
   }
 
+  async function handleCreateTransaction(submissionId: string) {
+    setActionLoading(submissionId);
+    try {
+      const tx = await createTransactionFromSubmission(submissionId);
+      router.push(`/brokerage/transactions/${tx.id}`);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to create transaction");
+      setActionLoading(null);
+    }
+  }
+
   async function handleDelete(id: string) {
     if (!confirm("Delete this submission? This cannot be undone.")) return;
     setActionLoading(id);
@@ -188,12 +209,12 @@ export default function DealSubmissionsPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
 
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Deal Submissions</h1>
           <p className="text-sm text-slate-500 mt-1">Review and approve agent deal submissions</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={handleShowPublicLink}
             className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
@@ -255,7 +276,7 @@ export default function DealSubmissionsPage() {
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by address, agent, or client..."
-          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
 
@@ -305,6 +326,11 @@ export default function DealSubmissionsPage() {
                       </span>
                       {s.submissionSource === "external" && (
                         <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-orange-100 text-orange-700">External</span>
+                      )}
+                      {s.transaction && (
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STAGE_COLORS[s.transaction.stage as TransactionStageType] || "bg-slate-100 text-slate-600"}`}>
+                          {STAGE_LABELS[s.transaction.stage as TransactionStageType] || s.transaction.stage}
+                        </span>
                       )}
                     </div>
                     <ChevronDown className={`h-4 w-4 text-slate-400 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
@@ -454,6 +480,28 @@ export default function DealSubmissionsPage() {
                         <span className="text-sm text-purple-600 font-medium">
                           {s.invoice.invoiceNumber}
                         </span>
+                      )}
+
+                      {/* Transaction actions — show on approved+ submissions */}
+                      {["approved", "invoiced", "paid"].includes(s.status) && (
+                        s.transaction ? (
+                          <a
+                            href={`/brokerage/transactions/${s.transaction.id}`}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 transition-colors"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            View Transaction
+                          </a>
+                        ) : (
+                          <button
+                            onClick={() => handleCreateTransaction(s.id)}
+                            disabled={isActing}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-teal-700 border border-teal-200 rounded-lg hover:bg-teal-50 disabled:opacity-50 transition-colors"
+                          >
+                            <ClipboardList className="h-4 w-4" />
+                            Create Transaction
+                          </button>
+                        )
                       )}
 
                       <div className="flex-1" />

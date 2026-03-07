@@ -41,6 +41,7 @@ export async function inviteAgent(
         inviteToken: token,
         invitedAt: new Date(),
         inviteEmail: agent.email,
+        status: "pending",
       },
     });
 
@@ -114,7 +115,14 @@ export async function bulkInviteAgents(
 
 export async function getInviteDetails(
   token: string,
-): Promise<{ agentName: string; brokerageName: string; agentEmail: string } | null> {
+): Promise<{
+  agentName: string;
+  agentEmail: string;
+  agentRole: string;
+  brokerageName: string;
+  brokerageLogo?: string;
+  brokerageColor?: string;
+} | null> {
   try {
     const agent = await prisma.brokerAgent.findUnique({
       where: { inviteToken: token },
@@ -122,7 +130,9 @@ export async function getInviteDetails(
         firstName: true,
         lastName: true,
         inviteEmail: true,
+        brokerageRole: true,
         userId: true,
+        orgId: true,
         organization: { select: { name: true } },
       },
     });
@@ -132,10 +142,19 @@ export async function getInviteDetails(
     // Already accepted
     if (agent.userId) return null;
 
+    // Fetch brokerage branding
+    const branding = await prisma.brandSettings.findUnique({
+      where: { orgId: agent.orgId },
+      select: { logoUrl: true, primaryColor: true, companyName: true },
+    });
+
     return {
       agentName: `${agent.firstName} ${agent.lastName}`,
-      brokerageName: agent.organization.name,
       agentEmail: agent.inviteEmail || "",
+      agentRole: agent.brokerageRole,
+      brokerageName: branding?.companyName || agent.organization.name,
+      brokerageLogo: branding?.logoUrl || undefined,
+      brokerageColor: branding?.primaryColor || undefined,
     };
   } catch (error) {
     console.error("getInviteDetails error:", error);
@@ -176,22 +195,34 @@ export async function acceptInvite(
       return { success: false, error: "Your account is already linked to another agent profile" };
     }
 
+    // Link user to agent, set status active, clear token
     await prisma.brokerAgent.update({
       where: { id: agent.id },
       data: {
         userId,
+        status: "active",
         inviteAcceptedAt: new Date(),
         inviteToken: null, // single-use
       },
     });
 
-    // Ensure user is in the same org
-    if (user.orgId !== agent.orgId) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { orgId: agent.orgId },
-      });
-    }
+    // Ensure user is in the same org and set appropriate role
+    const roleMap: Record<string, string> = {
+      brokerage_admin: "admin",
+      broker: "admin",
+      manager: "admin",
+      agent: "agent",
+    };
+    const userRole = roleMap[agent.brokerageRole] || "agent";
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        orgId: agent.orgId,
+        role: userRole as "owner" | "admin" | "agent",
+        isApproved: true,
+      },
+    });
 
     logAgentAction(agent.orgId, { id: userId }, "invite_accepted", agent.id, {
       agentName: `${agent.firstName} ${agent.lastName}`,
@@ -201,6 +232,73 @@ export async function acceptInvite(
   } catch (error) {
     console.error("acceptInvite error:", error);
     return { success: false, error: "Failed to accept invite" };
+  }
+}
+
+// ── Auto-Link by Email (during accept flow) ──────────────────
+
+export async function tryAutoLinkByEmail(
+  token: string,
+): Promise<{ autoLinked: boolean; error?: string }> {
+  try {
+    const agent = await prisma.brokerAgent.findUnique({
+      where: { inviteToken: token },
+    });
+    if (!agent || agent.userId) {
+      return { autoLinked: false };
+    }
+
+    // Check if a User with matching email exists in the same org
+    const existingUser = await prisma.user.findFirst({
+      where: {
+        orgId: agent.orgId,
+        email: { equals: agent.email, mode: "insensitive" },
+      },
+    });
+
+    if (!existingUser) return { autoLinked: false };
+
+    // Check user isn't already linked to a different agent
+    const existingLink = await prisma.brokerAgent.findFirst({
+      where: { userId: existingUser.id, id: { not: agent.id } },
+    });
+    if (existingLink) return { autoLinked: false };
+
+    // Auto-link
+    const roleMap: Record<string, string> = {
+      brokerage_admin: "admin",
+      broker: "admin",
+      manager: "admin",
+      agent: "agent",
+    };
+
+    await prisma.brokerAgent.update({
+      where: { id: agent.id },
+      data: {
+        userId: existingUser.id,
+        status: "active",
+        inviteAcceptedAt: new Date(),
+        inviteToken: null,
+      },
+    });
+
+    await prisma.user.update({
+      where: { id: existingUser.id },
+      data: {
+        role: (roleMap[agent.brokerageRole] || "agent") as "owner" | "admin" | "agent",
+        isApproved: true,
+      },
+    });
+
+    logAgentAction(agent.orgId, { id: existingUser.id }, "invite_auto_linked", agent.id, {
+      agentName: `${agent.firstName} ${agent.lastName}`,
+      email: agent.email,
+    });
+
+    return { autoLinked: true };
+  } catch (error) {
+    console.error("tryAutoLinkByEmail error:", error);
+    return { autoLinked: false, error: "Auto-link failed" };
   }
 }
 

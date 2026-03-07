@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { checkFeatureAccess } from "@/lib/feature-gate-server";
 import { generateDealAssumptions, calibrateWithCensusData } from "@/lib/ai-assumptions";
 import type { BuildingData } from "@/lib/ai-assumptions";
 import { calculateAll } from "@/lib/deal-calculator";
@@ -344,6 +345,11 @@ export async function underwriteDeal(params: {
   borough?: string;
 }) {
   const user = await getUser();
+
+  // Feature gate — deal modeler requires Pro
+  const { allowed } = await checkFeatureAccess(user.id, "deal_modeler");
+  if (!allowed) throw new Error("Upgrade required: Deal Modeler requires a Pro plan or higher");
+
   const { boroCode, block, lot } = params;
   const bbl = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
   const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];

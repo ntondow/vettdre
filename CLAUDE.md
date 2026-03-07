@@ -19,6 +19,12 @@ VettdRE is a CRM platform for NYC real estate agents combining traditional CRM w
 - **Deployment:** Docker + Google Cloud Run (cloudbuild.yaml)
 - **Utilities:** clsx, tailwind-merge
 
+## Key Reference Docs
+- `VETTDRE_VISION_ROADMAP.md` — Product vision, roadmap, competitive positioning
+- `CODEBASE_SUMMARY.md` — Full architecture, file map, recent dev history
+- `BMS_SPEC.md` — Brokerage Management System spec (Phases 1-10.5)
+- `MOBILE_SPEC.md` — Remaining mobile responsiveness work
+
 ## Environment Variables
 ```
 DATABASE_URL=                    # Supabase Session Pooler (port 5432)
@@ -33,6 +39,8 @@ BRAVE_SEARCH_API_KEY=            # Brave Web Search API (on-market listings, web
 GOOGLE_CLIENT_ID=                # Gmail + Calendar OAuth
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
+TOKEN_ENCRYPTION_KEY=            # (Optional) AES-256-GCM key for Gmail token encryption at rest (falls back to ANTHROPIC_API_KEY)
+AI_PARSE_MAX_PER_HOUR=100       # (Optional) Max AI email parses per hour (default: 100)
 ```
 
 ## Project Structure
@@ -462,9 +470,24 @@ src/
 1. **Apollo API** — Organization Plan active. Full integration: People Search (free), People/Org Enrichment (credits), Bulk Enrich
 2. **Map marker error** — "Cannot read properties of undefined (reading 'x')" in map-search.tsx when map hasn't initialized
 3. **"use server" constraint** — Next.js 16 requires ALL exported functions in "use server" files to be async
-4. **Prisma connection drops** — occasional "Error in PostgreSQL connection: Error { kind: Closed }" from Supabase pooler
-5. **Lead scoring** — grading thresholds need tuning for buyer vs seller vs owner contact types
-6. **Dashboard** — shows hardcoded placeholder data, not wired to real queries
+4. **Lead scoring** — grading thresholds need tuning for buyer vs seller vs owner contact types
+5. **Dashboard** — shows hardcoded placeholder data, not wired to real queries
+6. **Portfolio orgId migration** — Existing Portfolio rows need orgId backfilled after migration (run: `UPDATE portfolios SET org_id = (SELECT id FROM organizations LIMIT 1) WHERE org_id IS NULL`)
+7. **Gmail token encryption** — `src/lib/encryption.ts` created but not yet wired into Gmail token read/write (tokens still stored as plaintext; encrypt on next OAuth reconnect)
+
+## Recent Audit Fixes (2026-03-06)
+- **CRITICAL:** Removed hardcoded Supabase keys from `cloudbuild.yaml` → now uses Secret Manager
+- **CRITICAL:** Fixed middleware auto-approval bypass → unapproved users properly blocked
+- **CRITICAL:** Added `orgId` to Portfolio/PortfolioBuilding for tenant isolation
+- **CRITICAL:** Prisma singleton now cached in production (was dev-only) → prevents connection pool exhaustion
+- **HIGH:** Added 10+ missing database indexes (User.orgId, Deal.propertyId, Activity.dealId, etc.)
+- **HIGH:** Gmail token refresh race condition fixed with in-memory mutex
+- **HIGH:** OAuth state parameter now HMAC-signed with CSRF verification
+- **HIGH:** AI email parsing now rate-limited (100/hr default) with skip list for automated emails
+- **HIGH:** Security headers added to `next.config.ts` (HSTS, nosniff, X-Frame-Options, etc.)
+- **MEDIUM:** All `Promise.all()` in data-fusion-engine converted to `Promise.allSettled()` for resilience
+- **MEDIUM:** Docker layer caching optimized (Prisma schema copied before source code)
+- **MEDIUM:** Contacts query now paginated (default 200, cap 500)
 
 ## Coding Conventions
 - All server action files use `"use server"` directive

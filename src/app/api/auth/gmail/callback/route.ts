@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { exchangeCodeForTokens } from "@/lib/gmail";
+import { exchangeCodeForTokens, verifyOAuthState } from "@/lib/gmail";
+import { encryptToken } from "@/lib/encryption";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get("code");
-  const state = searchParams.get("state"); // userId
+  const state = searchParams.get("state");
   const error = searchParams.get("error");
 
   if (error) {
@@ -15,6 +16,13 @@ export async function GET(request: NextRequest) {
 
   if (!code || !state) {
     return NextResponse.redirect(new URL("/settings?gmail=error&reason=missing_params", request.url));
+  }
+
+  // Verify CSRF-signed state parameter
+  const userId = verifyOAuthState(state);
+  if (!userId) {
+    console.error("Gmail OAuth: invalid state signature (possible CSRF)");
+    return NextResponse.redirect(new URL("/settings?gmail=error&reason=invalid_state", request.url));
   }
 
   try {
@@ -29,9 +37,13 @@ export async function GET(request: NextRequest) {
     const profile = await profileRes.json();
     const gmailEmail = profile.emailAddress;
 
-    // Get the user to find their orgId
-    const user = await prisma.user.findUnique({ where: { authProviderId: state } });
+    // Get the user to find their orgId — userId from signed state is the authProviderId
+    const user = await prisma.user.findUnique({ where: { authProviderId: userId } });
     if (!user) throw new Error("User not found");
+
+    // Encrypt tokens before storing
+    const encryptedAccessToken = encryptToken(tokens.access_token);
+    const encryptedRefreshToken = encryptToken(tokens.refresh_token);
 
     // Upsert Gmail account
     await prisma.gmailAccount.upsert({
@@ -39,14 +51,14 @@ export async function GET(request: NextRequest) {
       create: {
         userId: user.id,
         email: gmailEmail,
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
         tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
         historyId: profile.historyId || null,
       },
       update: {
-        accessToken: tokens.access_token,
-        refreshToken: tokens.refresh_token,
+        accessToken: encryptedAccessToken,
+        refreshToken: encryptedRefreshToken,
         tokenExpiry: new Date(Date.now() + tokens.expires_in * 1000),
         historyId: profile.historyId || null,
         isActive: true,

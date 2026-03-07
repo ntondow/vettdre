@@ -37,6 +37,20 @@ A real estate intelligence SaaS platform for NYC commercial real estate professi
 ## Recent Development History (latest → oldest)
 
 ```
+Tiered Data Fetching for Building Profiles — Progressive rendering via 3 phased server actions (fetchBuildingCritical, fetchBuildingStandard, fetchBuildingBackground) in data-fusion-engine.ts. Phase 1 (PLUTO + HPD Violations + HPD Registrations/Contacts) resolves first → loading=false, critical sections render in ~1-2s. Phase 2 (DOB Permits, Complaints, Litigation, ECB, DOB Filings, Rolling Sales) merges in → additional sections appear. Phase 3 (LL84 Energy, RPIE, Rent Stabilization, Speculation) merges in → background sections appear. Full fetchBuildingIntelligence runs in parallel for entity resolution, scoring, enrichments. All 4 run concurrently; cache layer deduplicates network calls. Each phase does batch T3 pre-fetch + cachedQueryNYC for its subset. Building profile UI (building-profile.tsx) rewritten from Promise.all([fetchBuildingIntelligence, fetchBuildingProfile]) to progressive merge pattern with setData(prev => ({...prev, ...result})).
+Building Profile 3-Tier Caching Layer — Multi-tier cache for data fusion engine (src/lib/cache-manager.ts). Tier 1: in-memory LRU (500 BuildingIntelligence objects, 30-min TTL). Tier 2: per-source LRU (2000 entries, staggered TTLs: PLUTO 24h, HPD violations 2h, DOB permits 4h, etc.). Tier 3: Supabase BuildingCache table (persistent, cross-container, survives Cloud Run restarts). SOURCE_CONFIG registry (15 sources with TTLs and priorities). Batch Tier 3 pre-fetch (single DB query for all missing sources before Phase 1). cachedQueryNYC wrapper replaces raw queryNYC calls in Promise.allSettled. Stale-on-error: serves expired cache data when API fails. Fire-and-forget DB writes (upsert). Cache warming (src/lib/cache-warming.ts): warmBuildingCache(bbls) pre-warms PLUTO + HPD_REG for map search results. Admin API (/api/cache?action=stats|cleanup|invalidate). BuildingCache model in Prisma (bbl+source unique, expiresAt index). LRUCache class: hand-rolled Map-based O(1) eviction. Dev logging shows per-request cache tier breakdown.
+Skeleton/Shimmer Loading States for Building Profiles — Replaced spinner loading state with full skeleton layout mirroring all 20+ building profile sections. New reusable skeleton component library (src/components/ui/skeleton-shimmer.tsx: SkeletonLine, SkeletonBlock, SkeletonCircle, SkeletonStatCard, SkeletonTable, SkeletonScoreCard, SkeletonSection, SkeletonKeyValue). BuildingProfileSkeleton component (building-profile-skeleton.tsx) renders skeleton for header, intelligence scores, property overview, contacts, comps, violations, complaints, permits, ECB, litigation, energy, and neighborhood sections. Shimmer CSS animation (@keyframes shimmer + .animate-shimmer) and section-reveal fade-in (.animate-section-reveal) added to globals.css. Progressive sub-section loading: census demographics, sales comps, renovation estimate, STR projection, and owner portfolio all show inline skeleton grids instead of spinners while loading. Real content fades in via animate-section-reveal class.
+Unified Dashboard — Real CRM + BMS data. getDashboardData() server action with 25+ parallel Prisma queries. 6 stat cards (revenue, payouts, listings, transactions, deals closed, agents/contacts). CSS bar chart (6-month revenue/payouts). Pipeline snapshot (listings/transactions/invoices status bars). Recent activity feed (10 items across all entities). Alerts (overdue invoices, stale listings, expiring compliance, pending approvals). Top agents mini-leaderboard. CRM snapshot (contacts, unread messages, upcoming events). Quick actions. Agent-scoped view. Empty state for new brokerages. Mobile responsive.
+Sidebar Reorg & Dead Page Cleanup — Deleted properties, portfolios, pipeline, prospecting pages (replaced by Market Intel + BMS). New sidebar: Dashboard, Market Intel, Deal Modeler, Contacts, Messages, Calendar | Brokerage | Settings. Mobile: Dashboard, Intel, Messages, Brokerage, More. Deal Modeler promoted to top-level (/deals). Redirect pages for old routes. Prospecting save-to-list actions moved to market-intel/prospecting-actions.ts.
+BMS Phase 10.5: Unified BMS Identity System — BrokerAgent status default "pending" (new agents start pending), auto-invite on creation (token + URL), auto-link by email (tryAutoLinkByEmail), invite accept sets status "active" + maps role + isApproved, invite landing page with brokerage branding (logo, color, name), agent roster pending tab with copy-link/revoke, agent detail invite management banner (copy/regenerate/revoke), my-deals deactivation banner for inactive agents, getCurrentAgentInfo returns agentStatus
+BMS Phase 10: Multi-Agent Deal Splits — TransactionAgent model (per-agent role/split/payout tracking), split visualization bar + per-agent payout cards on transaction detail, "Add Agent to Split" modal, "X/Y Paid" multi-agent status on list, co-agents in create modal + deal submissions, leaderboard counts co-agent deals, agent portal shows co-agent transactions, backward-compatible with legacy single-agent payout fields
+BMS Phase 9B: Agent Leaderboard & Goals (UI) — Leaderboard page with ranked table (medals, progress bars, streaks, trends), period selector (month/quarter/year), goal setting modal (individual/bulk/history), Performance tab on my-deals (circular SVG progress, badge shelf, history chart, mini leaderboard), dashboard widgets (top performers + goal progress), agent detail performance tab, PERFORMANCE nav group in sidebar
+BMS Phase 9A: Agent Leaderboard & Goals (Data Model) — AgentGoal + AgentBadge models, badge definitions (10 types: lifetime/streak/monthly), leaderboard server actions (goal CRUD, actuals calculation from Transactions/DealSubmissions/BmsListings with dedup, scoring engine, streak calculation, badge engine), 3 new permissions (goals_view, goals_manage, leaderboard_view)
+BMS Phase 8: Mobile Responsiveness — All BMS pages mobile-responsive: Brokerage in mobile More menu, table→card alternatives (invoices, agents, my-deals), listings pipeline→vertical collapsible groups, sticky advance buttons, bottom-sheet modals, 16px inputs (iOS zoom prevention), responsive headers/stat grids, scrollable tabs
+BMS Phase 7: Listings Database & Pipeline — BmsProperty + BmsListing models (3 enums), listing pipeline (available→leased + off_market), 5 pages (list with pipeline/table/grid views, detail, bulk upload wizard, properties vacancy dashboard, property detail), agent assignment, commission tracking, lease-up→Transaction creation, bulk SheetJS upload with fuzzy property/agent matching, cross-linked to agent portal ("My Listings" tab) and transaction detail (listing link in Deal Info)
+BMS Phase 6.5: Deal Lifecycle UI — Deal timeline (vertical event feed), agent payout recording card, lifecycle dot indicators on list, financial overview on dashboard, invoice→transaction links, payout visibility in agent portal
+BMS Phase 6: Unified Deal Lifecycle — Transaction→Invoice linking, agent payout tracking, financial stages (invoice_sent, payment_received, agent_paid), auto-sync from invoice events, deal timeline aggregation, createTransactionsFromInvoices for bulk flows
+BMS Phase 5: Transaction Management — pipeline tracker (rental/sale stages), checklist tasks, stage advancement with validation, integrated into deal submissions ("Create Transaction" button), agent portal ("My Transactions" tab), brokerage dashboard (stats + recent list), quick actions (generate invoice, view submission)
 BMS Phase 3.5: RBAC (4 roles, 24 permissions), brokerage settings page, agent invite/onboarding flow, file upload model, audit logging (all 7 action files), audit log viewer
 BMS Phase 3: Brokerage dashboard, reporting (P&L, agent production, 1099 prep, deal pipeline), compliance tracking, payment recording + inline invoices
 BMS Phase 2: Commission plan templates, agent roster + detail pages, Excel import, agent self-service portal, sidebar role-gating
@@ -78,16 +92,20 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `promote-engine.ts` | 314 | GP/LP waterfall: distribution tiers, IRR hurdles, catch-up |
 | `expense-analyzer.ts` | — | T-12 parsing, market benchmarks, anomaly detection |
 | `bms-types.ts` | — | BMS shared types, status labels, colors, Excel column aliases, audit log types |
-| `bms-auth.ts` | — | getCurrentBmsUser, requireBmsPermission (role-based BMS access) |
+| `bms-auth.ts` | — | getCurrentBrokerageRole, getCurrentAgentInfo (role + agentId + agentStatus), role-based BMS access |
 | `bms-permissions.ts` | — | BMS_ROLES, BMS_PERMISSIONS map, hasPermission, getRoleLabel |
 | `bms-files.ts` | — | FileAttachment CRUD (upload, list, delete) |
-| `bms-audit.ts` | — | Fire-and-forget audit logging (logAction + 6 convenience functions) |
-| `invoice-pdf.ts` | — | jsPDF commission invoice generator (single + batch) |
+| `bms-audit.ts` | — | Fire-and-forget audit logging (logAction + 7 convenience functions) |
+| `agent-badges.ts` | — | Badge definitions (10 types), lifetime/streak thresholds, AgentLifetimeStats |
+| `invoice-simple-pdf.ts` | — | Commission invoice PDF generator (Gulino Group-style, single + batch ZIP) |
+| `transaction-templates.ts` | — | Transaction stage sequences, labels, colors, default rental/sale task definitions |
 
 #### Data Sources & APIs
 | File | Lines | Purpose |
 |------|-------|---------|
-| `data-fusion-engine.ts` | 1942 | Central aggregator: 14+ APIs in parallel, BuildingIntelligence object, 15min cache |
+| `data-fusion-engine.ts` | 2200 | Central aggregator: 14+ APIs, BuildingIntelligence object, 3-tier cache, **phased fetching** (fetchBuildingCritical/Standard/Background) for progressive UI rendering |
+| `cache-manager.ts` | 220 | 3-tier cache: LRU in-memory (T1: buildings, T2: per-source) + Supabase DB (T3), SOURCE_CONFIG registry |
+| `cache-warming.ts` | 70 | Background cache warming: warmBuildingCache(bbls) for PLUTO + HPD_REG pre-fetch |
 | `nyc-opendata.ts` | — | 17 NYC Open Data (Socrata) API helpers |
 | `entity-resolver.ts` | 548 | Fuzzy matching, address normalization, LLC piercing |
 | `apollo.ts` | 561 | Apollo.io: people search, enrichment, org enrichment, bulk |
@@ -179,24 +197,31 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | `/prospecting` | Prospect lists, CSV export | Working |
 | `/portfolios` | Basic schema + UI | Basic |
 | `/properties` | Empty state | Minimal |
-| `/brokerage/*` | Vertical secondary sidebar (Settings-style), 5 grouped sections | Working |
+| `/brokerage/*` | Vertical secondary sidebar (Settings-style), 6 grouped sections (incl. Performance) | Working |
 | `/brokerage/dashboard` | Stats cards, deal/invoice status charts, period selector | Working |
 | `/brokerage/deal-submissions` | Approval queue, status filters | Working |
 | `/brokerage/invoices` | Invoice list, inline payment recording | Working |
-| `/brokerage/invoices/bulk` | 4-step wizard: upload, map columns, Bill To, generate ZIP | Working |
+| `/brokerage/invoices/bulk` | 4-step wizard: upload, map 7 columns (incl. rental price, move-in date), Bill To, preview + generate ZIP with payment instructions & agent DOS# | Working |
 | `/brokerage/commission-plans` | Flat/volume/value tier builder | Working |
 | `/brokerage/reports/*` | P&L, agent production, 1099 prep, pipeline (4 sub-tabs) | Working |
 | `/brokerage/compliance` | Document tracking, expiry alerts, agent compliance grid | Working |
 | `/brokerage/payments` | Payment recording, history, filters, CSV export | Working |
 | `/brokerage/agents` + `[id]` | Roster, detail pages, Excel import, onboarding | Working |
-| `/brokerage/settings` | Roles & permissions, brokerage settings, audit log (3 tabs) | Working |
-| `/brokerage/my-deals` | Agent self-service portal | Working |
+| `/brokerage/settings` | Roles & permissions, brokerage settings (incl. payment instructions: ACH/Wire/Check), audit log (3 tabs) | Working |
+| `/brokerage/transactions` | Transaction list (stats, filters, create modal) + `[id]` detail (checklist, stage stepper, parties, dates, quick actions) | Working |
+| `/brokerage/listings` | Listing inventory: pipeline/table/grid views, 6 filters, stats, new listing modal | Working |
+| `/brokerage/listings/[id]` | Listing detail: editable fields, status pipeline, agent/tenant/property cards, lease-up→Transaction | Working |
+| `/brokerage/listings/bulk` | 4-step bulk upload wizard (SheetJS, column mapping, fuzzy property resolution) | Working |
+| `/brokerage/listings/properties` | Vacancy dashboard: occupancy bars, rent ranges, property cards | Working |
+| `/brokerage/listings/properties/[id]` | Property detail: inline editing, listings table, vacancy summary, rent-by-bedroom | Working |
+| `/brokerage/leaderboard` | Agent leaderboard & goals — ranked table, goal setting, period selector | Working |
+| `/brokerage/my-deals` | Agent self-service portal (submissions, invoices, transactions, listings, performance tabs) | Working |
 | `/join/agent/[token]` | Public agent invite landing + accept flow | Working |
 | `/settings/*` (20 sub-pages) | Full settings suite | Working |
 
 ---
 
-## Database Schema (42 models, 20 enums)
+## Database Schema (48 models, 22 enums)
 
 **Core:** Organization, User (multi-tenant, RBAC with 5 roles + approval gate)
 **CRM:** Contact, EnrichmentProfile, QualificationScore, Activity, Task
@@ -208,7 +233,9 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 **Communication:** PhoneNumber, PhoneCall, SmsMessage
 **Settings:** NotificationPreferences, WorkingHours, SyncSettings, LeadAssignmentRule, AiSettings, BrandSettings
 **System:** Automation, AutomationRun, AuditLog
-**BMS:** BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment (BmsDealType, InvoiceStatus, CommissionPlanType, ComplianceDocType, PaymentMethod enums)
+**BMS:** BrokerAgent, DealSubmission, Invoice, CommissionPlan, CommissionTier, ComplianceDocument, Payment, FileAttachment, TransactionAgent (BmsDealType, InvoiceStatus, CommissionPlanType, ComplianceDocType, PaymentMethod enums)
+**Transactions:** Transaction, TransactionTask, TransactionTemplate, TransactionTemplateTask (TransactionStage, BmsTransactionType enums)
+**Leaderboard:** AgentGoal (monthly targets + actuals), AgentBadge (earned achievements)
 
 ---
 
@@ -250,6 +277,7 @@ f9b85b8 Renovation Cost Estimator - condition assessment, 3-tier cost tables, AR
 | Enterprise | Custom | All features |
 
 BMS features: bms_submissions (pro+), bms_invoices (pro+), bms_agent_portal (pro+), bms_agent_onboarding (pro+), bms_bulk_upload (team+), bms_agents (team+), bms_commission_plans (team+), bms_compliance (team+), bms_payments (team+), bms_audit_log (team+), bms_file_upload (team+)
+BMS permissions: 27 keys across 4 roles (added: goals_view, goals_manage, leaderboard_view)
 
 ---
 
@@ -339,6 +367,8 @@ export async function fetchSomething(params: Params): Promise<Result> {
 - Tailwind for all styling; custom animations in `globals.css` (fade-in, modal-in, slide-up)
 - Use `circleMarker` not `Marker` for Leaflet map performance
 - Mobile: `md:` breakpoint splits mobile (bottom tab bar) vs desktop (sidebar)
+- Sidebar: Dashboard, Market Intel, Deal Modeler, Contacts, Messages, Calendar | Brokerage (owner/admin) / My Deals (agent) | Settings
+- Mobile tabs: Dashboard, Intel, Messages, Brokerage, More (Deal Modeler, Contacts, Calendar, Settings)
 
 ---
 
@@ -406,12 +436,14 @@ FANNIE_API_KEY=                  # Optional
 
 | Feature | Status |
 |---------|--------|
-| Dashboard real stats | Placeholder data |
+| Dashboard | ✅ Complete (real CRM + BMS data, stats, charts, pipeline, activity, alerts) |
 | `/tasks` page | Not built |
 | `/insights` (AI) | Not built |
 | `/analytics` | Not built |
-| Properties page | Empty state only |
-| Portfolios | Basic schema + UI |
+| Properties page | Removed (redirects to /market-intel) |
+| Portfolios | Removed (redirects to /market-intel) |
+| Pipeline | Removed (redirects to /brokerage/transactions) |
+| Prospecting | Removed (redirects to /market-intel, save-to-list actions in market-intel/) |
 | Automations | Schema only, no UI/engine |
 | Service worker / PWA offline | Not started |
 | BMS Agent Roster | ✅ Complete (roster, detail, import) |
@@ -422,10 +454,12 @@ FANNIE_API_KEY=                  # Optional
 | BMS Compliance Tracking | ✅ Complete (documents, expiry alerts, agent grid) |
 | BMS Payment Recording | ✅ Complete (record, history, inline on invoices, CSV export) |
 | BMS Roles & Permissions | Complete (4 roles, 24 permissions, settings page) |
-| BMS Agent Onboarding | Complete (invite flow, public accept page, user linking) |
+| BMS Agent Onboarding | ✅ Complete (unified identity: auto-invite on creation, pending status, branding, auto-link by email, deactivation banners) |
 | BMS File Upload Model | Complete (FileAttachment model + CRUD, not yet wired to UI) |
 | BMS Audit Logging | Complete (all 7 action files wired, audit log viewer) |
 | BMS Brokerage Settings | Complete (3-tab page: roles, settings, audit log) |
-| Stripe Connect Payouts | Not started (Phase 4 — agent payouts via Stripe) |
+| BMS Leaderboard UI | Complete (Phase 9B) — table, goal setting, performance tabs |
+| Stripe Connect Payouts | Not started (Phase 10 — agent payouts via Stripe) |
 | White-label BaaS | Not started (Phase 4) |
-| Mobile page layouts | Bottom nav done, pages need responsive |
+| BMS Mobile Responsiveness | ✅ Complete (all BMS pages: card lists, bottom sheets, sticky buttons, 16px inputs) |
+| Mobile page layouts | Bottom nav done, BMS pages responsive, other pages in progress |

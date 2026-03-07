@@ -7,6 +7,8 @@ import { incrementSearchCount } from "@/lib/feature-gate-server";
 import { getZipCodesForNeighborhoods } from "@/lib/neighborhoods";
 import NeighborhoodDropdown from "../neighborhood-dropdown";
 import BuildingProfile from "../building-profile";
+import ProfileModal from "../building-profile-modal";
+import { prefetchBuilding } from "../building-profile-actions";
 import type { FilterState } from "../types";
 
 const fmtPrice = (n: number) => (n > 0 ? `$${n.toLocaleString()}` : "—");
@@ -57,6 +59,7 @@ export default function NycPropertySearch({
 
   // Building profile slide-over
   const [nameDetailBuilding, setNameDetailBuilding] = useState<any>(null);
+  const [primaryPhone, setPrimaryPhone] = useState<string | null>(null);
 
   const suggestionsRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -284,6 +287,12 @@ export default function NycPropertySearch({
                 <button
                   key={i}
                   onClick={() => { setSelectedBuilding(b); setView("building"); setDetailTab("sales"); }}
+                  onMouseEnter={() => {
+                    if (b.boroCode && b.block && b.lot) {
+                      const bbl10 = b.boroCode + String(b.block).padStart(5, "0") + String(b.lot).padStart(4, "0");
+                      prefetchBuilding(bbl10).catch(() => {});
+                    }
+                  }}
                   className="bg-white rounded-xl border border-slate-200 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all group"
                 >
                   <div className="flex items-start justify-between">
@@ -391,33 +400,27 @@ export default function NycPropertySearch({
 
       {/* Building Profile Slide-over */}
       {nameDetailBuilding && (
-        <div className="fixed inset-0 z-[2000] flex">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setNameDetailBuilding(null)} />
-          <div className="relative ml-auto w-full md:max-w-3xl bg-white shadow-2xl overflow-y-auto">
-            <div className="sticky top-0 z-10 bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900">{nameDetailBuilding.address}</h2>
-                <p className="text-xs text-slate-500">{nameDetailBuilding.borough}</p>
-              </div>
-              <button onClick={() => setNameDetailBuilding(null)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg">&times;</button>
-            </div>
-            <div className="p-5">
-              <BuildingProfile
-                boroCode={nameDetailBuilding.boroCode}
-                block={nameDetailBuilding.block}
-                lot={nameDetailBuilding.lot}
-                address={nameDetailBuilding.address}
-                borough={nameDetailBuilding.borough}
-                ownerName={nameDetailBuilding.ownerName}
-                onClose={() => setNameDetailBuilding(null)}
-                onNameClick={(name) => {
-                  setNameDetailBuilding(null);
-                  onNameClick?.(name);
-                }}
-              />
-            </div>
-          </div>
-        </div>
+        <ProfileModal
+          address={nameDetailBuilding.address}
+          borough={nameDetailBuilding.borough}
+          primaryPhone={primaryPhone}
+          onClose={() => setNameDetailBuilding(null)}
+        >
+          <BuildingProfile
+            boroCode={nameDetailBuilding.boroCode}
+            block={nameDetailBuilding.block}
+            lot={nameDetailBuilding.lot}
+            address={nameDetailBuilding.address}
+            borough={nameDetailBuilding.borough}
+            ownerName={nameDetailBuilding.ownerName}
+            onClose={() => setNameDetailBuilding(null)}
+            onNameClick={(name) => {
+              setNameDetailBuilding(null);
+              onNameClick?.(name);
+            }}
+            onPrimaryPhoneChange={setPrimaryPhone}
+          />
+        </ProfileModal>
       )}
     </>
   );

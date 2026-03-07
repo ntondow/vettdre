@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, Fragment, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, Fragment, lazy, Suspense } from "react";
 import { getCurrentAgentInfo } from "@/lib/bms-auth";
 import { getAgents, updateAgentRole } from "../agents/actions";
-import { getBrokerageSettings, updateBrokerageSettings } from "./actions";
+import { getBrokerageSettings, updateBrokerageSettings, saveBrokerageLogo, getOrgTeamMembers, updateUserRole } from "./actions";
+import { createClient as createSupabaseClient } from "@/lib/supabase/client";
 import { getPublicSubmissionLink, regenerateSubmissionToken } from "../deal-submissions/actions";
 
 const AuditLog = lazy(() => import("./audit-log"));
@@ -12,11 +13,12 @@ import {
   BROKERAGE_ROLE_LABELS,
   BROKERAGE_ROLE_COLORS,
 } from "@/lib/bms-types";
-import type { BrokerageRoleType, BmsPermission, BrokerageSettings, BillToEntity, BillToMappings } from "@/lib/bms-types";
+import type { BrokerageRoleType, BmsPermission, BrokerageSettings, BillToEntity, BillToMappings, PaymentInstructions } from "@/lib/bms-types";
 import {
   Settings,
   ShieldCheck,
   ChevronDown,
+  ChevronRight,
   Check,
   X,
   Crown,
@@ -35,6 +37,9 @@ import {
   FileText,
   Trash2,
   Plus,
+  CreditCard,
+  Upload,
+  ImageIcon,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────
@@ -175,7 +180,7 @@ function permissionHasRole(
   return allowed?.includes(role) ?? false;
 }
 
-const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
 // ── Page ─────────────────────────────────────────────────────
@@ -184,7 +189,7 @@ export default function BrokerageSettingsPage() {
   // Shared state
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"roles" | "settings" | "audit">("roles");
+  const [activeTab, setActiveTab] = useState<"roles" | "settings" | "team" | "audit">("roles");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Roles tab state
@@ -201,6 +206,14 @@ export default function BrokerageSettingsPage() {
   const [submissionUrl, setSubmissionUrl] = useState<string | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
+  const [piSections, setPiSections] = useState<Record<string, boolean>>({});
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Team tab state
+  const [teamMembers, setTeamMembers] = useState<{ id: string; fullName: string; email: string; role: string; createdAt: string }[]>([]);
+  const [teamLoaded, setTeamLoaded] = useState(false);
+  const [teamSavingId, setTeamSavingId] = useState<string | null>(null);
 
   // Init — auth + roles data
   useEffect(() => {
@@ -250,6 +263,17 @@ export default function BrokerageSettingsPage() {
     load();
   }, [activeTab, settingsLoaded, authorized]);
 
+  // Load team members when tab switches to team
+  useEffect(() => {
+    if (activeTab !== "team" || teamLoaded || !authorized) return;
+    async function load() {
+      const result = await getOrgTeamMembers();
+      setTeamMembers(result.members);
+      setTeamLoaded(true);
+    }
+    load();
+  }, [activeTab, teamLoaded, authorized]);
+
   // Auto-dismiss toast
   useEffect(() => {
     if (!toast) return;
@@ -281,6 +305,13 @@ export default function BrokerageSettingsPage() {
     setSettingsForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   }
 
+  function setPaymentField<K extends keyof PaymentInstructions>(key: K, value: PaymentInstructions[K]) {
+    setSettingsForm((prev) => {
+      if (!prev) return prev;
+      return { ...prev, paymentInstructions: { ...prev.paymentInstructions, [key]: value } };
+    });
+  }
+
   async function handleSaveSettings() {
     if (!settingsForm) return;
     setSaving(true);
@@ -301,6 +332,7 @@ export default function BrokerageSettingsPage() {
       invoiceNotes: settingsForm.invoiceNotes,
       invoiceLineFormat: settingsForm.invoiceLineFormat,
       billToMappings: settingsForm.billToMappings,
+      paymentInstructions: settingsForm.paymentInstructions,
     });
     if (result.success) {
       setSettings({ ...settingsForm });
@@ -309,6 +341,76 @@ export default function BrokerageSettingsPage() {
       setToast({ message: result.error || "Failed to save settings", type: "error" });
     }
     setSaving(false);
+  }
+
+  async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate type
+    const allowed = ["image/png", "image/jpeg", "image/svg+xml"];
+    if (!allowed.includes(file.type)) {
+      setToast({ message: "Only PNG, JPEG, or SVG files are allowed", type: "error" });
+      return;
+    }
+
+    // Validate size (2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      setToast({ message: "Logo must be under 2MB", type: "error" });
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const supabase = createSupabaseClient();
+      const ext = file.name.split(".").pop()?.toLowerCase() || "png";
+      // Use timestamp to bust cache on re-upload
+      const path = `logos/logo-${Date.now()}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("brokerage-logos")
+        .upload(path, file, { upsert: true, contentType: file.type });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from("brokerage-logos")
+        .getPublicUrl(path);
+
+      const logoUrl = urlData.publicUrl;
+
+      const result = await saveBrokerageLogo(logoUrl);
+      if (result.success) {
+        setField("logoUrl", logoUrl);
+        setToast({ message: "Logo saved — will appear on all new invoices", type: "success" });
+      } else {
+        setToast({ message: result.error || "Failed to save logo", type: "error" });
+      }
+    } catch (err) {
+      console.error("Logo upload error:", err);
+      setToast({ message: "Failed to upload logo", type: "error" });
+    } finally {
+      setUploadingLogo(false);
+      // Reset file input so same file can be re-selected
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  }
+
+  async function handleRemoveLogo() {
+    setUploadingLogo(true);
+    try {
+      const result = await saveBrokerageLogo(null);
+      if (result.success) {
+        setField("logoUrl", null);
+        setToast({ message: "Logo removed", type: "success" });
+      } else {
+        setToast({ message: result.error || "Failed to remove logo", type: "error" });
+      }
+    } catch {
+      setToast({ message: "Failed to remove logo", type: "error" });
+    } finally {
+      setUploadingLogo(false);
+    }
   }
 
   async function handleRegenerateToken() {
@@ -420,6 +522,17 @@ export default function BrokerageSettingsPage() {
           }`}
         >
           Brokerage Settings
+        </button>
+        <button
+          onClick={() => setActiveTab("team")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === "team"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <Users className="w-4 h-4" />
+          Team
         </button>
         <button
           onClick={() => setActiveTab("audit")}
@@ -721,15 +834,69 @@ export default function BrokerageSettingsPage() {
                       placeholder="10991234567"
                     />
                   </div>
-                  <div>
-                    <label className={LABEL}>Logo URL</label>
-                    <input
-                      type="url"
-                      value={settingsForm.logoUrl || ""}
-                      onChange={(e) => setField("logoUrl", e.target.value || null)}
-                      className={INPUT}
-                      placeholder="https://example.com/logo.png"
-                    />
+                  <div className="md:col-span-2">
+                    <label className={LABEL}>Invoice & Brand Logo</label>
+                    <div className="flex items-start gap-4 mt-1">
+                      {/* Logo preview */}
+                      <div
+                        className={`flex items-center justify-center w-[120px] h-[60px] rounded-lg border-2 ${
+                          settingsForm.logoUrl
+                            ? "border-slate-200 bg-white"
+                            : "border-dashed border-slate-300 bg-slate-50"
+                        } overflow-hidden flex-shrink-0`}
+                      >
+                        {settingsForm.logoUrl ? (
+                          <img
+                            src={settingsForm.logoUrl}
+                            alt="Logo"
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        ) : (
+                          <ImageIcon className="w-6 h-6 text-slate-300" />
+                        )}
+                      </div>
+
+                      {/* Upload / remove controls */}
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => logoInputRef.current?.click()}
+                            disabled={uploadingLogo}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors"
+                          >
+                            {uploadingLogo ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Upload className="w-3.5 h-3.5" />
+                            )}
+                            {settingsForm.logoUrl ? "Replace" : "Upload Logo"}
+                          </button>
+                          {settingsForm.logoUrl && (
+                            <button
+                              type="button"
+                              onClick={handleRemoveLogo}
+                              disabled={uploadingLogo}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-400">
+                          Recommended: PNG or SVG, max 400x200px, under 2MB
+                        </p>
+                      </div>
+
+                      <input
+                        ref={logoInputRef}
+                        type="file"
+                        accept="image/png,image/jpeg,image/svg+xml"
+                        onChange={handleLogoUpload}
+                        className="hidden"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -822,6 +989,127 @@ export default function BrokerageSettingsPage() {
                     <p className="text-xs text-slate-400 mt-1">
                       Appears at the bottom of every generated invoice PDF
                     </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Instructions */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="w-5 h-5 text-slate-400" />
+                    <h2 className="font-semibold text-slate-900">Payment Instructions</h2>
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <span className="text-sm text-slate-500">Include on invoices</span>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentField("enabled", !settingsForm.paymentInstructions?.enabled)}
+                      className={`relative w-10 h-5 rounded-full transition-colors ${
+                        settingsForm.paymentInstructions?.enabled ? "bg-blue-600" : "bg-slate-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
+                          settingsForm.paymentInstructions?.enabled ? "translate-x-5" : ""
+                        }`}
+                      />
+                    </button>
+                  </label>
+                </div>
+                <div className="p-5 space-y-3">
+                  {/* ACH */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPiSections(p => ({ ...p, ach: !p.ach }))}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span>ACH Details</span>
+                      {piSections.ach ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    {piSections.ach && (
+                      <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className={LABEL}>Bank Name</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.achBankName || ""} onChange={e => setPaymentField("achBankName", e.target.value)} className={INPUT} placeholder="Chase, TD Bank, etc." />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Account Name</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.achAccountName || ""} onChange={e => setPaymentField("achAccountName", e.target.value)} className={INPUT} placeholder="Company LLC" />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Account Number</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.achAccountNumber || ""} onChange={e => setPaymentField("achAccountNumber", e.target.value)} className={INPUT} placeholder="Account #" />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Routing Number</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.achRoutingNumber || ""} onChange={e => setPaymentField("achRoutingNumber", e.target.value)} className={INPUT} placeholder="Routing #" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Wire */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPiSections(p => ({ ...p, wire: !p.wire }))}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span>Wire Details</span>
+                      {piSections.wire ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    {piSections.wire && (
+                      <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                          <label className={LABEL}>Bank Name</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.wireBankName || ""} onChange={e => setPaymentField("wireBankName", e.target.value)} className={INPUT} placeholder="Bank name" />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Account Name</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.wireAccountName || ""} onChange={e => setPaymentField("wireAccountName", e.target.value)} className={INPUT} placeholder="Company LLC" />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Account Number</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.wireAccountNumber || ""} onChange={e => setPaymentField("wireAccountNumber", e.target.value)} className={INPUT} placeholder="Account #" />
+                        </div>
+                        <div>
+                          <label className={LABEL}>Routing Number</label>
+                          <input type="text" value={settingsForm.paymentInstructions?.wireRoutingNumber || ""} onChange={e => setPaymentField("wireRoutingNumber", e.target.value)} className={INPUT} placeholder="Routing #" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Check */}
+                  <div className="border border-slate-200 rounded-lg overflow-hidden">
+                    <button
+                      type="button"
+                      onClick={() => setPiSections(p => ({ ...p, check: !p.check }))}
+                      className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span>Check</span>
+                      {piSections.check ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
+                    </button>
+                    {piSections.check && (
+                      <div className="px-4 pb-4">
+                        <label className={LABEL}>Make Payable To</label>
+                        <input type="text" value={settingsForm.paymentInstructions?.checkPayableTo || ""} onChange={e => setPaymentField("checkPayableTo", e.target.value)} className={INPUT} placeholder="Company LLC" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Other */}
+                  <div>
+                    <label className={LABEL}>Other Instructions</label>
+                    <textarea
+                      value={settingsForm.paymentInstructions?.otherInstructions || ""}
+                      onChange={e => setPaymentField("otherInstructions", e.target.value)}
+                      rows={2}
+                      className={INPUT}
+                      placeholder="e.g., Zelle: payments@company.com"
+                    />
                   </div>
                 </div>
               </div>
@@ -1089,6 +1377,100 @@ export default function BrokerageSettingsPage() {
               </div>
             </>
           ) : null}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* TEAM TAB                                                */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {activeTab === "team" && (
+        <div className="space-y-6">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+            Roles control which brokerage tools each team member can access. Changes take effect on their next page load.
+          </div>
+
+          {!teamLoaded ? (
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+            </div>
+          ) : teamMembers.length === 0 ? (
+            <p className="text-slate-500 text-sm text-center py-8">No team members found.</p>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Member</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Current Role</th>
+                    <th className="text-left px-4 py-3 font-medium text-slate-600">Change Role</th>
+                    <th className="text-right px-4 py-3 font-medium text-slate-600"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {teamMembers.map((m) => {
+                    const isOwner = m.role === "owner";
+                    const badgeColors: Record<string, string> = {
+                      owner: "bg-purple-100 text-purple-700",
+                      admin: "bg-blue-100 text-blue-700",
+                      manager: "bg-teal-100 text-teal-700",
+                      agent: "bg-slate-100 text-slate-600",
+                      viewer: "bg-slate-100 text-slate-500",
+                    };
+                    return (
+                      <tr key={m.id} className="border-b border-slate-100 last:border-0">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-slate-800">{m.fullName || "—"}</div>
+                          <div className="text-slate-500 text-xs">{m.email}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${badgeColors[m.role] || badgeColors.agent}`}>
+                            {isOwner && <Crown className="w-3 h-3" />}
+                            {m.role}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isOwner ? (
+                            <span className="text-xs text-slate-400 italic">Owner cannot be changed</span>
+                          ) : (
+                            <select
+                              value={m.role}
+                              onChange={async (e) => {
+                                const newRole = e.target.value;
+                                if (newRole === m.role) return;
+                                setTeamSavingId(m.id);
+                                const result = await updateUserRole(m.id, newRole);
+                                if (result.success) {
+                                  setTeamMembers((prev) =>
+                                    prev.map((u) => (u.id === m.id ? { ...u, role: newRole } : u))
+                                  );
+                                  setToast({ message: `Role updated to ${newRole}`, type: "success" });
+                                } else {
+                                  setToast({ message: result.error || "Failed to update role", type: "error" });
+                                }
+                                setTeamSavingId(null);
+                              }}
+                              disabled={teamSavingId === m.id}
+                              className="border border-slate-300 rounded-md px-2 py-1 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+                            >
+                              <option value="admin">Admin - Full brokerage access</option>
+                              <option value="manager">Manager - Deals, compliance, no settings</option>
+                              <option value="agent">Agent - My Deals only</option>
+                              <option value="viewer">Viewer - Read only</option>
+                            </select>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          {teamSavingId === m.id && (
+                            <Loader2 className="w-4 h-4 text-blue-500 animate-spin inline-block" />
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

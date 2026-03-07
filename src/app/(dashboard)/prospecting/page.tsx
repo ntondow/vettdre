@@ -1,12 +1,5 @@
-import { getLists } from "./actions";
-import ProspectingDashboard from "./prospecting-dashboard";
-import ProspectingGateWrapper from "./prospecting-gate-wrapper";
+import { redirect } from "next/navigation";
 
-export default async function ProspectingPage() {
-  const lists = await getLists();
-  return (
-    <ProspectingGateWrapper>
-      <ProspectingDashboard lists={JSON.parse(JSON.stringify(lists))} />
-    </ProspectingGateWrapper>
-  );
+export default function ProspectingRedirect() {
+  redirect("/market-intel");
 }

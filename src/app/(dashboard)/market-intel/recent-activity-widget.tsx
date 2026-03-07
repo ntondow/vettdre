@@ -42,15 +42,15 @@ export default function RecentActivityWidget() {
     <div className="mb-6 space-y-4">
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Link href="/properties" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
+        <Link href="/market-intel" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
           <p className="text-xs text-slate-500">Saved Properties</p>
           <p className="text-xl font-bold text-slate-900 mt-0.5">{data.savedProperties}</p>
         </Link>
-        <Link href="/pipeline" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
+        <Link href="/brokerage/transactions" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
           <p className="text-xs text-slate-500">Active Deals</p>
           <p className="text-xl font-bold text-slate-900 mt-0.5">{data.activeDeals}</p>
         </Link>
-        <Link href="/prospecting" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
+        <Link href="/market-intel" className="bg-white rounded-xl border border-slate-200 p-4 hover:border-blue-200 transition-colors">
           <p className="text-xs text-slate-500">Prospecting</p>
           <p className="text-xl font-bold text-blue-600 mt-0.5">View Lists</p>
         </Link>

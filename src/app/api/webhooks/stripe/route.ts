@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { getStripe, getPlanFromPriceId } from "@/lib/stripe";
+import { getStripe, getPlanFromPriceId, getLeasingTierFromPriceId } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
+import { invalidateLeasingTierCache } from "@/lib/leasing-limits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +31,109 @@ export async function POST(req: NextRequest) {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+        if (!session.subscription) break;
+
+        // ── Leasing tier upgrade ──────────────────────────────
+        const leasingTier = session.metadata?.leasingTier;
+        const configId = session.metadata?.configId;
+
+        if (leasingTier && configId) {
+          const sub = await getStripe().subscriptions.retrieve(session.subscription as string);
+          const priceId = sub.items.data[0]?.price?.id;
+          if (!priceId) break;
+
+          const tier = getLeasingTierFromPriceId(priceId);
+          if (tier === "free") break;
+
+          await prisma.leasingConfig.update({
+            where: { id: configId },
+            data: {
+              tier,
+              stripeCustomerId: session.customer as string,
+              stripeSubscriptionId: session.subscription as string,
+              emailEnabled: true, // Pro and Team get email
+            },
+          });
+
+          invalidateLeasingTierCache(configId);
+          console.log(`[Stripe] leasing checkout: config=${configId} tier=${tier} sub=${session.subscription}`);
+
+          // ── Apply pending referral credits if this org had any ─
+          {
+            const lc = await prisma.leasingConfig.findUnique({ where: { id: configId }, select: { orgId: true } });
+            if (lc) {
+              const thisOrg = await prisma.organization.findUnique({ where: { id: lc.orgId }, select: { pendingReferralCredit: true } });
+              if (thisOrg && thisOrg.pendingReferralCredit > 0) {
+                await getStripe().customers.createBalanceTransaction(
+                  session.customer as string,
+                  { amount: -thisOrg.pendingReferralCredit, currency: "usd", description: "Referral reward — friend upgraded to Pro" },
+                );
+                await prisma.organization.update({
+                  where: { id: lc.orgId },
+                  data: { pendingReferralCredit: 0 },
+                });
+                console.log(JSON.stringify({ event: "pending_referral_credit_applied", orgId: lc.orgId, amount: thisOrg.pendingReferralCredit }));
+              }
+            }
+          }
+
+          // ── Referral credit: first upgrade from free ──────────
+          if (session.metadata?.previousTier === "free") {
+            const leasingConf = await prisma.leasingConfig.findUnique({
+              where: { id: configId },
+              select: { orgId: true },
+            });
+            if (leasingConf) {
+              const upgradedOrg = await prisma.organization.findUnique({
+                where: { id: leasingConf.orgId },
+                select: { id: true, referredByOrgId: true },
+              });
+              if (upgradedOrg?.referredByOrgId) {
+                const referringOrg = await prisma.organization.findUnique({
+                  where: { id: upgradedOrg.referredByOrgId },
+                });
+                if (referringOrg) {
+                  // Find referring org's Stripe customer from their leasing config
+                  const referringConfig = await prisma.leasingConfig.findFirst({
+                    where: { orgId: referringOrg.id, stripeCustomerId: { not: null } },
+                    select: { stripeCustomerId: true },
+                  });
+                  if (referringConfig?.stripeCustomerId) {
+                    // Apply $149 credit to referring org's Stripe customer
+                    await getStripe().customers.createBalanceTransaction(
+                      referringConfig.stripeCustomerId,
+                      { amount: -14900, currency: "usd", description: "Referral reward — friend upgraded to Pro" },
+                    );
+                    console.log(JSON.stringify({
+                      event: "referral_credit_applied",
+                      referringOrgId: referringOrg.id,
+                      referredOrgId: upgradedOrg.id,
+                      amount: 14900,
+                    }));
+                  } else {
+                    // Referring org has no Stripe customer yet — store pending credit
+                    await prisma.organization.update({
+                      where: { id: referringOrg.id },
+                      data: { pendingReferralCredit: { increment: 14900 } },
+                    });
+                    console.log(JSON.stringify({
+                      event: "referral_credit_pending",
+                      referringOrgId: referringOrg.id,
+                      referredOrgId: upgradedOrg.id,
+                      amount: 14900,
+                    }));
+                  }
+                }
+              }
+            }
+          }
+
+          break;
+        }
+
+        // ── Platform plan upgrade ─────────────────────────────
         const userId = session.metadata?.userId;
-        if (!userId || !session.subscription) break;
+        if (!userId) break;
 
         const sub = await getStripe().subscriptions.retrieve(session.subscription as string);
         const priceId = sub.items.data[0]?.price?.id;
@@ -104,6 +206,25 @@ export async function POST(req: NextRequest) {
       case "customer.subscription.deleted": {
         const sub = event.data.object as Stripe.Subscription;
 
+        // ── Check if this is a leasing subscription ───────────
+        const leasingConfig = await prisma.leasingConfig.findFirst({
+          where: { stripeSubscriptionId: sub.id },
+        });
+        if (leasingConfig) {
+          await prisma.leasingConfig.update({
+            where: { id: leasingConfig.id },
+            data: {
+              tier: "free",
+              emailEnabled: false,
+              stripeSubscriptionId: null,
+            },
+          });
+          invalidateLeasingTierCache(leasingConfig.id);
+          console.log(`[Stripe] leasing subscription.deleted: config=${leasingConfig.id} → free`);
+          break;
+        }
+
+        // ── Platform subscription ─────────────────────────────
         let user = await prisma.user.findFirst({
           where: { stripeSubscriptionId: sub.id },
         });
