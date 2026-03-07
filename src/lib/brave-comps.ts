@@ -10,6 +10,8 @@
 
 import { braveWebSearch, isBraveSearchAvailable } from "./brave-search";
 import type { BraveWebResult } from "./brave-search";
+import { isFirecrawlAvailable } from "./firecrawl";
+import { fcFetchWebComps } from "./firecrawl-comps";
 
 // ---- Types ----
 
@@ -135,6 +137,18 @@ export async function fetchWebComps(
   zip?: string,
   units?: number,
 ): Promise<WebComp[]> {
+  // Try Firecrawl first (primary)
+  if (await isFirecrawlAvailable()) {
+    try {
+      const comps = await fcFetchWebComps(address, borough, zip, units);
+      if (comps.length > 0) return comps;
+      console.info("[Comps] Firecrawl returned 0 comps, trying Brave");
+    } catch (err: any) {
+      console.warn("[Comps] Firecrawl failed, falling back to Brave:", err?.message);
+    }
+  }
+
+  // Fallback to Brave
   const available = await isBraveSearchAvailable();
   if (!available) return [];
 

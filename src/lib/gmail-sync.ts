@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { getValidToken } from "@/lib/gmail";
 import { parseEmailWithAI } from "@/lib/email-parser";
 import { categorizeEmail } from "@/lib/email-categorizer";
+import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 
 const GMAIL_API = "https://www.googleapis.com/gmail/v1/users/me";
 
@@ -162,6 +163,19 @@ async function processMessage(
     } catch (err) {
       console.error("  AI parse error for", msg.id, err);
     }
+  }
+
+  // Fire automation: email_received (inbound only, skip initial bulk sync)
+  if (!skipAI && direction === "inbound") {
+    dispatchAutomationSafe(orgId, "email_received", {
+      contactId: contactId || undefined,
+      emailMessageId: emailMsg.id,
+      fromEmail,
+      fromName,
+      subject: subject || "",
+      category,
+      sentimentScore: null, // populated after AI parse
+    }, contactId || undefined);
   }
 
   return emailMsg;

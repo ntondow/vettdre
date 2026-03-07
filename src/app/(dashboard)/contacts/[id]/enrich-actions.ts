@@ -9,6 +9,7 @@ import {
   type ApolloPersonResult,
   type ApolloOrgResult,
 } from "@/lib/apollo";
+import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 
 const PDL_BASE = "https://api.peopledatalabs.com/v5";
 const NYC = "https://data.cityofnewyork.us/resource";
@@ -508,6 +509,28 @@ export async function enrichContact(contactId: string) {
     });
 
     console.log("  Saved enrichment. Score:", score, grade, "Sources:", dataSources.join(", "));
+
+    // Fire automation: contact_enriched
+    dispatchAutomationSafe(contact.orgId, "contact_enriched", {
+      contactId: contact.id,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      enrichmentType: dataSources.join(", "),
+      confidenceLevel: score >= 60 ? "high" : score >= 30 ? "medium" : "low",
+    }, contact.id);
+
+    // Fire automation: score_change (if score actually changed)
+    const previousScore = contact.qualificationScore || 0;
+    if (score !== previousScore) {
+      dispatchAutomationSafe(contact.orgId, "score_change", {
+        contactId: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        previousScore,
+        newScore: score,
+        scoreDelta: score - previousScore,
+      }, contact.id);
+    }
   } catch (err) {
     console.error("  Save error:", err);
   }

@@ -46,6 +46,12 @@ const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Portfolio",
+    items: [
+      { name: "Properties", href: "/properties", icon: "🏢" },
+    ],
+  },
+  {
     label: "Acquisitions",
     items: [
       { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
@@ -78,6 +84,12 @@ const NAV_SECTIONS: NavSection[] = [
     items: [
       { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions", roles: ["owner", "admin"] },
       { name: "My Deals", href: "/brokerage/my-deals", icon: "💼", feature: "bms_submissions", roles: ["agent"] },
+    ],
+  },
+  {
+    label: "Automation",
+    items: [
+      { name: "Automations", href: "/settings/automations", icon: "⚡" },
     ],
   },
 ];

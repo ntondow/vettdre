@@ -1,7 +1,7 @@
-# VettdRE — AI-Native NYC Real Estate CRM
+# VettdRE — AI-Native NYC Real Estate Platform
 
 ## Project Overview
-VettdRE is a CRM platform for NYC real estate agents combining traditional CRM with AI-powered property intelligence. The key differentiator is Market Intelligence — integrating 17+ NYC Open Data APIs with skip tracing (People Data Labs) and professional enrichment (Apollo.io) to identify property owners, discover portfolios, and score leads automatically.
+VettdRE is a multi-tenant real estate platform for NYC agents and brokerages combining CRM, brokerage management, AI-powered property intelligence, deal underwriting, and an AI leasing agent. The platform integrates 17+ NYC Open Data APIs, skip tracing (People Data Labs), professional enrichment (Apollo.io), Stripe billing, Twilio SMS/voice, and Brave Search to deliver a comprehensive real estate operations suite.
 
 ## Tech Stack
 - **Framework:** Next.js 16.1.6 (App Router, Turbopack, standalone output)
@@ -9,13 +9,16 @@ VettdRE is a CRM platform for NYC real estate agents combining traditional CRM w
 - **React:** 19.2.3
 - **Database:** PostgreSQL via Supabase (Session Pooler)
 - **ORM:** Prisma 5.22
-- **Auth:** Supabase Auth with SSR middleware + user approval system
+- **Auth:** Supabase Auth with SSR middleware + user approval + auto-provisioning
 - **Styling:** Tailwind CSS 4 (custom animations + mobile utilities in `globals.css`)
 - **Icons:** Lucide React + emoji icons in some UI elements
 - **Maps:** Leaflet + OpenStreetMap (dynamic import, `circleMarker` for performance)
 - **AI:** Anthropic Claude API (`@anthropic-ai/sdk` ^0.76.0)
 - **Skip Tracing:** People Data Labs API (primary), Tracerfy API (fallback)
 - **Professional Enrichment:** Apollo.io API (Organization Plan — People Search, People Enrichment, Org Enrichment, Bulk Enrich)
+- **Payments:** Stripe (checkout sessions, billing portal, webhook lifecycle)
+- **Communications:** Twilio (SMS, voice, status callbacks)
+- **Search:** Brave Web Search API (listings, comps, entity research)
 - **Deployment:** Docker + Google Cloud Run (cloudbuild.yaml)
 - **Utilities:** clsx, tailwind-merge
 
@@ -27,20 +30,78 @@ VettdRE is a CRM platform for NYC real estate agents combining traditional CRM w
 
 ## Environment Variables
 ```
+# Database
 DATABASE_URL=                    # Supabase Session Pooler (port 5432)
 DIRECT_URL=                      # Supabase Direct connection (port 5432)
+
+# Supabase Auth
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
-ANTHROPIC_API_KEY=               # Claude AI for ownership analysis + email parsing
-PDL_API_KEY=                     # People Data Labs skip tracing
-APOLLO_API_KEY=                  # Apollo.io (used in market-intel/lead-verification.ts)
-TRACERFY_API_KEY=                # Tracerfy skip trace (fallback, CSV-based)
-BRAVE_SEARCH_API_KEY=            # Brave Web Search API (on-market listings, web comps, entity research)
+SUPABASE_SERVICE_ROLE_KEY=
+
+# AI
+ANTHROPIC_API_KEY=               # Claude AI for ownership analysis, email parsing, leasing agent, deal underwriting
+
+# Data APIs
+NYC_OPEN_DATA_APP_TOKEN=         # NYC Open Data (Socrata)
+NYC_OPEN_DATA_TOKEN=             # Alternate NYC token
+NYS_OPEN_DATA_TOKEN=             # NYS entity/filing data
+CENSUS_API_KEY=                  # Census demographic data
+GEOCODIO_API_KEY=                # Geocoding
+HUD_API_TOKEN=                   # HUD fair market rents
+FRED_API_KEY=                    # FRED economic data (mortgage rates)
+FANNIE_CLIENT_ID=                # Fannie Mae loan data
+FANNIE_CLIENT_SECRET=
+FANNIE_API_KEY=
+
+# Skip Tracing & Enrichment
+PDL_API_KEY=                     # People Data Labs
+APOLLO_API_KEY=                  # Apollo.io
+TRACERFY_API_KEY=                # Tracerfy (fallback, CSV-based)
+
+# Web Search & Scraping
+FIRECRAWL_API_KEY=               # Firecrawl (primary — web scraping for listings, comps, entity research)
+FIRECRAWL_MAX_CREDITS_PER_MONTH= # Monthly credit budget (default: 500)
+BRAVE_SEARCH_API_KEY=            # Brave Web Search API (fallback when Firecrawl unavailable)
+
+# Gmail & Calendar
 GOOGLE_CLIENT_ID=                # Gmail + Calendar OAuth
 GOOGLE_CLIENT_SECRET=
 GOOGLE_REDIRECT_URI=
-TOKEN_ENCRYPTION_KEY=            # (Optional) AES-256-GCM key for Gmail token encryption at rest (falls back to ANTHROPIC_API_KEY)
-AI_PARSE_MAX_PER_HOUR=100       # (Optional) Max AI email parses per hour (default: 100)
+
+# Stripe Billing
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+STRIPE_PRO_MONTHLY_PRICE_ID=
+STRIPE_PRO_YEARLY_PRICE_ID=
+STRIPE_EXPLORER_MONTHLY_PRICE_ID=
+STRIPE_EXPLORER_YEARLY_PRICE_ID=
+STRIPE_TEAM_MONTHLY_PRICE_ID=
+STRIPE_LEASING_PRO_PRICE_ID=
+STRIPE_LEASING_TEAM_PRICE_ID=
+
+# Twilio SMS/Voice
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+
+# Push Notifications
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_SUBJECT=
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=
+
+# Error Monitoring (Sentry)
+NEXT_PUBLIC_SENTRY_DSN=          # Sentry DSN (public, identifies project)
+SENTRY_AUTH_TOKEN=               # (Optional) Source map upload auth token
+
+# Security & Config
+TOKEN_ENCRYPTION_KEY=            # AES-256-GCM for Gmail token encryption (falls back to ANTHROPIC_API_KEY)
+AI_PARSE_MAX_PER_HOUR=100       # Max AI email parses per hour (default: 100)
+NEXT_PUBLIC_APP_URL=             # Public app URL
+LEASING_FALLBACK_EMAIL=          # Fallback for leasing email routing
+CRON_SECRET=                     # Auth for cron endpoints
+EMAIL_WEBHOOK_SECRET=            # Leasing email webhook auth
+VITALITY_REFRESH_KEY=            # Vitality cache refresh auth
 ```
 
 ## Project Structure
@@ -53,182 +114,311 @@ src/
 │   ├── page.tsx                   # Root redirect (→ /dashboard or /login)
 │   │
 │   ├── (auth)/
-│   │   ├── login/page.tsx         # Email/password login
-│   │   ├── signup/page.tsx        # Registration with email confirmation
-│   │   └── pending-approval/page.tsx  # Shown when user account not yet approved
+│   │   ├── login/page.tsx
+│   │   ├── signup/page.tsx
+│   │   └── pending-approval/page.tsx
 │   │
 │   ├── auth/callback/route.ts     # Supabase OAuth callback
 │   │
 │   ├── api/
 │   │   ├── auth/gmail/route.ts           # Gmail OAuth initiation
 │   │   ├── auth/gmail/callback/route.ts  # Gmail OAuth callback → stores tokens
-│   │   └── book/route.ts                 # Public showing booking endpoint
+│   │   ├── book/route.ts                 # Public showing booking
+│   │   ├── cache/route.ts                # Admin cache management
+│   │   ├── report/[bbl]/route.ts         # Single building PDF report
+│   │   ├── vitality/refresh/route.ts     # Neighborhood vitality cache refresh
+│   │   ├── automations/
+│   │   │   └── cron/route.ts             # Cron: no_activity + task_overdue triggers (30m)
+│   │   ├── leasing/
+│   │   │   ├── chat/route.ts             # Web chat inbound
+│   │   │   ├── sms/route.ts              # Twilio SMS inbound
+│   │   │   ├── sms/status/route.ts       # SMS delivery callbacks
+│   │   │   ├── voice/route.ts            # Twilio voice inbound (TwiML)
+│   │   │   ├── voice/transcription/route.ts  # Speech-to-text
+│   │   │   ├── email/route.ts            # Email webhook inbound
+│   │   │   ├── follow-ups/route.ts       # Cron: scheduled follow-ups (15m)
+│   │   │   ├── import/route.ts           # Bulk unit import
+│   │   │   ├── upgrade/route.ts          # Stripe checkout session
+│   │   │   └── benchmarks/route.ts       # Anonymous benchmarking
+│   │   ├── webhooks/stripe/route.ts      # Stripe subscription lifecycle
+│   │   ├── stripe/
+│   │   │   ├── checkout/route.ts         # Create checkout session
+│   │   │   └── portal/route.ts           # Billing portal redirect
+│   │   └── twilio/
+│   │       ├── sms/route.ts              # Twilio SMS webhook
+│   │       ├── status/route.ts           # SMS status callbacks
+│   │       └── voice/route.ts            # Voice webhook
 │   │
-│   ├── book/[slug]/page.tsx       # Public showing booking page (no auth)
+│   ├── book/[slug]/page.tsx              # Public showing booking (no auth)
+│   ├── join/agent/[token]/page.tsx       # Agent invite accept flow
+│   ├── join/agent/[token]/accept/page.tsx
+│   ├── submit-deal/[token]/page.tsx      # Public deal submission (no auth)
+│   ├── leasing-agent/page.tsx            # Marketing landing page
+│   ├── chat/[configSlug]/page.tsx        # Public web chat widget (hosted)
 │   │
-│   └── (dashboard)/               # Protected layout (auth + approval required)
-│       ├── layout.tsx             # Sidebar (desktop) + MobileNav (phone) + responsive main
-│       ├── dashboard/             # Home dashboard
-│       ├── contacts/              # CRM contacts + [id] detail
-│       ├── pipeline/              # Kanban deal board
-│       ├── messages/              # Gmail inbox + templates
-│       ├── calendar/              # Calendar + showing slots
-│       ├── market-intel/          # NYC property intelligence (core feature)
-│       ├── properties/            # Property listings (minimal)
-│       ├── prospecting/           # Saved prospects from Market Intel
-│       ├── portfolios/            # Portfolio dashboard (schema exists, basic UI)
-│       └── settings/              # 14 settings sub-pages
+│   └── (dashboard)/                      # Protected layout (auth + approval required)
+│       ├── layout.tsx                    # Sidebar (desktop) + MobileNav (phone)
+│       ├── dashboard/                    # Home dashboard
+│       ├── contacts/                     # CRM contacts + [id] dossier
+│       ├── pipeline/                     # Kanban deal board
+│       ├── messages/                     # Gmail inbox + templates
+│       ├── calendar/                     # Calendar + showing slots
+│       ├── market-intel/                 # NYC property intelligence
+│       ├── properties/                   # My Properties unified hub
+│       ├── prospecting/                  # Saved prospects from Market Intel
+│       ├── portfolios/                   # Portfolio dashboard
+│       ├── brokerage/                    # Brokerage Management System (BMS)
+│       │   ├── dashboard/               # BMS overview stats
+│       │   ├── agents/[id]/             # Agent detail
+│       │   ├── my-deals/                # Agent self-service portal
+│       │   ├── listings/                # Listing management + bulk upload
+│       │   ├── listings/properties/     # Property management
+│       │   ├── deal-submissions/        # Approval queue
+│       │   ├── transactions/            # Pipeline tracker
+│       │   ├── invoices/                # Invoice list + create + bulk
+│       │   ├── payments/                # Payment recording
+│       │   ├── compliance/              # License/insurance tracking
+│       │   ├── commission-plans/        # Plan setup
+│       │   ├── reports/                 # Dashboard, production, P&L, tax prep
+│       │   ├── leaderboard/             # Agent rankings
+│       │   └── settings/                # BMS admin config
+│       ├── leasing/                      # AI Leasing Agent
+│       │   ├── setup/                   # Onboarding wizard + bulk import
+│       │   ├── [configId]/web-chat/     # Web chat config
+│       │   ├── [configId]/knowledge/    # FAQ + competitor intel
+│       │   ├── [configId]/team/         # Agent assignment + cadences
+│       │   ├── analytics/               # Metrics + ROI calculator
+│       │   ├── upgrade/success/         # Post-upgrade landing
+│       │   └── referral/                # Referral program
+│       ├── deals/                        # Deal Modeler / Underwriting
+│       │   ├── new/                     # Create workspace
+│       │   ├── [id]/                    # Edit workspace
+│       │   ├── pipeline/                # Kanban board
+│       │   ├── screen/                  # Quick screening tool
+│       │   ├── saved/                   # Saved analyses
+│       │   ├── compare/                 # Side-by-side comparison
+│       │   ├── benchmarks/              # Market cap rates
+│       │   ├── comps/                   # Comparable sales research
+│       │   ├── closing-costs/           # NYC deal costs
+│       │   ├── cap-rates/               # Market analysis
+│       │   ├── rent-stabilization/      # RGB modeling
+│       │   ├── renovation/              # Cost estimation
+│       │   ├── promote/                 # GP/LP waterfall
+│       │   ├── documents/               # LOI/PDF exports
+│       │   ├── export/                  # LOI, BOV, investment summary
+│       │   └── import/                  # CSV upload existing deals
+│       └── settings/                     # 17+ settings sub-pages
+│           ├── profile/
+│           ├── team/
+│           ├── gmail/
+│           ├── sync/
+│           ├── api-keys/
+│           ├── pipeline/
+│           ├── branding/
+│           ├── signature/
+│           ├── notifications/
+│           ├── hours/
+│           ├── lead-rules/
+│           ├── ai/
+│           ├── export/
+│           ├── templates/
+│           ├── billing/                 # Stripe subscription management
+│           ├── phone/                   # Twilio phone configuration
+│           ├── automations/             # Automation engine settings + CRUD
+│           └── admin/                   # Admin user/waitlist management
 │
-├── components/layout/
-│   ├── header.tsx                 # Top navigation bar
-│   ├── sidebar.tsx                # Desktop left sidebar (hidden on mobile: hidden md:flex)
-│   └── mobile-nav.tsx             # Mobile bottom tab bar + "More" sheet overlay
+├── components/
+│   ├── layout/
+│   │   ├── header.tsx
+│   │   ├── sidebar.tsx                  # Desktop (hidden md:flex)
+│   │   └── mobile-nav.tsx               # Mobile bottom tab bar
+│   ├── bms/                             # Brokerage management UI
+│   ├── leasing/                         # AI leasing agent UI
+│   ├── research/                        # Deal research widgets
+│   └── ui/                              # shadcn + custom (skeleton-shimmer, charts)
 │
 ├── lib/
-│   ├── prisma.ts                  # Prisma client singleton
-│   ├── utils.ts                   # Shared utilities
-│   ├── gmail.ts                   # Gmail token management + refresh
-│   ├── gmail-sync.ts              # Initial + incremental Gmail sync engine
-│   ├── gmail-send.ts              # Send/reply via Gmail API
-│   ├── google-calendar.ts         # Google Calendar sync (16KB, full 2-way)
-│   ├── email-parser.ts            # AI email parsing (Claude) — extracts lead data
-│   ├── email-categorizer.ts       # Email categorization (lead source, intent, sentiment)
-│   ├── email-scoring.ts           # Email engagement scoring algorithm
-│   ├── follow-up-checker.ts       # Follow-up reminder trigger logic
-│   ├── nyc-opendata.ts            # NYC Open Data API helpers
-│   ├── apollo.ts                  # Apollo.io API: enrich person/org, search people, bulk enrich, merge logic
-│   ├── zillow-data.ts             # Zillow rent/sale estimates
-│   ├── entity-resolver.ts         # Fuzzy matching, address normalization, owner resolution across sources
-│   ├── data-fusion-engine.ts      # Central aggregation: 14 NYC APIs + Brave + scoring + caching
-│   ├── brave-search.ts            # Brave Search API wrapper (Web Search + Summarizer)
-│   ├── brave-listings.ts          # Live listings search via Brave, listing parser, dedup
-│   ├── brave-comps.ts             # Web comps: merge Brave results with DOF Rolling Sales
-│   ├── brave-entity.ts            # Owner/entity web research: news, courts, corporate records
+│   ├── prisma.ts                        # Prisma client singleton (cached in production)
+│   ├── utils.ts                         # Shared utilities
+│   │
+│   │  # Gmail & Email
+│   ├── gmail.ts                         # Gmail token management + refresh (mutex lock)
+│   ├── gmail-sync.ts                    # Initial + incremental Gmail sync
+│   ├── gmail-send.ts                    # Send/reply via Gmail API
+│   ├── email-parser.ts                  # AI email parsing (Claude)
+│   ├── email-categorizer.ts             # Email categorization
+│   ├── email-scoring.ts                 # Engagement scoring
+│   ├── follow-up-checker.ts             # Follow-up reminder logic
+│   │
+│   │  # Calendar
+│   ├── google-calendar.ts               # Google Calendar 2-way sync
+│   │
+│   │  # Market Intelligence & NYC Data
+│   ├── nyc-opendata.ts                  # NYC Open Data API wrappers
+│   ├── data-fusion-engine.ts            # 3-phase progressive building profiles (27KB)
+│   ├── entity-resolver.ts               # Fuzzy matching, address normalization
+│   ├── cache-manager.ts                 # LRU 3-tier caching (memory, per-source, Supabase)
+│   ├── cache-warming.ts                 # Pre-warm cache for map search
+│   │
+│   │  # Web Search & Scraping (Firecrawl primary, Brave fallback)
+│   ├── firecrawl.ts                     # Firecrawl API client (search, scrape, extract, budget)
+│   ├── firecrawl-listings.ts            # On-market listing search via Firecrawl
+│   ├── firecrawl-comps.ts               # Web comps via Firecrawl
+│   ├── firecrawl-entity.ts              # Owner/entity research via Firecrawl
+│   ├── brave-search.ts                  # Brave Web Search API wrapper (fallback)
+│   ├── brave-listings.ts                # On-market listing search (orchestrates Firecrawl → Brave)
+│   ├── brave-comps.ts                   # Web comps (orchestrates Firecrawl → Brave)
+│   ├── brave-entity.ts                  # Owner/entity web research (orchestrates Firecrawl → Brave)
+│   │
+│   │  # Skip Tracing & Enrichment
+│   ├── apollo.ts                        # Apollo.io API (people/org search + enrichment)
+│   ├── contact-enrichment-pipeline.ts   # PDL + Apollo + PLUTO pipeline
+│   ├── zillow-data.ts                   # Zillow rent/sale estimates
+│   │
+│   │  # Leasing Engine
+│   ├── leasing-engine.ts                # Core conversation loop, intent detection, tool execution
+│   ├── leasing-prompt.ts                # Building-aware system prompt generation
+│   ├── leasing-followups.ts             # Scheduled cadence engine
+│   ├── leasing-limits.ts                # Tier-based usage metering
+│   ├── leasing-analytics.ts             # Metric aggregation
+│   ├── leasing-calendar.ts              # Google Calendar availability + booking
+│   ├── leasing-ab.ts                    # A/B testing framework
+│   ├── leasing-types.ts                 # Type definitions
+│   ├── leasing-waitlist.ts              # Waitlist matching logic
+│   ├── leasing-import.ts                # CSV/XLSX unit import
+│   ├── leasing-email.ts                 # Email handling + ILS parser
+│   ├── leasing-benchmarks.ts            # Cross-building percentiles
+│   ├── ils-parser.ts                    # StreetEasy/Apartments/Zillow email parsing
+│   │
+│   │  # BMS & Finance
+│   ├── bms-types.ts                     # Shared types, status labels, Excel mappings
+│   ├── bms-auth.ts                      # Role + agent info helpers
+│   ├── bms-permissions.ts               # RBAC matrix (4 roles x 24 permissions)
+│   ├── bms-audit.ts                     # Fire-and-forget audit logging
+│   ├── bms-files.ts                     # File attachment CRUD
+│   ├── invoice-simple-pdf.ts            # Commission invoice PDF generator
+│   ├── invoice-pdf.ts                   # Alternative invoice format
+│   ├── transaction-templates.ts         # Transaction workflow templates
+│   │
+│   │  # Deal Analysis & Underwriting
+│   ├── deal-calculator.ts               # Full underwriting (DCF, IRR, proforma)
+│   ├── deal-structure-engine.ts         # 5 deal structures + comparison
+│   ├── ai-assumptions.ts               # One-click underwrite generator (15KB)
+│   ├── cap-rate-engine.ts               # Market-derived cap rates
+│   ├── comps-engine.ts                  # Comparable sales + valuation scoring
+│   ├── nyc-deal-costs.ts                # Transfer taxes, MRT, mansion tax, CEMA
+│   ├── rent-stabilization.ts            # RGB rates + MCI/IAI
+│   ├── ll97-penalties.ts                # LL97 carbon penalty calculation
+│   ├── renovation-engine.ts             # Renovation cost estimation
+│   ├── promote-engine.ts                # GP/LP waterfall
+│   ├── expense-benchmarks.ts            # RGB I&E benchmarks
+│   ├── expense-analyzer.ts              # T-12 parsing
+│   │
+│   │  # Document Generation
+│   ├── deal-pdf.ts                      # Deal summary PDF export
+│   ├── investment-summary-pdf.ts        # Executive summary generator
+│   ├── pdf-report.ts                    # Property analysis PDF
+│   ├── pdf-utils.ts                     # PDF generation utilities
+│   ├── bov-pdf.ts                       # Build-out validator PDF
+│   ├── loi-template.ts                  # LOI template + DOCX
+│   ├── loi-pdf.ts                       # LOI PDF generator
+│   ├── document-parser.ts               # PDF/Word OCR + parsing
+│   ├── document-parser-mappings.ts      # Deal input extraction mappings
+│   │
+│   │  # Market Data & Economics
+│   ├── vitality-engine.ts               # Neighborhood commercial vitality scoring
+│   ├── vitality-data.ts                 # POI/retail density calculations
+│   ├── fannie-mae.ts                    # GSE loan lookup
+│   ├── fhfa.ts                          # House price index
+│   ├── fred.ts                          # FRED API (mortgage rates, economic data)
+│   ├── hud.ts                           # HUD fair market rents
+│   │
+│   │  # Maps & Neighborhoods
+│   ├── map-layers.ts                    # Leaflet layer definitions
+│   ├── map-styles.ts                    # Custom map styling
+│   ├── neighborhoods.ts                 # NYC neighborhood data
+│   ├── neighborhoods-nys.ts             # NYS neighborhoods
+│   ├── neighborhoods-nj.ts              # NJ neighborhoods
+│   ├── nyc-zip-centroids.ts             # ZIP code coordinates
+│   │
+│   │  # Automations Engine
+│   ├── automation-types.ts              # Type definitions: triggers, conditions, actions
+│   ├── automation-evaluator.ts          # Condition evaluation (7 operators, AND/OR groups)
+│   ├── automation-executor.ts           # Action execution (create_task, update_status, notify, add_tag)
+│   ├── automation-dispatcher.ts         # Trigger dispatcher + safe wrapper (never throws)
+│   │
+│   │  # Integrations & Utilities
+│   ├── stripe.ts                        # Stripe client + price ID mapping
+│   ├── twilio.ts                        # Twilio client initialization
+│   ├── encryption.ts                    # AES-256-GCM for sensitive data
+│   ├── feature-gate.ts                  # Feature flag system (client)
+│   ├── feature-gate-server.ts           # Feature flag system (server)
+│   ├── motivation-engine.ts             # Agent motivation + streak logic
+│   ├── agent-badges.ts                  # Badge definitions
+│   ├── push-notifications.ts            # Web push (VAPID)
+│   ├── rss-feed.ts                      # Market news RSS aggregation
+│   │
 │   └── supabase/
-│       ├── client.ts              # Supabase browser client
-│       ├── server.ts              # Supabase server client
-│       └── middleware.ts           # Auth middleware (session + approval check)
+│       ├── client.ts                    # Supabase browser client (.trim() on env)
+│       ├── server.ts                    # Supabase server client (.trim() on env)
+│       └── middleware.ts                # Auth middleware (session + approval + auto-provisioning)
 │
-├── middleware.ts                   # Next.js middleware → Supabase session
+├── middleware.ts                        # Next.js middleware → Supabase session
 │
 └── prisma/
-    └── schema.prisma              # 30 models, 17 enums
+    └── schema.prisma                    # 71 models, 34 enums
 
 # Root files
-├── Dockerfile                     # Multi-stage Docker build (Node 20-Alpine, standalone)
-├── cloudbuild.yaml                # Google Cloud Build → Cloud Run deployment
-├── next.config.ts                 # output: "standalone"
+├── Dockerfile                           # Multi-stage Docker build (Node 20-Alpine, standalone)
+├── docker-entrypoint.sh                 # (exists but not used — CMD node server.js)
+├── cloudbuild.yaml                      # Google Cloud Build → Cloud Run
+├── next.config.ts                       # standalone output + hardcoded NEXT_PUBLIC_* for edge inlining
 └── public/
-    ├── manifest.json              # PWA manifest (standalone, theme #1E40AF)
+    ├── manifest.json                    # PWA manifest (standalone, theme #1E40AF)
     ├── favicon.ico
-    ├── icon-192.png               # PWA icon 192x192
-    └── icon-512.png               # PWA icon 512x512
+    ├── icon-192.png
+    └── icon-512.png
 ```
 
 ## Auth & Approval System
 - **Supabase Auth** handles login/signup with email + password
-- **User approval gate:** new signups have `isApproved = false` by default
+- **Auto-provisioning:** first-time login auto-creates Organization + User records via middleware
+- **User approval gate:** new signups have `isApproved = false` by default (middleware now auto-approves on first signup)
+- **Referral attribution:** referral code from cookies applied during auto-provisioning
 - **Middleware flow:** authenticated but unapproved users → redirect to `/pending-approval`
-- **Public routes** (skip approval check): `/login`, `/signup`, `/auth/*`, `/pending-approval`, `/book/*`, `/`
-- Admin must set `isApproved = true` on User record to grant dashboard access
+- **Public routes** (skip auth/approval): `/login`, `/signup`, `/auth/*`, `/pending-approval`, `/book/*`, `/join/*`, `/submit-deal/*`, `/leasing-agent`, `/chat/*`, `/api/webhooks/*`, `/api/twilio/*`, `/api/stripe/*`, `/api/book`, `/`
+- Admin user management at `/settings/admin/users` with role assignment and approval toggles
 
 ## Mobile & PWA
 
 ### PWA Setup
 - `manifest.json`: name="VettdRE CRM", display="standalone", theme="#1E40AF"
 - Root `layout.tsx` exports `viewport` (device-width, no scale, viewportFit="cover") and `metadata` (appleWebApp capable, black-translucent status bar, manifest link, apple-touch-icon)
-- `<meta name="theme-color" content="#1E40AF" />` in `<head>`
 
 ### Mobile Navigation
-- **Bottom tab bar** (`mobile-nav.tsx`): fixed bottom, visible on phones (`md:hidden`)
-  - 5 tabs: Dashboard, Contacts, Pipeline, Messages (with unread badge), More
-  - "More" opens a slide-up sheet with: Properties, Tasks, Calendar, AI Insights, Analytics, Prospecting, Market Intel, Settings + Sign out
-  - Sheet has backdrop, drag handle, smooth enter/exit transitions
+- **Bottom tab bar** (`mobile-nav.tsx`): fixed bottom, visible on phones (`md:hidden`), 5 tabs: Dashboard, Contacts, Pipeline, Messages (unread badge), More
 - **Desktop sidebar** (`sidebar.tsx`): `hidden md:flex` — hidden on mobile
-- **Dashboard layout**: `<main className="pb-16 md:pb-0 md:pl-60">` — bottom padding for tab bar on mobile, left padding for sidebar on desktop
+- **Dashboard layout**: `<main className="pb-16 md:pb-0 md:pl-60">`
 
 ### Mobile CSS Utilities (`globals.css`)
 - `pb-safe` / `pt-safe` — safe area insets for notched devices
 - `no-scrollbar` — hides scrollbars for horizontal pill scrolling
 - `@keyframes slide-up-sheet` — sheet animation
 
-### Mobile Optimizations Still Needed
-- Page-specific responsive layouts (contacts card view, messages pane adaptation, pipeline vertical stages, calendar agenda-first on mobile, market-intel full-screen building profiles)
-- Touch targets (44x44px minimum), input font-size (16px to prevent iOS zoom)
-- Service worker / offline support not yet implemented
-
-## Routes & Pages
-
-### Auth (Public)
-| Route | Description |
-|-------|-------------|
-| `/login` | Email/password login |
-| `/signup` | Registration with email confirmation |
-| `/pending-approval` | Approval pending page (unapproved users) |
-| `/auth/callback` | Supabase OAuth callback |
-| `/book/[slug]` | Public showing booking (no auth required) |
-
-### API Routes
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/api/auth/gmail` | GET | Initiates Gmail OAuth flow |
-| `/api/auth/gmail/callback` | GET | Gmail OAuth callback, stores tokens |
-| `/api/book` | POST | Public showing slot reservation |
-
-### Dashboard (Protected — requires auth + approval)
-| Route | Status | Description |
-|-------|--------|-------------|
-| `/dashboard` | **Basic** | Welcome + placeholder stats (needs real data) |
-| `/contacts` | **Working** | Contact list with filters, create/edit forms |
-| `/contacts/[id]` | **Working** | 5-tab dossier: Overview, Details, Activity, Deals, Tasks + AI enrichment |
-| `/pipeline` | **Working** | Kanban board with drag-and-drop, 6 default stages |
-| `/messages` | **Working** | Gmail inbox: threads, compose, reply, labels, snooze, pin, bulk actions, CRM sidebar |
-| `/messages/templates` | **Working** | Email template CRUD with categories + merge variables |
-| `/calendar` | **Working** | Month/week/day/agenda views, Google Calendar sync, showing slot creator |
-| `/market-intel` | **Working** | 4 search modes: Property, Ownership, Name/Portfolio, Map |
-| `/properties` | **Minimal** | Empty state placeholder — needs full implementation |
-| `/prospecting` | **Working** | Saved prospect lists from Market Intel, convert to contacts/deals, CSV export |
-| `/portfolios` | **Basic** | Schema + basic UI exists, not actively used |
-
-### Settings (14 sub-pages)
-| Route | Status | Description |
-|-------|--------|-------------|
-| `/settings/profile` | **Working** | Name, phone, title, license, brokerage |
-| `/settings/team` | **Working** | Team members, roles (owner/admin/manager/agent/viewer), invites |
-| `/settings/gmail` | **Working** | Gmail connection status, re-auth, disconnect |
-| `/settings/sync` | **Working** | Auto-sync toggle, frequency, depth, label selection |
-| `/settings/api-keys` | **Working** | Status + test connections for PDL, Apollo, Tracerfy, Anthropic, Gmail |
-| `/settings/pipeline` | **Working** | Customize pipeline stages (names, colors, order) |
-| `/settings/branding` | **Working** | Company name, tagline, website, primary color, logo |
-| `/settings/signature` | **Working** | Email signature builder with 3 templates + live preview |
-| `/settings/notifications` | **Working** | Email/push toggles for leads, emails, tasks, reports |
-| `/settings/hours` | **Working** | Timezone + per-day working hours schedule |
-| `/settings/lead-rules` | **Working** | Lead assignment: manual, round robin, by source, by geography |
-| `/settings/ai` | **Working** | Auto-response mode/delay/tone, email parsing model selection |
-| `/settings/export` | **Working** | CSV export: contacts, deals, emails, full backup |
-| `/settings/templates` | **Working** | Email template CRUD (alternate location) |
-
-### Placeholder Routes (in sidebar nav, not yet built)
-| Route | Sidebar Label | Notes |
-|-------|---------------|-------|
-| `/tasks` | Tasks | Standalone task management page — not yet implemented |
-| `/insights` | AI Insights | AI-powered insights dashboard — not yet implemented |
-| `/analytics` | Analytics | Analytics/reporting dashboard — not yet implemented |
-
-## Database Schema (30 Models)
+## Database Schema (71 Models, 34 Enums)
 
 ### Core CRM
 | Model | Key Fields | Notes |
 |-------|-----------|-------|
-| **Organization** | name, slug, tier (solo/pro/enterprise), aiLookupsUsed/Limit, settings JSON | Multi-tenant root |
-| **User** | email, role (UserRole enum), fullName, title, licenseNumber, brokerage, **isApproved** | RBAC with 5 roles + approval gate |
-| **Contact** | firstName, lastName, email, phone, status (ContactStatus), source, qualificationScore, tags[], enrichmentStatus | Core CRM entity |
+| **Organization** | name, slug, tier, plan (UserPlan), aiLookupsUsed/Limit, stripeCustomerId, stripeSubscriptionId, settings JSON | Multi-tenant root with billing |
+| **User** | email, role (UserRole), plan (UserPlan), fullName, title, licenseNumber, brokerage, isApproved, referralCode, referredBy | RBAC + approval + referrals |
+| **Contact** | firstName, lastName, email, phone, status, source, qualificationScore, tags[], enrichmentStatus | Core CRM entity |
 | **EnrichmentProfile** | contactId, version, employer, jobTitle, linkedinUrl, ownsProperty, rawData JSON, dataSources[], confidenceLevel | PDL/Apollo/PLUTO data |
-| **QualificationScore** | contactId, totalScore, financialCapacity, intentSignals, identityVerification, engagementLevel, marketFit | AI scoring breakdown |
-| **Deal** | contactId, pipelineId, stageId, dealValue, status (open/won/lost), winProbability, riskFlags JSON | Pipeline deals |
+| **QualificationScore** | contactId, totalScore, financialCapacity, intentSignals, identityVerification, engagementLevel, marketFit | AI scoring |
+| **Deal** | contactId, pipelineId, stageId, dealValue, status, winProbability, riskFlags JSON | Pipeline deals |
 | **Pipeline** | orgId, name, pipelineType, stages JSON, isDefault | Customizable pipelines |
-| **Activity** | contactId, dealId, type (ActivityType), direction, subject, body, isAiGenerated | Timeline events |
-| **Task** | contactId, assignedTo, title, type (TaskType), priority, dueAt, status, aiReasoning | Follow-ups |
+| **Activity** | contactId, dealId, type, direction, subject, body, isAiGenerated | Timeline events |
+| **Task** | contactId, assignedTo, title, type, priority, dueAt, status, aiReasoning | Follow-ups |
 | **Property** | address, propertyType, transactionType, status, price, bedrooms, sqft, mlsNumber | Listings |
 | **Showing** | contactId, propertyId, scheduledAt, status, interestLevel, feedback | Showing tracking |
 | **ContactPropertyInterest** | contactId, propertyId, interestLevel | M:N interest mapping |
@@ -255,8 +445,58 @@ src/
 |-------|-----------|-------|
 | **ProspectingList** | orgId, name, status | Prospect list container |
 | **ProspectingItem** | address, block, lot, totalUnits, ownerName, lastSalePrice, status, contactId | Building prospects |
-| **Portfolio** | name, slug, totalBuildings, totalUnits, entityNames[] | Owner portfolios |
-| **PortfolioBuilding** | portfolioId, bbl, address, units, ownerName | Buildings in portfolio |
+| **Portfolio** | orgId, name, slug, totalBuildings, totalUnits, entityNames[] | Owner portfolios (tenant-isolated) |
+| **PortfolioBuilding** | portfolioId, orgId, bbl, address, units, ownerName | Buildings in portfolio |
+| **BuildingCache** | bbl, sourceType, data JSON, expiresAt | Multi-tier cache for NYC API data |
+| **VitalitySnapshot** | neighborhood, scores JSON, updatedAt | Neighborhood commercial vitality |
+
+### Brokerage Management System (BMS)
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| **BrokerAgent** | orgId, userId, licenseNumber, splitPercent, status, goals, badges | Agent roster |
+| **Transaction** | orgId, type, stage, parties JSON, dates, agentPayout, dealSubmissionId | Main deal entity |
+| **TransactionAgent** | transactionId, agentId, role, splitPercent, payoutStatus | Multi-agent splits |
+| **TransactionTask** | transactionId, stage, title, dueAt, completedAt | Stage-based checklist |
+| **TransactionTemplate** | orgId, name, type, tasks JSON | Reusable workflows |
+| **TransactionTemplateTask** | templateId, stage, title, daysDue | Template tasks |
+| **DealSubmission** | orgId, token, agentName, address, dealType, status, approvedAt | Public/auth deal submissions |
+| **Invoice** | orgId, transactionId, agentSplit, houseSplit, status, paidAt | Commission invoices |
+| **CommissionPlan** | orgId, name, type, tiers JSON, isDefault | Tiered commission structures |
+| **CommissionTier** | planId, threshold, rate | Plan tier breakpoints |
+| **ComplianceDocument** | agentId, type, expiresAt, status | License/insurance/background |
+| **Payment** | invoiceId, method, amount, reference, paidAt | Payment records |
+| **FileAttachment** | entityType, entityId, fileName, url, uploadedBy | Generic file storage |
+| **AgentGoal** | agentId, period, target, actual | Monthly/quarterly/annual targets |
+| **AgentBadge** | agentId, type, earnedAt | Gamification badges |
+
+### BMS Listings
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| **BmsProperty** | orgId, address, landlordName, totalUnits, notes | Building/property record |
+| **BmsListing** | propertyId, unitNumber, rent, bedrooms, status, availableAt | Individual unit listings |
+
+### AI Leasing Agent
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| **LeasingConfig** | orgId, tier (LeasingTier), channels, aiPersonality, knowledgeBase JSON | Property setup |
+| **LeasingConversation** | configId, channel, prospectPhone/Email, status, temperature, escalationReason | Prospect conversation |
+| **LeasingMessage** | conversationId, sender, content, channel, metadata JSON | Individual messages |
+| **LeasingFollowUp** | conversationId, type, scheduledAt, status, attempts | Scheduled follow-ups |
+| **LeasingDailyUsage** | configId, date, messageCount, tourCount | Usage metering |
+| **LeasingBenchmark** | metric, percentiles JSON, sampleSize | Cross-building aggregate stats |
+
+### Phone System
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| **PhoneNumber** | orgId, userId, number, status, twilioSid | Twilio number assignment |
+| **SmsMessage** | phoneNumberId, contactId, direction, body, status | SMS history |
+| **PhoneCall** | phoneNumberId, contactId, direction, duration, recordingUrl, status | Call history |
+
+### Deal Analysis
+| Model | Key Fields | Notes |
+|-------|-----------|-------|
+| **DealAnalysis** | orgId, userId, propertyAddress, inputs JSON, outputs JSON, status | Underwriting workspace |
+| **PromoteModel** | dealAnalysisId, structure JSON, returns JSON | GP/LP waterfall modeling |
 
 ### Settings & System
 | Model | Key Fields | Notes |
@@ -271,233 +511,223 @@ src/
 | **AutomationRun** | automationId, triggerData JSON, status | Execution log |
 | **AuditLog** | userId, action, entityType, entityId, changes JSON | Audit trail |
 
-### Enums (17)
-`OrgTier`, `SubscriptionStatus`, `UserRole`, `ContactStatus`, `ConfidenceLevel`, `PropertyType`, `TransactionType`, `PropertyStatus`, `DealStatus`, `PipelineType`, `ActivityType`, `ActivityDirection`, `TaskType`, `TaskPriority`, `TaskStatus`, `ShowingStatus`, `InterestLevel`, `TemplateChannel`, `AutomationTrigger`
+### Enums (34)
+**Core:** `OrgTier`, `SubscriptionStatus`, `UserRole`, `UserPlan`, `ContactStatus`, `ConfidenceLevel`, `PropertyType`, `TransactionType`, `PropertyStatus`, `DealStatus`, `PipelineType`, `ActivityType`, `ActivityDirection`, `TaskType`, `TaskPriority`, `TaskStatus`, `ShowingStatus`, `InterestLevel`, `TemplateChannel`, `AutomationTrigger`
+
+**BMS:** `BmsDealType`, `TransactionStage`, `BmsTransactionType`, `InvoiceStatus`, `CommissionPlanType`, `ComplianceDocType`, `PaymentMethod`, `BrokerageRole`, `BmsListingStatus`, `BmsListingType`, `BmsCommissionType`
+
+**Leasing:** `LeasingTier`, `ConversationStatus`, `LeadTemperature`, `EscalationReason`, `MessageSender`, `ConversationChannel`, `FollowUpType`, `FollowUpStatus`
+
+**Phone:** `PhoneNumberStatus`, `MessageDirection`, `SmsStatus`, `CallDirection`, `CallStatus`
 
 ## Feature Details
 
-### Messages Inbox (Working — Feature-Complete)
-**Files:** `messages/messages-view.tsx` (1232 lines), `messages/actions.ts`, `messages/bulk-actions.ts`, `messages/label-actions.ts`, `messages/follow-up-actions.ts`, `messages/crm-actions.ts`, `messages/template-actions.ts`, plus 6 components in `messages/components/`
+### Brokerage Management System (BMS) — Working
+**Routes:** `/brokerage/*` (16+ sub-pages)
 
-- Three-pane layout: folder/thread list (left), thread detail (center), CRM sidebar (right)
-- Gmail sync: initial full sync + incremental via historyId, auto-sync every 60s
-- Thread grouping with smart aggregation (participants, message count, snippet, AI metadata)
-- Gmail folder navigation: Inbox, Sent, Starred, Drafts, Trash, Spam, All Mail
-- Filter by: all, leads, personal, newsletters, snoozed, pinned, unread, lead source
-- Search with debounce
-- Compose modal with contact autocomplete and template library
-- Reply with templates (7 defaults: Follow Up, Schedule Showing, Application, etc.)
-- Bulk actions: mark read/unread, star, pin, label, snooze, archive, delete (syncs back to Gmail)
-- Custom labels (5 defaults: Hot Lead, Follow Up, Active Deal, Showing, Archived)
-- Snooze with date picker (auto-unsnooze on page load)
-- Pin threads (persisted in DB)
-- CRM sidebar: shows contact card, enrichment data, deals, activities, tasks, engagement score
-- Quick create contact/lead from unknown sender with AI-extracted data
-- AI email parsing: lead source, intent, sentiment score, extracted name/phone/budget/area
-- Follow-up reminders with banner
-- Keyboard shortcuts: c (compose), j/k (navigate), e (archive), # (delete), s (star), p (pin), / (search), ? (shortcuts modal), Esc (close)
-- Toast notifications for new emails
-- Shift-click multi-select for bulk operations
+Full brokerage operations platform for managing agents, deals, commissions, and compliance.
+
+**Agent Management:** roster with license tracking, split percentages, goal setting, badge gamification, leaderboard rankings. Agent invite flow via `/join/agent/[token]` with token-based onboarding.
+
+**Deal Pipeline:** public deal submission (`/submit-deal/[token]`), approval queue, transaction lifecycle tracking with stage-based task checklists, multi-agent split allocation.
+
+**Financial:** commission plan builder (tiered/flat/hybrid), invoice generation (single + bulk PDF), payment recording (check/ACH/wire/Stripe), P&L reporting, 1099 tax prep export.
+
+**Compliance:** document tracking for licenses, insurance, background checks with expiration alerts.
+
+**Reports:** dashboard overview, agent production reports, P&L, tax preparation exports.
+
+**RBAC:** 4 brokerage roles (owner, admin, manager, agent) x 24 permissions matrix via `bms-permissions.ts`.
+
+### AI Leasing Agent — Working
+**Routes:** `/leasing/*` (10+ sub-pages)
+
+Conversational AI assistant for property managers that handles tenant inquiries across SMS, email, voice, and web chat.
+
+**Conversation Engine:** `leasing-engine.ts` — intent detection, tool execution (tour booking, FAQ answers, waitlist management), context-aware responses using building knowledge base.
+
+**Channels:** Twilio SMS (`/api/leasing/sms`), Twilio voice with transcription (`/api/leasing/voice`), email webhook (`/api/leasing/email`), hosted web chat widget (`/chat/[configSlug]`).
+
+**Follow-Up System:** automated cadence engine (`leasing-followups.ts`) with scheduled messages, 15-minute cron job, configurable intervals and attempt limits.
+
+**Tier System:** free/pro/team tiers with usage metering (`leasing-limits.ts`), Stripe checkout for upgrades.
+
+**Analytics:** response times, conversion rates, tour booking rates, A/B testing framework, cross-building benchmarking with anonymous percentiles.
+
+**Setup:** onboarding wizard, bulk CSV/XLSX unit import, knowledge base editor (FAQs, competitor intel, amenities), web chat customization.
+
+**ILS Integration:** `ils-parser.ts` parses inbound emails from StreetEasy, Apartments.com, Zillow for auto-lead creation.
+
+### Deal Modeler / Underwriting — Working
+**Routes:** `/deals/*` (15+ sub-pages)
+
+Comprehensive real estate investment analysis toolkit.
+
+**Core Analysis:** `deal-calculator.ts` — DCF modeling, IRR calculation, proforma generation, debt service coverage, cash-on-cash returns.
+
+**Deal Structures:** `deal-structure-engine.ts` — 5 structure types with side-by-side comparison.
+
+**AI Underwriting:** `ai-assumptions.ts` — one-click AI-generated assumptions from address + deal type, pulls market data for rent comps, expense benchmarks, cap rates.
+
+**NYC-Specific Tools:** closing costs calculator (transfer taxes, MRT, mansion tax, CEMA via `nyc-deal-costs.ts`), rent stabilization RGB modeling (`rent-stabilization.ts`), LL97 carbon penalty calculator (`ll97-penalties.ts`), renovation cost estimator (`renovation-engine.ts`).
+
+**Market Data:** cap rate engine with market-derived rates, comparable sales scoring (`comps-engine.ts`), FRED API integration for mortgage rates, HUD fair market rents, Fannie Mae loan data.
+
+**Waterfall Modeling:** GP/LP promote structures with multiple hurdle rates (`promote-engine.ts`).
+
+**Document Export:** deal summary PDF, investment summary PDF, LOI generator (DOCX + PDF), build-out validator PDF.
+
+**Document Import:** `document-parser.ts` — PDF/Word OCR + parsing to auto-extract deal inputs.
+
+### Messages Inbox (Working — Feature-Complete)
+**Files:** `messages/messages-view.tsx`, `messages/actions.ts`, plus bulk/label/follow-up/crm/template action files and 6+ components
+
+Three-pane layout with Gmail sync (initial + incremental via historyId, auto-sync every 60s). Thread grouping, folder navigation (Inbox/Sent/Starred/Drafts/Trash/Spam/All Mail), filters (leads/personal/newsletters/snoozed/pinned/unread), compose with contact autocomplete + template library, reply with templates, bulk actions (read/star/pin/label/snooze/archive/delete synced to Gmail), custom labels, snooze with date picker, CRM sidebar (contact card, enrichment, deals, activities, tasks, engagement score), quick create contact from unknown sender with AI-extracted data, AI email parsing (lead source, intent, sentiment, name/phone/budget/area), follow-up reminders, keyboard shortcuts (c/j/k/e/#/s/p/?/Esc), shift-click multi-select.
 
 ### Calendar (Working — Feature-Complete)
 **Files:** `calendar/calendar-view.tsx` (1900 lines), `calendar/actions.ts`
 
-- Four views: month, week, day, agenda (with smooth fade transitions between views)
-- Month view: day grid with event pills, "+N more" pill, quick-create "+" button per day
-- Week view: time grid (6AM-10PM), overlapping event layout algorithm (Google Calendar style), all-day row
-- Day view: expanded time grid (80px/hour) with event sidebar list
-- Agenda view: 2-week lookahead, grouped by day with staggered entrance animations
-- Current time indicator: red line + pulsing dot (week + day views)
-- Mini calendar sidebar: month navigation, event dots, upcoming events list
-- Event CRUD with Google Calendar 2-way sync
-- Event types: showing, meeting, open house, inspection, closing, task, milestone, general
-- Auto-duration by event type (showing=30m, meeting=60m, open house=120m, etc.)
-- Color picker per event
-- Showing Slot Creator: bulk-generate slots for a property (address, date, time range, duration, break between)
-- Tasks displayed on calendar as 30-minute blocks
-- Contact and deal linking on events
-- Type filter dropdown
-- Unified modal: view mode (details + edit/delete) and create/edit mode (full form)
-
-### Contacts & CRM (Working)
-**Files:** `contacts/contact-list.tsx`, `contacts/contact-form.tsx`, `contacts/actions.ts`, `contacts/[id]/contact-dossier.tsx`, `contacts/[id]/actions.ts`, `contacts/[id]/enrich-actions.ts`
-
-- Contact list with status filters
-- 5-tab contact dossier: Overview, Details, Activity, Deals, Tasks
-- AI Lead Intelligence card: "Verify & Enrich" triggers PDL + NYC PLUTO lookup
-  - Scores 0-100 with A-F grade
-  - Shows: job title, company, LinkedIn, phones, emails, NYC properties owned
-  - Saves to EnrichmentProfile with version tracking
-- Activity timeline: notes, calls, emails, meetings
-- Task management with priority and due dates
-- Tag-based organization
-- Enrichment pipeline: PDL (2-pass strategy) -> NYC PLUTO -> scoring algorithm
-
-### Pipeline (Working)
-**Files:** `pipeline/pipeline-board.tsx`, `pipeline/actions.ts`
-
-- Kanban board with drag-and-drop
-- Default 6 stages: New Lead -> Contacted -> Showing -> Offer -> Under Contract -> Closed
-- Customizable stages via settings
-- Deal values and commission tracking
-- Contact + property linking
-- Win/loss tracking with reasons
-- Auto-close when moved to "closed" stage
+Four views (month/week/day/agenda), Google Calendar 2-way sync, event types (showing/meeting/open house/inspection/closing/task/milestone/general), auto-duration by type, color picker, Showing Slot Creator (bulk-generate slots), contact/deal linking, type filters. Current time indicator with pulsing dot. Mini calendar sidebar with upcoming events.
 
 ### Market Intelligence (Working — Core Feature)
-**Files:** `market-intel/market-intel-search.tsx`, `market-intel/actions.ts`, `market-intel/map-search.tsx`, `market-intel/building-profile.tsx`, `market-intel/building-profile-actions.ts`, `market-intel/tracerfy.ts`, `market-intel/lead-verification.ts`, `market-intel/ai-analysis.ts`, `market-intel/graph-engine.ts`, `market-intel/portfolio-engine.ts`, `market-intel/enrichment.ts`, `market-intel/map-actions.ts`
+**Files:** `market-intel/market-intel-search.tsx`, `market-intel/actions.ts`, `market-intel/map-search.tsx`, `market-intel/building-profile.tsx`, `market-intel/building-profile-actions.ts`, plus tracerfy/lead-verification/ai-analysis/graph-engine/portfolio-engine/enrichment/map-actions
 
-**4 Search Modes:**
-1. **Property Search** — address-based, pulls ACRIS sales + DOB permits + violations
-2. **Ownership Lookup** — HPD-registered multifamily buildings, filter by borough/zip/street/units/owner
-3. **Name/Portfolio Search** — person/LLC name across ACRIS parties + HPD contacts
-4. **Map Search** — Leaflet interactive map with filters (units, value, year, floors, zoning, public housing toggle)
+**4 Search Modes:** Property Search (address → ACRIS + DOB + violations), Ownership Lookup (HPD multifamily buildings with borough/zip/units/owner filters), Name/Portfolio Search (person/LLC across ACRIS + HPD), Map Search (Leaflet interactive map with unit/value/year/floor/zoning/public housing filters).
 
-**Building Profiles (Slide-over Modal):**
-- PLUTO overview (units, floors, year, assessed value, zoning, FAR)
-- AI Ownership Analysis with confidence score (0-95%)
-- Smart Contact Directory — AI-ranked contacts from HPD + DOB, auto-PDL enrichment
-- Related Properties — real-time portfolio discovery
-- AI Lead Score with Apollo verification
-- Distress Score (0-100) with signals
-- HPD Violations (class A/B/C counts)
-- HPD Complaints (311 data with top types)
-- DOB Permits
-- HPD Litigation
-- ECB Violations with penalties
-- Rent Stabilization status
-- Speculation Watch List status
-- Neighborhood data
+**Building Profiles (Slide-over Modal):** PLUTO overview, AI Ownership Analysis (0-95% confidence), Smart Contact Directory (AI-ranked, auto-PDL enrichment), Related Properties (real-time portfolio discovery), AI Lead Score with Apollo verification, Distress Score (0-100), HPD Violations/Complaints/Litigation, DOB Permits, ECB Violations, Rent Stabilization status, Speculation Watch List, neighborhood data.
 
-**17 NYC Open Data APIs:**
-1. Rolling Sales (ACRIS) — `usep-8jbt`
-2. PLUTO — `64uk-42ks`
-3. DOB Permits — `ic3t-wcy2`
-4. DOB Violations — `3h2n-5cm9`
-5. HPD Registrations — `tesw-yqqr`
-6. HPD Contacts — `feu5-w2e2`
-7. HPD Violations — `wvxf-dwi5`
-8. HPD Complaints — `uwyv-629c`
-9. HPD Litigation — `59kj-x8nc`
-10. ECB Violations — `6bgk-3dad`
-11. ACRIS Legals — `8h5j-fqxa`
-12. ACRIS Master — `bnx9-e6tj`
-13. ACRIS Parties — `636b-3b5g`
-14. Rent Stabilization — `35ss-ekc5`
-15. Speculation Watch List — `adax-9x2w`
-16. NYS Entity Names — `ekwr-p59j`
-17. NYS Entity Filings — `63wc-4exh`
+**Data Fusion:** 3-phase progressive rendering via `data-fusion-engine.ts` with `Promise.allSettled()` for resilience, 3-tier caching (LRU memory → per-source → Supabase `BuildingCache`).
+
+**17 NYC Open Data APIs:** Rolling Sales (ACRIS) `usep-8jbt`, PLUTO `64uk-42ks`, DOB Permits `ic3t-wcy2`, DOB Violations `3h2n-5cm9`, HPD Registrations `tesw-yqqr`, HPD Contacts `feu5-w2e2`, HPD Violations `wvxf-dwi5`, HPD Complaints `uwyv-629c`, HPD Litigation `59kj-x8nc`, ECB Violations `6bgk-3dad`, ACRIS Legals `8h5j-fqxa`, ACRIS Master `bnx9-e6tj`, ACRIS Parties `636b-3b5g`, Rent Stabilization `35ss-ekc5`, Speculation Watch List `adax-9x2w`, NYS Entity Names `ekwr-p59j`, NYS Entity Filings `63wc-4exh`.
+
+### Contacts & CRM (Working)
+Contact list with status filters, 5-tab dossier (Overview/Details/Activity/Deals/Tasks), AI Lead Intelligence with "Verify & Enrich" (PDL + Apollo + NYC PLUTO), scores 0-100 with A-F grade, activity timeline, task management, tag-based organization, enrichment pipeline with version tracking.
+
+### Pipeline (Working)
+Kanban board with drag-and-drop, default 6 stages (New Lead → Contacted → Showing → Offer → Under Contract → Closed), customizable stages, deal values + commission tracking, win/loss tracking, auto-close on "closed" stage.
 
 ### Prospecting (Working)
-**Files:** `prospecting/prospecting-dashboard.tsx`, `prospecting/actions.ts`
+Create/manage prospect lists, save buildings from Market Intel, convert to CRM contacts, create pipeline deals, CSV export (21 columns).
 
-- Create/manage prospect lists
-- Save buildings from Market Intel
-- Convert prospects to CRM contacts
-- Create pipeline deals from prospects
-- CSV export (21 columns: address, units, owner, contact info, etc.)
-
-### Email Templates (Working)
-**Files:** `messages/templates/page.tsx`, `messages/template-actions.ts`
-
-- CRUD for templates with categories: Follow Up, Showing, Application, Welcome, Nurture, Cold Outreach, Custom
-- Merge variables support
-- Usage tracking (timesUsed, lastUsedAt)
-- 7 default templates auto-seeded
-- Accessible from compose modal and quick-reply bar
-
-### Public Showing Booking (Working)
-**Files:** `book/[slug]/page.tsx`, `api/book/route.ts`
-
-- Shareable booking page per property (no auth)
-- Displays available time slots
-- Visitor fills in name, email, phone, notes
-- Auto-creates Contact + CalendarEvent, marks slot as booked
-
-### Settings (Working — 14 Pages)
-**Files:** `settings/actions.ts` (all settings operations), 14 page files
-
-- Profile, Team, Gmail, Sync, API Keys, Pipeline, Branding, Signature, Notifications, Hours, Lead Rules, AI, Export, Templates
-- All settings persisted to dedicated DB tables
-- API key test connections
-- CSV export for contacts/deals/emails
+### Settings (17+ Pages)
+Profile, Team, Gmail, Sync, API Keys, Pipeline, Branding, Signature, Notifications, Hours, Lead Rules, AI, Export, Templates, **Billing** (Stripe subscription management), **Phone** (Twilio config), **Automations** (rule-based workflow engine), **Admin** (user management with role assignment, plan assignment, approval toggles, waitlist management).
 
 ### Skip Tracing / Enrichment
-- **People Data Labs (PDL)** — primary, instant API, ~$0.02/match
-  - Used in: building profiles (auto-enrich top owner), CRM contacts (Verify & Enrich)
-  - Returns: phones, emails, job title, company, LinkedIn, mailing address
-  - 2-pass strategy: first by name+location, retry with relaxed params if no match
-- **Apollo.io** — professional database (Organization Plan)
-  - Core library: `src/lib/apollo.ts` (enrichPerson, enrichOrganization, findPeopleAtOrg, bulkEnrich, testConnection, merge logic)
-  - Used in: building-profile-actions.ts (auto-enrich owner + org), enrich-actions.ts (dual-source with PDL), lead-verification.ts (scoring signals), contacts/actions.ts (bulk enrich)
-  - People Search: FREE (find people at org by title)
-  - People Enrichment: 1 credit (email, phone, LinkedIn, title, company)
-  - Org Enrichment: 1 credit (industry, revenue, employees, phone, website, logo)
-  - Bulk Enrich: credits (max 10 per call)
-  - Returns: verified email, direct phone, title, seniority, LinkedIn photo, company intel
-- **Tracerfy** — fallback skip trace, CSV upload/polling, $0.02/record
+- **People Data Labs (PDL)** — primary, instant API, ~$0.02/match. 2-pass strategy.
+- **Apollo.io** — Organization Plan. People Search (free), People/Org Enrichment (1 credit each), Bulk Enrich (max 10/call).
+- **Tracerfy** — fallback skip trace, CSV upload/polling, $0.02/record.
+- **Contact Enrichment Pipeline** — `contact-enrichment-pipeline.ts` orchestrates PDL + Apollo + PLUTO with merge logic.
+
+### Stripe Billing Integration
+- `lib/stripe.ts` — Stripe client + price ID mapping for all plan tiers
+- `/api/stripe/checkout` — Creates checkout sessions
+- `/api/stripe/portal` — Redirects to Stripe billing portal
+- `/api/webhooks/stripe` — Handles subscription lifecycle (created, updated, deleted, payment failed)
+- Plans: free, explorer, pro, team, enterprise (both core + leasing tiers)
+- Feature gating via `feature-gate.ts` / `feature-gate-server.ts` with `UserPlan` context
+
+### Twilio SMS/Voice Integration
+- `lib/twilio.ts` — Twilio client initialization
+- `/api/twilio/sms` — Inbound SMS webhook
+- `/api/twilio/voice` — Inbound voice webhook
+- `/api/twilio/status` — Delivery status callbacks
+- Phone number management in Settings → Phone
+- Used by AI Leasing Agent for multi-channel conversation
+
+### Automations Engine — Working
+**Routes:** `/settings/automations`, `/api/automations/cron`
+
+Rule-based workflow automation triggered by CRM events: new leads, deal stage changes, inactivity, overdue tasks, and showing bookings.
+
+**Core Engine:** `automation-types.ts` (type definitions), `automation-evaluator.ts` (condition evaluation with 7 operators + AND/OR group logic), `automation-executor.ts` (4 action types), `automation-dispatcher.ts` (safe fire-and-forget dispatch).
+
+**Trigger Types:** `new_lead` (contact created), `stage_change` (deal advances), `no_activity` (stale contacts), `task_overdue` (past due), `showing_completed` (showing booked).
+
+**Actions:** `create_task` (with template tokens like `{{contactName}}`), `update_contact_status`, `send_notification` (console log MVP), `add_tag` (merge into contact.tags[]).
+
+**Conditions:** JSON condition groups with AND/OR logic. Operators: equals, not_equals, contains, greater_than, less_than, is_empty, is_not_empty. Dot-notation field access.
+
+**Fire Points:** `contacts/actions.ts` (new_lead after contact create), `brokerage/transactions/actions.ts` (stage_change after advanceStage), `calendar/actions.ts` (showing_completed after bookShowingSlot). All use `dispatchAutomationSafe()` which never throws.
+
+**Cron:** `/api/automations/cron` (GET, Bearer token auth via CRON_SECRET) — checks no_activity + task_overdue triggers, batch limit 100 per automation.
+
+**Settings UI:** List view with active toggle, run count, last run time; inline expand-to-edit; create form with trigger type radio cards, conditions builder, actions builder; empty state.
 
 ## Deployment
 
 ### Docker
-- Multi-stage Dockerfile: builder (Node 20-Alpine) -> runner (standalone)
-- Port: 8080
-- Non-root user: `nextjs`
-- Includes Prisma client, public assets, Zillow data directory
+- Multi-stage Dockerfile: builder (Node 20-Alpine, Prisma generate, npm run build) → runner (standalone)
+- Port: 8080, non-root user: `nextjs`
+- `NEXT_PUBLIC_*` vars passed as Docker build args AND hardcoded in `next.config.ts` for reliable Turbopack edge inlining
+- `.env.production` generated during build as additional fallback
+- CMD: `node server.js` (no entrypoint script — Prisma migrations run separately)
 
 ### Google Cloud Run
-- `cloudbuild.yaml` configured for Cloud Build pipeline
+- `cloudbuild.yaml`: 3 steps (docker build, push, gcloud run deploy)
 - Registry: `us-east1-docker.pkg.dev`
 - Instance: 1Gi memory, 1 CPU, 80 concurrency, 300s timeout
 - Scaling: 0-10 instances
-- 11 secrets via Cloud Secret Manager
+- 35 runtime secrets via Cloud Secret Manager `--set-secrets` (all API keys, Stripe, Twilio, data APIs, VAPID, encryption keys)
+- 5 build-time secrets via `availableSecrets` (NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, NEXT_PUBLIC_SENTRY_DSN, NEXT_PUBLIC_APP_URL, NEXT_PUBLIC_VAPID_PUBLIC_KEY)
+- Secret creation script: `bash scripts/create-secrets.sh`
+
+### Known Deployment Issue
+- Next.js 16 Turbopack does NOT reliably inline `process.env.NEXT_PUBLIC_*` from Docker build args into edge middleware bundles
+- **Workaround:** Public Supabase keys are hardcoded in `next.config.ts` `env` section to force edge inlining
+- This is required for the Supabase SSR middleware to function in Cloud Run
 
 ## Pending / Incomplete Features
 | Feature | Status | Notes |
 |---------|--------|-------|
 | Dashboard real stats | **Needs work** | Currently shows placeholder stats, needs real data queries |
-| Tasks page (`/tasks`) | **Not built** | Referenced in sidebar nav, no route exists yet |
-| AI Insights page (`/insights`) | **Not built** | Referenced in sidebar nav, no route exists yet |
-| Analytics page (`/analytics`) | **Not built** | Referenced in sidebar nav, no route exists yet |
-| Properties page | **Minimal** | Empty state only, needs full listing management |
-| Portfolios | **Basic** | Schema + basic UI exists, not actively used |
-| Automations | **Schema only** | Automation + AutomationRun models exist, no UI or engine |
-| Mobile page layouts | **In progress** | Bottom nav done; individual pages need responsive adaptation |
+| Properties page | **Working** | Unified hub aggregating BMS Listings, CRM Deals, Showings, Prospecting Items |
+| Automations | **Working (MVP)** | Engine + CRUD + cron + UI complete; Phase 2: send_email action, templates, run history viewer |
+| Mobile page layouts | **In progress** | Bottom nav done; pages need responsive adaptation |
 | Service worker | **Not started** | No offline support / true PWA installability |
-| SMS integration | **Not started** | Twilio/SendGrid |
+| cloudbuild.yaml secrets | **Complete** | All 35 runtime secrets configured; run `scripts/create-secrets.sh` for GCP |
 
 ## Known Issues / Tech Debt
-1. **Apollo API** — Organization Plan active. Full integration: People Search (free), People/Org Enrichment (credits), Bulk Enrich
+1. **"use server" constraint** — Next.js 16 requires ALL exported functions in "use server" files to be async
 2. **Map marker error** — "Cannot read properties of undefined (reading 'x')" in map-search.tsx when map hasn't initialized
-3. **"use server" constraint** — Next.js 16 requires ALL exported functions in "use server" files to be async
-4. **Lead scoring** — grading thresholds need tuning for buyer vs seller vs owner contact types
-5. **Dashboard** — shows hardcoded placeholder data, not wired to real queries
-6. **Portfolio orgId migration** — Existing Portfolio rows need orgId backfilled after migration (run: `UPDATE portfolios SET org_id = (SELECT id FROM organizations LIMIT 1) WHERE org_id IS NULL`)
-7. **Gmail token encryption** — `src/lib/encryption.ts` created but not yet wired into Gmail token read/write (tokens still stored as plaintext; encrypt on next OAuth reconnect)
+3. **Lead scoring** — grading thresholds need tuning for buyer vs seller vs owner contact types
+4. **Dashboard** — shows hardcoded placeholder data, not wired to real queries
+5. **Gmail token encryption** — `encryption.ts` created but not yet wired into Gmail token read/write
+6. **Edge env var workaround** — NEXT_PUBLIC keys hardcoded in next.config.ts due to Turbopack edge bundling issue
+7. **docker-entrypoint.sh** — exists on disk but not referenced by Dockerfile (abandoned approach for Prisma migrations at startup)
 
-## Recent Audit Fixes (2026-03-06)
-- **CRITICAL:** Removed hardcoded Supabase keys from `cloudbuild.yaml` → now uses Secret Manager
-- **CRITICAL:** Fixed middleware auto-approval bypass → unapproved users properly blocked
-- **CRITICAL:** Added `orgId` to Portfolio/PortfolioBuilding for tenant isolation
-- **CRITICAL:** Prisma singleton now cached in production (was dev-only) → prevents connection pool exhaustion
-- **HIGH:** Added 10+ missing database indexes (User.orgId, Deal.propertyId, Activity.dealId, etc.)
-- **HIGH:** Gmail token refresh race condition fixed with in-memory mutex
-- **HIGH:** OAuth state parameter now HMAC-signed with CSRF verification
-- **HIGH:** AI email parsing now rate-limited (100/hr default) with skip list for automated emails
-- **HIGH:** Security headers added to `next.config.ts` (HSTS, nosniff, X-Frame-Options, etc.)
-- **MEDIUM:** All `Promise.all()` in data-fusion-engine converted to `Promise.allSettled()` for resilience
-- **MEDIUM:** Docker layer caching optimized (Prisma schema copied before source code)
-- **MEDIUM:** Contacts query now paginated (default 200, cap 500)
+## Recent Fixes (2026-03-07)
+- **CRITICAL:** Fixed Cloud Run container startup — removed Prisma migration entrypoint that blocked server start
+- **CRITICAL:** Hardcoded NEXT_PUBLIC Supabase keys in next.config.ts to fix edge middleware `Invalid supabaseUrl` crash
+- **CRITICAL:** Added `.trim()` to all Supabase client env var reads for whitespace resilience
+- **HIGH:** Traffic routing fixed — new revisions now receive 100% traffic via `--to-latest`
+- **VERIFIED:** Admin Users page shows Role column correctly in production
+- **VERIFIED:** Market Intel building profiles open correctly with full data (owner, violations, contacts)
+
+## Previous Audit Fixes (2026-03-06)
+- Removed hardcoded Supabase keys from `cloudbuild.yaml` → Secret Manager
+- Fixed middleware auto-approval bypass → unapproved users properly blocked
+- Added `orgId` to Portfolio/PortfolioBuilding for tenant isolation
+- Prisma singleton now cached in production → prevents connection pool exhaustion
+- Added 10+ missing database indexes
+- Gmail token refresh race condition fixed with in-memory mutex
+- OAuth state parameter HMAC-signed with CSRF verification
+- AI email parsing rate-limited (100/hr default)
+- Security headers (HSTS, nosniff, X-Frame-Options, etc.)
+- `Promise.allSettled()` in data-fusion-engine for resilience
+- Docker layer caching optimized
+- Contacts query paginated (default 200, cap 500)
 
 ## Coding Conventions
-- All server action files use `"use server"` directive
-- All exported functions in server files must be `async` (Next.js 16 requirement)
+- All server action files use `"use server"` directive; all exports must be `async`
 - NYC API calls go through `actions.ts` in market-intel
-- Use `Array.isArray()` checks before spreading API response arrays (PDL returns non-arrays sometimes)
-- Serialize data with `JSON.parse(JSON.stringify(obj))` when passing Server -> Client components (Dates, Decimals)
-- Tailwind for all styling; custom animations in `globals.css` (fade-in, modal-in, slide-up, slide-up-sheet)
+- Use `Array.isArray()` checks before spreading API response arrays
+- Serialize data with `JSON.parse(JSON.stringify(obj))` when passing Server → Client components
+- Tailwind for all styling; custom animations in `globals.css`
 - Use `circleMarker` not `Marker` for Leaflet map performance
-- Lucide React for SVG icons; emoji icons in some UI elements (folders, categories)
+- Lucide React for SVG icons; emoji icons in some UI elements
 - Modal pattern: `bg-black/30` backdrop + `modal-in` animation; use `entered` state for backdrop fade
 - Thread row selection uses inset box-shadow instead of border-left (avoids layout shift)
 - Mobile responsive: `md:` breakpoint splits mobile (bottom tab bar) vs desktop (sidebar); use `pb-safe` for notched devices
+- BMS permissions: always check via `bms-permissions.ts` matrix before operations
+- Feature gating: use `hasPermission(feature, plan)` for plan-locked features
+- Leasing tier checks: use `leasing-limits.ts` for metering before AI responses

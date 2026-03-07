@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -26,4 +27,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Sentry org and project slugs (update after creating Sentry project)
+  org: "vettdre",
+  project: "vettdre-nextjs",
+
+  // Suppress noisy build logs unless in CI
+  silent: !process.env.CI,
+
+  // Automatically tree-shake Sentry logger statements to reduce bundle size
+  // disableLogger is deprecated; Sentry handles this automatically
+
+  // Upload source maps for readable stack traces in Sentry
+  // Requires SENTRY_AUTH_TOKEN env var to be set
+  sourcemaps: {
+    disable: !process.env.SENTRY_AUTH_TOKEN,
+  },
+});

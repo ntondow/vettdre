@@ -10,6 +10,8 @@
 
 import { braveWebSearch, braveSearchWithSummary, isBraveSearchAvailable } from "./brave-search";
 import type { BraveWebResult } from "./brave-search";
+import { isFirecrawlAvailable } from "./firecrawl";
+import { fcResearchEntity, fcQuickEntityCheck, fcResearchProperty } from "./firecrawl-entity";
 
 // ---- Types ----
 
@@ -111,6 +113,18 @@ export async function researchEntity(
   entityName: string,
   options?: { includeAiSummary?: boolean; additionalContext?: string },
 ): Promise<EntityWebIntelligence> {
+  // Try Firecrawl first (primary)
+  if (await isFirecrawlAvailable()) {
+    try {
+      const result = await fcResearchEntity(entityName, options);
+      if (result.totalResults > 0) return result;
+      console.info("[Entity] Firecrawl returned 0 results, trying Brave");
+    } catch (err: any) {
+      console.warn("[Entity] Firecrawl failed, falling back to Brave:", err?.message);
+    }
+  }
+
+  // Fallback to Brave
   const available = await isBraveSearchAvailable();
   if (!available) {
     return {
@@ -195,6 +209,18 @@ export async function quickEntityCheck(entityName: string): Promise<{
   articleCount: number;
   topIssue?: string;
 }> {
+  // Try Firecrawl first (primary)
+  if (await isFirecrawlAvailable()) {
+    try {
+      const result = await fcQuickEntityCheck(entityName);
+      if (result.articleCount > 0) return result;
+      console.info("[Entity] Firecrawl quick check returned 0, trying Brave");
+    } catch (err: any) {
+      console.warn("[Entity] Firecrawl quick check failed, falling back to Brave:", err?.message);
+    }
+  }
+
+  // Fallback to Brave
   const available = await isBraveSearchAvailable();
   if (!available) {
     return { hasNegativeNews: false, hasLawsuits: false, hasCorporateRecords: false, articleCount: 0 };
@@ -231,6 +257,18 @@ export async function researchProperty(
   address: string,
   borough?: string,
 ): Promise<WebArticle[]> {
+  // Try Firecrawl first (primary)
+  if (await isFirecrawlAvailable()) {
+    try {
+      const results = await fcResearchProperty(address, borough);
+      if (results.length > 0) return results;
+      console.info("[Entity] Firecrawl property research returned 0, trying Brave");
+    } catch (err: any) {
+      console.warn("[Entity] Firecrawl property research failed, falling back to Brave:", err?.message);
+    }
+  }
+
+  // Fallback to Brave
   const available = await isBraveSearchAvailable();
   if (!available) return [];
 

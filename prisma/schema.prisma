@@ -191,6 +191,10 @@ enum AutomationTrigger {
   no_activity
   task_overdue
   showing_completed
+  email_received
+  deal_won
+  deal_lost
+  contact_enriched
   custom
 }
 
@@ -849,6 +853,7 @@ model Automation {
   organization    Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
   creator         User?             @relation(fields: [createdBy], references: [id], onDelete: SetNull)
   runs            AutomationRun[]
+  scheduledActions ScheduledAutomationAction[]
 
   @@index([orgId, triggerType, isActive])
   @@map("automations")
@@ -869,6 +874,26 @@ model AutomationRun {
 
   @@index([automationId])
   @@map("automation_runs")
+}
+
+model ScheduledAutomationAction {
+  id              String    @id @default(uuid())
+  automationId    String    @map("automation_id")
+  orgId           String    @map("org_id")
+  contactId       String?   @map("contact_id")
+  dealId          String?   @map("deal_id")
+  action          Json      @default("{}") // The action to execute (without delay)
+  triggerData     Json      @default("{}") @map("trigger_data")
+  scheduledFor    DateTime  @map("scheduled_for")
+  status          String    @default("pending") // pending, executed, failed, cancelled
+  error           String?
+  executedAt      DateTime? @map("executed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  automation      Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, scheduledFor])
+  @@index([automationId])
+  @@map("scheduled_automation_actions")
 }
 
 model ContactPropertyInterest {

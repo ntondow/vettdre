@@ -20,6 +20,7 @@ import type {
   NewsArticle,
   BrokeragePulseData,
   FeedTopicConfig,
+  FullDashboardData,
 } from "./types";
 
 // ── Auth helper ──────────────────────────────────────────────
@@ -326,6 +327,15 @@ export async function getBrokeragePulse(): Promise<BrokeragePulseData> {
     };
   } catch {
     return { revenue: 0, pendingInvoices: 0, activeDeals: 0, agentCount: 0 };
+  }
+}
+
+export async function getFullDashboard(): Promise<FullDashboardData | null> {
+  try {
+    const data = await getDashboardData();
+    return JSON.parse(JSON.stringify(data)) as FullDashboardData;
+  } catch {
+    return null;
   }
 }
 

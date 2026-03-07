@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { searchAreaListings, type ParsedListing } from "@/lib/brave-listings";
+import { searchAreaListings } from "@/lib/brave-listings";
+import type { ParsedListing } from "@/lib/listing-parsers";
 import { isBraveSearchAvailable } from "@/lib/brave-search";
 import type { Market, FilterState } from "../types";
 

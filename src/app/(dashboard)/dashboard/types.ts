@@ -42,6 +42,58 @@ export interface BrokeragePulseData {
   agentCount: number;
 }
 
+// Full dashboard data (from actions.ts getDashboardData)
+export interface FullDashboardData {
+  userName: string;
+  isAdmin: boolean;
+  overview: {
+    totalRevenue: number;
+    pendingPayouts: number;
+    activeListings: number;
+    activeTransactions: number;
+    dealsClosedThisMonth: number;
+    agentCount: number;
+  };
+  revenueByMonth: Array<{
+    month: string;
+    revenue: number;
+    payouts: number;
+    net: number;
+  }>;
+  pipeline: {
+    listings: Record<string, number>;
+    transactions: Record<string, number>;
+    invoices: Record<string, number>;
+  };
+  recentActivity: Array<{
+    type: "listing" | "transaction" | "invoice" | "submission" | "agent";
+    title: string;
+    subtitle?: string;
+    timestamp: string;
+    href: string;
+    status?: string;
+    statusColor?: string;
+  }>;
+  topAgents: Array<{
+    name: string;
+    deals: number;
+    revenue: number;
+    rank: number;
+  }>;
+  alerts: Array<{
+    type: "overdue_invoice" | "stale_listing" | "expiring_compliance" | "pending_approval";
+    title: string;
+    count: number;
+    href: string;
+  }>;
+  crm: {
+    totalContacts: number;
+    newContactsThisMonth: number;
+    unreadMessages: number;
+    upcomingEvents: number;
+  };
+}
+
 export interface FeedTopicConfig {
   topics: string[];
 }

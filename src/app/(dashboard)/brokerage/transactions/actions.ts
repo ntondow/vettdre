@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { logTransactionAction } from "@/lib/bms-audit";
+import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 import {
   DEFAULT_RENTAL_TASKS,
   DEFAULT_SALE_TASKS,
@@ -496,6 +497,31 @@ export async function advanceStage(
     from: transaction.stage,
     to: nextStage,
   });
+
+  // Fire automation: stage_change
+  dispatchAutomationSafe(ctx.orgId, "stage_change", {
+    dealId: id,
+    newStage: nextStage,
+    previousStage: transaction.stage,
+    transactionValue: transaction.transactionValue ? Number(transaction.transactionValue) : null,
+    updatedAt: new Date().toISOString(),
+  }, undefined, id);
+
+  // Fire automation: deal_won / deal_lost on terminal stages
+  if (nextStage === "closed") {
+    dispatchAutomationSafe(ctx.orgId, "deal_won", {
+      dealId: id,
+      transactionValue: transaction.transactionValue ? Number(transaction.transactionValue) : null,
+      dealAddress: (transaction as any).address || null,
+    }, undefined, id);
+  }
+  if (nextStage === "cancelled") {
+    dispatchAutomationSafe(ctx.orgId, "deal_lost", {
+      dealId: id,
+      dealAddress: (transaction as any).address || null,
+      cancelReason: null,
+    }, undefined, id);
+  }
 
   return { success: true, transaction: serialize(updated) as TransactionRecord };
 }

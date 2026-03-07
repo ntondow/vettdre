@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { apolloBulkEnrich } from "@/lib/apollo";
+import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 
 // Helper: get or create the user's org
 async function getOrCreateUserOrg(authUser: { id: string; email?: string; user_metadata?: { full_name?: string } }) {
@@ -59,7 +60,7 @@ export async function createContact(formData: FormData) {
     try { typeData = JSON.parse(typeDataRaw); } catch { /* ignore */ }
   }
 
-  await prisma.contact.create({
+  const contact = await prisma.contact.create({
     data: {
       orgId: org.id,
       assignedTo: user.id,
@@ -76,6 +77,17 @@ export async function createContact(formData: FormData) {
       status: "lead",
     },
   });
+
+  // Fire automation: new_lead
+  dispatchAutomationSafe(org.id, "new_lead", {
+    contactId: contact.id,
+    firstName: contact.firstName,
+    lastName: contact.lastName,
+    source: contact.source,
+    email: contact.email,
+    phone: contact.phone,
+    createdAt: new Date().toISOString(),
+  }, contact.id);
 
   revalidatePath("/contacts");
   return { success: true };
@@ -214,7 +226,17 @@ export async function bulkEnrichContacts(contactIds: string[]): Promise<{
             await prisma.contact.update({ where: { id: contact.id }, data: updates });
           }
 
-          if (apolloMatch) enriched++;
+          if (apolloMatch) {
+            enriched++;
+            // Fire automation: contact_enriched
+            dispatchAutomationSafe(org.id, "contact_enriched", {
+              contactId: contact.id,
+              firstName: contact.firstName,
+              lastName: contact.lastName,
+              enrichmentType: "Apollo_Bulk",
+              confidenceLevel: "medium",
+            }, contact.id);
+          }
           if (phoneFound) newPhones++;
           if (emailFound) newEmails++;
         } catch (err) {

@@ -3,6 +3,7 @@
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 import {
   syncGoogleCalendar,
   createCalendarEvent,
@@ -592,6 +593,13 @@ export async function bookShowingSlot(
         notes: data.notes || null,
       },
     });
+
+    // Fire automation: showing_completed (showing booked)
+    dispatchAutomationSafe(slot.orgId, "showing_completed", {
+      showingSlotId: slotId,
+      contactId: contact.id,
+      propertyAddress: slot.propertyAddress,
+    }, contact.id);
 
     return {
       success: true,

@@ -6,6 +6,7 @@ import {
   getMarketStripData,
   getNewsFeed,
   getBrokeragePulse,
+  getFullDashboard,
   getFeedTopics,
   saveFeedTopics,
 } from "./feed-actions";
@@ -15,6 +16,7 @@ import type {
   NewsArticle,
   BrokeragePulseData,
   FeedTopicConfig,
+  FullDashboardData,
 } from "./types";
 import {
   ExternalLink,
@@ -22,6 +24,18 @@ import {
   X,
   Plus,
   RefreshCw,
+  AlertTriangle,
+  ArrowRight,
+  Users,
+  Mail,
+  CalendarDays,
+  UserPlus,
+  Building2,
+  FileText,
+  TrendingUp,
+  Trophy,
+  DollarSign,
+  Clock,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -129,6 +143,10 @@ export default function DashboardPage() {
   const [pulse, setPulse] = useState<BrokeragePulseData | null>(null);
   const [pulseLoading, setPulseLoading] = useState(true);
 
+  // Full dashboard data
+  const [dashboard, setDashboard] = useState<FullDashboardData | null>(null);
+  const [dashLoading, setDashLoading] = useState(true);
+
   // Topics
   const [topics, setTopics] = useState<FeedTopicConfig>({ topics: [] });
   const [showTopicEditor, setShowTopicEditor] = useState(false);
@@ -166,7 +184,11 @@ export default function DashboardPage() {
       .catch(() => {})
       .finally(() => setPulseLoading(false));
 
-    await Promise.allSettled([stripPromise, feedPromise, pulsePromise]);
+    const dashPromise = getFullDashboard()
+      .then((d) => { setDashboard(d); setDashLoading(false); })
+      .catch(() => setDashLoading(false));
+
+    await Promise.allSettled([stripPromise, feedPromise, pulsePromise, dashPromise]);
     setLastUpdated(new Date());
     if (isRefresh) setRefreshing(false);
   }, []);
@@ -397,22 +419,193 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── Section 3: Brokerage Pulse (Bloomberg Dark) ───── */}
-      {pulseLoading ? (
-        <BrokeragePulseSkeleton />
-      ) : pulse ? (
-        <div className="bg-slate-900 rounded-xl p-4">
-          <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
-            Brokerage Pulse
+      {/* ── Section 3: Full Dashboard (Bloomberg Dark) ───── */}
+      {dashLoading ? (
+        <DashboardSkeleton />
+      ) : dashboard ? (
+        <>
+          {/* ── Alerts Banner ──────────────────────────────── */}
+          {dashboard.alerts.length > 0 && (
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
+                Action Required
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {dashboard.alerts.map((alert) => (
+                  <Link
+                    key={alert.type}
+                    href={alert.href}
+                    className="flex items-center gap-3 px-3 py-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg hover:bg-amber-500/20 transition-colors group"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-amber-400 flex-shrink-0" />
+                    <span className="text-sm text-amber-200 flex-1 truncate">{alert.title}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-amber-500/50 group-hover:text-amber-400 transition-colors" />
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Overview Stats (6 cards) ───────────────────── */}
+          <div className="bg-slate-900 rounded-xl p-4">
+            <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
+              Overview
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              <StatCard icon={<DollarSign className="h-4 w-4" />} label="Revenue" value={fmtCompact(dashboard.overview.totalRevenue)} sub="this month" href="/brokerage/dashboard" color="text-emerald-400" />
+              <StatCard icon={<Clock className="h-4 w-4" />} label="Pending" value={fmtCompact(dashboard.overview.pendingPayouts)} sub="payouts" href="/brokerage/invoices" color="text-amber-400" />
+              <StatCard icon={<Building2 className="h-4 w-4" />} label="Listings" value={String(dashboard.overview.activeListings)} sub="active" href="/brokerage/listings" color="text-blue-400" />
+              <StatCard icon={<FileText className="h-4 w-4" />} label="Deals" value={String(dashboard.overview.activeTransactions)} sub="in progress" href="/brokerage/transactions" color="text-purple-400" />
+              <StatCard icon={<TrendingUp className="h-4 w-4" />} label="Closed" value={String(dashboard.overview.dealsClosedThisMonth)} sub="this month" href="/brokerage/transactions" color="text-emerald-400" />
+              <StatCard icon={<Users className="h-4 w-4" />} label="Agents" value={String(dashboard.overview.agentCount)} sub="active" href="/brokerage/agents" color="text-cyan-400" />
+            </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <PulseCard label="Revenue" value={fmtCompact(pulse.revenue)} sub="this month" href="/brokerage/dashboard" />
-            <PulseCard label="Pending" value={String(pulse.pendingInvoices)} sub="invoices" href="/brokerage/invoices" />
-            <PulseCard label="Active" value={String(pulse.activeDeals)} sub="deals" href="/brokerage/transactions" />
-            <PulseCard label="Agents" value={String(pulse.agentCount)} sub="active" href="/brokerage/agents" />
+
+          {/* ── Two-column: CRM + Revenue Chart ─────────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* CRM Stats */}
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
+                CRM
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <CrmCard icon={<Users className="h-4 w-4 text-blue-400" />} label="Total Contacts" value={String(dashboard.crm.totalContacts)} href="/contacts" />
+                <CrmCard icon={<UserPlus className="h-4 w-4 text-emerald-400" />} label="New This Month" value={String(dashboard.crm.newContactsThisMonth)} href="/contacts" />
+                <CrmCard icon={<Mail className="h-4 w-4 text-amber-400" />} label="Unread Messages" value={String(dashboard.crm.unreadMessages)} href="/messages" />
+                <CrmCard icon={<CalendarDays className="h-4 w-4 text-purple-400" />} label="Upcoming Events" value={String(dashboard.crm.upcomingEvents)} href="/calendar" />
+              </div>
+            </div>
+
+            {/* Revenue Chart */}
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
+                Revenue (6 Months)
+              </div>
+              <RevenueChart data={dashboard.revenueByMonth} />
+            </div>
           </div>
+
+          {/* ── Two-column: Activity Feed + Pipeline ────────── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Recent Activity */}
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase">
+                  Recent Activity
+                </div>
+                <Link href="/brokerage/dashboard" className="text-[10px] text-blue-500 hover:text-blue-400 transition-colors">
+                  View All
+                </Link>
+              </div>
+              {dashboard.recentActivity.length > 0 ? (
+                <div className="space-y-1">
+                  {dashboard.recentActivity.slice(0, 8).map((item, i) => (
+                    <Link
+                      key={`${item.type}-${i}`}
+                      href={item.href}
+                      className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-800/60 transition-colors group"
+                    >
+                      <ActivityIcon type={item.type} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-slate-200 truncate group-hover:text-blue-400 transition-colors">
+                          {item.title}
+                        </div>
+                        {item.subtitle && (
+                          <div className="text-[11px] text-slate-500 truncate">{item.subtitle}</div>
+                        )}
+                      </div>
+                      {item.status && item.statusColor && (
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${item.statusColor}`}>
+                          {item.status.replace(/_/g, " ")}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-slate-600 flex-shrink-0 whitespace-nowrap">
+                        {relativeTime(item.timestamp)}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-sm text-slate-600">No recent activity</div>
+              )}
+            </div>
+
+            {/* Pipeline Snapshot */}
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase mb-3">
+                Pipeline
+              </div>
+              <div className="space-y-4">
+                <PipelineSection
+                  title="Listings"
+                  data={dashboard.pipeline.listings}
+                  order={["available", "showing", "application", "approved", "leased", "off_market"]}
+                  colors={{ available: "bg-green-500", showing: "bg-blue-500", application: "bg-amber-500", approved: "bg-purple-500", leased: "bg-emerald-500", off_market: "bg-slate-600" }}
+                  href="/brokerage/listings"
+                />
+                <PipelineSection
+                  title="Transactions"
+                  data={dashboard.pipeline.transactions}
+                  order={["submitted", "approved", "lease_signing", "under_contract", "closing", "invoice_sent", "payment_received", "closed", "cancelled"]}
+                  colors={{ submitted: "bg-slate-500", approved: "bg-green-500", lease_signing: "bg-purple-500", under_contract: "bg-indigo-500", closing: "bg-purple-500", invoice_sent: "bg-cyan-500", payment_received: "bg-lime-500", closed: "bg-emerald-500", cancelled: "bg-red-500" }}
+                  href="/brokerage/transactions"
+                />
+                <PipelineSection
+                  title="Invoices"
+                  data={dashboard.pipeline.invoices}
+                  order={["draft", "sent", "paid", "void"]}
+                  colors={{ draft: "bg-slate-500", sent: "bg-blue-500", paid: "bg-green-500", void: "bg-red-500" }}
+                  href="/brokerage/invoices"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ── Top Agents (admin only) ────────────────────── */}
+          {dashboard.isAdmin && dashboard.topAgents.length > 0 && (
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="text-[10px] font-medium tracking-wider text-slate-500 uppercase">
+                  Top Agents This Month
+                </div>
+                <Link href="/brokerage/leaderboard" className="text-[10px] text-blue-500 hover:text-blue-400 transition-colors">
+                  Leaderboard
+                </Link>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                {dashboard.topAgents.map((agent) => (
+                  <div key={agent.rank} className="flex items-center gap-3 px-3 py-2.5 bg-slate-800/50 rounded-lg">
+                    <div className="flex items-center justify-center w-7 h-7 rounded-full bg-slate-700 text-sm font-bold text-slate-300">
+                      {agent.rank <= 3 ? (
+                        <Trophy className={`h-3.5 w-3.5 ${agent.rank === 1 ? "text-amber-400" : agent.rank === 2 ? "text-slate-300" : "text-amber-600"}`} />
+                      ) : (
+                        <span className="text-xs">{agent.rank}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm text-slate-200 font-medium truncate">{agent.name}</div>
+                      <div className="text-[11px] text-slate-500">
+                        {agent.deals} deal{agent.deals !== 1 ? "s" : ""} · {fmtCompact(agent.revenue)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="bg-slate-900 rounded-xl p-8 text-center">
+          <Building2 className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+          <h3 className="text-sm font-medium text-slate-400 mb-1">Brokerage Dashboard</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto">
+            Your brokerage stats, pipeline, CRM metrics, and agent performance will appear here once data is available.
+          </p>
+          <Link href="/brokerage/dashboard" className="inline-block mt-4 text-xs text-blue-500 hover:text-blue-400 transition-colors">
+            Go to Brokerage →
+          </Link>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -603,6 +796,268 @@ function BrokeragePulseSkeleton() {
             <div className="h-2.5 w-14 bg-slate-800 rounded" />
             <div className="h-8 w-16 bg-slate-800 rounded" />
             <div className="h-3 w-12 bg-slate-800 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Dashboard Skeleton ────────────────────────────────────────
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-900 rounded-xl p-4">
+        <div className="h-3 w-20 bg-slate-800 rounded mb-3" />
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="space-y-2 animate-pulse">
+              <div className="h-3 w-10 bg-slate-800 rounded" />
+              <div className="h-8 w-16 bg-slate-800 rounded" />
+              <div className="h-3 w-14 bg-slate-800 rounded" />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {Array.from({ length: 2 }).map((_, i) => (
+          <div key={i} className="bg-slate-900 rounded-xl p-4 animate-pulse">
+            <div className="h-3 w-24 bg-slate-800 rounded mb-3" />
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, j) => (
+                <div key={j} className="h-10 bg-slate-800/50 rounded" />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Stat Card (Overview grid) ─────────────────────────────────
+
+function StatCard({
+  icon,
+  label,
+  value,
+  sub,
+  href,
+  color,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub: string;
+  href: string;
+  color: string;
+}) {
+  return (
+    <Link href={href} className="group">
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={color}>{icon}</span>
+        <span className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</span>
+      </div>
+      <div className="text-2xl font-mono font-bold text-white group-hover:text-blue-400 transition-colors">
+        {value}
+      </div>
+      <div className="text-xs text-slate-600">{sub}</div>
+    </Link>
+  );
+}
+
+// ── CRM Card ──────────────────────────────────────────────────
+
+function CrmCard({
+  icon,
+  label,
+  value,
+  href,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  href: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 px-3 py-3 bg-slate-800/40 rounded-lg hover:bg-slate-800/70 transition-colors group"
+    >
+      <div className="flex-shrink-0">{icon}</div>
+      <div>
+        <div className="text-lg font-mono font-bold text-white group-hover:text-blue-400 transition-colors">
+          {value}
+        </div>
+        <div className="text-[11px] text-slate-500">{label}</div>
+      </div>
+    </Link>
+  );
+}
+
+// ── Revenue Chart (simple bar chart via SVG) ──────────────────
+
+function RevenueChart({ data }: { data: FullDashboardData["revenueByMonth"] }) {
+  const maxVal = Math.max(...data.map((d) => d.revenue), 1);
+  const barWidth = 40;
+  const gap = 16;
+  const chartHeight = 120;
+  const totalWidth = data.length * (barWidth + gap) - gap;
+
+  if (data.every((d) => d.revenue === 0)) {
+    return (
+      <div className="flex items-center justify-center h-[140px] text-sm text-slate-600">
+        No revenue data yet
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center">
+      <svg
+        width={Math.max(totalWidth, 200)}
+        height={chartHeight + 24}
+        viewBox={`0 0 ${Math.max(totalWidth, 200)} ${chartHeight + 24}`}
+        className="w-full max-w-full"
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {data.map((d, i) => {
+          const barH = (d.revenue / maxVal) * chartHeight;
+          const x = i * (barWidth + gap);
+          return (
+            <g key={d.month}>
+              {/* Bar background */}
+              <rect
+                x={x}
+                y={0}
+                width={barWidth}
+                height={chartHeight}
+                fill="#1e293b"
+                rx={4}
+              />
+              {/* Revenue bar */}
+              <rect
+                x={x}
+                y={chartHeight - barH}
+                width={barWidth}
+                height={barH}
+                fill="#3b82f6"
+                rx={4}
+              />
+              {/* Value label */}
+              {d.revenue > 0 && (
+                <text
+                  x={x + barWidth / 2}
+                  y={chartHeight - barH - 4}
+                  textAnchor="middle"
+                  className="text-[9px] fill-slate-400 font-mono"
+                >
+                  {fmtCompact(d.revenue)}
+                </text>
+              )}
+              {/* Month label */}
+              <text
+                x={x + barWidth / 2}
+                y={chartHeight + 16}
+                textAnchor="middle"
+                className="text-[10px] fill-slate-500 font-medium"
+              >
+                {d.month}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+    </div>
+  );
+}
+
+// ── Activity Icon ─────────────────────────────────────────────
+
+function ActivityIcon({ type }: { type: string }) {
+  const cls = "h-3.5 w-3.5";
+  switch (type) {
+    case "listing":
+      return <Building2 className={`${cls} text-blue-400`} />;
+    case "transaction":
+      return <FileText className={`${cls} text-purple-400`} />;
+    case "invoice":
+      return <DollarSign className={`${cls} text-emerald-400`} />;
+    case "submission":
+      return <TrendingUp className={`${cls} text-amber-400`} />;
+    case "agent":
+      return <Users className={`${cls} text-cyan-400`} />;
+    default:
+      return <Clock className={`${cls} text-slate-500`} />;
+  }
+}
+
+// ── Pipeline Section ──────────────────────────────────────────
+
+function PipelineSection({
+  title,
+  data,
+  order,
+  colors,
+  href,
+}: {
+  title: string;
+  data: Record<string, number>;
+  order: string[];
+  colors: Record<string, string>;
+  href: string;
+}) {
+  const total = Object.values(data).reduce((s, v) => s + v, 0);
+  if (total === 0) {
+    return (
+      <div>
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="text-xs text-slate-400 font-medium">{title}</span>
+          <Link href={href} className="text-[10px] text-blue-500 hover:text-blue-400 transition-colors">View</Link>
+        </div>
+        <div className="text-xs text-slate-600 py-2">No {title.toLowerCase()} yet</div>
+      </div>
+    );
+  }
+
+  const segments = order
+    .filter((key) => (data[key] || 0) > 0)
+    .map((key) => ({
+      key,
+      count: data[key] || 0,
+      pct: ((data[key] || 0) / total) * 100,
+      color: colors[key] || "bg-slate-600",
+    }));
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-xs text-slate-400 font-medium">{title}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-mono">{total}</span>
+          <Link href={href} className="text-[10px] text-blue-500 hover:text-blue-400 transition-colors">View</Link>
+        </div>
+      </div>
+      {/* Stacked bar */}
+      <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-800 mb-1.5">
+        {segments.map((seg) => (
+          <div
+            key={seg.key}
+            className={`${seg.color} transition-all`}
+            style={{ width: `${seg.pct}%` }}
+            title={`${seg.key.replace(/_/g, " ")}: ${seg.count}`}
+          />
+        ))}
+      </div>
+      {/* Legend */}
+      <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+        {segments.map((seg) => (
+          <div key={seg.key} className="flex items-center gap-1">
+            <div className={`w-1.5 h-1.5 rounded-full ${seg.color}`} />
+            <span className="text-[10px] text-slate-500">
+              {seg.key.replace(/_/g, " ")} ({seg.count})
+            </span>
           </div>
         ))}
       </div>
