@@ -38,19 +38,15 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# Copy Prisma schema + generated client + CLI (for migrate deploy at startup)
+# Copy Prisma schema + generated client
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
 
 # Copy runtime data (Zillow)
 COPY --from=builder /app/data ./data
 
-# Copy entrypoint script (runs migrations then starts server)
-COPY --from=builder /app/docker-entrypoint.sh ./docker-entrypoint.sh
-
 USER nextjs
 EXPOSE 8080
 
-ENTRYPOINT ["sh", "./docker-entrypoint.sh"]
+CMD ["node", "server.js"]
