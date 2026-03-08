@@ -44,3 +44,5 @@ next-env.d.ts
 
 # zillow data CSVs (large files, download via scripts/download-zillow-data.sh)
 data/zillow/*.csv
+scripts/create-secrets.sh
+.env*
