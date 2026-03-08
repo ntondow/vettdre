@@ -35,6 +35,8 @@ export interface CapRateAnalysis {
   compCapRates: CompCapRate[];
   /** Methodology description */
   methodology: string;
+  /** Risk premium analysis (cap rate vs risk-free rate) — present when mortgageRate supplied */
+  riskPremium?: RiskPremiumAnalysis;
 }
 
 export interface CompCapRate {
@@ -47,6 +49,21 @@ export interface CompCapRate {
   weight: number;
   distanceMiles: number;
   similarityScore: number;
+}
+
+export interface RiskPremiumAnalysis {
+  /** Current mortgage rate used (%) */
+  mortgageRate: number;
+  /** Cap rate minus mortgage rate (bps) — positive = positive leverage */
+  spreadBps: number;
+  /** Whether the deal has positive leverage (cap > mortgage) */
+  positiveLeverage: boolean;
+  /** Risk-free spread: cap rate minus 10yr treasury (bps) */
+  riskFreeSpreadBps?: number;
+  /** 10yr treasury rate if available */
+  treasuryRate?: number;
+  /** Interpretation text */
+  interpretation: string;
 }
 
 export interface CapRateParams {
@@ -64,6 +81,12 @@ export interface CapRateParams {
   comps: CompProperty[];
   /** Optional: known expense ratio override (opex / EGI) */
   expenseRatioOverride?: number;
+  /** Optional: current 30yr mortgage rate from FRED (for spread analysis) */
+  mortgageRate?: number;
+  /** Optional: 10yr treasury rate from FRED (for risk-free spread) */
+  treasuryRate?: number;
+  /** Optional: building condition cap rate spread adjustment (from building-condition-engine) */
+  buildingConditionSpreadBps?: number;
 }
 
 export interface ExitSensitivity {
@@ -179,7 +202,14 @@ export function deriveMarketCapRate(params: CapRateParams): CapRateAnalysis {
     weightedSum += ccr.capRate * ccr.weight;
     totalWeight += ccr.weight;
   }
-  const marketCapRate = totalWeight > 0 ? weightedSum / totalWeight : compCapRates[0].capRate;
+  let marketCapRate = totalWeight > 0 ? weightedSum / totalWeight : compCapRates[0].capRate;
+
+  // Apply building condition spread adjustment (from building-condition-engine)
+  // This widens cap rate for buildings with deferred maintenance, violations, etc.
+  const conditionSpreadBps = params.buildingConditionSpreadBps ?? 0;
+  if (conditionSpreadBps > 0) {
+    marketCapRate += conditionSpreadBps / 100; // bps → percentage points
+  }
 
   // Sort for range/median
   const sortedRates = compCapRates.map(c => c.capRate).sort((a, b) => a - b);
@@ -199,6 +229,11 @@ export function deriveMarketCapRate(params: CapRateParams): CapRateAnalysis {
   // Suggested exit cap: market + 25bp (cap rate drift during hold period)
   const suggestedExitCap = round2(marketCapRate + 0.25);
 
+  // Risk premium analysis (when mortgage rate available)
+  const riskPremium = params.mortgageRate != null
+    ? computeRiskPremium(round2(marketCapRate), params.mortgageRate, params.treasuryRate)
+    : undefined;
+
   return {
     marketCapRate: round2(marketCapRate),
     range: { low: round2(low), high: round2(high) },
@@ -209,7 +244,8 @@ export function deriveMarketCapRate(params: CapRateParams): CapRateAnalysis {
     trend: trend.direction,
     trendBpsPerYear: trend.bpsPerYear,
     compCapRates,
-    methodology: `Derived from ${compCapRates.length} comparable sales using ${benchmark ? "RGB benchmark expenses" : "estimated expense ratios"} (wtd avg: ${round2(marketCapRate)}%, range: ${round2(low)}–${round2(high)}%)`,
+    methodology: `Derived from ${compCapRates.length} comparable sales using ${benchmark ? "RGB benchmark expenses" : "estimated expense ratios"} (wtd avg: ${round2(marketCapRate)}%, range: ${round2(low)}–${round2(high)}%)${conditionSpreadBps > 0 ? ` +${conditionSpreadBps}bp condition adjustment` : ""}`,
+    riskPremium,
   };
 }
 
@@ -372,6 +408,48 @@ function buildFallbackResult(borough: string): CapRateAnalysis {
     trendBpsPerYear: 0,
     compCapRates: [],
     methodology: `${borough} submarket average (no comparable sales available)`,
+  };
+}
+
+// ── Risk Premium Analysis ────────────────────────────────────
+
+function computeRiskPremium(
+  capRate: number,
+  mortgageRate: number,
+  treasuryRate?: number,
+): RiskPremiumAnalysis {
+  const spreadBps = Math.round((capRate - mortgageRate) * 100);
+  const positiveLeverage = capRate > mortgageRate;
+
+  let riskFreeSpreadBps: number | undefined;
+  if (treasuryRate != null) {
+    riskFreeSpreadBps = Math.round((capRate - treasuryRate) * 100);
+  }
+
+  // Generate interpretation
+  let interpretation: string;
+  if (spreadBps > 100) {
+    interpretation = `Strong positive leverage: cap rate ${capRate.toFixed(2)}% exceeds mortgage rate ${mortgageRate.toFixed(2)}% by ${spreadBps}bp — debt accretive to equity returns`;
+  } else if (spreadBps > 0) {
+    interpretation = `Thin positive leverage: cap rate ${capRate.toFixed(2)}% vs mortgage ${mortgageRate.toFixed(2)}% (${spreadBps}bp spread) — leverage marginally accretive, sensitive to rate moves`;
+  } else if (spreadBps > -100) {
+    interpretation = `Mild negative leverage: mortgage ${mortgageRate.toFixed(2)}% exceeds cap rate ${capRate.toFixed(2)}% by ${Math.abs(spreadBps)}bp — requires rent growth to achieve target returns`;
+  } else {
+    interpretation = `Significant negative leverage: mortgage ${mortgageRate.toFixed(2)}% exceeds cap rate ${capRate.toFixed(2)}% by ${Math.abs(spreadBps)}bp — deal economics dependent on value-add or substantial rent growth`;
+  }
+
+  if (riskFreeSpreadBps != null && treasuryRate != null) {
+    const riskLabel = riskFreeSpreadBps > 200 ? "well-compensated" : riskFreeSpreadBps > 100 ? "adequate" : "thin";
+    interpretation += ` | Risk premium over 10yr Treasury (${treasuryRate.toFixed(2)}%): ${riskFreeSpreadBps}bp — ${riskLabel} for real estate risk`;
+  }
+
+  return {
+    mortgageRate,
+    spreadBps,
+    positiveLeverage,
+    riskFreeSpreadBps,
+    treasuryRate,
+    interpretation,
   };
 }
 

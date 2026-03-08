@@ -1,7 +1,10 @@
 // ============================================================
 // Expense Benchmark Engine — NYC RGB Income & Expense Study
 // Building-category-specific operating expense benchmarks
+// Now reads from ReferenceDataCatalog with hardcoded fallbacks
 // ============================================================
+
+import { getReferenceData } from "./reference-data";
 
 // ── Building Categories ──────────────────────────────────────
 
@@ -224,6 +227,37 @@ const LINE_ITEM_LABELS: Record<string, string> = {
 
 // ── Main Benchmark Function ──────────────────────────────────
 
+/**
+ * Async version — reads benchmarks from DB, falls back to hardcoded.
+ * Prefer this for new code paths.
+ */
+export async function getExpenseBenchmarkAsync(
+  params: ExpenseBenchmarkParams & { inflationRate?: number; inflationYears?: number },
+): Promise<ExpenseBenchmark> {
+  const category = classifyBuildingCategory({
+    yearBuilt: params.yearBuilt,
+    hasElevator: params.hasElevator,
+    numFloors: params.numFloors,
+    bldgClass: params.bldgClass,
+  });
+
+  // Try DB first, fall back to hardcoded
+  const dbBenchmark = await getReferenceData<CategoryBenchmarkData>("expense_benchmarks", category);
+  const base = dbBenchmark ?? CATEGORY_BENCHMARKS[category];
+
+  // Also try DB for adjustment factors
+  const dbBoroughFactors = await getReferenceData<Record<string, number>>("adjustment_factors", "borough_expense_multipliers");
+  const dbFuelAdj = await getReferenceData<Record<string, number>>("adjustment_factors", "fuel_type_adjustments");
+
+  const boroughFactors = dbBoroughFactors ?? BOROUGH_FACTORS;
+  const fuelAdjustments = dbFuelAdj ?? FUEL_ADJUSTMENTS;
+
+  return computeBenchmark(params, category, base, boroughFactors, fuelAdjustments);
+}
+
+/**
+ * Sync version — uses hardcoded data only (backward compatible).
+ */
 export function getExpenseBenchmark(params: ExpenseBenchmarkParams): ExpenseBenchmark {
   const category = classifyBuildingCategory({
     yearBuilt: params.yearBuilt,
@@ -233,10 +267,20 @@ export function getExpenseBenchmark(params: ExpenseBenchmarkParams): ExpenseBenc
   });
 
   const base = CATEGORY_BENCHMARKS[category];
+  return computeBenchmark(params, category, base, BOROUGH_FACTORS, FUEL_ADJUSTMENTS);
+}
+
+function computeBenchmark(
+  params: ExpenseBenchmarkParams & { inflationRate?: number; inflationYears?: number },
+  category: BuildingCategory,
+  base: CategoryBenchmarkData,
+  boroughFactors: Record<string, number>,
+  fuelAdjustments: Record<string, number>,
+): ExpenseBenchmark {
   const units = Math.max(1, params.unitsRes);
-  const boroughFactor = BOROUGH_FACTORS[params.borough] ?? 1.0;
+  const boroughFactor = boroughFactors[params.borough] ?? 1.0;
   const sizeFactor = getSizeFactor(units);
-  const fuelAdj = FUEL_ADJUSTMENTS[params.fuelType || "gas"] || 0;
+  const fuelAdj = fuelAdjustments[params.fuelType || "gas"] || 0;
 
   // RS compliance adjustment
   const rsRatio = params.rentStabilizedUnits != null ? params.rentStabilizedUnits / units : 0;
@@ -275,6 +319,17 @@ export function getExpenseBenchmark(params: ExpenseBenchmarkParams): ExpenseBenc
     totalPerUnit += perUnit;
   }
 
+  // Apply inflation adjustment if provided (compound growth)
+  if (params.inflationRate && params.inflationYears && params.inflationYears > 0) {
+    const inflationMultiplier = Math.pow(1 + params.inflationRate / 100, params.inflationYears);
+    for (const item of lineItems) {
+      item.perUnit = Math.round(item.perUnit * inflationMultiplier);
+      item.totalAnnual = item.perUnit * units;
+    }
+    totalPerUnit = lineItems.reduce((sum, item) => sum + item.perUnit, 0);
+    adjustmentNotes.push(`Inflation: +${params.inflationRate.toFixed(1)}%/yr × ${params.inflationYears}yr = ${((inflationMultiplier - 1) * 100).toFixed(1)}% total`);
+  }
+
   return {
     category,
     categoryLabel: CATEGORY_LABELS[category],
@@ -282,6 +337,59 @@ export function getExpenseBenchmark(params: ExpenseBenchmarkParams): ExpenseBenc
     totalPerUnit,
     totalAnnual: totalPerUnit * units,
     adjustmentNotes,
+  };
+}
+
+// ── CPI-Adjusted Expense Growth ─────────────────────────────
+// Uses FRED CPI data to derive realistic annualExpenseGrowth for deal inputs
+
+/**
+ * Compute annualized CPI inflation from FRED CPI observations.
+ * Pass two observations (recent and older) to get the annualized rate.
+ * Falls back to a reasonable default (2.5%) if insufficient data.
+ */
+export function computeAnnualizedCPI(
+  recentCPI: { date: string; value: number } | null,
+  olderCPI: { date: string; value: number } | null,
+): { annualizedRate: number; source: "fred_cpi" | "default"; note: string } {
+  if (!recentCPI || !olderCPI || recentCPI.value <= 0 || olderCPI.value <= 0) {
+    return { annualizedRate: 2.5, source: "default", note: "Default 2.5% (no CPI data available)" };
+  }
+
+  const recentDate = new Date(recentCPI.date);
+  const olderDate = new Date(olderCPI.date);
+  const yearsSpan = Math.max(0.5, (recentDate.getTime() - olderDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+
+  const totalGrowth = recentCPI.value / olderCPI.value;
+  const annualized = (Math.pow(totalGrowth, 1 / yearsSpan) - 1) * 100;
+
+  // Sanity bound: 0-10%
+  const bounded = Math.max(0, Math.min(10, annualized));
+
+  return {
+    annualizedRate: Math.round(bounded * 100) / 100,
+    source: "fred_cpi",
+    note: `CPI ${olderCPI.date.slice(0, 7)} → ${recentCPI.date.slice(0, 7)}: ${bounded.toFixed(2)}%/yr annualized (${(totalGrowth - 1) * 100 > 0 ? "+" : ""}${((totalGrowth - 1) * 100).toFixed(1)}% over ${yearsSpan.toFixed(1)}yr)`,
+  };
+}
+
+/**
+ * Suggest annualExpenseGrowth rate for deal calculator using CPI data.
+ * Applies a real estate premium (RE expenses typically grow 0.5-1% above CPI).
+ */
+export function suggestExpenseGrowthRate(
+  annualizedCPI: number,
+  options?: { realEstatePremiumPct?: number },
+): { suggestedRate: number; cpiRate: number; premium: number; note: string } {
+  const premium = options?.realEstatePremiumPct ?? 0.75; // RE expenses ~0.75% above CPI
+  const suggested = Math.round((annualizedCPI + premium) * 100) / 100;
+  const bounded = Math.max(1, Math.min(8, suggested)); // 1-8% bounds
+
+  return {
+    suggestedRate: bounded,
+    cpiRate: annualizedCPI,
+    premium,
+    note: `CPI ${annualizedCPI.toFixed(2)}% + ${premium.toFixed(2)}% RE premium = ${bounded.toFixed(2)}%/yr expense growth`,
   };
 }
 

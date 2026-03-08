@@ -214,6 +214,62 @@ function generateSignals(
   return signals;
 }
 
+// ---- Structured Census context for deal analysis ----
+
+export interface CensusContextStructured {
+  censusTract: string;
+  county: string;
+  state: string;
+  zip: string;
+  medianHouseholdIncome: number | null;
+  medianRent: number | null;
+  medianContractRent: number | null;
+  vacancyRate: number | null;
+  renterOccupiedPct: number | null;
+  rentBurdenPct: number | null;
+  transitCommutePct: number | null;
+  povertyRate: number | null;
+  totalPopulation: number | null;
+  medianAge: number | null;
+  medianHomeValue: number | null;
+  maxAffordableRent: number | null;
+  signals: NeighborhoodSignal[];
+}
+
+/**
+ * Returns structured Census data for use in deal analysis tools.
+ * Prefer this over getCensusContextForAI for programmatic consumption.
+ */
+export async function getCensusContextStructured(address: string): Promise<CensusContextStructured | null> {
+  const profile = await fetchNeighborhoodProfile(address, { includeTrends: false });
+  if (!profile) return null;
+
+  const c = profile.census;
+  const q = profile.quickStats;
+
+  const income = c?.medianHouseholdIncome ?? q.medianHouseholdIncome ?? null;
+
+  return {
+    censusTract: profile.censusTract,
+    county: profile.county,
+    state: profile.state,
+    zip: profile.zip,
+    medianHouseholdIncome: income,
+    medianRent: c?.medianRent ?? q.medianRent ?? null,
+    medianContractRent: c?.medianContractRent ?? null,
+    vacancyRate: c?.vacancyRate ?? q.vacancyRate ?? null,
+    renterOccupiedPct: c?.renterPct ?? q.renterOccupiedPct ?? null,
+    rentBurdenPct: c?.rentBurdenPct ?? null,
+    transitCommutePct: c?.transitCommutePct ?? null,
+    povertyRate: c?.povertyRate ?? null,
+    totalPopulation: q.totalPopulation,
+    medianAge: q.medianAge,
+    medianHomeValue: q.medianHomeValue,
+    maxAffordableRent: income ? Math.round(income / 12 * 0.30) : null,
+    signals: profile.signals,
+  };
+}
+
 // ---- Helper: Generate AI context string for assumptions engine ----
 
 export async function getCensusContextForAI(address: string): Promise<string | null> {

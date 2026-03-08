@@ -12,6 +12,7 @@ import { getCurrentMortgageRate } from "@/lib/fred";
 import { fetchFmrByZip } from "@/lib/hud";
 import { getMarketAppreciation } from "@/lib/fhfa";
 import { getRedfinMetrics } from "@/lib/redfin-market";
+import { assessBuildingCondition } from "@/lib/building-condition-engine";
 
 async function getUser() {
   const supabase = await createClient();
@@ -355,8 +356,8 @@ export async function underwriteDeal(params: {
   const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
   const borough = params.borough || boroNames[parseInt(boroCode)] || "";
 
-  // Fetch all data sources in parallel
-  const [plutoResult, salesResult, hpdRegResult, hpdViolResult, rentStabResult] = await Promise.allSettled([
+  // Fetch all data sources in parallel (Phase 4: enhanced with HPD detail + LL84)
+  const [plutoResult, salesResult, hpdRegResult, hpdViolResult, rentStabResult, hpdViolDetailResult, hpdComplaintResult, hpdLitigationResult, dobPermitResult, ll84Result, dobViolResult] = await Promise.allSettled([
     fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/${SALES_ID}.json?$where=borough='${boroCode}' AND block='${block}' AND lot='${lot}'&$order=sale_date DESC&$limit=5`)
@@ -367,6 +368,24 @@ export async function underwriteDeal(params: {
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
+    // Phase 4: HPD violations by class for building condition scoring
+    fetch(`${NYC_BASE}/wvxf-dwi5.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=class,count(*) as cnt&$group=class`)
+      .then(r => r.ok ? r.json() : []),
+    // Phase 4: HPD complaint count
+    fetch(`${NYC_BASE}/uwyv-629c.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=count(*) as cnt`)
+      .then(r => r.ok ? r.json() : []),
+    // Phase 4: HPD litigation count
+    fetch(`${NYC_BASE}/59kj-x8nc.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=count(*) as cnt`)
+      .then(r => r.ok ? r.json() : []),
+    // Phase 4: DOB permit count (recent 2yr)
+    fetch(`${NYC_BASE}/ic3t-wcy2.json?$where=borocode='${boroCode}' AND block='${block}' AND lot='${lot}' AND filing_date > '${new Date(Date.now() - 2 * 365.25 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)}'&$select=count(*) as cnt`)
+      .then(r => r.ok ? r.json() : []),
+    // Phase 4: LL84 energy data
+    fetch(`${NYC_BASE}/5zyy-y8am.json?$where=nyc_borough_block_and_lot='${bbl}'&$order=year_ending DESC&$limit=1`)
+      .then(r => r.ok ? r.json() : []),
+    // Phase 4: DOB violations count (for building condition scoring)
+    fetch(`${NYC_BASE}/3h2n-5cm9.json?$where=borocode='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=count(*) as cnt`)
+      .then(r => r.ok ? r.json() : []),
   ]);
 
   const plutoData = plutoResult.status === "fulfilled" ? plutoResult.value : [];
@@ -374,6 +393,19 @@ export async function underwriteDeal(params: {
   const hpdRegData = hpdRegResult.status === "fulfilled" ? hpdRegResult.value : [];
   const hpdViolData = hpdViolResult.status === "fulfilled" ? hpdViolResult.value : [];
   const rentStabData = rentStabResult.status === "fulfilled" ? rentStabResult.value : [];
+
+  // Phase 4: Parse enhanced data
+  const hpdViolDetail = hpdViolDetailResult.status === "fulfilled" ? hpdViolDetailResult.value : [];
+  const hpdComplaintData = hpdComplaintResult.status === "fulfilled" ? hpdComplaintResult.value : [];
+  const hpdLitigationData = hpdLitigationResult.status === "fulfilled" ? hpdLitigationResult.value : [];
+  const dobPermitData = dobPermitResult.status === "fulfilled" ? dobPermitResult.value : [];
+  const ll84Data = ll84Result.status === "fulfilled" ? ll84Result.value : [];
+  const dobViolData2 = dobViolResult.status === "fulfilled" ? dobViolResult.value : [];
+
+  const hpdClassCounts: Record<string, number> = {};
+  for (const row of Array.isArray(hpdViolDetail) ? hpdViolDetail : []) {
+    if (row.class && row.cnt) hpdClassCounts[row.class.toUpperCase()] = parseInt(row.cnt || "0");
+  }
 
   const p = plutoData[0] || {};
   const unitsRes = parseInt(p.unitsres || "0");
@@ -426,6 +458,26 @@ export async function underwriteDeal(params: {
     marketValue: assessTotal, // use assessed as proxy
     annualTaxes,
     hasElevator: parseInt(p.numfloors || "0") > 5,
+    // Phase 4: Enhanced building data for condition scoring + utility calibration
+    hpdClassACount: hpdClassCounts["A"] || 0,
+    hpdClassBCount: hpdClassCounts["B"] || 0,
+    hpdClassCCount: hpdClassCounts["C"] || 0,
+    hpdComplaintCount: Array.isArray(hpdComplaintData) && hpdComplaintData[0]?.cnt ? parseInt(hpdComplaintData[0].cnt) : 0,
+    hpdLitigationCount: Array.isArray(hpdLitigationData) && hpdLitigationData[0]?.cnt ? parseInt(hpdLitigationData[0].cnt) : 0,
+    dobViolationCount: Array.isArray(dobViolData2) && dobViolData2[0]?.cnt ? parseInt(dobViolData2[0].cnt) : 0,
+    recentPermits: Array.isArray(dobPermitData) && dobPermitData[0]?.cnt ? parseInt(dobPermitData[0].cnt) : 0,
+    ll84Energy: ll84Data.length > 0 ? {
+      energyStarScore: parseInt(ll84Data[0].energy_star_score || "0"),
+      energyStarGrade: ll84Data[0].energy_star_certification || ll84Data[0].letter_grade || "",
+      siteEUI: parseFloat(ll84Data[0].site_eui_kbtu_ft || ll84Data[0].weather_normalized_site_eui_kbtu_ft || "0"),
+      sourceEUI: parseFloat(ll84Data[0].source_eui_kbtu_ft || ll84Data[0].weather_normalized_source_eui_kbtu_ft || "0"),
+      electricityKwh: parseFloat(ll84Data[0].electricity_use_grid_purchase_kwh || "0"),
+      gasTherms: parseFloat(ll84Data[0].natural_gas_use_therms || "0"),
+      waterKgal: parseFloat(ll84Data[0].water_use_all_water_sources_kgal || ll84Data[0].water_use_kgal || "0"),
+      fuelOilGal: parseFloat(ll84Data[0].fuel_oil_1_use_gallons || ll84Data[0].fuel_oil_2_use_gallons || ll84Data[0].fuel_oil_4_use_gallons || "0"),
+      grossFloorArea: parseFloat(ll84Data[0].property_gfa_self_reported || ll84Data[0].largest_property_use_type_gross_floor_area || "0"),
+      reportingYear: parseInt(ll84Data[0].year_ending || "0"),
+    } : undefined,
   };
 
   // Fetch live market data (non-blocking)
@@ -456,12 +508,37 @@ export async function underwriteDeal(params: {
   const renoEst = renoResult.status === "fulfilled" ? renoResult.value : null;
   const strProj = strResult.status === "fulfilled" ? strResult.value : null;
 
+  // Phase 4: Compute building condition score for expense/cap rate adjustments
+  let buildingCondition;
+  try {
+    const units = unitsRes || unitsTotal || 1;
+    buildingCondition = assessBuildingCondition({
+      hpdViolationCount,
+      hpdClassACount: buildingData.hpdClassACount,
+      hpdClassBCount: buildingData.hpdClassBCount,
+      hpdClassCCount: buildingData.hpdClassCCount,
+      hpdComplaintCount: buildingData.hpdComplaintCount,
+      hpdLitigationCount: buildingData.hpdLitigationCount,
+      dobViolationCount: buildingData.dobViolationCount,
+      recentPermits: buildingData.recentPermits,
+      yearBuilt: parseInt(p.yearbuilt || "0"),
+      numFloors: parseInt(p.numfloors || "0"),
+      hasElevator: parseInt(p.numfloors || "0") > 5,
+      unitsRes: units,
+      bldgArea: parseInt(p.bldgarea || "0"),
+      rentStabilizedUnits,
+    });
+  } catch {
+    // Non-blocking
+  }
+
   // Generate AI assumptions
   let inputs = generateDealAssumptions(buildingData, {
     liveInterestRate: liveRate ?? undefined,
     hudFmr: hudFmr ?? undefined,
     marketAppreciation: appreciation ?? undefined,
     redfinMetrics: redfin ?? undefined,
+    buildingCondition,
   });
 
   // Calibrate with Census data if available
@@ -508,7 +585,7 @@ export async function underwriteDeal(params: {
       dealSource: "off_market" as any,
       inputs: inputs as any,
       outputs: outputs as any,
-      notes: `AI-generated underwriting assumptions based on ${unitsRes || unitsTotal} units at ${address}, ${borough}. Year built: ${buildingData.yearBuilt}. ${hpdViolationCount > 0 ? `HPD violations: ${hpdViolationCount}.` : ""} ${rentStabilizedUnits > 0 ? `Rent stabilized units: ${rentStabilizedUnits}.` : ""}${inputs._censusContext ? ` Census: ${inputs._censusContext}` : ""}`,
+      notes: `AI-generated underwriting assumptions based on ${unitsRes || unitsTotal} units at ${address}, ${borough}. Year built: ${buildingData.yearBuilt}. ${hpdViolationCount > 0 ? `HPD violations: ${hpdViolationCount}.` : ""} ${rentStabilizedUnits > 0 ? `Rent stabilized units: ${rentStabilizedUnits}.` : ""}${buildingCondition ? ` Condition: ${buildingCondition.grade} (${buildingCondition.overallScore}/100).` : ""}${buildingData.ll84Energy ? ` LL84 Energy Star: ${buildingData.ll84Energy.energyStarScore}/100.` : ""}${inputs._censusContext ? ` Census: ${inputs._censusContext}` : ""}`,
     },
   });
 

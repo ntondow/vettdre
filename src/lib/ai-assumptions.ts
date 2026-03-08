@@ -15,6 +15,10 @@ import type { CapRateAnalysis } from "./cap-rate-engine";
 import { calculateNYCClosingCosts, estimatePostAcquisitionTax } from "./nyc-deal-costs";
 import type { ClosingCostBreakdown, TaxReassessment } from "./nyc-deal-costs";
 import type { DealStructureType } from "./deal-structure-engine";
+import { assessBuildingCondition } from "./building-condition-engine";
+import type { BuildingConditionInput, BuildingConditionScore, ConditionAdjustments } from "./building-condition-engine";
+import { calibrateUtilityCosts } from "./utility-cost-calibration";
+import type { LL84EnergyData } from "./utility-cost-calibration";
 
 // ============================================================
 // Building data from various NYC Open Data sources
@@ -54,6 +58,18 @@ export interface BuildingData {
   // Commercial (optional — from PLUTO comArea or building profile)
   commercialSqft?: number;
   commercialUnits?: number;
+  // Phase 4: Enhanced building data for condition scoring + utility calibration
+  hpdClassACount?: number;
+  hpdClassBCount?: number;
+  hpdClassCCount?: number;
+  hpdComplaintCount?: number;
+  hpdLitigationCount?: number;
+  dobPermitCount?: number;
+  dobViolationCount?: number;
+  recentPermits?: number;
+  hasActiveSWO?: boolean;
+  /** LL84 energy benchmarking data (from data-fusion-engine) */
+  ll84Energy?: LL84EnergyData;
 }
 
 // ============================================================
@@ -600,6 +616,54 @@ function getRentGrowth(marketAppreciation?: MarketAppreciation): number {
 }
 
 // ============================================================
+// SHARED HELPER: Validate Rents Against HUD FMR
+// Floors unit rents at HUD FMR minimums (market rents should
+// be ≥ FMR in most NYC neighborhoods). Adjusts upward only.
+// ============================================================
+function validateRentsAgainstFMR(
+  unitMix: UnitMixRow[],
+  hudFmr: HudFmrData | undefined,
+  rsRatio: number,
+): { adjusted: boolean; notes: string[] } {
+  if (!hudFmr || hudFmr.source === "fallback") return { adjusted: false, notes: [] };
+
+  const fmrByType: Record<string, number> = {
+    Studio: hudFmr.studio,
+    "1BR": hudFmr.oneBr,
+    "2BR": hudFmr.twoBr,
+    "3BR": hudFmr.threeBr,
+    "4BR": hudFmr.fourBr,
+  };
+
+  const notes: string[] = [];
+  let adjusted = false;
+
+  for (const row of unitMix) {
+    const fmr = fmrByType[row.type];
+    if (!fmr || fmr <= 0) continue;
+
+    // For free-market units, rent should be at least FMR
+    // For RS-heavy buildings, skip — RS rents are often below FMR
+    if (rsRatio > 0.5) continue;
+
+    // If our estimated rent is more than 20% below FMR, something is off — floor it
+    if (row.monthlyRent < fmr * 0.80) {
+      const oldRent = row.monthlyRent;
+      row.monthlyRent = Math.round(fmr * 0.85); // Set to 85% of FMR (slightly below market)
+      notes.push(`${row.type} rent floored: $${oldRent} → $${row.monthlyRent} (HUD FMR: $${fmr}/mo for ZIP ${hudFmr.zip})`);
+      adjusted = true;
+    }
+
+    // Attach market rent reference from FMR if not already set
+    if (!row.marketRent || row.marketRent <= 0) {
+      row.marketRent = fmr;
+    }
+  }
+
+  return { adjusted, notes };
+}
+
+// ============================================================
 // SHARED HELPER: Calculate Going-In Cap & Exit Cap
 // ============================================================
 function calculateExitCap(gpr: number, vacancyRate: number, mgmtPct: number, totalFixedExpenses: number, purchasePrice: number): number {
@@ -983,7 +1047,7 @@ function buildStandardAssumptionFlags(): Record<string, boolean> {
 // ============================================================
 export function generateDealAssumptions(
   building: BuildingData,
-  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics; capRateAnalysis?: CapRateAnalysis },
+  options?: { liveInterestRate?: number; hudFmr?: HudFmrData; marketAppreciation?: MarketAppreciation; redfinMetrics?: RedfinMetrics; capRateAnalysis?: CapRateAnalysis; buildingCondition?: BuildingConditionScore },
 ): DealInputs {
   const units = building.unitsRes || building.hpdUnits || building.unitsTotal || 1;
   const borough = building.borough || "Brooklyn";
@@ -1010,6 +1074,13 @@ export function generateDealAssumptions(
 
   // -- UNIT MIX (enhanced with sqft) --
   const unitMix = estimateUnitMixDetailed(units, rents, blendedMultiplier, building.bldgArea, building.numFloors, building.yearBuilt);
+
+  // -- HUD FMR RENT VALIDATION --
+  // Floor unit rents against HUD Fair Market Rents when available
+  const fmrValidation = validateRentsAgainstFMR(unitMix, options?.hudFmr, rsRatio);
+  if (fmrValidation.adjusted) {
+    assumptions.unitMix = true; // Re-mark as adjusted
+  }
 
   // -- COMMERCIAL TENANTS --
   let commercialTenants: CommercialTenant[] | undefined;
@@ -1054,6 +1125,29 @@ export function generateDealAssumptions(
     borough,
   );
   if (building.annualTaxes > 0) delete assumptions.realEstateTaxes;
+
+  // -- BUILDING CONDITION ADJUSTMENTS (Phase 4) --
+  // Apply condition-based expense multipliers from building-condition-engine
+  const conditionScore = options?.buildingCondition ?? tryAssessBuildingCondition(building, units);
+  if (conditionScore && conditionScore.grade !== "A") {
+    const adj = conditionScore.adjustments;
+    // Apply expense multiplier to R&M, insurance
+    if (adj.expenseMultiplier > 1.0) {
+      expenses.rmGeneral = Math.round(expenses.rmGeneral * adj.expenseMultiplier);
+      expenses.insurance = Math.round(expenses.insurance * adj.insuranceMultiplier);
+      expenses.rmCapexReserve = Math.round(expenses.rmCapexReserve * adj.rmReserveMultiplier);
+    }
+  }
+
+  // -- LL84 UTILITY CALIBRATION (Phase 4) --
+  // Use actual energy data to calibrate electricity/gas and water costs
+  if (building.ll84Energy) {
+    const utilCalibration = calibrateUtilityCosts(building.ll84Energy, undefined, units);
+    if (utilCalibration.energyGrade !== "unknown" && utilCalibration.energyGrade !== "C") {
+      expenses.electricityGas = Math.round(expenses.electricityGas * utilCalibration.electricityGasMultiplier);
+      expenses.waterSewer = Math.round(expenses.waterSewer * utilCalibration.waterSewerMultiplier);
+    }
+  }
 
   // -- TAX REASSESSMENT PROJECTION --
   // Post-acquisition taxes are typically higher than current taxes because NYC reassesses
@@ -1223,6 +1317,14 @@ export function generateDealAssumptions(
     (inputs as any)._taxReassessmentNote = taxReassessmentNote;
   }
 
+  // Attach HUD FMR validation notes
+  if (fmrValidation.notes.length > 0) {
+    (inputs as any)._fmrValidationNotes = fmrValidation.notes;
+  }
+  if (options?.hudFmr && options.hudFmr.source === "api") {
+    (inputs as any)._hudFmrContext = `HUD FMR (${options.hudFmr.year}, ZIP ${options.hudFmr.zip}): Studio $${options.hudFmr.studio} | 1BR $${options.hudFmr.oneBr} | 2BR $${options.hudFmr.twoBr} | 3BR $${options.hudFmr.threeBr}`;
+  }
+
   return inputs;
 }
 
@@ -1278,6 +1380,9 @@ export function generateNYSDealAssumptions(
 
   // -- UNIT MIX (shared helper) --
   const unitMix = estimateUnitMix(units, rents, rentMultiplier);
+
+  // -- HUD FMR RENT VALIDATION --
+  const fmrValidation = validateRentsAgainstFMR(unitMix, options?.hudFmr, 0);
 
   // -- VACANCY --
   const residentialVacancyRate = 5;
@@ -1465,6 +1570,9 @@ export function generateNJDealAssumptions(
   // -- UNIT MIX (shared helper) --
   const unitMix = estimateUnitMix(units, rents, rentMultiplier);
 
+  // -- HUD FMR RENT VALIDATION --
+  validateRentsAgainstFMR(unitMix, options?.hudFmr, 0);
+
   const residentialVacancyRate = 5;
 
   // -- EXPENSES --
@@ -1554,6 +1662,15 @@ export interface CensusCalibration {
   medianHouseholdIncome?: number;
   rentBurdenPct?: number;
   renterPct?: number;
+  /** Tract percentile ranks within county (from census.ts getTractPercentileRank) */
+  percentileRank?: {
+    medianIncomePercentile: number;
+    medianRentPercentile: number;
+    vacancyRatePercentile: number;
+    renterPctPercentile: number;
+    rentBurdenPercentile: number;
+    totalTractsInCounty: number;
+  };
 }
 
 export function calibrateWithCensusData(
@@ -1590,6 +1707,27 @@ export function calibrateWithCensusData(
 
   if (census.rentBurdenPct && census.rentBurdenPct > 35) {
     updated.concessions = Math.max(updated.concessions, 1);
+  }
+
+  // Use percentile rank data to refine vacancy and rent growth assumptions
+  if (census.percentileRank) {
+    const pr = census.percentileRank;
+
+    // High vacancy percentile (top 25%) → bump vacancy rate up
+    if (pr.vacancyRatePercentile > 75 && updated.residentialVacancyRate < 8) {
+      updated.residentialVacancyRate = Math.min(12, updated.residentialVacancyRate + 1);
+    }
+
+    // High rent burden + low income percentile → reduce rent growth outlook
+    if (pr.rentBurdenPercentile > 80 && pr.medianIncomePercentile < 30) {
+      updated.annualRentGrowth = Math.max(1.5, updated.annualRentGrowth - 0.5);
+    }
+
+    // Top-quartile income area → can support higher rents
+    if (pr.medianIncomePercentile > 75 && pr.medianRentPercentile < 50) {
+      // Rent is below-market for the income level — upside potential
+      updated.annualRentGrowth = Math.min(5, updated.annualRentGrowth + 0.5);
+    }
   }
 
   updated._assumptions = assumptions;
@@ -1684,4 +1822,42 @@ export function applyLL84UtilityOverride(
   delete assumptions.waterSewer;
   updated._assumptions = assumptions;
   return updated;
+}
+
+// ============================================================
+// Helper: Try to assess building condition from BuildingData
+// Returns null if insufficient data (caller can skip adjustments)
+// ============================================================
+function tryAssessBuildingCondition(
+  building: BuildingData,
+  units: number,
+): BuildingConditionScore | null {
+  try {
+    // Need at least year built and violation count to be meaningful
+    if (!building.yearBuilt || building.yearBuilt <= 0) return null;
+    if (building.hpdViolationCount == null) return null;
+
+    const input: BuildingConditionInput = {
+      hpdViolationCount: building.hpdViolationCount,
+      hpdClassACount: building.hpdClassACount,
+      hpdClassBCount: building.hpdClassBCount,
+      hpdClassCCount: building.hpdClassCCount,
+      hpdComplaintCount: building.hpdComplaintCount,
+      hpdLitigationCount: building.hpdLitigationCount,
+      dobPermitCount: building.dobPermitCount,
+      dobViolationCount: building.dobViolationCount,
+      recentPermits: building.recentPermits,
+      hasActiveSWO: building.hasActiveSWO,
+      yearBuilt: building.yearBuilt,
+      numFloors: building.numFloors,
+      hasElevator: building.hasElevator,
+      unitsRes: units,
+      bldgArea: building.bldgArea,
+      rentStabilizedUnits: building.rentStabilizedUnits,
+    };
+
+    return assessBuildingCondition(input);
+  } catch {
+    return null;
+  }
 }

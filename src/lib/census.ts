@@ -309,3 +309,204 @@ export async function getCensusTimeSeries(
   cacheSet(trendCache, cacheKey, trends);
   return trends;
 }
+
+// ============================================================
+// Batch Tract Fetch — fetch multiple tracts in a single county
+// Census API supports querying multiple tracts at once
+// ============================================================
+
+export async function getCensusDataBatch(
+  stateFips: string,
+  countyFips: string,
+  tracts: string[],
+): Promise<Map<string, CensusData>> {
+  const results = new Map<string, CensusData>();
+  if (tracts.length === 0) return results;
+
+  // Check cache first, collect misses
+  const misses: string[] = [];
+  for (const tract of tracts) {
+    const cacheKey = `${stateFips}-${countyFips}-${tract}`;
+    const cached = cacheGet(dataCache, cacheKey);
+    if (cached) {
+      results.set(tract, cached);
+    } else {
+      misses.push(tract);
+    }
+  }
+
+  if (misses.length === 0) return results;
+
+  // Census API supports comma-separated tract IDs
+  const year = 2022;
+  const tractParam = misses.join(",");
+
+  try {
+    const url = `${BASE_URL}/${year}/acs/acs5?get=${VARIABLES}&for=tract:${tractParam}&in=state:${stateFips}+county:${countyFips}&key=${getApiKey()}`;
+    const res = await fetch(url);
+    if (!res.ok) return results;
+
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 2) return results;
+
+    const headers = data[0] as string[];
+    const tractIdx = headers.indexOf("tract");
+
+    for (let i = 1; i < data.length; i++) {
+      const values = data[i] as string[];
+      const tract = tractIdx >= 0 ? values[tractIdx] : misses[i - 1];
+      if (!tract) continue;
+
+      const parsed = parseCensusResponse(headers, values, tract, year);
+      results.set(tract, parsed);
+      cacheSet(dataCache, `${stateFips}-${countyFips}-${tract}`, parsed);
+    }
+  } catch (error) {
+    console.error("Census batch API error:", error);
+  }
+
+  return results;
+}
+
+// ============================================================
+// All Tracts in a County — for neighborhood comparison
+// ============================================================
+
+const countyTractCache = new Map<string, CacheEntry<CensusData[]>>();
+
+export async function getAllCountyTracts(
+  stateFips: string,
+  countyFips: string,
+): Promise<CensusData[]> {
+  const cacheKey = `county:${stateFips}-${countyFips}`;
+  const cached = cacheGet(countyTractCache, cacheKey);
+  if (cached) return cached;
+
+  const year = 2022;
+  // Fetch core metrics for all tracts in a county (smaller variable set for performance)
+  const coreVars = [
+    "B01003_001E", // population
+    "B19013_001E", // median income
+    "B25064_001E", // median rent
+    "B25077_001E", // median home value
+    "B25002_002E", // occupied
+    "B25002_003E", // vacant
+    "B25003_003E", // renter occupied
+    "B25003_002E", // owner occupied
+    "B25058_001E", // median contract rent
+    "B25071_001E", // rent burden
+  ].join(",");
+
+  try {
+    const url = `${BASE_URL}/${year}/acs/acs5?get=${coreVars}&for=tract:*&in=state:${stateFips}+county:${countyFips}&key=${getApiKey()}`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length < 2) return [];
+
+    const headers = data[0] as string[];
+    const tractIdx = headers.indexOf("tract");
+    const results: CensusData[] = [];
+
+    for (let i = 1; i < data.length; i++) {
+      const values = data[i] as string[];
+      const tract = tractIdx >= 0 ? values[tractIdx] : `unknown-${i}`;
+
+      const idx = (varName: string) => {
+        const j = headers.indexOf(varName);
+        return j >= 0 ? values[j] : null;
+      };
+
+      const population = parseNum(idx("B01003_001E"));
+      const occupied = parseNum(idx("B25002_002E"));
+      const vacant = parseNum(idx("B25002_003E"));
+      const ownerOcc = parseNum(idx("B25003_002E"));
+      const renterOcc = parseNum(idx("B25003_003E"));
+      const totalHU = occupied + vacant;
+
+      // Only include tracts with meaningful population
+      if (population < 50) continue;
+
+      results.push({
+        population,
+        medianHouseholdIncome: parseNum(idx("B19013_001E")),
+        medianRent: parseNum(idx("B25064_001E")),
+        medianContractRent: parseNum(idx("B25058_001E")),
+        medianHomeValue: parseNum(idx("B25077_001E")),
+        occupiedUnits: occupied,
+        vacantUnits: vacant,
+        vacancyRate: totalHU > 0 ? (vacant / totalHU) * 100 : 0,
+        ownerOccupied: ownerOcc,
+        renterOccupied: renterOcc,
+        renterPct: safeDiv(renterOcc, ownerOcc + renterOcc),
+        medianAge: 0, // Not fetched in core vars
+        medianYearBuilt: 0,
+        povertyRate: 0,
+        unemploymentRate: 0,
+        transitCommutePct: 0,
+        workFromHomePct: 0,
+        rentBurdenPct: parseNum(idx("B25071_001E")),
+        housingStock: { singleFamily: 0, twoUnit: 0, threeToFour: 0, fiveToNine: 0, tenToNineteen: 0, twentyToFortyNine: 0, fiftyPlus: 0 },
+        censusTract: tract,
+        year,
+      });
+    }
+
+    cacheSet(countyTractCache, cacheKey, results);
+    return results;
+  } catch (error) {
+    console.error("Census county tracts error:", error);
+    return [];
+  }
+}
+
+// ============================================================
+// Tract Comparison — compare a subject tract to its county peers
+// ============================================================
+
+export interface TractPercentileRank {
+  censusTract: string;
+  medianIncomePercentile: number;
+  medianRentPercentile: number;
+  vacancyRatePercentile: number;
+  renterPctPercentile: number;
+  rentBurdenPercentile: number;
+  totalTractsInCounty: number;
+}
+
+/**
+ * Rank a tract against all other tracts in its county.
+ * Returns percentile ranks (0-100) for key metrics.
+ */
+export async function getTractPercentileRank(
+  stateFips: string,
+  countyFips: string,
+  subjectTract: string,
+): Promise<TractPercentileRank | null> {
+  const allTracts = await getAllCountyTracts(stateFips, countyFips);
+  if (allTracts.length < 5) return null;
+
+  const subject = allTracts.find(t => t.censusTract === subjectTract);
+  if (!subject) return null;
+
+  const percentile = (value: number, arr: number[]): number => {
+    const sorted = arr.filter(v => v > 0).sort((a, b) => a - b);
+    if (sorted.length === 0) return 50;
+    let count = 0;
+    for (const v of sorted) {
+      if (v < value) count++;
+    }
+    return Math.round((count / sorted.length) * 100);
+  };
+
+  return {
+    censusTract: subjectTract,
+    medianIncomePercentile: percentile(subject.medianHouseholdIncome, allTracts.map(t => t.medianHouseholdIncome)),
+    medianRentPercentile: percentile(subject.medianRent, allTracts.map(t => t.medianRent)),
+    vacancyRatePercentile: percentile(subject.vacancyRate, allTracts.map(t => t.vacancyRate)),
+    renterPctPercentile: percentile(subject.renterPct, allTracts.map(t => t.renterPct)),
+    rentBurdenPercentile: percentile(subject.rentBurdenPct, allTracts.map(t => t.rentBurdenPct)),
+    totalTractsInCounty: allTracts.length,
+  };
+}
