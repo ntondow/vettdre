@@ -1,0 +1,341 @@
+"use server";
+
+const NYC = "https://data.cityofnewyork.us/resource";
+const PLUTO = "64uk-42ks";
+
+const PUBLIC_OWNERS = [
+  "NYC HOUSING AUTHORITY", "NYCHA", "NEW YORK CITY HOUSING AUTH",
+  "DEPT OF HOUSING PRESERV",
+  "NYC DEPT OF ED", "NYC DEPARTMENT OF EDUCATION", "BOARD OF EDUCATION",
+  "NYC TRANSIT AUTHORITY", "METROPOLITAN TRANS AUTH",
+  "NYC HEALTH & HOSPITALS", "HEALTH & HOSP CORP",
+  "DEPARTMENT OF PARKS", "PARKS & RECREATION",
+  "NYC SCHOOL CONSTRUCTION", "SCHOOL CONSTRUCTION AUTH",
+  "FIRE DEPT CITY OF NY", "POLICE DEPT CITY OF NY",
+  "DEPT OF CITYWIDE ADMIN",
+  "HUDSON RIVER PARK TRUST", "BATTERY PARK CITY AUTH",
+  "PORT AUTHORITY OF NY", "DORMITORY AUTHORITY",
+  "NYC ECONOMIC DEVELOPMENT",
+  "HOUSING DEVELOPMENT CORP",
+  "NYC INDUSTRIAL DEV", "DEPT OF SANITATION",
+  "DEPT OF TRANSPORTATION",
+  "DEPT OF ENVIRONMENTAL PROTECTION",
+  "TRIBOROUGH BRIDGE", "ROOSEVELT ISLAND OPERATING",
+  "LOWER MANHATTAN DEV", "GOVERNORS ISLAND",
+  "NYC LAND DEVELOPMENT", "URBAN DEVELOPMENT CORP",
+  "DEPT OF BUILDINGS",
+];
+
+
+
+function checkPublicOwner(name: string): boolean {
+  if (!name) return false;
+  const upper = name.toUpperCase().trim();
+  if (upper.length < 3) return false;
+  return PUBLIC_OWNERS.some(p => upper.includes(p)) ||
+    (upper.startsWith("CITY OF ") && upper.includes("NEW YORK")) ||
+    (upper.startsWith("STATE OF ") && upper.includes("NEW YORK")) ||
+    upper.startsWith("UNITED STATES") ||
+    upper.includes("HOUSING AUTHORITY") ||
+    upper.includes("CITY UNIVERSITY OF") ||
+    upper.includes("STATE UNIVERSITY OF");
+}
+
+export async function geocodeAddress(query: string): Promise<{ lat: number; lng: number } | null> {
+  // Try NYC GeoSearch first — free, no key, NYC-optimized with rooftop accuracy
+  try {
+    const q = encodeURIComponent(query.trim());
+    const res = await fetch(
+      `https://geosearch.planninglabs.nyc/v2/search?text=${q}&size=1`,
+      { signal: AbortSignal.timeout(5000) },
+    );
+    if (res.ok) {
+      const data = await res.json();
+      const feat = data?.features?.[0];
+      if (feat?.geometry?.coordinates) {
+        const [lng, lat] = feat.geometry.coordinates;
+        if (lat && lng) return { lat, lng };
+      }
+    }
+  } catch (err) {
+    console.error("NYC GeoSearch fallback:", err);
+  }
+
+  // Fallback to Geocodio for rooftop accuracy
+  try {
+    const { geocodeAddress: geocodioGeocode, getGeocodioBudget } = await import("@/lib/geocodio");
+    const budget = getGeocodioBudget();
+    if (budget.remaining > 0) {
+      const result = await geocodioGeocode(query.trim());
+      if (result && result.lat && result.lng) {
+        return { lat: result.lat, lng: result.lng };
+      }
+    }
+  } catch (err) {
+    console.error("Geocodio fallback:", err);
+  }
+
+  // Fallback to Nominatim
+  try {
+    const q = encodeURIComponent(query.trim() + ", New York City");
+    const res = await fetch(
+      "https://nominatim.openstreetmap.org/search?format=json&q=" + q + "&limit=1&countrycodes=us",
+      { headers: { "User-Agent": "VettdRE/1.0" } },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data.length > 0) {
+      return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+    }
+    return null;
+  } catch (err) {
+    console.error("Server geocode error:", err);
+    return null;
+  }
+}
+
+// Ray-casting point-in-polygon algorithm
+// polygon is an array of [lat, lng] pairs defining the polygon boundary
+function isPointInPolygon(lat: number, lng: number, polygon: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [yi, xi] = polygon[i]; // [lat, lng]
+    const [yj, xj] = polygon[j];
+    const intersect = ((xi > lng) !== (xj > lng)) &&
+      (lat < (yi - yj) * (lng - xj) / (xi - xj) + yj);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+export async function fetchPropertiesInBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+  filters?: {
+    minUnits?: number;
+    maxUnits?: number;
+    minValue?: number;
+    maxValue?: number;
+    minYearBuilt?: number;
+    maxYearBuilt?: number;
+    minFloors?: number;
+    bldgClass?: string;
+    zoneDist?: string;
+    excludePublic?: boolean;
+    ownerName?: string;
+  },
+  polygons?: [number, number][][], // Optional polygons for precise spatial filtering (point-in-any-polygon OR logic)
+) {
+  // IMPORTANT: Do NOT quote numeric values — Socrata SODA does string comparison
+  // on quoted values, which breaks negative longitude comparisons entirely.
+  const conditions: string[] = [
+    `unitsres > 0`,
+    `address IS NOT NULL`,
+    `address != ''`,
+    `NOT starts_with(address, '0 ')`,
+    `latitude > ${swLat}`,
+    `latitude < ${neLat}`,
+    `longitude > ${swLng}`,
+    `longitude < ${neLng}`,
+  ];
+
+  if (filters?.minUnits) conditions.push(`unitsres >= ${filters.minUnits}`);
+  if (filters?.maxUnits) conditions.push(`unitsres <= ${filters.maxUnits}`);
+  if (filters?.minValue) conditions.push(`assesstot >= ${filters.minValue}`);
+  if (filters?.maxValue) conditions.push(`assesstot <= ${filters.maxValue}`);
+  if (filters?.minYearBuilt) conditions.push(`yearbuilt >= ${filters.minYearBuilt}`);
+  if (filters?.maxYearBuilt) conditions.push(`yearbuilt <= ${filters.maxYearBuilt}`);
+  if (filters?.minFloors) conditions.push(`numfloors >= ${filters.minFloors}`);
+  if (filters?.bldgClass) conditions.push(`bldgclass like '${filters.bldgClass}%'`);
+  if (filters?.zoneDist) conditions.push(`zonedist1 like '${filters.zoneDist}%'`);
+  if (filters?.ownerName) conditions.push(`upper(ownername) like upper('%${filters.ownerName.replace(/'/g, "''")}%')`);
+
+  try {
+    const url = new URL(NYC + "/" + PLUTO + ".json");
+    url.searchParams.set("$where", conditions.join(" AND "));
+    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea,zipcode");
+    url.searchParams.set("$limit", "2000");
+    url.searchParams.set("$order", "unitsres DESC");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return { properties: [], total: 0 };
+
+    const data = await res.json();
+
+    let properties = data.map((p: any) => ({
+      address: p.address || "",
+      ownerName: p.ownername || "",
+      unitsRes: parseInt(p.unitsres || "0"),
+      unitsTot: parseInt(p.unitstotal || "0"),
+      yearBuilt: parseInt(p.yearbuilt || "0"),
+      numFloors: parseInt(p.numfloors || "0"),
+      assessTotal: parseInt(p.assesstot || "0"),
+      bldgClass: p.bldgclass || "",
+      zoneDist: p.zonedist1 || "",
+      boroCode: p.borocode || "",
+      block: p.block || "",
+      lot: p.lot || "",
+      lat: parseFloat(p.latitude || "0"),
+      lng: parseFloat(p.longitude || "0"),
+      bldgArea: parseInt(p.bldgarea || "0"),
+      lotArea: parseInt(p.lotarea || "0"),
+      borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+      zip: p.zipcode || "",
+      ntaName: "",
+    })).filter((p: any) => p.lat !== 0 && p.lng !== 0)
+      .filter((p: any) => filters?.excludePublic ? !checkPublicOwner(p.ownerName) : true);
+
+    // Post-filter by polygons if provided (precision spatial filtering — OR logic)
+    if (polygons && polygons.length > 0) {
+      properties = properties.filter((p: any) =>
+        polygons.some(poly => poly.length >= 3 && isPointInPolygon(p.lat, p.lng, poly)),
+      );
+    }
+
+    const total = properties.length;
+
+    return { properties, total };
+  } catch (err) {
+    console.error("Map fetch error:", err);
+    return { properties: [], total: 0 };
+  }
+}
+
+// ============================================================
+// Single property lookup by lat/lng — no filters, for address search override
+// ============================================================
+
+export async function fetchPropertyAtLocation(
+  lat: number, lng: number,
+): Promise<{
+  address: string; ownerName: string; unitsRes: number; unitsTot: number;
+  yearBuilt: number; numFloors: number; assessTotal: number; bldgClass: string;
+  zoneDist: string; boroCode: string; block: string; lot: string;
+  lat: number; lng: number; bldgArea: number; lotArea: number; borough: string;
+  zip: string; ntaName: string;
+} | null> {
+  const RADIUS = 0.001; // ~110m — covers geocoder-to-PLUTO centroid offset
+  try {
+    const url = new URL(NYC + "/" + PLUTO + ".json");
+    url.searchParams.set("$where", [
+      `latitude > ${lat - RADIUS}`,
+      `latitude < ${lat + RADIUS}`,
+      `longitude > ${lng - RADIUS}`,
+      `longitude < ${lng + RADIUS}`,
+    ].join(" AND "));
+    url.searchParams.set("$select", "address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgclass,zonedist1,borocode,block,lot,latitude,longitude,bldgarea,lotarea,zipcode");
+    url.searchParams.set("$limit", "1");
+    url.searchParams.set("$order", "unitsres DESC");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    if (!data || data.length === 0) return null;
+
+    const p = data[0];
+    return {
+      address: p.address || "",
+      ownerName: p.ownername || "",
+      unitsRes: parseInt(p.unitsres || "0"),
+      unitsTot: parseInt(p.unitstotal || "0"),
+      yearBuilt: parseInt(p.yearbuilt || "0"),
+      numFloors: parseInt(p.numfloors || "0"),
+      assessTotal: parseInt(p.assesstot || "0"),
+      bldgClass: p.bldgclass || "",
+      zoneDist: p.zonedist1 || "",
+      boroCode: p.borocode || "",
+      block: p.block || "",
+      lot: p.lot || "",
+      lat: parseFloat(p.latitude || "0"),
+      lng: parseFloat(p.longitude || "0"),
+      bldgArea: parseInt(p.bldgarea || "0"),
+      lotArea: parseInt(p.lotarea || "0"),
+      borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(p.borocode)] || "",
+      zip: p.zipcode || "",
+      ntaName: "",
+    };
+  } catch (err) {
+    console.error("Fetch property at location error:", err);
+    return null;
+  }
+}
+
+// ============================================================
+// New Developments — DOB Job Applications (NB = New Building, A1 = Major Alteration)
+// ============================================================
+const DOB_JOBS = "ic3t-wcy2";
+
+export interface MapNewDevelopment {
+  address: string;
+  borough: string;
+  units: number;
+  stories: number;
+  jobType: string;
+  jobStatus: string;
+  estimatedCost: string;
+  ownerName: string;
+  filingDate: string;
+  lat: number;
+  lng: number;
+  block: string;
+  lot: string;
+  boroCode: string;
+}
+
+export async function fetchNewDevelopmentsInBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+): Promise<MapNewDevelopment[]> {
+  try {
+    const url = new URL(NYC + "/" + DOB_JOBS + ".json");
+    url.searchParams.set("$where", [
+      `latitude > ${swLat}`,
+      `latitude < ${neLat}`,
+      `longitude > ${swLng}`,
+      `longitude < ${neLng}`,
+      `job_type in('NB','A1')`,
+      `existing_dwelling_units IS NOT NULL`,
+    ].join(" AND "));
+    url.searchParams.set("$select", "house__,street_name,borough,proposed_dwelling_units,existing_dwelling_units,proposed_no_of_stories,job_type,job_status,total_est__fee,owner_s_business_name,owner_s_first_name,owner_s_last_name,latest_action_date,latitude,longitude,block,lot,community___board");
+    url.searchParams.set("$limit", "200");
+    url.searchParams.set("$order", "latest_action_date DESC");
+
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+
+    const data = await res.json();
+    const boroNames: Record<string, string> = { MANHATTAN: "Manhattan", BRONX: "Bronx", BROOKLYN: "Brooklyn", QUEENS: "Queens", "STATEN ISLAND": "Staten Island" };
+    const boroCodeMap: Record<string, string> = { MANHATTAN: "1", BRONX: "2", BROOKLYN: "3", QUEENS: "4", "STATEN ISLAND": "5" };
+
+    return data
+      .map((d: any) => {
+        const proposed = parseInt(d.proposed_dwelling_units || "0");
+        const existing = parseInt(d.existing_dwelling_units || "0");
+        const netNewUnits = proposed - existing;
+        if (netNewUnits <= 0) return null;
+
+        const ownerBiz = d.owner_s_business_name || "";
+        const ownerPerson = [d.owner_s_first_name, d.owner_s_last_name].filter(Boolean).join(" ").trim();
+
+        return {
+          address: [d.house__, d.street_name].filter(Boolean).join(" ").trim(),
+          borough: boroNames[d.borough] || d.borough || "",
+          units: netNewUnits,
+          stories: parseInt(d.proposed_no_of_stories || "0"),
+          jobType: d.job_type || "",
+          jobStatus: d.job_status || "",
+          estimatedCost: d.total_est__fee || "",
+          ownerName: ownerBiz || ownerPerson || "",
+          filingDate: d.latest_action_date || "",
+          lat: parseFloat(d.latitude || "0"),
+          lng: parseFloat(d.longitude || "0"),
+          block: (d.block || "").replace(/^0+/, ""),
+          lot: (d.lot || "").replace(/^0+/, ""),
+          boroCode: boroCodeMap[d.borough] || "",
+        };
+      })
+      .filter((d: MapNewDevelopment | null): d is MapNewDevelopment => d !== null && d.lat !== 0 && d.lng !== 0);
+  } catch (err) {
+    console.error("New developments fetch error:", err);
+    return [];
+  }
+}

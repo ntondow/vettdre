@@ -46,3 +46,11 @@ next-env.d.ts
 data/zillow/*.csv
 scripts/create-secrets.sh
 .env*
+
+# restore artifacts (Cloud Build archive recovery)
+_restore/
+*.tgz
+.~lock.*
+
+# claude settings
+.claude/

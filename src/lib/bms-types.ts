@@ -10,16 +10,8 @@ export type SubmissionStatus = "submitted" | "under_review" | "approved" | "invo
 export type InvoiceStatusType = "draft" | "sent" | "paid" | "void";
 export type SubmissionSource = "internal" | "external";
 export type AgentStatus = "pending" | "active" | "inactive" | "terminated";
-export type ExclusiveType = "brokerage" | "personal";
 export type CommissionPlanType = "volume_based" | "value_based" | "flat";
 export type CommissionPlanStatus = "active" | "inactive";
-
-export interface RequiredDocs {
-  signedLease: boolean;
-  agencyDisclosure: boolean;
-  fairHousing: boolean;
-  commissionAgreement: boolean;
-}
 
 // ── Interfaces ────────────────────────────────────────────────
 
@@ -59,30 +51,6 @@ export interface DealSubmissionInput {
   coAgents?: CoAgentInput[];
 
   notes?: string;
-
-  // Exclusive type
-  exclusiveType?: ExclusiveType;
-  bmsPropertyId?: string;
-
-  // Landlord / billing (auto-filled for brokerage exclusive, manual for personal)
-  landlordName?: string;
-  landlordEmail?: string;
-  landlordPhone?: string;
-  landlordAddress?: string;
-  managementCo?: string;
-
-  // Lease-specific
-  leaseStartDate?: string;
-  leaseEndDate?: string;
-  monthlyRent?: number;
-
-  // Tenant info (used for leases instead of clientName/Email/Phone)
-  tenantName?: string;
-  tenantEmail?: string;
-  tenantPhone?: string;
-
-  // Required docs tracker
-  requiredDocs?: RequiredDocs;
 }
 
 export interface DealSubmissionRecord extends DealSubmissionInput {
@@ -96,9 +64,6 @@ export interface DealSubmissionRecord extends DealSubmissionInput {
   updatedAt: string;
   invoice?: InvoiceRecord;
   agent?: AgentRecord;
-  approvedBy?: string;
-  approvedAt?: string;
-  bmsProperty?: BmsPropertyRecord;
 }
 
 export interface InvoiceInput {
@@ -323,8 +288,6 @@ export interface AgentRecord {
   licenseNumber?: string;
   licenseExpiry?: string;
   defaultSplitPct: number;
-  houseExclusiveSplitPct?: number | null;
-  personalExclusiveSplitPct?: number | null;
   status: AgentStatus;
   brokerageRole?: string;
   // Invite fields (for UI display)
@@ -875,16 +838,6 @@ export const INVOICE_STATUS_COLORS: Record<string, string> = {
   void: "bg-red-100 text-red-700",
 };
 
-export const EXCLUSIVE_TYPE_LABELS: Record<string, string> = {
-  brokerage: "Brokerage Exclusive",
-  personal: "Personal Exclusive",
-};
-
-export const EXCLUSIVE_TYPE_COLORS: Record<string, string> = {
-  brokerage: "bg-indigo-100 text-indigo-700",
-  personal: "bg-sky-100 text-sky-700",
-};
-
 export const COMMISSION_PLAN_TYPE_LABELS: Record<string, string> = {
   volume_based: "Volume-Based",
   value_based: "Value-Based",
@@ -1358,27 +1311,16 @@ export interface BmsPropertyInput {
   managementCo?: string;
   totalUnits?: number;
   notes?: string;
-  isExclusive?: boolean;
-  billingEntityName?: string;
-  billingEntityAddress?: string;
-  billingEntityEmail?: string;
-  billingEntityPhone?: string;
 }
 
 export interface BmsPropertyRecord extends BmsPropertyInput {
   id: string;
   orgId: string;
-  isExclusive: boolean;
-  billingEntityName?: string;
-  billingEntityAddress?: string;
-  billingEntityEmail?: string;
-  billingEntityPhone?: string;
   createdAt: string;
   updatedAt: string;
   _listingCount?: number;
   _availableCount?: number;
   _leasedCount?: number;
-  _dealSubmissionCount?: number;
 }
 
 export interface BmsListingInput {
