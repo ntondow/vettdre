@@ -1,0 +1,32 @@
+# Dependencies & build artifacts
+node_modules/
+.next/
+/out/
+/build/
+
+# Version control
+.git/
+
+# Environment files
+.env
+.env.*
+
+# IDE & OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Docs (not needed for build)
+*.md
+PROMPT_*
+*.xlsx
+
+# Misc
+.vercel/
+.claude/
+*.tsbuildinfo
+next-env.d.ts
+/src/generated/prisma
+design-system/
+scripts/create-secrets.sh

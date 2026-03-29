@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 280 64" fill="none">
+  <defs>
+    <linearGradient id="navyGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1E40AF"/>
+      <stop offset="100%" stop-color="#122669"/>
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FBBF24"/>
+      <stop offset="100%" stop-color="#D4A012"/>
+    </linearGradient>
+    <clipPath id="buildingClip">
+      <rect x="0" y="0" width="52" height="64" rx="4"/>
+    </clipPath>
+  </defs>
+
+  <!-- Logomark: Abstract building / shield / checkmark -->
+  <g>
+    <!-- Primary shield shape -->
+    <path d="M6 8 L26 2 L46 8 L46 38 Q46 52 26 60 Q6 52 6 38 Z" fill="url(#navyGrad)"/>
+    <!-- Inner building silhouette -->
+    <rect x="16" y="16" width="4" height="18" rx="1" fill="rgba(255,255,255,0.25)"/>
+    <rect x="24" y="12" width="4" height="22" rx="1" fill="rgba(255,255,255,0.35)"/>
+    <rect x="32" y="18" width="4" height="16" rx="1" fill="rgba(255,255,255,0.25)"/>
+    <!-- Gold checkmark / verification accent -->
+    <path d="M17 34 L23 40 L37 26" stroke="url(#goldGrad)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <!-- Subtle gold line at shield base -->
+    <path d="M14 46 Q26 54 38 46" stroke="#D4A012" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g>
+    <!-- "Vettd" in navy -->
+    <text x="60" y="42" font-family="'DM Serif Display', Georgia, serif" font-size="36" font-weight="700" fill="#0F172A" letter-spacing="-0.5">Vettd</text>
+    <!-- "RE" in gold -->
+    <text x="170" y="42" font-family="'DM Serif Display', Georgia, serif" font-size="36" font-weight="700" fill="#D4A012" letter-spacing="-0.5">RE</text>
+  </g>
+</svg>

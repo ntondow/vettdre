@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VettdRE — AI-Native NYC Real Estate Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,200;0,300;0,400;0,500;0,600;0,700;1,200;1,300;1,400;1,500;1,600;1,700&family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary: #050505;
+    --bg-card: rgba(255, 255, 255, 0.02);
+    --bg-card-hover: rgba(255, 255, 255, 0.04);
+    --border-subtle: rgba(255, 255, 255, 0.06);
+    --border-shimmer: rgba(16, 185, 129, 0.3);
+    --text-primary: #EBEBEB;
+    --text-secondary: rgba(235, 235, 235, 0.6);
+    --text-tertiary: rgba(235, 235, 235, 0.4);
+    --accent: #10b981;
+    --accent-glow: rgba(16, 185, 129, 0.15);
+    --accent-bright: #34d399;
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans: 'Inter', -apple-system, sans-serif;
+    --font-mono: 'Space Grotesk', monospace;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ===== AMBIENT BACKGROUND ===== */
+  .ambient-glow {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .ambient-glow .blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.07;
+    animation: morphBlob 20s ease-in-out infinite alternate;
+  }
+  .ambient-glow .blob:nth-child(1) {
+    width: 600px; height: 600px;
+    background: var(--accent);
+    top: -200px; right: -100px;
+  }
+  .ambient-glow .blob:nth-child(2) {
+    width: 400px; height: 400px;
+    background: #1E40AF;
+    bottom: 20%; left: -100px;
+    animation-delay: -7s;
+  }
+  .ambient-glow .blob:nth-child(3) {
+    width: 300px; height: 300px;
+    background: var(--accent);
+    bottom: -100px; right: 30%;
+    animation-delay: -14s;
+  }
+
+  @keyframes morphBlob {
+    0% { border-radius: 40% 60% 60% 40% / 70% 30% 70% 30%; transform: translate(0, 0) scale(1); }
+    50% { border-radius: 60% 40% 40% 60% / 30% 70% 30% 70%; transform: translate(30px, -20px) scale(1.1); }
+    100% { border-radius: 40% 60% 60% 40% / 70% 30% 70% 30%; transform: translate(-20px, 20px) scale(0.95); }
+  }
+
+  /* ===== CONTAINER ===== */
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ===== NAVBAR ===== */
+  nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    padding: 16px 0;
+    background: rgba(5, 5, 5, 0.8);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  nav .container {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-primary);
+    text-decoration: none;
+  }
+  .nav-logo span { color: var(--accent); }
+  .nav-links {
+    display: flex;
+    gap: 32px;
+    list-style: none;
+  }
+  .nav-links a {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+  .nav-links a:hover { color: var(--accent); }
+  .nav-cta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--bg-primary);
+    background: var(--accent);
+    padding: 10px 24px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-decoration: none;
+  }
+  .nav-cta:hover { background: var(--accent-bright); transform: translateY(-1px); }
+
+  /* ===== HERO ===== */
+  .hero {
+    padding: 160px 0 100px;
+    position: relative;
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 100px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 28px;
+  }
+  .hero-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .hero h1 {
+    font-family: var(--font-serif);
+    font-size: clamp(42px, 5vw, 68px);
+    font-weight: 300;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    margin-bottom: 24px;
+    color: var(--text-primary);
+  }
+  .hero h1 em {
+    font-style: italic;
+    color: var(--accent);
+    font-weight: 400;
+  }
+  .hero-sub {
+    font-size: 17px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    max-width: 480px;
+    margin-bottom: 36px;
+  }
+  .hero-actions {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 40px;
+  }
+  .btn-primary {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--bg-primary);
+    background: var(--accent);
+    padding: 14px 32px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-primary:hover { background: var(--accent-bright); transform: translateY(-2px); box-shadow: 0 8px 30px var(--accent-glow); }
+  .btn-secondary {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    background: transparent;
+    padding: 14px 32px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-secondary:hover { border-color: var(--text-tertiary); color: var(--text-primary); }
+
+  /* Social proof row */
+  .social-proof {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .avatar-stack {
+    display: flex;
+  }
+  .avatar-stack .avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-primary);
+    margin-left: -8px;
+    background: linear-gradient(135deg, #1E40AF, var(--accent));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+  }
+  .avatar-stack .avatar:first-child { margin-left: 0; }
+  .social-proof-text {
+    font-size: 13px;
+    color: var(--text-tertiary);
+  }
+  .social-proof-text strong { color: var(--text-secondary); }
+
+  /* Hero right — Dashboard mockup */
+  .hero-mockup {
+    position: relative;
+  }
+  .mockup-window {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .mockup-titlebar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .dot.red { background: #ff5f57; }
+  .dot.yellow { background: #febc2e; }
+  .dot.green { background: #28c840; }
+  .mockup-body {
+    padding: 20px;
+  }
+
+  /* Stat cards inside mockup */
+  .mockup-stats {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .mockup-stat {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 14px;
+  }
+  .mockup-stat-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 6px;
+  }
+  .mockup-stat-value {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .mockup-stat-change {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-top: 4px;
+  }
+
+  /* Chart area in mockup */
+  .mockup-chart {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 16px;
+    height: 120px;
+    position: relative;
+    overflow: hidden;
+  }
+  .mockup-chart-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+  }
+  .chart-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 70px;
+  }
+  .chart-bar {
+    flex: 1;
+    background: linear-gradient(to top, var(--accent), rgba(16,185,129,0.3));
+    border-radius: 3px 3px 0 0;
+    transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* Floating badges on mockup */
+  .floating-badge {
+    position: absolute;
+    background: rgba(255,255,255,0.95);
+    color: #050505;
+    padding: 10px 16px;
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+    font-size: 12px;
+    font-weight: 600;
+    animation: float 6s ease-in-out infinite;
+  }
+  .floating-badge.top-right {
+    top: -10px;
+    right: -20px;
+    animation-delay: -2s;
+  }
+  .floating-badge.bottom-left {
+    bottom: 30px;
+    left: -30px;
+  }
+  .floating-badge .badge-label {
+    font-family: var(--font-mono);
+    font-size: 8px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: #888;
+    display: block;
+    margin-bottom: 2px;
+  }
+  .floating-badge .badge-icon {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .floating-badge .badge-icon .check {
+    color: var(--accent);
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+
+  /* ===== STATS BAR ===== */
+  .stats-bar {
+    padding: 60px 0;
+    border-top: 1px solid var(--border-subtle);
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 40px;
+    text-align: center;
+  }
+  .stat-item-number {
+    font-family: var(--font-serif);
+    font-size: 44px;
+    font-weight: 300;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .stat-item-number span { color: var(--accent); }
+  .stat-item-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+
+  /* ===== FEATURES SECTION ===== */
+  .features {
+    padding: 120px 0;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+  .section-title {
+    font-family: var(--font-serif);
+    font-size: clamp(32px, 3.5vw, 48px);
+    font-weight: 300;
+    line-height: 1.15;
+    margin-bottom: 16px;
+    max-width: 600px;
+  }
+  .section-title em { font-style: italic; color: var(--accent); font-weight: 400; }
+  .section-desc {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 500px;
+    margin-bottom: 60px;
+    line-height: 1.7;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  .feature-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 32px 28px;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-shimmer), transparent);
+    opacity: 0;
+    transition: opacity 0.4s;
+  }
+  .feature-card:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255,255,255,0.1);
+    transform: translateY(-4px);
+  }
+  .feature-card:hover::before { opacity: 1; }
+  .feature-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--accent-glow);
+    border: 1px solid rgba(16,185,129,0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    margin-bottom: 20px;
+  }
+  .feature-card h3 {
+    font-family: var(--font-sans);
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+  .feature-card p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+  .feature-tag {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-glow);
+    padding: 4px 10px;
+    border-radius: 4px;
+    margin-top: 16px;
+  }
+
+  /* ===== HOW IT WORKS ===== */
+  .how-it-works {
+    padding: 120px 0;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 40px;
+    margin-top: 60px;
+  }
+  .step {
+    position: relative;
+  }
+  .step-number {
+    font-family: var(--font-serif);
+    font-size: 72px;
+    font-weight: 200;
+    color: rgba(16, 185, 129, 0.1);
+    line-height: 1;
+    margin-bottom: 16px;
+  }
+  .step h3 {
+    font-family: var(--font-sans);
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .step p {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* ===== TESTIMONIAL ===== */
+  .testimonial {
+    padding: 120px 0;
+    border-top: 1px solid var(--border-subtle);
+    text-align: center;
+  }
+  .testimonial blockquote {
+    font-family: var(--font-serif);
+    font-size: clamp(24px, 3vw, 36px);
+    font-weight: 300;
+    font-style: italic;
+    line-height: 1.5;
+    max-width: 800px;
+    margin: 0 auto 32px;
+    color: var(--text-primary);
+  }
+  .testimonial-author {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    color: var(--text-tertiary);
+  }
+  .testimonial-author strong {
+    color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  /* ===== CTA ===== */
+  .cta {
+    padding: 120px 0;
+    text-align: center;
+    position: relative;
+  }
+  .cta-card {
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(30, 64, 175, 0.08));
+    border: 1px solid var(--border-shimmer);
+    border-radius: 20px;
+    padding: 80px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cta-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  }
+  .cta h2 {
+    font-family: var(--font-serif);
+    font-size: clamp(32px, 3.5vw, 48px);
+    font-weight: 300;
+    margin-bottom: 16px;
+  }
+  .cta h2 em { font-style: italic; color: var(--accent); font-weight: 400; }
+  .cta p {
+    font-size: 16px;
+    color: var(--text-secondary);
+    max-width: 500px;
+    margin: 0 auto 36px;
+    line-height: 1.7;
+  }
+  .cta-actions {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .cta-note {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-tertiary);
+    letter-spacing: 0.05em;
+  }
+  .cta-note svg { vertical-align: middle; margin-right: 4px; }
+
+  /* ===== FOOTER ===== */
+  footer {
+    padding: 60px 0 40px;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .footer-grid {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .footer-logo {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+  }
+  .footer-logo span { color: var(--accent); }
+  .footer-links {
+    display: flex;
+    gap: 24px;
+    list-style: none;
+  }
+  .footer-links a {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    text-decoration: none;
+    transition: color 0.3s;
+  }
+  .footer-links a:hover { color: var(--accent); }
+  .footer-copy {
+    text-align: center;
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 12px;
+    color: var(--text-tertiary);
+  }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 1024px) {
+    .hero-grid { grid-template-columns: 1fr; gap: 40px; }
+    .features-grid { grid-template-columns: 1fr 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .steps-grid { grid-template-columns: 1fr; gap: 32px; }
+  }
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .hero h1 { font-size: 36px; }
+    .features-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: 1fr 1fr; }
+    .hero-actions { flex-direction: column; align-items: flex-start; }
+    .cta-actions { flex-direction: column; align-items: center; }
+    .footer-grid { flex-direction: column; gap: 24px; text-align: center; }
+    .footer-links { flex-wrap: wrap; justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient Background -->
+<div class="ambient-glow">
+  <div class="blob"></div>
+  <div class="blob"></div>
+  <div class="blob"></div>
+</div>
+
+<!-- Navbar -->
+<nav>
+  <div class="container">
+    <a href="#" class="nav-logo">VETTD<span>RE</span></a>
+    <ul class="nav-links">
+      <li><a href="#features">Features</a></li>
+      <li><a href="#how">How It Works</a></li>
+      <li><a href="#pricing">Pricing</a></li>
+      <li><a href="#testimonials">Reviews</a></li>
+    </ul>
+    <a href="#" class="nav-cta">Get Early Access</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="container">
+    <div class="hero-grid">
+      <div class="hero-content">
+        <div class="hero-badge">NYC Real Estate Intelligence</div>
+        <h1>Turn Every<br>Building Into<br><em>an Opportunity.</em></h1>
+        <p class="hero-sub">Stop juggling 12 different tools. VettdRE brings CRM, market intel, AI underwriting, and brokerage management into one intelligent workspace — built for NYC agents who close.</p>
+        <div class="hero-actions">
+          <a href="#" class="btn-primary">Start Free Trial →</a>
+          <a href="#" class="btn-secondary">Watch Demo</a>
+        </div>
+        <div class="social-proof">
+          <div class="avatar-stack">
+            <div class="avatar">JR</div>
+            <div class="avatar">MT</div>
+            <div class="avatar">KS</div>
+            <div class="avatar">AL</div>
+            <div class="avatar">+</div>
+          </div>
+          <span class="social-proof-text"><strong>140+ NYC agents</strong> already onboard</span>
+        </div>
+      </div>
+
+      <div class="hero-mockup">
+        <!-- Floating badges -->
+        <div class="floating-badge top-right">
+          <span class="badge-label">AI Analysis</span>
+          <span class="badge-icon"><span class="check">✓</span> Ownership Verified</span>
+        </div>
+        <div class="floating-badge bottom-left">
+          <span class="badge-label">Deal Score</span>
+          <span class="badge-icon" style="font-size: 18px; color: var(--accent);">94<span style="font-size: 11px; color: #888;">/100</span></span>
+        </div>
+
+        <!-- Window -->
+        <div class="mockup-window">
+          <div class="mockup-titlebar">
+            <div class="dot red"></div>
+            <div class="dot yellow"></div>
+            <div class="dot green"></div>
+            <span style="margin-left: auto; font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); letter-spacing: 0.1em;">MARKET INTEL</span>
+          </div>
+          <div class="mockup-body">
+            <div class="mockup-stats">
+              <div class="mockup-stat">
+                <div class="mockup-stat-label">Total Revenue</div>
+                <div class="mockup-stat-value">$2.4M</div>
+                <div class="mockup-stat-change">↑ +24% this quarter</div>
+              </div>
+              <div class="mockup-stat">
+                <div class="mockup-stat-label">Active Deals</div>
+                <div class="mockup-stat-value">38</div>
+                <div class="mockup-stat-change">↑ 12 new this month</div>
+              </div>
+              <div class="mockup-stat">
+                <div class="mockup-stat-label">Buildings Analyzed</div>
+                <div class="mockup-stat-value">1,247</div>
+                <div class="mockup-stat-change">↑ +340 last 30 days</div>
+              </div>
+              <div class="mockup-stat">
+                <div class="mockup-stat-label">Win Rate</div>
+                <div class="mockup-stat-value">67%</div>
+                <div class="mockup-stat-change">↑ +8% vs. benchmark</div>
+              </div>
+            </div>
+            <div class="mockup-chart">
+              <div class="mockup-chart-label">Pipeline Volume — 12 Months</div>
+              <div class="chart-bars">
+                <div class="chart-bar" style="height: 30%"></div>
+                <div class="chart-bar" style="height: 45%"></div>
+                <div class="chart-bar" style="height: 38%"></div>
+                <div class="chart-bar" style="height: 55%"></div>
+                <div class="chart-bar" style="height: 48%"></div>
+                <div class="chart-bar" style="height: 62%"></div>
+                <div class="chart-bar" style="height: 70%"></div>
+                <div class="chart-bar" style="height: 58%"></div>
+                <div class="chart-bar" style="height: 75%"></div>
+                <div class="chart-bar" style="height: 85%"></div>
+                <div class="chart-bar" style="height: 78%"></div>
+                <div class="chart-bar" style="height: 92%"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Stats Bar -->
+<section class="stats-bar">
+  <div class="container">
+    <div class="stats-grid">
+      <div>
+        <div class="stat-item-number">17<span>+</span></div>
+        <div class="stat-item-label">NYC Data APIs Integrated</div>
+      </div>
+      <div>
+        <div class="stat-item-number">72</div>
+        <div class="stat-item-label">Database Models</div>
+      </div>
+      <div>
+        <div class="stat-item-number">95<span>%</span></div>
+        <div class="stat-item-label">Ownership Accuracy</div>
+      </div>
+      <div>
+        <div class="stat-item-number">4<span>s</span></div>
+        <div class="stat-item-label">Avg. Building Profile Load</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-label">01_Platform</div>
+    <h2 class="section-title">Everything you need to <em>dominate</em> NYC real estate.</h2>
+    <p class="section-desc">One platform replaces your CRM, market research tools, underwriting spreadsheets, and brokerage back-office.</p>
+
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🏢</div>
+        <h3>Market Intelligence</h3>
+        <p>Instant building profiles from 17 NYC Open Data APIs. ACRIS sales, DOB permits, HPD violations, rent stabilization, and AI ownership analysis — all in one click.</p>
+        <span class="feature-tag">17 Data Sources</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🤖</div>
+        <h3>AI Leasing Agent</h3>
+        <p>Conversational AI handles tenant inquiries 24/7 across SMS, email, voice, and web chat. Books tours, answers FAQs, and follows up automatically.</p>
+        <span class="feature-tag">Multi-Channel</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>Deal Underwriting</h3>
+        <p>Full DCF modeling, IRR calculation, proforma generation. AI-generated assumptions from address alone. NYC-specific closing costs, LL97 penalties, and RGB modeling.</p>
+        <span class="feature-tag">One-Click Analysis</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <h3>Skip Tracing & Enrichment</h3>
+        <p>People Data Labs + Apollo.io + NYC PLUTO pipeline. Find owner contact info, verify identities, and score leads with AI-powered qualification.</p>
+        <span class="feature-tag">PDL + Apollo</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">💼</div>
+        <h3>Brokerage Management</h3>
+        <p>Agent roster, deal pipeline, commission plans, invoice generation, compliance tracking, and leaderboards. Full back-office in one system.</p>
+        <span class="feature-tag">Full BMS</span>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📧</div>
+        <h3>Gmail CRM</h3>
+        <p>Three-pane inbox with AI email parsing, lead detection, sentiment analysis, follow-up reminders, and template library. Every email becomes intelligence.</p>
+        <span class="feature-tag">AI-Parsed</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- How It Works -->
+<section class="how-it-works" id="how">
+  <div class="container">
+    <div class="section-label">02_Process</div>
+    <h2 class="section-title">From signup to <em>closing deals</em> in minutes.</h2>
+    <p class="section-desc">No migration headaches. No training sessions. Just sign up and start closing.</p>
+
+    <div class="steps-grid">
+      <div class="step">
+        <div class="step-number">01</div>
+        <h3>Connect Your World</h3>
+        <p>Link Gmail, sync your calendar, import contacts. VettdRE auto-provisions your organization, team, and pipeline in seconds.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">02</div>
+        <h3>Research Any Building</h3>
+        <p>Search any NYC address. Get instant ACRIS history, ownership analysis, violations, permits, and AI-scored lead potential — with one click.</p>
+      </div>
+      <div class="step">
+        <div class="step-number">03</div>
+        <h3>Close With Confidence</h3>
+        <p>Underwrite deals with AI assumptions, generate LOIs, track your pipeline, and let the AI leasing agent handle tenant inquiries while you focus on revenue.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Testimonial -->
+<section class="testimonial" id="testimonials">
+  <div class="container">
+    <div class="section-label">03_Reviews</div>
+    <blockquote>"VettdRE replaced three separate tools for our team. The building profiles alone save us hours of research on every deal."</blockquote>
+    <div class="testimonial-author"><strong>Managing Director</strong> — Top 20 NYC Brokerage</div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta" id="pricing">
+  <div class="container">
+    <div class="cta-card">
+      <div class="section-label" style="text-align: center;">04_Get Started</div>
+      <h2>Ready to <em>Vett</em> smarter?</h2>
+      <p>Join the NYC agents who are already using AI-powered intelligence to find, analyze, and close deals faster than ever.</p>
+      <div class="cta-actions">
+        <a href="#" class="btn-primary">Start Free Trial →</a>
+        <a href="#" class="btn-secondary">Schedule a Demo</a>
+      </div>
+      <div class="cta-note">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        14-day free trial &nbsp;·&nbsp; No credit card required &nbsp;·&nbsp; Cancel anytime
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <div class="container">
+    <div class="footer-grid">
+      <div class="footer-logo">VETTD<span>RE</span></div>
+      <ul class="footer-links">
+        <li><a href="#">Features</a></li>
+        <li><a href="#">Pricing</a></li>
+        <li><a href="#">Documentation</a></li>
+        <li><a href="#">Support</a></li>
+        <li><a href="#">Privacy</a></li>
+      </ul>
+    </div>
+    <div class="footer-copy">© 2026 VettdRE. All rights reserved. Built for NYC real estate.</div>
+  </div>
+</footer>
+
+</body>
+</html>

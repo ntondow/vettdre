@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VettdRE Logo Explorations</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Oswald:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* New palette: Pure black + electric accent options */
+  --black: #0A0A0A;
+  --black-800: #141414;
+  --black-700: #1C1C1E;
+  --black-600: #2C2C2E;
+  --black-500: #3A3A3C;
+  --gray-400: #636366;
+  --gray-300: #8E8E93;
+  --gray-200: #C7C7CC;
+  --gray-100: #E5E5EA;
+  --gray-50: #F2F2F7;
+  --white: #FFFFFF;
+
+  /* Accent options */
+  --accent-teal: #00D4AA;
+  --accent-teal-dim: #00B894;
+  --accent-teal-glow: rgba(0, 212, 170, 0.25);
+
+  --accent-red: #FF3B30;
+  --accent-red-dim: #E02D22;
+  --accent-red-glow: rgba(255, 59, 48, 0.25);
+
+  --accent-orange: #FF6B2B;
+  --accent-orange-dim: #E55A1B;
+  --accent-orange-glow: rgba(255, 107, 43, 0.25);
+
+  --font-display: 'Bebas Neue', sans-serif;
+  --font-heading: 'Oswald', sans-serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font-body); background: var(--gray-50); color: var(--black); }
+
+.page-header {
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-100);
+  padding: 32px 48px;
+}
+.page-header h1 {
+  font-family: var(--font-heading);
+  font-size: 28px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.page-header p { color: var(--gray-400); margin-top: 6px; font-size: 15px; }
+
+.content { max-width: 1200px; margin: 0 auto; padding: 40px 48px 120px; }
+
+.section-label {
+  font-family: var(--font-heading);
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gray-300);
+  margin-bottom: 20px;
+}
+
+/* Option cards */
+.option-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; margin-bottom: 56px; }
+.option-card {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  overflow: hidden;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.option-card:hover { border-color: var(--gray-200); box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+.option-card .label {
+  padding: 16px 24px;
+  font-family: var(--font-heading);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--gray-400);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+/* Logo display areas */
+.logo-light {
+  background: var(--white);
+  padding: 48px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+.logo-dark {
+  background: var(--black);
+  padding: 48px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+}
+.logo-desc {
+  padding: 20px 24px;
+  font-size: 14px;
+  color: var(--gray-400);
+  line-height: 1.5;
+  border-top: 1px solid var(--gray-100);
+}
+
+/* Icon grid */
+.icon-row {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+}
+.icon-box {
+  width: 64px; height: 64px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 14px;
+}
+
+/* Color system preview */
+.color-section { margin-bottom: 56px; }
+.color-row { display: flex; gap: 4px; margin-bottom: 24px; }
+.color-chip {
+  flex: 1;
+  height: 64px;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+.accent-preview {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+.accent-card {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  padding: 32px;
+  text-align: center;
+  transition: all 200ms;
+}
+.accent-card:hover { border-color: var(--gray-200); }
+.accent-dot {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  margin: 0 auto 12px;
+}
+.accent-name { font-family: var(--font-heading); font-weight: 500; font-size: 16px; letter-spacing: 0.04em; }
+.accent-hex { font-family: var(--font-mono); font-size: 12px; color: var(--gray-300); margin-top: 4px; }
+.accent-use { font-size: 13px; color: var(--gray-400); margin-top: 8px; }
+
+/* Typography preview */
+.type-preview {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  padding: 40px;
+  margin-bottom: 24px;
+}
+
+/* Application mockups */
+.mockup-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 32px; }
+.mockup {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.mockup-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gray-100);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.mockup-body { padding: 20px; }
+.mockup-sidebar {
+  width: 200px;
+  background: var(--black);
+  color: var(--white);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.mockup-sidebar .nav-item {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--gray-300);
+  font-weight: 500;
+}
+.mockup-sidebar .nav-item.active {
+  background: var(--black-600);
+  color: var(--white);
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>VettdRE — Logo & Brand Exploration</h1>
+  <p>Modern tech-forward &middot; Pure black + electric accent &middot; Abstract architectural &middot; Industrial typography</p>
+</div>
+
+<div class="content">
+
+<!-- ========================================= -->
+<!-- LOGO OPTION A                             -->
+<!-- ========================================= -->
+<div class="section-label">Logo Explorations</div>
+<div class="option-grid">
+
+<div class="option-card">
+  <div class="label">Option A — Skyline Angles</div>
+  <div class="logo-light">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <!-- Abstract angular skyline mark -->
+      <g>
+        <!-- Building forms as sharp geometric angles -->
+        <rect x="4" y="28" width="8" height="32" fill="#0A0A0A"/>
+        <rect x="14" y="18" width="8" height="42" fill="#0A0A0A"/>
+        <rect x="24" y="8" width="10" height="52" rx="0" fill="#0A0A0A"/>
+        <rect x="36" y="22" width="8" height="38" fill="#0A0A0A"/>
+        <rect x="46" y="32" width="7" height="28" fill="#0A0A0A"/>
+        <!-- Electric accent slash cutting through -->
+        <line x1="2" y1="58" x2="55" y2="58" stroke="#00D4AA" stroke-width="3"/>
+        <line x1="24" y1="4" x2="24" y2="8" stroke="#00D4AA" stroke-width="3" stroke-linecap="round"/>
+      </g>
+      <!-- Wordmark -->
+      <text x="68" y="47" font-family="'Bebas Neue', sans-serif" font-size="48" font-weight="400" fill="#0A0A0A" letter-spacing="3">VETTD</text>
+      <text x="218" y="47" font-family="'Bebas Neue', sans-serif" font-size="48" font-weight="400" fill="#00D4AA" letter-spacing="3">RE</text>
+    </svg>
+  </div>
+  <div class="logo-dark">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <rect x="4" y="28" width="8" height="32" fill="#FFFFFF"/>
+      <rect x="14" y="18" width="8" height="42" fill="#FFFFFF"/>
+      <rect x="24" y="8" width="10" height="52" fill="#FFFFFF"/>
+      <rect x="36" y="22" width="8" height="38" fill="#FFFFFF"/>
+      <rect x="46" y="32" width="7" height="28" fill="#FFFFFF"/>
+      <line x1="2" y1="58" x2="55" y2="58" stroke="#00D4AA" stroke-width="3"/>
+      <line x1="24" y1="4" x2="24" y2="8" stroke="#00D4AA" stroke-width="3" stroke-linecap="round"/>
+      <text x="68" y="47" font-family="'Bebas Neue', sans-serif" font-size="48" font-weight="400" fill="#FFFFFF" letter-spacing="3">VETTD</text>
+      <text x="218" y="47" font-family="'Bebas Neue', sans-serif" font-size="48" font-weight="400" fill="#00D4AA" letter-spacing="3">RE</text>
+    </svg>
+  </div>
+  <div class="logo-desc">
+    <strong>Skyline Angles.</strong> Five building forms at varying heights create an abstract Manhattan skyline silhouette. The teal baseline represents the ground/foundation. Tall, condensed Bebas Neue wordmark echoes the verticality of the buildings. "RE" in accent teal.
+  </div>
+</div>
+
+<!-- ========================================= -->
+<!-- LOGO OPTION B                             -->
+<!-- ========================================= -->
+<div class="option-card">
+  <div class="label">Option B — Negative Space V</div>
+  <div class="logo-light">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <!-- V formed by two building shapes with negative space -->
+      <g>
+        <path d="M4 4 L4 60 L26 60 L26 28" fill="#0A0A0A"/>
+        <path d="M52 4 L52 60 L30 60 L30 28" fill="#0A0A0A"/>
+        <!-- The V gap between them -->
+        <!-- Small accent bar at the bottom of the V -->
+        <rect x="22" y="56" width="12" height="4" rx="1" fill="#00D4AA"/>
+        <!-- Antenna/spire detail -->
+        <line x1="28" y1="22" x2="28" y2="28" stroke="#00D4AA" stroke-width="2" stroke-linecap="round"/>
+      </g>
+      <text x="66" y="47" font-family="'Oswald', sans-serif" font-size="40" font-weight="500" fill="#0A0A0A" letter-spacing="4">VETTD</text>
+      <text x="226" y="47" font-family="'Oswald', sans-serif" font-size="40" font-weight="500" fill="#00D4AA" letter-spacing="4">RE</text>
+    </svg>
+  </div>
+  <div class="logo-dark">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <path d="M4 4 L4 60 L26 60 L26 28" fill="#FFFFFF"/>
+      <path d="M52 4 L52 60 L30 60 L30 28" fill="#FFFFFF"/>
+      <rect x="22" y="56" width="12" height="4" rx="1" fill="#00D4AA"/>
+      <line x1="28" y1="22" x2="28" y2="28" stroke="#00D4AA" stroke-width="2" stroke-linecap="round"/>
+      <text x="66" y="47" font-family="'Oswald', sans-serif" font-size="40" font-weight="500" fill="#FFFFFF" letter-spacing="4">VETTD</text>
+      <text x="226" y="47" font-family="'Oswald', sans-serif" font-size="40" font-weight="500" fill="#00D4AA" letter-spacing="4">RE</text>
+    </svg>
+  </div>
+  <div class="logo-desc">
+    <strong>Negative Space V.</strong> Two building towers form a "V" through the negative space between them — a canyon of buildings like a NYC avenue. Teal accent at the base and a spire detail. Oswald wordmark (medium weight) for a slightly less condensed industrial feel. Architectural but cleverly encodes the brand initial.
+  </div>
+</div>
+
+<!-- ========================================= -->
+<!-- LOGO OPTION C                             -->
+<!-- ========================================= -->
+<div class="option-card">
+  <div class="label">Option C — Grid Blueprint</div>
+  <div class="logo-light">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <!-- Minimal building grid / blueprint style -->
+      <g>
+        <!-- Main tall building (wireframe) -->
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <!-- Floors -->
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#0A0A0A" stroke-width="1.5"/>
+        <!-- Second building -->
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#0A0A0A" stroke-width="1.5"/>
+        <!-- Accent: ground line + measurement marks -->
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <!-- Small verification check -->
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="62" y="35" font-family="'Oswald', sans-serif" font-size="32" font-weight="600" fill="#0A0A0A" letter-spacing="5">VETTD</text>
+      <text x="62" y="56" font-family="'Oswald', sans-serif" font-size="18" font-weight="300" fill="#00D4AA" letter-spacing="8">REAL ESTATE</text>
+    </svg>
+  </div>
+  <div class="logo-dark">
+    <svg viewBox="0 0 320 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+      <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+      <line x1="8" y1="18" x2="26" y2="18" stroke="#FFFFFF" stroke-width="1.5"/>
+      <line x1="8" y1="30" x2="26" y2="30" stroke="#FFFFFF" stroke-width="1.5"/>
+      <line x1="8" y1="42" x2="26" y2="42" stroke="#FFFFFF" stroke-width="1.5"/>
+      <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+      <line x1="32" y1="34" x2="46" y2="34" stroke="#FFFFFF" stroke-width="1.5"/>
+      <line x1="32" y1="47" x2="46" y2="47" stroke="#FFFFFF" stroke-width="1.5"/>
+      <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+      <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="62" y="35" font-family="'Oswald', sans-serif" font-size="32" font-weight="600" fill="#FFFFFF" letter-spacing="5">VETTD</text>
+      <text x="62" y="56" font-family="'Oswald', sans-serif" font-size="18" font-weight="300" fill="#00D4AA" letter-spacing="8">REAL ESTATE</text>
+    </svg>
+  </div>
+  <div class="logo-desc">
+    <strong>Grid Blueprint.</strong> Wireframe buildings evoke architectural blueprints and technical precision. Floor lines suggest data layers. A small verification checkmark in teal ties to the "Vettd" name. Two-line wordmark stacks "VETTD" (bold, wide-tracked) over "REAL ESTATE" (light, ultra-tracked) for a clean lockup. Most technical/data-forward of the three.
+  </div>
+</div>
+
+</div>
+
+<!-- ========================================= -->
+<!-- ICON MARKS                                -->
+<!-- ========================================= -->
+<div class="section-label">App Icon Variants</div>
+<div class="option-grid">
+<div class="option-card">
+  <div class="label">A — Skyline</div>
+  <div class="icon-row" style="background:var(--black)">
+    <div class="icon-box" style="background:#1C1C1E">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <rect x="4" y="22" width="7" height="22" fill="#fff"/>
+        <rect x="13" y="14" width="7" height="30" fill="#fff"/>
+        <rect x="22" y="6" width="8" height="38" fill="#fff"/>
+        <rect x="32" y="18" width="7" height="26" fill="#fff"/>
+        <rect x="41" y="24" width="5" height="20" fill="#fff"/>
+        <line x1="2" y1="44" x2="48" y2="44" stroke="#00D4AA" stroke-width="2.5"/>
+      </svg>
+    </div>
+    <div class="icon-box" style="background:#00D4AA;border-radius:14px">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <rect x="4" y="22" width="7" height="22" fill="#0A0A0A"/>
+        <rect x="13" y="14" width="7" height="30" fill="#0A0A0A"/>
+        <rect x="22" y="6" width="8" height="38" fill="#0A0A0A"/>
+        <rect x="32" y="18" width="7" height="26" fill="#0A0A0A"/>
+        <rect x="41" y="24" width="5" height="20" fill="#0A0A0A"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<div class="option-card">
+  <div class="label">B — Negative V</div>
+  <div class="icon-row" style="background:var(--black)">
+    <div class="icon-box" style="background:#1C1C1E">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <path d="M6 4 L6 44 L22 44 L22 24" fill="#fff"/>
+        <path d="M42 4 L42 44 L26 44 L26 24" fill="#fff"/>
+        <rect x="20" y="40" width="8" height="3" rx="1" fill="#00D4AA"/>
+      </svg>
+    </div>
+    <div class="icon-box" style="background:#00D4AA;border-radius:14px">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <path d="M6 4 L6 44 L22 44 L22 24" fill="#0A0A0A"/>
+        <path d="M42 4 L42 44 L26 44 L26 24" fill="#0A0A0A"/>
+      </svg>
+    </div>
+  </div>
+</div>
+
+<div class="option-card">
+  <div class="label">C — Blueprint</div>
+  <div class="icon-row" style="background:var(--black)">
+    <div class="icon-box" style="background:#1C1C1E">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <rect x="6" y="4" width="16" height="40" rx="1" fill="none" stroke="#fff" stroke-width="2"/>
+        <line x1="6" y1="14" x2="22" y2="14" stroke="#fff" stroke-width="1.5"/>
+        <line x1="6" y1="24" x2="22" y2="24" stroke="#fff" stroke-width="1.5"/>
+        <line x1="6" y1="34" x2="22" y2="34" stroke="#fff" stroke-width="1.5"/>
+        <rect x="26" y="16" width="14" height="28" rx="1" fill="none" stroke="#fff" stroke-width="2"/>
+        <line x1="26" y1="28" x2="40" y2="28" stroke="#fff" stroke-width="1.5"/>
+        <path d="M31 20 L34 23 L42 15" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <div class="icon-box" style="background:#00D4AA;border-radius:14px">
+      <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:36px">
+        <rect x="6" y="4" width="16" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+        <line x1="6" y1="14" x2="22" y2="14" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="6" y1="24" x2="22" y2="24" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="6" y1="34" x2="22" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <rect x="26" y="16" width="14" height="28" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+        <line x1="26" y1="28" x2="40" y2="28" stroke="#0A0A0A" stroke-width="1.5"/>
+        <path d="M31 20 L34 23 L42 15" stroke="#0A0A0A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- ========================================= -->
+<!-- ACCENT COLOR OPTIONS                      -->
+<!-- ========================================= -->
+<div class="section-label">Electric Accent Options</div>
+<p style="color:var(--gray-400);font-size:14px;margin:-12px 0 24px">Each accent works with the pure black base. Pick the energy that fits VettdRE best.</p>
+
+<div class="accent-preview">
+  <div class="accent-card">
+    <div class="accent-dot" style="background:#00D4AA;box-shadow:0 0 24px rgba(0,212,170,0.4)"></div>
+    <div class="accent-name">Electric Teal</div>
+    <div class="accent-hex">#00D4AA</div>
+    <div class="accent-use">Growth, money, verification. Feels fintech/proptech. High contrast on black (10.1:1). Most modern.</div>
+    <div style="margin-top:16px;display:flex;gap:4px;justify-content:center">
+      <div style="width:32px;height:32px;border-radius:6px;background:#0A0A0A"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#1C1C1E"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#3A3A3C"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#00D4AA"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#00B894"></div>
+    </div>
+  </div>
+
+  <div class="accent-card">
+    <div class="accent-dot" style="background:#FF3B30;box-shadow:0 0 24px rgba(255,59,48,0.4)"></div>
+    <div class="accent-name">Signal Red</div>
+    <div class="accent-hex">#FF3B30</div>
+    <div class="accent-use">Urgency, market heat, NYC energy. Feels bold and aggressive. High impact. Conflicts with error states though.</div>
+    <div style="margin-top:16px;display:flex;gap:4px;justify-content:center">
+      <div style="width:32px;height:32px;border-radius:6px;background:#0A0A0A"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#1C1C1E"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#3A3A3C"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#FF3B30"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#E02D22"></div>
+    </div>
+  </div>
+
+  <div class="accent-card">
+    <div class="accent-dot" style="background:#FF6B2B;box-shadow:0 0 24px rgba(255,107,43,0.4)"></div>
+    <div class="accent-name">Heat Orange</div>
+    <div class="accent-hex">#FF6B2B</div>
+    <div class="accent-use">Energy, warmth, market activity. Between red's urgency and gold's premium. Unique in the RE space. No semantic conflict.</div>
+    <div style="margin-top:16px;display:flex;gap:4px;justify-content:center">
+      <div style="width:32px;height:32px;border-radius:6px;background:#0A0A0A"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#1C1C1E"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#3A3A3C"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#FF6B2B"></div>
+      <div style="width:32px;height:32px;border-radius:6px;background:#E55A1B"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ========================================= -->
+<!-- TYPOGRAPHY PREVIEW                        -->
+<!-- ========================================= -->
+<div class="section-label">Typography Direction</div>
+
+<div class="type-preview">
+  <p style="font-family:'Bebas Neue',sans-serif;font-size:48px;letter-spacing:3px;color:var(--black);line-height:1">BEBAS NEUE — ALL CAPS INDUSTRIAL</p>
+  <p style="font-size:13px;color:var(--gray-300);margin-top:8px;margin-bottom:24px">Pure condensed display. Maximum impact at large sizes. Used in Option A wordmark.</p>
+
+  <p style="font-family:'Oswald',sans-serif;font-size:36px;font-weight:600;letter-spacing:2px;color:var(--black);line-height:1.1">OSWALD — STRUCTURED AUTHORITY</p>
+  <p style="font-family:'Oswald',sans-serif;font-size:20px;font-weight:300;letter-spacing:4px;color:var(--gray-400);margin-top:4px">REAL ESTATE INTELLIGENCE</p>
+  <p style="font-size:13px;color:var(--gray-300);margin-top:8px;margin-bottom:24px">More versatile across weights (300-700). Works for both display and UI headings. Used in Options B & C.</p>
+
+  <p style="font-family:'Inter',sans-serif;font-size:16px;color:var(--gray-400);line-height:1.6">Body text remains Inter — the workhorse. Clean, legible, excellent for data-dense real estate interfaces. $4,250,000 &middot; 12.4% IRR &middot; 24 units &middot; BBL: 1-00234-0056</p>
+</div>
+
+<!-- ========================================= -->
+<!-- MOCKUP: DARK SIDEBAR                      -->
+<!-- ========================================= -->
+<div class="section-label">Application Context — Dark Sidebar</div>
+<p style="color:var(--gray-400);font-size:14px;margin:-12px 0 24px">Here's how a dark sidebar with the new palette would feel in the actual app.</p>
+
+<div class="mockup">
+  <div style="display:flex;min-height:320px">
+    <div class="mockup-sidebar">
+      <div style="padding:8px 12px 16px;margin-bottom:8px;border-bottom:1px solid var(--black-600)">
+        <span style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:500;letter-spacing:3px;color:#fff">VETTD</span><span style="font-family:'Oswald',sans-serif;font-size:18px;font-weight:500;letter-spacing:3px;color:#00D4AA">RE</span>
+      </div>
+      <div class="nav-item active" style="background:rgba(0,212,170,0.12);color:#00D4AA">&#9632; Dashboard</div>
+      <div class="nav-item">&#9632; Contacts</div>
+      <div class="nav-item">&#9632; Pipeline</div>
+      <div class="nav-item">&#9632; Messages</div>
+      <div class="nav-item">&#9632; Market Intel</div>
+      <div class="nav-item">&#9632; Brokerage</div>
+      <div class="nav-item">&#9632; Deals</div>
+      <div style="flex:1"></div>
+      <div class="nav-item" style="font-size:12px;color:var(--gray-400)">&#9881; Settings</div>
+    </div>
+    <div style="flex:1;padding:24px;background:var(--gray-50)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <p style="font-family:'Oswald',sans-serif;font-size:24px;font-weight:500;letter-spacing:1px">DASHBOARD</p>
+          <p style="font-size:13px;color:var(--gray-400)">Welcome back, Nathan</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="padding:8px 16px;background:var(--black);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font-body);cursor:pointer">+ New Deal</button>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:10px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Active Deals</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">24</p>
+          <p style="font-size:11px;color:#00D4AA;margin-top:4px">&#9650; 12%</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:10px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Pipeline</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">$4.2M</p>
+          <p style="font-size:11px;color:#FF3B30;margin-top:4px">&#9660; 3%</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:10px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Conversion</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">18.4%</p>
+          <p style="font-size:11px;color:var(--gray-300);margin-top:4px">&mdash; flat</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:10px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Avg Response</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">2.4m</p>
+          <p style="font-size:11px;color:#00D4AA;margin-top:4px">&#9650; faster</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

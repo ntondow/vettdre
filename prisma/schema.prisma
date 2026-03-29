@@ -1,0 +1,2587 @@
+// VettdRE Database Schema
+// Prisma ORM schema for PostgreSQL (Supabase)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum OrgTier {
+  solo
+  pro
+  enterprise
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
+  paused
+}
+
+enum UserRole {
+  super_admin
+  owner
+  admin
+  manager
+  agent
+  viewer
+}
+
+enum ContactType {
+  landlord
+  buyer
+  seller
+  renter
+}
+
+enum ContactStatus {
+  lead
+  active
+  client
+  past_client
+  archived
+}
+
+enum ConfidenceLevel {
+  high
+  medium
+  low
+}
+
+enum PropertyType {
+  house
+  condo
+  co_op
+  townhouse
+  multi_family
+  land
+  commercial
+  rental_unit
+}
+
+enum TransactionType {
+  sale
+  rental
+  new_development
+}
+
+enum PropertyStatus {
+  available
+  pending
+  under_contract
+  sold
+  leased
+  off_market
+}
+
+enum DealStatus {
+  open
+  won
+  lost
+}
+
+enum DealAnalysisStatus {
+  analyzing
+  prospecting
+  loi_sent
+  under_contract
+  closed
+  dead
+}
+
+enum DealType {
+  acquisition
+  value_add
+  new_development
+  mixed_use
+  ground_up
+}
+
+enum DealSource {
+  off_market
+  on_market
+  new_development
+  referral
+  other
+}
+
+enum PipelineType {
+  sales
+  rental
+  new_development
+  custom
+}
+
+enum ActivityType {
+  email
+  call
+  text
+  showing
+  note
+  meeting
+  document
+  system
+}
+
+enum ActivityDirection {
+  inbound
+  outbound
+}
+
+enum TaskType {
+  follow_up
+  call
+  email
+  showing
+  document
+  review
+  meeting
+  custom
+}
+
+enum TaskPriority {
+  urgent
+  high
+  medium
+  low
+}
+
+enum TaskStatus {
+  pending
+  in_progress
+  completed
+  skipped
+  overdue
+}
+
+enum ShowingStatus {
+  scheduled
+  confirmed
+  completed
+  cancelled
+  no_show
+}
+
+enum InterestLevel {
+  hot
+  warm
+  neutral
+  cold
+}
+
+enum TemplateChannel {
+  email
+  sms
+}
+
+enum AutomationTrigger {
+  new_lead
+  stage_change
+  score_change
+  no_activity
+  task_overdue
+  showing_completed
+  email_received
+  deal_won
+  deal_lost
+  contact_enriched
+  custom
+}
+
+enum UserPlan {
+  free
+  explorer
+  pro
+  team
+  enterprise
+}
+
+enum BmsDealType {
+  sale
+  lease
+  rental
+  commercial_sale
+  commercial_lease
+  land
+  new_construction
+}
+
+enum TransactionStage {
+  // Entry
+  submitted
+  // Rental stages
+  application
+  approved
+  lease_signing
+  move_in
+  // Sale stages
+  offer_accepted
+  under_contract
+  due_diligence
+  closing
+  // Financial (shared)
+  invoice_sent
+  payment_received
+  agent_paid
+  // Terminal
+  closed
+  cancelled
+}
+
+enum BmsTransactionType {
+  rental
+  sale
+}
+
+enum InvoiceStatus {
+  draft
+  sent
+  paid
+  void
+}
+
+enum CommissionPlanType {
+  volume_based
+  value_based
+  flat
+}
+
+enum ComplianceDocType {
+  license
+  eo_insurance
+  continuing_education
+  background_check
+  other
+}
+
+enum PaymentMethod {
+  check
+  ach
+  wire
+  cash
+  stripe
+  other
+}
+
+enum BrokerageRole {
+  brokerage_admin
+  broker
+  manager
+  agent
+}
+
+enum BmsListingStatus {
+  available
+  showing
+  application
+  approved
+  leased
+  off_market
+}
+
+enum BmsListingType {
+  rental
+  sale
+}
+
+enum BmsCommissionType {
+  one_month
+  percentage
+  flat
+}
+
+// ── AI Leasing Agent ──
+
+enum LeasingTier {
+  free
+  pro
+  team
+}
+
+enum ConversationStatus {
+  active
+  qualified
+  showing_scheduled
+  applied
+  escalated
+  closed_won
+  closed_lost
+  stale
+}
+
+enum LeadTemperature {
+  hot
+  warm
+  cool
+  cold
+}
+
+enum EscalationReason {
+  budget_mismatch
+  pet_policy
+  complex_question
+  showing_request
+  application_ready
+  complaint
+  manual
+  sms_delivery_failure
+}
+
+enum MessageSender {
+  prospect
+  ai
+  agent
+}
+
+enum ConversationChannel {
+  sms
+  email
+  voice
+  web_chat
+}
+
+enum FollowUpType {
+  no_response
+  showing_reminder
+  application_nudge
+  check_in
+  custom
+  waitlist_notify
+  touch_1
+  touch_2
+  touch_3
+  post_showing
+  app_nudge
+  re_engage
+}
+
+enum FollowUpStatus {
+  pending
+  sent
+  canceled
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+model Organization {
+  id                    String                 @id @default(uuid())
+  name                  String
+  slug                  String                 @unique
+  tier                  OrgTier                @default(solo)
+  subscriptionStatus    SubscriptionStatus     @default(trialing) @map("subscription_status")
+  stripeCustomerId      String?                @map("stripe_customer_id")
+  stripeSubscriptionId  String?                @map("stripe_subscription_id")
+  trialEndsAt           DateTime?              @map("trial_ends_at")
+  maxUsers              Int                    @default(1) @map("max_users")
+  aiLookupsLimit        Int                    @default(50) @map("ai_lookups_limit")
+  aiLookupsUsed         Int                    @default(0) @map("ai_lookups_used")
+  aiLookupsResetAt      DateTime?              @map("ai_lookups_reset_at")
+  settings              Json                   @default("{}")
+  logoUrl               String?                @map("logo_url")
+  website               String?
+  phone                 String?
+  address               String?
+  referralCode          String?                @unique @map("referral_code")
+  referredByOrgId       String?                @map("referred_by_org_id")
+  pendingReferralCredit Int                    @default(0) @map("pending_referral_credit")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  users                 User[]
+  contacts              Contact[]
+  properties            Property[]
+  pipelines             Pipeline[]
+  deals                 Deal[]
+  activities            Activity[]
+  tasks                 Task[]
+  showings              Showing[]
+  emailTemplates        EmailTemplate[]
+  automations           Automation[]
+  auditLogs             AuditLog[]
+  prospectingLists      ProspectingList[]
+  prospectingItems      ProspectingItem[]
+  emailMessages         EmailMessage[]
+  emailLabels           EmailLabel[]
+  followUpReminders     FollowUpReminder[]
+  calendarEvents        CalendarEvent[]
+  showingSlots          ShowingSlot[]
+  dealAnalyses          DealAnalysis[]
+  phoneNumbers          PhoneNumber[]
+  leadAssignmentRule    LeadAssignmentRule?
+  aiSettings            AiSettings?
+  brandSettings         BrandSettings?
+  bmsSettings           Json?                  @map("bms_settings")
+  submissionToken       String?                @unique @map("submission_token")
+  brokerAgents          BrokerAgent[]
+  dealSubmissions       DealSubmission[]
+  invoices              Invoice[]
+  commissionPlans       CommissionPlan[]
+  complianceDocuments   ComplianceDocument[]
+  payments              Payment[]
+  fileAttachments       FileAttachment[]
+  transactions          Transaction[]
+  transactionTemplates  TransactionTemplate[]
+  bmsProperties         BmsProperty[]
+  bmsListings           BmsListing[]
+  agentGoals            AgentGoal[]
+  agentBadges           AgentBadge[]
+  leasingConfigs        LeasingConfig[]
+  leasingConversations  LeasingConversation[]
+  teams                 Team[]
+  referenceData         ReferenceDataCatalog[]
+
+  // Default commission splits (org-level, overridable per-agent)
+  defaultHouseExclusiveSplitPct    Decimal? @default(50) @map("default_house_exclusive_split_pct") @db.Decimal(5, 2)
+  defaultPersonalExclusiveSplitPct Decimal? @default(70) @map("default_personal_exclusive_split_pct") @db.Decimal(5, 2)
+
+  @@map("organizations")
+}
+
+model Team {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  name         String
+  slug         String
+  type         String   @default("generic") // brokerage, firm, property_manager, investment, generic
+  parentTeamId String?  @map("parent_team_id")
+  description  String?
+  logoUrl      String?  @map("logo_url")
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parentTeam   Team?        @relation("SubTeams", fields: [parentTeamId], references: [id], onDelete: SetNull)
+  subTeams     Team[]       @relation("SubTeams")
+  users        User[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@map("teams")
+}
+
+model User {
+  id                      String                   @id @default(uuid())
+  orgId                   String                   @map("org_id")
+  teamId                  String?                  @map("team_id")
+  authProviderId          String?                  @unique @map("auth_provider_id")
+  email                   String
+  fullName                String                   @map("full_name")
+  role                    UserRole                 @default(agent)
+  avatarUrl               String?                  @map("avatar_url")
+  phone                   String?
+  timezone                String                   @default("America/New_York")
+  title                   String?
+  licenseNumber           String?                  @map("license_number")
+  brokerage               String?
+  plan                    UserPlan                 @default(free)
+  stripeCustomerId        String?                  @map("stripe_customer_id")
+  stripeSubscriptionId    String?                  @map("stripe_subscription_id")
+  usageCounters           Json                     @default("{}") @map("usage_counters")
+  usageResetDate          DateTime?                @map("usage_reset_date")
+  trialEndsAt             DateTime?                @map("trial_ends_at")
+  invitedBy               String?                  @map("invited_by")
+  isActive                Boolean                  @default(true) @map("is_active")
+  isApproved              Boolean                  @default(false) @map("is_approved")
+  lastLoginAt             DateTime?                @map("last_login_at")
+  notificationPrefs       Json                     @default("{\"email\": true, \"push\": true, \"sms\": false}") @map("notification_prefs")
+  pushSubscription        Json?                    @map("push_subscription")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @updatedAt @map("updated_at")
+  organization            Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  team                    Team?                    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  assignedContacts        Contact[]                @relation("AssignedAgent")
+  assignedDeals           Deal[]                   @relation("DealAgent")
+  activities              Activity[]
+  assignedTasks           Task[]                   @relation("TaskAssignee")
+  createdTasks            Task[]                   @relation("TaskCreator")
+  completedTasks          Task[]                   @relation("TaskCompleter")
+  assignedShowings        Showing[]
+  createdTemplates        EmailTemplate[]
+  createdAutomations      Automation[]
+  auditLogs               AuditLog[]
+  prospectingLists        ProspectingList[]        @relation("ListCreator")
+  gmailAccounts           GmailAccount[]
+  emailSignature          EmailSignature?
+  notificationPreferences NotificationPreferences?
+  workingHours            WorkingHours?
+  syncSettings            SyncSettings?
+  calendarEvents          CalendarEvent[]
+  showingSlots            ShowingSlot[]
+  dealAnalyses            DealAnalysis[]
+  phoneNumbers            PhoneNumber[]
+  smsMessages             SmsMessage[]
+  phoneCalls              PhoneCall[]
+  brokerAgent             BrokerAgent?
+
+  @@unique([orgId, email])
+  @@index([orgId])
+  @@index([teamId])
+  @@map("users")
+}
+
+model Contact {
+  id                   String                    @id @default(uuid())
+  orgId                String                    @map("org_id")
+  assignedTo           String?                   @map("assigned_to")
+  firstName            String                    @map("first_name")
+  lastName             String                    @map("last_name")
+  email                String?
+  phone                String?
+  secondaryPhone       String?                   @map("secondary_phone")
+  address              String?
+  city                 String?
+  state                String?
+  zip                  String?
+  contactType          ContactType               @default(renter) @map("contact_type")
+  status               ContactStatus             @default(lead)
+  source               String?
+  sourceDetail         String?                   @map("source_detail")
+  tags                 String[]                  @default([])
+  qualificationScore   Int?                      @map("qualification_score")
+  scoreUpdatedAt       DateTime?                 @map("score_updated_at")
+  enrichmentStatus     String                    @default("pending") @map("enrichment_status")
+  lastContactedAt      DateTime?                 @map("last_contacted_at")
+  lastActivityAt       DateTime?                 @map("last_activity_at")
+  totalActivities      Int                       @default(0) @map("total_activities")
+  preferences          Json                      @default("{}")
+  typeData             Json?                     @map("type_data")
+  notes                String?
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+  organization         Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedAgent        User?                     @relation("AssignedAgent", fields: [assignedTo], references: [id], onDelete: SetNull)
+  enrichmentProfiles   EnrichmentProfile[]
+  prospectingItems     ProspectingItem[]
+  qualificationScores  QualificationScore[]
+  deals                Deal[]
+  activities           Activity[]
+  tasks                Task[]
+  showings             Showing[]
+  propertyInterests    ContactPropertyInterest[]
+  emailMessages        EmailMessage[]
+  followUpReminders    FollowUpReminder[]
+  calendarEvents       CalendarEvent[]
+  showingSlots         ShowingSlot[]
+  smsMessages          SmsMessage[]
+  phoneCalls           PhoneCall[]
+  leasingConversations LeasingConversation[]
+
+  @@index([orgId, status])
+  @@index([orgId, qualificationScore(sort: Desc)])
+  @@index([orgId, email])
+  @@index([orgId, lastName, firstName])
+  @@map("contacts")
+}
+
+model EnrichmentProfile {
+  id                  String               @id @default(uuid())
+  contactId           String               @map("contact_id")
+  version             Int                  @default(1)
+  employer            String?
+  jobTitle            String?              @map("job_title")
+  industry            String?
+  companySize         String?              @map("company_size")
+  careerTenureYears   Int?                 @map("career_tenure_years")
+  incomeRangeLow      Int?                 @map("income_range_low")
+  incomeRangeHigh     Int?                 @map("income_range_high")
+  incomeConfidence    ConfidenceLevel?     @map("income_confidence")
+  currentAddress      String?              @map("current_address")
+  currentCity         String?              @map("current_city")
+  currentState        String?              @map("current_state")
+  currentZip          String?              @map("current_zip")
+  ownsProperty        Boolean?             @map("owns_property")
+  propertyValueEst    Int?                 @map("property_value_est")
+  mortgageStatus      String?              @map("mortgage_status")
+  rentVsOwn           String?              @map("rent_vs_own")
+  linkedinUrl         String?              @map("linkedin_url")
+  facebookUrl         String?              @map("facebook_url")
+  instagramUrl        String?              @map("instagram_url")
+  twitterUrl          String?              @map("twitter_url")
+  otherSocials        Json                 @default("{}") @map("other_socials")
+  profilePhotoUrl     String?              @map("profile_photo_url")
+  lifeEvents          Json                 @default("[]") @map("life_events")
+  education           Json                 @default("[]")
+  aiSummary           String?              @map("ai_summary")
+  aiInsights          Json                 @default("[]") @map("ai_insights")
+  rawData             Json                 @default("{}") @map("raw_data")
+  dataSources         String[]             @default([]) @map("data_sources")
+  confidenceLevel     ConfidenceLevel      @default(low) @map("confidence_level")
+  enrichedAt          DateTime             @default(now()) @map("enriched_at")
+  expiresAt           DateTime?            @map("expires_at")
+  contact             Contact              @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  qualificationScores QualificationScore[]
+
+  @@unique([contactId, version])
+  @@index([contactId])
+  @@map("enrichment_profiles")
+}
+
+model QualificationScore {
+  id                   String             @id @default(uuid())
+  contactId            String             @map("contact_id")
+  enrichmentProfileId  String?            @map("enrichment_profile_id")
+  totalScore           Int                @map("total_score")
+  financialCapacity    Int                @default(0) @map("financial_capacity")
+  intentSignals        Int                @default(0) @map("intent_signals")
+  identityVerification Int                @default(0) @map("identity_verification")
+  engagementLevel      Int                @default(0) @map("engagement_level")
+  marketFit            Int                @default(0) @map("market_fit")
+  scoreExplanation     String?            @map("score_explanation")
+  factorDetails        Json               @default("{}") @map("factor_details")
+  scoringModelVersion  String             @default("v1.0") @map("scoring_model_version")
+  excludedFactors      String[]           @default([]) @map("excluded_factors")
+  scoredAt             DateTime           @default(now()) @map("scored_at")
+  contact              Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  enrichmentProfile    EnrichmentProfile? @relation(fields: [enrichmentProfileId], references: [id], onDelete: SetNull)
+
+  @@index([contactId])
+  @@map("qualification_scores")
+}
+
+model Property {
+  id               String                    @id @default(uuid())
+  orgId            String                    @map("org_id")
+  createdBy        String?                   @map("created_by")
+  address          String
+  unitNumber       String?                   @map("unit_number")
+  city             String
+  state            String
+  zip              String?
+  neighborhood     String?
+  latitude         Decimal?                  @db.Decimal(10, 7)
+  longitude        Decimal?                  @db.Decimal(10, 7)
+  propertyType     PropertyType              @map("property_type")
+  transactionType  TransactionType           @map("transaction_type")
+  status           PropertyStatus            @default(available)
+  price            Decimal?                  @db.Decimal(12, 2)
+  pricePerSqft     Decimal?                  @map("price_per_sqft") @db.Decimal(8, 2)
+  monthlyRent      Decimal?                  @map("monthly_rent") @db.Decimal(10, 2)
+  monthlyCc        Decimal?                  @map("monthly_cc") @db.Decimal(10, 2)
+  monthlyTaxes     Decimal?                  @map("monthly_taxes") @db.Decimal(10, 2)
+  bedrooms         Int?
+  bathrooms        Decimal?                  @db.Decimal(3, 1)
+  sqft             Int?
+  yearBuilt        Int?                      @map("year_built")
+  mlsNumber        String?                   @map("mls_number")
+  listingUrl       String?                   @map("listing_url")
+  listedAt         DateTime?                 @map("listed_at")
+  description      String?
+  images           Json                      @default("[]")
+  developmentName  String?                   @map("development_name")
+  buildingName     String?                   @map("building_name")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+  organization     Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deals            Deal[]
+  showings         Showing[]
+  contactInterests ContactPropertyInterest[]
+
+  @@index([orgId, status])
+  @@index([orgId, transactionType])
+  @@index([orgId, city])
+  @@map("properties")
+}
+
+model Pipeline {
+  id           String       @id @default(uuid())
+  orgId        String       @map("org_id")
+  name         String
+  pipelineType PipelineType @map("pipeline_type")
+  stages       Json         @default("[]")
+  isDefault    Boolean      @default(false) @map("is_default")
+  isActive     Boolean      @default(true) @map("is_active")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  deals        Deal[]
+
+  @@index([orgId])
+  @@map("pipelines")
+}
+
+model Deal {
+  id                String            @id @default(uuid())
+  orgId             String            @map("org_id")
+  contactId         String            @map("contact_id")
+  propertyId        String?           @map("property_id")
+  assignedTo        String?           @map("assigned_to")
+  pipelineId        String            @map("pipeline_id")
+  stageId           String            @map("stage_id")
+  stageEnteredAt    DateTime          @default(now()) @map("stage_entered_at")
+  name              String?
+  dealValue         Decimal?          @map("deal_value") @db.Decimal(12, 2)
+  offerPrice        Decimal?          @map("offer_price") @db.Decimal(12, 2)
+  askingPrice       Decimal?          @map("asking_price") @db.Decimal(12, 2)
+  commissionRate    Decimal?          @map("commission_rate") @db.Decimal(5, 4)
+  commissionAmount  Decimal?          @map("commission_amount") @db.Decimal(10, 2)
+  expectedCloseDate DateTime?         @map("expected_close_date") @db.Date
+  actualCloseDate   DateTime?         @map("actual_close_date") @db.Date
+  winProbability    Int?              @map("win_probability")
+  riskFlags         Json              @default("[]") @map("risk_flags")
+  nextBestAction    String?           @map("next_best_action")
+  status            DealStatus        @default(open)
+  lostReason        String?           @map("lost_reason")
+  notes             String?
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+  closedAt          DateTime?         @map("closed_at")
+  organization      Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact           Contact           @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  property          Property?         @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  assignedAgent     User?             @relation("DealAgent", fields: [assignedTo], references: [id], onDelete: SetNull)
+  pipeline          Pipeline          @relation(fields: [pipelineId], references: [id], onDelete: Restrict)
+  activities        Activity[]
+  tasks             Task[]
+  showings          Showing[]
+  calendarEvents    CalendarEvent[]
+  prospectingItems  ProspectingItem[]
+
+  @@index([orgId, status])
+  @@index([orgId, status, createdAt(sort: Desc)])
+  @@index([contactId])
+  @@index([propertyId])
+  @@index([assignedTo])
+  @@index([pipelineId, stageId])
+  @@map("deals")
+}
+
+model Activity {
+  id              String             @id @default(uuid())
+  orgId           String             @map("org_id")
+  contactId       String             @map("contact_id")
+  dealId          String?            @map("deal_id")
+  userId          String?            @map("user_id")
+  type            ActivityType
+  direction       ActivityDirection?
+  subject         String?
+  body            String?
+  metadata        Json               @default("{}")
+  isAiGenerated   Boolean            @default(false) @map("is_ai_generated")
+  aiDraftAccepted Boolean?           @map("ai_draft_accepted")
+  occurredAt      DateTime           @default(now()) @map("occurred_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  organization    Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact         Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  deal            Deal?              @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  user            User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([contactId, occurredAt(sort: Desc)])
+  @@index([orgId, type])
+  @@index([dealId])
+  @@index([userId])
+  @@map("activities")
+}
+
+model Task {
+  id                String       @id @default(uuid())
+  orgId             String       @map("org_id")
+  contactId         String?      @map("contact_id")
+  dealId            String?      @map("deal_id")
+  assignedTo        String?      @map("assigned_to")
+  createdBy         String?      @map("created_by")
+  title             String
+  description       String?
+  type              TaskType     @default(follow_up)
+  priority          TaskPriority @default(medium)
+  dueAt             DateTime?    @map("due_at")
+  reminderAt        DateTime?    @map("reminder_at")
+  status            TaskStatus   @default(pending)
+  completedAt       DateTime?    @map("completed_at")
+  completedBy       String?      @map("completed_by")
+  isAiGenerated     Boolean      @default(false) @map("is_ai_generated")
+  aiReasoning       String?      @map("ai_reasoning")
+  aiSuggestedAction String?      @map("ai_suggested_action")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact           Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  deal              Deal?        @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  assignee          User?        @relation("TaskAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  creator           User?        @relation("TaskCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  completer         User?        @relation("TaskCompleter", fields: [completedBy], references: [id], onDelete: SetNull)
+
+  @@index([assignedTo, status, dueAt])
+  @@index([orgId, status])
+  @@map("tasks")
+}
+
+model Showing {
+  id              String         @id @default(uuid())
+  orgId           String         @map("org_id")
+  contactId       String         @map("contact_id")
+  propertyId      String         @map("property_id")
+  dealId          String?        @map("deal_id")
+  assignedTo      String?        @map("assigned_to")
+  scheduledAt     DateTime       @map("scheduled_at")
+  durationMinutes Int            @default(30) @map("duration_minutes")
+  status          ShowingStatus  @default(scheduled)
+  feedback        String?
+  interestLevel   InterestLevel? @map("interest_level")
+  followUpNotes   String?        @map("follow_up_notes")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  organization    Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact         Contact        @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  property        Property       @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  deal            Deal?          @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  assignee        User?          @relation(fields: [assignedTo], references: [id], onDelete: SetNull)
+
+  @@index([orgId, scheduledAt])
+  @@map("showings")
+}
+
+model EmailTemplate {
+  id            String          @id @default(uuid())
+  orgId         String          @map("org_id")
+  createdBy     String?         @map("created_by")
+  name          String
+  subject       String?
+  body          String
+  channel       TemplateChannel @default(email)
+  mergeFields   String[]        @default([]) @map("merge_fields")
+  timesUsed     Int             @default(0) @map("times_used")
+  lastUsedAt    DateTime?       @map("last_used_at")
+  isAiGenerated Boolean         @default(false) @map("is_ai_generated")
+  category      String?
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+  organization  Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator       User?           @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@map("email_templates")
+}
+
+model Automation {
+  id               String                      @id @default(uuid())
+  orgId            String                      @map("org_id")
+  createdBy        String?                     @map("created_by")
+  name             String
+  description      String?
+  triggerType      AutomationTrigger           @map("trigger_type")
+  triggerConfig    Json                        @default("{}") @map("trigger_config")
+  conditions       Json                        @default("[]")
+  actions          Json                        @default("[]")
+  isActive         Boolean                     @default(true) @map("is_active")
+  runsCount        Int                         @default(0) @map("runs_count")
+  lastRunAt        DateTime?                   @map("last_run_at")
+  lastError        String?                     @map("last_error")
+  createdAt        DateTime                    @default(now()) @map("created_at")
+  updatedAt        DateTime                    @updatedAt @map("updated_at")
+  organization     Organization                @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator          User?                       @relation(fields: [createdBy], references: [id], onDelete: SetNull)
+  runs             AutomationRun[]
+  scheduledActions ScheduledAutomationAction[]
+
+  @@index([orgId, triggerType, isActive])
+  @@map("automations")
+}
+
+model AutomationRun {
+  id           String     @id @default(uuid())
+  automationId String     @map("automation_id")
+  contactId    String?    @map("contact_id")
+  dealId       String?    @map("deal_id")
+  triggerData  Json       @default("{}") @map("trigger_data")
+  actionsTaken Json       @default("[]") @map("actions_taken")
+  status       String     @default("success")
+  errorMessage String?    @map("error_message")
+  startedAt    DateTime   @default(now()) @map("started_at")
+  completedAt  DateTime?  @map("completed_at")
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([automationId])
+  @@map("automation_runs")
+}
+
+model ScheduledAutomationAction {
+  id           String     @id @default(uuid())
+  automationId String     @map("automation_id")
+  orgId        String     @map("org_id")
+  contactId    String?    @map("contact_id")
+  dealId       String?    @map("deal_id")
+  action       Json       @default("{}") // The action to execute (without delay)
+  triggerData  Json       @default("{}") @map("trigger_data")
+  scheduledFor DateTime   @map("scheduled_for")
+  status       String     @default("pending") // pending, executed, failed, cancelled
+  error        String?
+  executedAt   DateTime?  @map("executed_at")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, status, scheduledFor])
+  @@index([automationId])
+  @@map("scheduled_automation_actions")
+}
+
+model ContactPropertyInterest {
+  id            String        @id @default(uuid())
+  contactId     String        @map("contact_id")
+  propertyId    String        @map("property_id")
+  interestLevel InterestLevel @default(neutral) @map("interest_level")
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  contact       Contact       @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  property      Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, propertyId])
+  @@map("contact_property_interests")
+}
+
+model AuditLog {
+  id     String  @id @default(uuid())
+  orgId  String  @map("org_id")
+  userId String? @map("user_id")
+
+  actorName String? @map("actor_name")
+  actorRole String? @map("actor_role")
+
+  action     String
+  entityType String  @map("entity_type")
+  entityId   String? @map("entity_id")
+
+  changes       Json?
+  metadata      Json  @default("{}")
+  details       Json?
+  previousValue Json? @map("previous_value")
+  newValue      Json? @map("new_value")
+
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([orgId, entityType, entityId])
+  @@index([orgId, action])
+  @@map("audit_log")
+}
+
+model ProspectingList {
+  id          String   @id @default(cuid())
+  orgId       String   @map("org_id")
+  createdBy   String   @map("created_by")
+  name        String
+  description String?
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  creator      User              @relation("ListCreator", fields: [createdBy], references: [id])
+  items        ProspectingItem[]
+
+  @@map("prospecting_lists")
+}
+
+model ProspectingItem {
+  id               String   @id @default(cuid())
+  listId           String   @map("list_id")
+  orgId            String   @map("org_id")
+  address          String
+  borough          String?
+  zip              String?
+  block            String?
+  lot              String?
+  bin              String?
+  neighborhood     String?
+  totalUnits       Int?     @map("total_units")
+  residentialUnits Int?     @map("residential_units")
+  yearBuilt        Int?     @map("year_built")
+  numFloors        Int?     @map("num_floors")
+  buildingArea     Int?     @map("building_area")
+  lotArea          Int?     @map("lot_area")
+  buildingClass    String?  @map("building_class")
+  zoning           String?
+  assessedValue    Int?     @map("assessed_value")
+  ownerName        String?  @map("owner_name")
+  ownerAddress     String?  @map("owner_address")
+  ownerType        String?  @map("owner_type")
+  lastSalePrice    Int?     @map("last_sale_price")
+  lastSaleDate     String?  @map("last_sale_date")
+  status           String   @default("new")
+  source           String?  @default("manual")
+  notes            String?
+  contactId        String?  @map("contact_id")
+  dealId           String?  @map("deal_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  list         ProspectingList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact      Contact?        @relation(fields: [contactId], references: [id])
+  deal         Deal?           @relation(fields: [dealId], references: [id])
+
+  @@index([listId])
+  @@index([orgId])
+  @@index([contactId])
+  @@map("prospecting_items")
+}
+
+// ============================================================
+// Gmail Integration
+// ============================================================
+
+model GmailAccount {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  email        String
+  accessToken  String    @map("access_token")
+  refreshToken String    @map("refresh_token")
+  tokenExpiry  DateTime  @map("token_expiry")
+  historyId    String?   @map("history_id")
+  syncedAt     DateTime? @map("synced_at")
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, email])
+  @@index([userId])
+  @@map("gmail_accounts")
+}
+
+model EmailMessage {
+  id             String    @id @default(uuid())
+  orgId          String    @map("org_id")
+  gmailMessageId String    @map("gmail_message_id")
+  threadId       String?   @map("thread_id")
+  contactId      String?   @map("contact_id")
+  direction      String // "inbound" | "outbound"
+  fromEmail      String    @map("from_email")
+  fromName       String?   @map("from_name")
+  toEmails       String[]  @map("to_emails")
+  ccEmails       String[]  @default([]) @map("cc_emails")
+  subject        String?
+  bodyText       String?   @map("body_text")
+  bodyHtml       String?   @map("body_html")
+  snippet        String?
+  labelIds       String[]  @default([]) @map("label_ids")
+  isRead         Boolean   @default(false) @map("is_read")
+  isStarred      Boolean   @default(false) @map("is_starred")
+  hasAttachments Boolean   @default(false) @map("has_attachments")
+  isArchived     Boolean   @default(false) @map("is_archived")
+  isDeleted      Boolean   @default(false) @map("is_deleted")
+  isPinned       Boolean   @default(false) @map("is_pinned")
+  snoozedUntil   DateTime? @map("snoozed_until")
+  category       String? // "lead", "newsletter", "personal", "transactional", "spam"
+  receivedAt     DateTime  @map("received_at")
+
+  // AI parsing results
+  aiParsed        Boolean @default(false) @map("ai_parsed")
+  leadSource      String? @map("lead_source")
+  leadIntent      String? @map("lead_intent")
+  extractedName   String? @map("extracted_name")
+  extractedPhone  String? @map("extracted_phone")
+  extractedBudget String? @map("extracted_budget")
+  extractedArea   String? @map("extracted_area")
+  aiSummary       String? @map("ai_summary")
+  sentimentScore  Int?    @map("sentiment_score")
+
+  createdAt    DateTime     @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  threadLabels EmailThreadLabel[]
+
+  @@unique([orgId, gmailMessageId])
+  @@index([orgId, contactId])
+  @@index([orgId, receivedAt(sort: Desc)])
+  @@index([orgId, leadSource])
+  @@index([orgId, threadId])
+  @@index([orgId, category])
+  @@index([orgId, snoozedUntil])
+  @@map("email_messages")
+}
+
+// ============================================================
+// Email Labels & Follow-ups
+// ============================================================
+
+model EmailLabel {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  name      String
+  color     String // hex color e.g. "#ef4444"
+  icon      String? // emoji icon
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  threadLabels EmailThreadLabel[]
+
+  @@unique([orgId, name])
+  @@map("email_labels")
+}
+
+model EmailThreadLabel {
+  id             String  @id @default(uuid())
+  threadId       String  @map("thread_id")
+  labelId        String  @map("label_id")
+  emailMessageId String? @map("email_message_id")
+
+  label        EmailLabel    @relation(fields: [labelId], references: [id], onDelete: Cascade)
+  emailMessage EmailMessage? @relation(fields: [emailMessageId], references: [id], onDelete: Cascade)
+
+  @@unique([threadId, labelId])
+  @@map("email_thread_labels")
+}
+
+model FollowUpReminder {
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
+  threadId    String    @map("thread_id")
+  contactId   String?   @map("contact_id")
+  status      String    @default("pending") // "pending", "dismissed", "completed"
+  reason      String // e.g. "no_reply_24h"
+  dueAt       DateTime  @map("due_at")
+  dismissedAt DateTime? @map("dismissed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contact      Contact?     @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, threadId, reason])
+  @@index([orgId, status, dueAt])
+  @@map("follow_up_reminders")
+}
+
+// ============================================================
+// Portfolio Intelligence
+// ============================================================
+model Portfolio {
+  id             String              @id @default(uuid())
+  orgId          String              @map("org_id")
+  name           String // Primary entity name (e.g., "Parkway Management NY LLC")
+  slug           String              @unique
+  totalBuildings Int                 @default(0) @map("total_buildings")
+  totalUnits     Int                 @default(0) @map("total_units")
+  totalValue     Float               @default(0) @map("total_value")
+  avgDistress    Float               @default(0) @map("avg_distress")
+  borough        String?
+  neighborhood   String?
+  entityNames    String[]            @map("entity_names") // All linked entity names (LLCs, individuals)
+  headOfficers   String[]            @map("head_officers") // Known head officers
+  addresses      String[] // Known business addresses
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  buildings      PortfolioBuilding[]
+
+  @@index([orgId])
+  @@map("portfolios")
+}
+
+model PortfolioBuilding {
+  id            String    @id @default(uuid())
+  portfolioId   String    @map("portfolio_id")
+  portfolio     Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  bbl           String // Borough-Block-Lot
+  boroCode      String    @map("boro_code")
+  block         String
+  lot           String
+  address       String
+  borough       String
+  units         Int       @default(0)
+  floors        Int       @default(0)
+  yearBuilt     Int       @default(0) @map("year_built")
+  assessedValue Float     @default(0) @map("assessed_value")
+  ownerName     String?   @map("owner_name")
+  buildingClass String?   @map("building_class")
+  zoning        String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@unique([portfolioId, bbl])
+  @@index([bbl])
+  @@map("portfolio_buildings")
+}
+
+// ============================================================
+// Settings Models
+// ============================================================
+
+model EmailSignature {
+  id          String   @id @default(uuid())
+  userId      String   @unique @map("user_id")
+  template    String   @default("classic") // "classic", "with_logo", "minimal"
+  html        String   @db.Text
+  logoUrl     String?  @map("logo_url")
+  accentColor String   @default("#2563EB") @map("accent_color")
+  linkedinUrl String?  @map("linkedin_url")
+  websiteUrl  String?  @map("website_url")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_signatures")
+}
+
+model NotificationPreferences {
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  newLeadEmail       Boolean  @default(true) @map("new_lead_email")
+  newLeadPush        Boolean  @default(true) @map("new_lead_push")
+  followUpEmail      Boolean  @default(true) @map("follow_up_email")
+  followUpPush       Boolean  @default(true) @map("follow_up_push")
+  newEmailPush       Boolean  @default(true) @map("new_email_push")
+  taskDueEmail       Boolean  @default(true) @map("task_due_email")
+  taskDuePush        Boolean  @default(true) @map("task_due_push")
+  taskOverdueEmail   Boolean  @default(true) @map("task_overdue_email")
+  weeklySummaryEmail Boolean  @default(true) @map("weekly_summary_email")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
+model WorkingHours {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  timezone  String   @default("America/New_York")
+  schedule  Json // { mon: { active: true, start: "09:00", end: "18:00" }, ... }
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("working_hours")
+}
+
+model LeadAssignmentRule {
+  id           String       @id @default(uuid())
+  orgId        String       @unique @map("org_id")
+  method       String       @default("manual") // "round_robin", "by_source", "by_geography", "manual"
+  rules        Json? // { "streeteasy": "agent-uuid-1", ... }
+  agentOrder   Json?        @map("agent_order") // ["agent-uuid-1", ...]
+  lastAssigned String?      @map("last_assigned")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("lead_assignment_rules")
+}
+
+model AiSettings {
+  id                  String       @id @default(uuid())
+  orgId               String       @unique @map("org_id")
+  autoResponseEnabled Boolean      @default(false) @map("auto_response_enabled")
+  autoResponseMode    String       @default("draft") // "draft", "auto_send", "off"
+  responseDelay       Int          @default(5) @map("response_delay")
+  responseTone        String       @default("professional") @map("response_tone")
+  customInstructions  String?      @map("custom_instructions") @db.Text
+  autoParseEmails     Boolean      @default(true) @map("auto_parse_emails")
+  autoCategorize      Boolean      @default(true) @map("auto_categorize")
+  parseModel          String       @default("sonnet") @map("parse_model")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  organization        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("ai_settings")
+}
+
+model BrandSettings {
+  id           String       @id @default(uuid())
+  orgId        String       @unique @map("org_id")
+  logoUrl      String?      @map("logo_url")
+  primaryColor String       @default("#2563EB") @map("primary_color")
+  accentColor  String?      @map("accent_color")
+  companyName  String?      @map("company_name")
+  tagline      String?
+  websiteUrl   String?      @map("website_url")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("brand_settings")
+}
+
+model SyncSettings {
+  id            String    @id @default(uuid())
+  userId        String    @unique @map("user_id")
+  autoSync      Boolean   @default(true) @map("auto_sync")
+  syncFrequency Int       @default(15) @map("sync_frequency")
+  syncDepth     String    @default("30d") @map("sync_depth")
+  syncLabels    String[]  @default(["INBOX", "SENT"]) @map("sync_labels")
+  lastSyncAt    DateTime? @map("last_sync_at")
+  totalSynced   Int       @default(0) @map("total_synced")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sync_settings")
+}
+
+// ============================================================
+// Calendar
+// ============================================================
+
+model CalendarEvent {
+  id               String  @id @default(uuid())
+  orgId            String  @map("org_id")
+  userId           String  @map("user_id")
+  googleEventId    String? @map("google_event_id")
+  googleCalendarId String? @map("google_calendar_id")
+
+  title       String
+  description String? @db.Text
+  location    String?
+
+  startAt  DateTime @map("start_at")
+  endAt    DateTime @map("end_at")
+  allDay   Boolean  @default(false) @map("all_day")
+  timezone String   @default("America/New_York")
+
+  recurring      Boolean @default(false)
+  recurrenceRule String? @map("recurrence_rule")
+
+  eventType  String  @default("general") // "showing","meeting","open_house","inspection","closing","task_deadline","deal_milestone","general"
+  contactId  String? @map("contact_id")
+  propertyId String? @map("property_id")
+  dealId     String? @map("deal_id")
+  showingId  String? @map("showing_id")
+
+  propertyAddress String? @map("property_address")
+  unitNumber      String? @map("unit_number")
+
+  status String @default("confirmed") // "confirmed","tentative","cancelled"
+  color  String @default("#3B82F6")
+
+  attendees Json?
+
+  syncedAt     DateTime? @map("synced_at")
+  lastModified DateTime? @map("last_modified")
+  source       String    @default("vettdre") // "vettdre","google","scheduler"
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  showingSlots ShowingSlot[]
+
+  @@unique([orgId, googleEventId])
+  @@index([orgId, startAt])
+  @@index([userId, startAt])
+  @@index([contactId])
+  @@index([propertyAddress])
+  @@map("calendar_events")
+}
+
+model ShowingSlot {
+  id              String  @id @default(uuid())
+  orgId           String  @map("org_id")
+  userId          String  @map("user_id")
+  propertyAddress String  @map("property_address")
+  unitNumber      String? @map("unit_number")
+
+  startAt  DateTime @map("start_at")
+  endAt    DateTime @map("end_at")
+  duration Int      @default(30)
+
+  isBooked        Boolean   @default(false) @map("is_booked")
+  bookedByName    String?   @map("booked_by_name")
+  bookedByEmail   String?   @map("booked_by_email")
+  bookedByPhone   String?   @map("booked_by_phone")
+  bookedAt        DateTime? @map("booked_at")
+  contactId       String?   @map("contact_id")
+  calendarEventId String?   @map("calendar_event_id")
+
+  notes String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact       Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, propertyAddress, startAt])
+  @@map("showing_slots")
+}
+
+// ============================================================
+// DEAL ANALYSIS / MODELER
+// ============================================================
+model DealAnalysis {
+  id              String             @id @default(uuid())
+  orgId           String             @map("org_id")
+  userId          String             @map("user_id")
+  name            String?
+  address         String?
+  borough         String?
+  block           String?
+  lot             String?
+  bbl             String?
+  contactId       String?            @map("contact_id")
+  status          DealAnalysisStatus @default(analyzing)
+  dealType        DealType           @default(acquisition) @map("deal_type")
+  dealSource      DealSource         @default(off_market) @map("deal_source")
+  inputs          Json               @default("{}")
+  outputs         Json               @default("{}")
+  notes           String?
+  loiSent         Boolean            @default(false) @map("loi_sent")
+  loiSentDate     DateTime?          @map("loi_sent_date")
+  loiAccepted     Boolean            @default(false) @map("loi_accepted")
+  structure       String? // all_cash, conventional, bridge_refi, assumable, syndication
+  quickScreenData Json?              @map("quick_screen_data")
+  lastViewedAt    DateTime?          @map("last_viewed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  organization  Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  promoteModels PromoteModel[]
+
+  @@index([orgId, status])
+  @@index([userId])
+  @@map("deal_analyses")
+}
+
+// ============================================================
+// GP/LP PROMOTE MODEL
+// ============================================================
+model PromoteModel {
+  id             String   @id @default(uuid())
+  dealAnalysisId String   @map("deal_analysis_id")
+  name           String?
+  templateName   String?  @map("template_name")
+  gpEquityPct    Float    @default(10) @map("gp_equity_pct")
+  lpEquityPct    Float    @default(90) @map("lp_equity_pct")
+  waterfallTiers Json     @default("[]") @map("waterfall_tiers")
+  outputs        Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  dealAnalysis DealAnalysis @relation(fields: [dealAnalysisId], references: [id], onDelete: Cascade)
+
+  @@index([dealAnalysisId])
+  @@map("promote_models")
+}
+
+// ============================================================
+// Twilio Phone System
+// ============================================================
+
+enum PhoneNumberStatus {
+  active
+  suspended
+  released
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum SmsStatus {
+  queued
+  sent
+  delivered
+  failed
+  received
+}
+
+enum CallDirection {
+  inbound
+  outbound
+}
+
+enum CallStatus {
+  initiated
+  ringing
+  answered
+  completed
+  missed
+  failed
+}
+
+model PhoneNumber {
+  id               String            @id @default(uuid())
+  number           String            @unique // E.164 format: +12125551234
+  twilioSid        String            @unique @map("twilio_sid")
+  friendlyName     String?           @map("friendly_name")
+  areaCode         String?           @map("area_code")
+  userId           String            @map("user_id")
+  organizationId   String            @map("organization_id")
+  status           PhoneNumberStatus @default(active)
+  forwardingNumber String?           @map("forwarding_number") // user's real phone for call forwarding
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  smsMessages    SmsMessage[]
+  calls          PhoneCall[]
+  leasingConfigs LeasingConfig[]
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("phone_numbers")
+}
+
+model SmsMessage {
+  id            String           @id @default(uuid())
+  phoneNumberId String           @map("phone_number_id")
+  userId        String           @map("user_id")
+  contactId     String?          @map("contact_id")
+  direction     MessageDirection
+  from          String
+  to            String
+  body          String           @db.Text
+  status        SmsStatus        @default(queued)
+  twilioSid     String?          @unique @map("twilio_sid")
+  mediaUrls     Json             @default("[]") @map("media_urls")
+  createdAt     DateTime         @default(now()) @map("created_at")
+
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([phoneNumberId, createdAt(sort: Desc)])
+  @@index([userId, to])
+  @@map("sms_messages")
+}
+
+model PhoneCall {
+  id            String        @id @default(uuid())
+  phoneNumberId String        @map("phone_number_id")
+  userId        String        @map("user_id")
+  contactId     String?       @map("contact_id")
+  direction     CallDirection
+  from          String
+  to            String
+  status        CallStatus    @default(initiated)
+  duration      Int? // seconds
+  recordingUrl  String?       @map("recording_url")
+  twilioSid     String?       @unique @map("twilio_sid")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  phoneNumber PhoneNumber @relation(fields: [phoneNumberId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact     Contact?    @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([phoneNumberId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("phone_calls")
+}
+
+model BrokerAgent {
+  id     String  @id @default(uuid())
+  orgId  String  @map("org_id")
+  userId String? @unique @map("user_id")
+
+  firstName String  @map("first_name")
+  lastName  String  @map("last_name")
+  email     String
+  phone     String?
+
+  // Personal Info
+  address     String?
+  city        String?
+  state       String?   @default("NY")
+  zipCode     String?   @map("zip_code")
+  dateOfBirth DateTime? @map("date_of_birth")
+
+  // Brokerage Info
+  startDate    DateTime? @map("start_date")
+  teamOrOffice String?   @map("team_or_office")
+
+  // Tax & Compliance Flags
+  w9OnFile Boolean @default(false) @map("w9_on_file")
+
+  // Media
+  photoUrl String? @map("photo_url")
+
+  // Internal
+  notes String?
+
+  licenseNumber String?   @map("license_number")
+  licenseExpiry DateTime? @map("license_expiry")
+
+  defaultSplitPct Decimal @default(70) @map("default_split_pct") @db.Decimal(5, 2)
+
+  // Per-agent split overrides (null = use org defaults)
+  houseExclusiveSplitPct    Decimal? @map("house_exclusive_split_pct") @db.Decimal(5, 2)
+  personalExclusiveSplitPct Decimal? @map("personal_exclusive_split_pct") @db.Decimal(5, 2)
+
+  status           String        @default("pending") // pending | active | inactive | terminated
+  brokerageRole    BrokerageRole @default(agent) @map("brokerage_role")
+  commissionPlanId String?       @map("commission_plan_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  dealSubmissions DealSubmission[]
+  invoices        Invoice[]
+  commissionPlan  CommissionPlan?  @relation(fields: [commissionPlanId], references: [id], onDelete: SetNull)
+
+  eoInsuranceExpiry   DateTime?            @map("eo_insurance_expiry")
+  complianceDocuments ComplianceDocument[]
+  payments            Payment[]
+  transactions        Transaction[]
+  bmsListings         BmsListing[]
+
+  // Invitation / Onboarding
+  inviteToken      String?   @unique @map("invite_token")
+  invitedAt        DateTime? @map("invited_at")
+  inviteAcceptedAt DateTime? @map("invite_accepted_at")
+  inviteEmail      String?   @map("invite_email")
+
+  // Goals & Leaderboard
+  goals  AgentGoal[]
+  badges AgentBadge[]
+
+  // Multi-agent deal splits
+  transactionAgents TransactionAgent[]
+
+  // AI Leasing Agent
+  leasingConversations LeasingConversation[] @relation("LeasingShowingAgent")
+
+  @@index([orgId])
+  @@index([email])
+  @@map("broker_agents")
+}
+
+model DealSubmission {
+  id      String  @id @default(uuid())
+  orgId   String  @map("org_id")
+  agentId String? @map("agent_id")
+
+  agentFirstName String  @map("agent_first_name")
+  agentLastName  String  @map("agent_last_name")
+  agentEmail     String  @map("agent_email")
+  agentPhone     String? @map("agent_phone")
+  agentLicense   String? @map("agent_license")
+
+  propertyAddress String  @map("property_address")
+  unit            String?
+  city            String?
+  state           String  @default("NY")
+
+  dealType         BmsDealType @default(sale) @map("deal_type")
+  transactionValue Decimal     @map("transaction_value") @db.Decimal(14, 2)
+  closingDate      DateTime?   @map("closing_date")
+
+  commissionType  String   @default("percentage") @map("commission_type")
+  commissionPct   Decimal? @map("commission_pct") @db.Decimal(5, 2)
+  commissionFlat  Decimal? @map("commission_flat") @db.Decimal(12, 2)
+  totalCommission Decimal  @map("total_commission") @db.Decimal(12, 2)
+  agentSplitPct   Decimal  @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct   Decimal  @map("house_split_pct") @db.Decimal(5, 2)
+  agentPayout     Decimal  @map("agent_payout") @db.Decimal(12, 2)
+  housePayout     Decimal  @map("house_payout") @db.Decimal(12, 2)
+
+  clientName      String? @map("client_name")
+  clientEmail     String? @map("client_email")
+  clientPhone     String? @map("client_phone")
+  representedSide String? @map("represented_side")
+
+  coBrokeAgent     String? @map("co_broke_agent")
+  coBrokeBrokerage String? @map("co_broke_brokerage")
+
+  // Multi-agent co-agents: [{ agentId?, name, email, splitPct, role }]
+  coAgents Json? @map("co_agents")
+
+  status          String  @default("submitted")
+  rejectionReason String? @map("rejection_reason")
+  notes           String?
+
+  submissionSource String @default("internal") @map("submission_source")
+
+  // Exclusive type: determines which split % applies
+  exclusiveType String? @map("exclusive_type") // "brokerage" | "personal"
+
+  // Link to BmsProperty when brokerage exclusive (auto-fills address, landlord, billing entity)
+  bmsPropertyId String? @map("bms_property_id")
+
+  // Landlord / billing info (auto-filled from BmsProperty for brokerage exclusive, or manually entered for personal)
+  landlordName    String? @map("landlord_name")
+  landlordEmail   String? @map("landlord_email")
+  landlordPhone   String? @map("landlord_phone")
+  landlordAddress String? @map("landlord_address")
+  managementCo    String? @map("management_co")
+
+  // Lease-specific fields
+  leaseStartDate DateTime? @map("lease_start_date")
+  leaseEndDate   DateTime? @map("lease_end_date")
+  monthlyRent    Decimal?  @map("monthly_rent") @db.Decimal(12, 2)
+
+  // Tenant / Buyer info (rename-safe: clientName already exists, these are additional)
+  tenantName  String? @map("tenant_name")
+  tenantEmail String? @map("tenant_email")
+  tenantPhone String? @map("tenant_phone")
+
+  // Required document tracking (stores which required docs have been uploaded)
+  // Values: { signedLease: boolean, agencyDisclosure: boolean, fairHousing: boolean, commissionAgreement: boolean }
+  requiredDocs Json? @map("required_docs")
+
+  // Manager override fields
+  managerOverrideExclusiveType String?   @map("manager_override_exclusive_type")
+  managerOverrideSplitPct      Decimal?  @map("manager_override_split_pct") @db.Decimal(5, 2)
+  approvedBy                   String?   @map("approved_by")
+  approvedAt                   DateTime? @map("approved_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent        BrokerAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  bmsProperty  BmsProperty? @relation(fields: [bmsPropertyId], references: [id], onDelete: SetNull)
+  invoice      Invoice?
+  transaction  Transaction?
+
+  @@index([orgId, status])
+  @@index([agentEmail])
+  @@map("deal_submissions")
+}
+
+model Invoice {
+  id            String @id @default(uuid())
+  orgId         String @map("org_id")
+  invoiceNumber String @unique @map("invoice_number")
+
+  dealSubmissionId String? @unique @map("deal_submission_id")
+  agentId          String? @map("agent_id")
+
+  brokerageName    String  @map("brokerage_name")
+  brokerageAddress String? @map("brokerage_address")
+  brokeragePhone   String? @map("brokerage_phone")
+  brokerageEmail   String? @map("brokerage_email")
+  brokerageLicense String? @map("brokerage_license")
+
+  agentName    String  @map("agent_name")
+  agentEmail   String? @map("agent_email")
+  agentLicense String? @map("agent_license")
+
+  propertyAddress  String      @map("property_address")
+  dealType         BmsDealType @default(sale) @map("deal_type")
+  transactionValue Decimal     @map("transaction_value") @db.Decimal(14, 2)
+  closingDate      DateTime?   @map("closing_date")
+  clientName       String?     @map("client_name")
+  representedSide  String?     @map("represented_side")
+
+  totalCommission Decimal @map("total_commission") @db.Decimal(12, 2)
+  agentSplitPct   Decimal @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct   Decimal @map("house_split_pct") @db.Decimal(5, 2)
+  agentPayout     Decimal @map("agent_payout") @db.Decimal(12, 2)
+  housePayout     Decimal @map("house_payout") @db.Decimal(12, 2)
+
+  paymentTerms String    @default("Net 30") @map("payment_terms")
+  issueDate    DateTime  @default(now()) @map("issue_date")
+  dueDate      DateTime  @map("due_date")
+  paidDate     DateTime? @map("paid_date")
+
+  status InvoiceStatus @default(draft)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  dealSubmission DealSubmission? @relation(fields: [dealSubmissionId], references: [id], onDelete: SetNull)
+  agent          BrokerAgent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  payments       Payment[]
+  transaction    Transaction?
+
+  @@index([orgId, status])
+  @@index([invoiceNumber])
+  @@map("invoices")
+}
+
+model CommissionPlan {
+  id          String             @id @default(uuid())
+  orgId       String             @map("org_id")
+  name        String
+  description String?
+  planType    CommissionPlanType @default(flat) @map("plan_type")
+  isDefault   Boolean            @default(false) @map("is_default")
+  status      String             @default("active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tiers        CommissionTier[]
+  agents       BrokerAgent[]
+
+  @@index([orgId])
+  @@map("commission_plans")
+}
+
+model CommissionTier {
+  id            String   @id @default(uuid())
+  planId        String   @map("plan_id")
+  tierOrder     Int      @default(0) @map("tier_order")
+  minThreshold  Decimal  @default(0) @map("min_threshold") @db.Decimal(14, 2)
+  maxThreshold  Decimal? @map("max_threshold") @db.Decimal(14, 2)
+  agentSplitPct Decimal  @map("agent_split_pct") @db.Decimal(5, 2)
+  houseSplitPct Decimal  @map("house_split_pct") @db.Decimal(5, 2)
+  label         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  plan CommissionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@index([planId, tierOrder])
+  @@map("commission_tiers")
+}
+
+model ComplianceDocument {
+  id      String @id @default(uuid())
+  orgId   String @map("org_id")
+  agentId String @map("agent_id")
+
+  docType     ComplianceDocType @map("doc_type")
+  title       String
+  description String?
+  issueDate   DateTime?         @map("issue_date")
+  expiryDate  DateTime?         @map("expiry_date")
+
+  fileUrl  String? @map("file_url")
+  fileName String? @map("file_name")
+  fileSize Int?    @map("file_size")
+
+  status String  @default("active")
+  notes  String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent        BrokerAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, agentId])
+  @@index([expiryDate])
+  @@map("compliance_documents")
+}
+
+model Payment {
+  id        String  @id @default(uuid())
+  orgId     String  @map("org_id")
+  invoiceId String  @map("invoice_id")
+  agentId   String? @map("agent_id")
+
+  amount        Decimal       @db.Decimal(12, 2)
+  paymentMethod PaymentMethod @default(check) @map("payment_method")
+  paymentDate   DateTime      @default(now()) @map("payment_date")
+
+  referenceNumber  String? @map("reference_number")
+  stripePaymentId  String? @unique @map("stripe_payment_id")
+  stripeTransferId String? @unique @map("stripe_transfer_id")
+
+  notes String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoice      Invoice      @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  agent        BrokerAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([invoiceId])
+  @@index([agentId])
+  @@index([stripePaymentId])
+  @@map("payments")
+}
+
+model FileAttachment {
+  id         String @id @default(uuid())
+  orgId      String @map("org_id")
+  entityType String @map("entity_type")
+  entityId   String @map("entity_id")
+
+  fileName    String  @map("file_name")
+  fileType    String  @map("file_type")
+  fileSize    Int     @map("file_size")
+  storagePath String  @map("storage_path")
+  publicUrl   String? @map("public_url")
+  uploadedBy  String? @map("uploaded_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, entityType, entityId])
+  @@index([entityId])
+  @@map("file_attachments")
+}
+
+// ============================================================
+// BMS: Transaction Management
+// ============================================================
+
+model Transaction {
+  id               String  @id @default(uuid())
+  orgId            String  @map("org_id")
+  dealSubmissionId String? @unique @map("deal_submission_id")
+  agentId          String? @map("agent_id")
+
+  // Type and stage
+  type  BmsTransactionType
+  stage TransactionStage   @default(application)
+
+  // Property info (snapshotted or entered manually)
+  propertyAddress String  @map("property_address")
+  propertyUnit    String? @map("property_unit")
+  propertyCity    String? @map("property_city")
+  propertyState   String? @default("NY") @map("property_state")
+  propertyName    String? @map("property_name")
+
+  // Deal info
+  transactionValue Decimal? @map("transaction_value") @db.Decimal(12, 2)
+  commissionAmount Decimal? @map("commission_amount") @db.Decimal(12, 2)
+
+  // Parties
+  clientName      String? @map("client_name")
+  clientEmail     String? @map("client_email")
+  clientPhone     String? @map("client_phone")
+  otherPartyName  String? @map("other_party_name")
+  otherPartyEmail String? @map("other_party_email")
+  otherPartyPhone String? @map("other_party_phone")
+
+  // Key dates (milestones)
+  applicationDate DateTime? @map("application_date")
+  approvalDate    DateTime? @map("approval_date")
+  contractDate    DateTime? @map("contract_date")
+  inspectionDate  DateTime? @map("inspection_date")
+  closingDate     DateTime? @map("closing_date")
+  moveInDate      DateTime? @map("move_in_date")
+  leaseStartDate  DateTime? @map("lease_start_date")
+  leaseEndDate    DateTime? @map("lease_end_date")
+  expirationDate  DateTime? @map("expiration_date")
+  actualCloseDate DateTime? @map("actual_close_date")
+
+  // Notes
+  notes String?
+
+  // Link to listing (one-to-one optional — set when created from a listing lease-up)
+  listingId String? @unique @map("listing_id")
+
+  // Link to invoice (one-to-one optional)
+  invoiceId String? @unique @map("invoice_id")
+
+  // Agent payout tracking (money OUT to agent)
+  agentSplitPct        Decimal?  @map("agent_split_pct") @db.Decimal(5, 2)
+  agentPayoutAmount    Decimal?  @map("agent_payout_amount") @db.Decimal(12, 2)
+  housePayoutAmount    Decimal?  @map("house_payout_amount") @db.Decimal(12, 2)
+  agentPayoutDate      DateTime? @map("agent_payout_date")
+  agentPayoutMethod    String?   @map("agent_payout_method")
+  agentPayoutReference String?   @map("agent_payout_reference")
+  agentPayoutStatus    String?   @default("pending") @map("agent_payout_status")
+
+  // Lifecycle timestamps
+  invoiceCreatedAt     DateTime? @map("invoice_created_at")
+  invoiceSentAt        DateTime? @map("invoice_sent_at")
+  commissionReceivedAt DateTime? @map("commission_received_at")
+  agentPaidAt          DateTime? @map("agent_paid_at")
+
+  // Metadata
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  closedAt     DateTime? @map("closed_at")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
+
+  // Relations
+  organization   Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  dealSubmission DealSubmission?    @relation(fields: [dealSubmissionId], references: [id], onDelete: SetNull)
+  agent          BrokerAgent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  listing        BmsListing?        @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  invoice        Invoice?           @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  tasks          TransactionTask[]
+  agents         TransactionAgent[]
+
+  @@index([orgId, stage])
+  @@index([orgId, type])
+  @@index([orgId, agentId])
+  @@index([invoiceId])
+  @@map("transactions")
+}
+
+model TransactionAgent {
+  id            String @id @default(uuid())
+  transactionId String @map("transaction_id")
+  agentId       String @map("agent_id")
+
+  role         String   @default("primary") // "primary" | "co_agent" | "referral"
+  splitPct     Decimal? @map("split_pct") @db.Decimal(5, 2)
+  payoutAmount Decimal? @map("payout_amount") @db.Decimal(12, 2)
+
+  // Payout tracking
+  payoutStatus    String    @default("pending") @map("payout_status") // "pending" | "processing" | "paid"
+  payoutDate      DateTime? @map("payout_date")
+  payoutMethod    String?   @map("payout_method")
+  payoutReference String?   @map("payout_reference")
+
+  notes String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  agent       BrokerAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([transactionId, agentId])
+  @@index([transactionId])
+  @@index([agentId])
+  @@map("transaction_agents")
+}
+
+model TransactionTask {
+  id            String @id @default(uuid())
+  transactionId String @map("transaction_id")
+
+  title       String
+  description String?
+  stage       TransactionStage
+  sortOrder   Int              @default(0) @map("sort_order")
+  isCompleted Boolean          @default(false) @map("is_completed")
+  completedAt DateTime?        @map("completed_at")
+  completedBy String?          @map("completed_by")
+  dueDate     DateTime?        @map("due_date")
+  notes       String?
+  isRequired  Boolean          @default(false) @map("is_required")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  transaction Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([transactionId, stage])
+  @@map("transaction_tasks")
+}
+
+model TransactionTemplate {
+  id        String             @id @default(uuid())
+  orgId     String             @map("org_id")
+  name      String
+  type      BmsTransactionType
+  isDefault Boolean            @default(false) @map("is_default")
+  isActive  Boolean            @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization              @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  tasks        TransactionTemplateTask[]
+
+  @@index([orgId, type])
+  @@map("transaction_templates")
+}
+
+model TransactionTemplateTask {
+  id         String @id @default(uuid())
+  templateId String @map("template_id")
+
+  title          String
+  description    String?
+  stage          TransactionStage
+  sortOrder      Int              @default(0) @map("sort_order")
+  isRequired     Boolean          @default(false) @map("is_required")
+  defaultDueDays Int?             @map("default_due_days")
+
+  template TransactionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+  @@map("transaction_template_tasks")
+}
+
+// ============================================================
+// LISTINGS & PROPERTY MANAGEMENT
+// ============================================================
+
+model BmsProperty {
+  id    String @id @default(uuid())
+  orgId String @map("org_id")
+
+  name    String
+  address String?
+  city    String? @default("New York")
+  state   String? @default("NY")
+  zipCode String? @map("zip_code")
+
+  // Landlord / Management info
+  landlordName  String? @map("landlord_name")
+  landlordEmail String? @map("landlord_email")
+  landlordPhone String? @map("landlord_phone")
+  managementCo  String? @map("management_co")
+
+  totalUnits Int?    @map("total_units")
+  notes      String?
+
+  // Exclusive building flag — marks this as a brokerage-exclusive listing
+  isExclusive Boolean @default(false) @map("is_exclusive")
+
+  // Billing entity for commission invoices (may differ from landlordName)
+  billingEntityName    String? @map("billing_entity_name")
+  billingEntityAddress String? @map("billing_entity_address")
+  billingEntityEmail   String? @map("billing_entity_email")
+  billingEntityPhone   String? @map("billing_entity_phone")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization    Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  listings        BmsListing[]
+  leasingConfig   LeasingConfig?
+  dealSubmissions DealSubmission[]
+
+  @@index([orgId])
+  @@index([orgId, name])
+  @@map("bms_properties")
+}
+
+model BmsListing {
+  id         String  @id @default(uuid())
+  orgId      String  @map("org_id")
+  propertyId String? @map("property_id")
+
+  // Address
+  address String
+  unit    String?
+  city    String? @default("New York")
+  state   String? @default("NY")
+  zipCode String? @map("zip_code")
+
+  // Type & Status
+  type   BmsListingType   @default(rental)
+  status BmsListingStatus @default(available)
+
+  // Pricing
+  rentPrice   Decimal? @map("rent_price") @db.Decimal(12, 2)
+  askingPrice Decimal? @map("asking_price") @db.Decimal(12, 2)
+
+  // Unit details
+  bedrooms    String?
+  bathrooms   String?
+  sqft        Int?
+  floor       String?
+  description String?
+  amenities   String[] @default([])
+
+  // Availability
+  availableDate DateTime? @map("available_date")
+  daysOnMarket  Int?      @map("days_on_market")
+
+  // Commission
+  commissionType   BmsCommissionType? @map("commission_type")
+  commissionAmount Decimal?           @map("commission_amount") @db.Decimal(12, 2)
+  commissionPct    Decimal?           @map("commission_pct") @db.Decimal(5, 2)
+
+  // Assignment
+  agentId String? @map("agent_id")
+
+  // Tenant (populated at application+ stage)
+  tenantName     String?   @map("tenant_name")
+  tenantEmail    String?   @map("tenant_email")
+  tenantPhone    String?   @map("tenant_phone")
+  leaseStartDate DateTime? @map("lease_start_date")
+  leaseEndDate   DateTime? @map("lease_end_date")
+
+  // Notes
+  notes String?
+
+  // Status change timestamps
+  showingStartedAt DateTime? @map("showing_started_at")
+  applicationAt    DateTime? @map("application_at")
+  approvedAt       DateTime? @map("approved_at")
+  leasedAt         DateTime? @map("leased_at")
+  offMarketAt      DateTime? @map("off_market_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization         Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  property             BmsProperty?          @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  agent                BrokerAgent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  transaction          Transaction?
+  leasingConversations LeasingConversation[]
+
+  @@unique([propertyId, unit], map: "bms_listings_property_unit_unique")
+  @@index([orgId, status])
+  @@index([orgId, propertyId])
+  @@index([orgId, agentId])
+  @@index([orgId, type])
+  @@map("bms_listings")
+}
+
+// ============================================================
+// AGENT GOALS & LEADERBOARD
+// ============================================================
+
+model AgentGoal {
+  id      String @id @default(uuid())
+  orgId   String @map("org_id")
+  agentId String @map("agent_id")
+
+  // Period
+  year  Int
+  month Int // 1-12
+
+  // Targets (nullable = no target set for this metric)
+  dealsClosedTarget    Int?     @map("deals_closed_target")
+  revenueTarget        Decimal? @map("revenue_target") @db.Decimal(12, 2)
+  listingsLeasedTarget Int?     @map("listings_leased_target")
+  listingsAddedTarget  Int?     @map("listings_added_target")
+
+  // Custom targets (flexible JSON for future expansion)
+  customTargets Json? @map("custom_targets")
+
+  // Tracking (denormalized snapshots — updated periodically or on demand)
+  dealsClosedActual    Int     @default(0) @map("deals_closed_actual")
+  revenueActual        Decimal @default(0) @map("revenue_actual") @db.Decimal(12, 2)
+  listingsLeasedActual Int     @default(0) @map("listings_leased_actual")
+  listingsAddedActual  Int     @default(0) @map("listings_added_actual")
+
+  lastCalculatedAt DateTime? @map("last_calculated_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent        BrokerAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, agentId, year, month])
+  @@index([orgId, year, month])
+  @@map("agent_goals")
+}
+
+model AgentBadge {
+  id      String @id @default(uuid())
+  orgId   String @map("org_id")
+  agentId String @map("agent_id")
+
+  type        String // "streak_3", "streak_6", "top_producer", etc.
+  name        String // "3-Month Streak", "Top Producer", etc.
+  description String?
+  earnedAt    DateTime @default(now()) @map("earned_at")
+  period      String? // "2026-02" — the month it was earned, if applicable
+
+  // Relations
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent        BrokerAgent  @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, agentId])
+  @@map("agent_badges")
+}
+
+// ============================================================
+// BUILDING INTELLIGENCE CACHE
+// ============================================================
+
+model BuildingCache {
+  id        String   @id @default(uuid())
+  bbl       String   @db.VarChar(10)
+  source    String   @db.VarChar(40)
+  data      Json
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+  expiresAt DateTime @map("expires_at")
+
+  @@unique([bbl, source])
+  @@index([expiresAt])
+  @@map("building_cache")
+}
+
+// ============================================================
+// NEIGHBORHOOD VITALITY SNAPSHOTS
+// Pre-computed commercial tenant mix scores per ZIP code
+// ============================================================
+
+model VitalitySnapshot {
+  id            String   @id @default(cuid())
+  zipCode       String   @map("zip_code") @db.VarChar(10)
+  market        String   @default("nyc") @db.VarChar(10)
+  score         Float
+  level         String   @db.VarChar(20)
+  ratio         Float
+  confidence    String   @db.VarChar(10)
+  positiveCount Int      @map("positive_count")
+  negativeCount Int      @map("negative_count")
+  poiData       Json     @map("poi_data")
+  metadata      Json?
+  calculatedAt  DateTime @default(now()) @map("calculated_at")
+  expiresAt     DateTime @map("expires_at")
+
+  @@unique([zipCode, market])
+  @@index([market, level])
+  @@index([expiresAt])
+  @@map("vitality_snapshots")
+}
+
+// ============================================================
+// AI LEASING AGENT
+// ============================================================
+
+model LeasingConfig {
+  id         String @id @default(uuid())
+  orgId      String @map("org_id")
+  propertyId String @unique @map("property_id")
+
+  tier           LeasingTier @default(free)
+  isActive       Boolean     @default(true) @map("is_active")
+  emailEnabled   Boolean     @default(false) @map("email_enabled")
+  webChatEnabled Boolean     @default(false) @map("web_chat_enabled")
+  voiceEnabled   Boolean     @default(false) @map("voice_enabled")
+  slug           String?     @unique
+
+  // Stripe billing
+  stripeCustomerId     String? @map("stripe_customer_id")
+  stripeSubscriptionId String? @map("stripe_subscription_id")
+
+  // Twilio number assigned to this property
+  twilioNumberId String? @map("twilio_number_id")
+
+  // AI identity & personality
+  aiName             String   @default("Leasing Assistant") @map("ai_name")
+  aiTone             String   @default("professional_friendly") @map("ai_tone")
+  greeting           String   @default("Hi! I'm the leasing assistant for this property. How can I help you today?")
+  personality        String   @default("friendly")
+  languages          String[] @default(["en"])
+  customInstructions String?  @map("custom_instructions") @db.Text
+
+  // Knowledge base (assembled from enrichment + manual input, cached JSON)
+  buildingKnowledge  Json? @map("building_knowledge")
+  autoEnrichmentData Json? @map("auto_enrichment_data")
+
+  // Qualification criteria (JSON)
+  qualCriteria Json @default("{}") @map("qual_criteria")
+
+  // Operating hours
+  officeHoursStart String? @map("office_hours_start")
+  officeHoursEnd   String? @map("office_hours_end")
+  timezone         String  @default("America/New_York")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization  Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  property      BmsProperty           @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  twilioNumber  PhoneNumber?          @relation(fields: [twilioNumberId], references: [id], onDelete: SetNull)
+  conversations LeasingConversation[]
+  dailyUsage    LeasingDailyUsage[]
+
+  @@index([orgId])
+  @@index([orgId, isActive])
+  @@map("leasing_configs")
+}
+
+model LeasingConversation {
+  id       String @id @default(uuid())
+  orgId    String @map("org_id")
+  configId String @map("config_id")
+
+  // Channel
+  channel      ConversationChannel @default(sms)
+  emailSubject String?             @map("email_subject")
+
+  // Prospect info
+  prospectPhone String  @map("prospect_phone")
+  prospectName  String? @map("prospect_name")
+  prospectEmail String? @map("prospect_email")
+
+  // Status tracking
+  status      ConversationStatus @default(active)
+  temperature LeadTemperature    @default(warm)
+
+  // AI context (JSON — qualification answers, preferences, etc.)
+  qualData  Json    @default("{}") @map("qual_data")
+  aiSummary String? @map("ai_summary")
+
+  // Interested listing
+  listingId String? @map("listing_id")
+
+  // Escalation
+  escalatedAt      DateTime?         @map("escalated_at")
+  escalationReason EscalationReason? @map("escalation_reason")
+
+  // Agent assignment (for showings / escalations)
+  showingAgentId String?   @map("showing_agent_id")
+  showingAt      DateTime? @map("showing_at")
+
+  // Waitlist
+  onWaitlist      Boolean   @default(false) @map("on_waitlist")
+  waitlistAddedAt DateTime? @map("waitlist_added_at")
+  waitlistUnits   String[]  @default([]) @map("waitlist_units")
+
+  // CRM link (created after qualification)
+  contactId String? @map("contact_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  config       LeasingConfig     @relation(fields: [configId], references: [id], onDelete: Cascade)
+  listing      BmsListing?       @relation(fields: [listingId], references: [id], onDelete: SetNull)
+  showingAgent BrokerAgent?      @relation("LeasingShowingAgent", fields: [showingAgentId], references: [id], onDelete: SetNull)
+  contact      Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages     LeasingMessage[]
+  followUps    LeasingFollowUp[]
+
+  @@unique([configId, prospectPhone])
+  @@unique([configId, prospectEmail], map: "leasing_conversations_config_email_unique")
+  @@index([orgId, status])
+  @@index([configId])
+  @@index([prospectPhone])
+  @@index([prospectEmail])
+  @@map("leasing_conversations")
+}
+
+model LeasingMessage {
+  id             String @id @default(uuid())
+  conversationId String @map("conversation_id")
+
+  sender         MessageSender
+  channel        ConversationChannel @default(sms)
+  body           String
+  twilioSid      String?             @map("twilio_sid")
+  deliveryStatus String?             @map("delivery_status")
+
+  // AI metadata
+  intentDetected  String? @map("intent_detected")
+  confidenceScore Float?  @map("confidence_score")
+  tokensUsed      Int?    @map("tokens_used")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversation LeasingConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("leasing_messages")
+}
+
+model LeasingFollowUp {
+  id             String @id @default(uuid())
+  conversationId String @map("conversation_id")
+
+  type            FollowUpType
+  status          FollowUpStatus @default(pending)
+  scheduledFor    DateTime       @map("scheduled_for")
+  sentAt          DateTime?      @map("sent_at")
+  messageBody     String?        @map("message_body")
+  cadencePosition Int            @default(1) @map("cadence_position")
+  variantId       String?        @map("variant_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  conversation LeasingConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([status, scheduledFor])
+  @@index([conversationId])
+  @@index([variantId])
+  @@map("leasing_follow_ups")
+}
+
+model LeasingDailyUsage {
+  id       String   @id @default(uuid())
+  configId String   @map("config_id")
+  date     DateTime @db.Date
+
+  messagesAi      Int @default(0) @map("messages_ai")
+  messagesInbound Int @default(0) @map("messages_inbound")
+  tokensUsed      Int @default(0) @map("tokens_used")
+
+  config LeasingConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, date])
+  @@index([configId, date])
+  @@map("leasing_daily_usage")
+}
+
+// ── Leasing Benchmarks (anonymous cross-building aggregation) ──
+
+model LeasingBenchmark {
+  id         String   @id @default(cuid())
+  date       DateTime @db.Date
+  segment    String // e.g. "nyc_small", "other_medium"
+  metric     String // "avg_response_time_ms", "showing_conversion_rate", "escalation_rate", "messages_per_conversation"
+  p25        Float
+  p50        Float
+  p75        Float
+  sampleSize Int      @map("sample_size")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([date, segment, metric])
+  @@map("leasing_benchmark")
+}
+
+// ============================================================
+// REFERENCE DATA CATALOG
+// Externalized rates, benchmarks, tax tables, cost estimates
+// Versioned with effective dates for audit trail + rollback
+// ============================================================
+
+model ReferenceDataCatalog {
+  id            String    @id @default(uuid())
+  orgId         String?   @map("org_id")
+  category      String    @db.VarChar(50) // expense_benchmarks, rgb_rates, tax_tables, renovation_costs, closing_cost_rates, fhfa_hpi
+  subcategory   String    @db.VarChar(80) // pre_war_elevator, manhattan, light_renovation, etc.
+  version       Int       @default(1)
+  data          Json
+  source        String    @db.VarChar(120) // rgb_board_2025, dof_assessment_2024, etc.
+  effectiveDate DateTime  @map("effective_date")
+  expiresAt     DateTime? @map("expires_at")
+  notes         String?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, category, subcategory, version])
+  @@index([category, subcategory, effectiveDate])
+  @@index([orgId, category])
+  @@map("reference_data_catalog")
+}
+
+model ReferenceDataAudit {
+  id           String   @id @default(uuid())
+  catalogId    String   @map("catalog_id")
+  userId       String?  @map("user_id")
+  action       String   @db.VarChar(20) // created, updated, expired
+  oldData      Json?    @map("old_data")
+  newData      Json     @map("new_data")
+  changeReason String   @map("change_reason") @db.VarChar(200)
+  changedAt    DateTime @default(now()) @map("changed_at")
+
+  @@index([catalogId, changedAt])
+  @@map("reference_data_audit")
+}
+
+// ============================================================
+// CENSUS TRACT CACHE
+// Persistent cache for Census ACS demographic data
+// ============================================================
+
+model CensusTractCache {
+  id          String   @id @default(uuid())
+  stateFips   String   @map("state_fips") @db.VarChar(2)
+  countyFips  String   @map("county_fips") @db.VarChar(3)
+  censusTract String   @map("census_tract") @db.VarChar(10)
+  year        Int
+  data        Json
+  fetchedAt   DateTime @default(now()) @map("fetched_at")
+  expiresAt   DateTime @map("expires_at")
+
+  @@unique([stateFips, countyFips, censusTract, year])
+  @@index([expiresAt])
+  @@map("census_tract_cache")
+}

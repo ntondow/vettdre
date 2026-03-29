@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VettdRE — Logo Option C + DM Serif Display</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --black: #0A0A0A;
+  --black-700: #1C1C1E;
+  --black-600: #2C2C2E;
+  --gray-400: #636366;
+  --gray-300: #8E8E93;
+  --gray-200: #C7C7CC;
+  --gray-100: #E5E5EA;
+  --gray-50: #F2F2F7;
+  --white: #FFFFFF;
+  --accent: #00D4AA;
+  --accent-dim: #00B894;
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'Inter', -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: var(--font-body); background: var(--gray-50); color: var(--black); }
+
+.header {
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-100);
+  padding: 24px 48px;
+}
+.header h1 { font-family: var(--font-display); font-size: 24px; }
+.header p { color: var(--gray-400); font-size: 14px; margin-top: 4px; }
+
+.content { max-width: 960px; margin: 0 auto; padding: 40px 48px 120px; }
+
+.section-label {
+  font-size: 11px; font-weight: 600; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--gray-300); margin: 48px 0 20px;
+}
+.section-label:first-of-type { margin-top: 0; }
+
+.logo-box {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.logo-display {
+  padding: 56px 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+.logo-display.dark { background: var(--black); }
+.logo-display.accent-bg { background: var(--accent); }
+.logo-label {
+  padding: 14px 20px;
+  font-size: 12px; font-weight: 500; color: var(--gray-300);
+  border-top: 1px solid var(--gray-100);
+  letter-spacing: 0.04em;
+}
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+.icon-box {
+  width: 72px; height: 72px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 16px;
+}
+
+.note {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: 12px;
+  padding: 20px;
+  font-size: 14px;
+  color: var(--gray-400);
+  line-height: 1.6;
+  margin-top: 16px;
+}
+.note strong { color: var(--black); }
+
+/* Mockup styles */
+.mockup {
+  background: var(--white);
+  border: 2px solid var(--gray-100);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.mockup-sidebar {
+  width: 220px;
+  background: var(--black);
+  color: var(--white);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.nav-item {
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--gray-300);
+  font-weight: 500;
+}
+.nav-item.active {
+  background: rgba(0,212,170,0.1);
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Option C — Grid Blueprint + DM Serif Display</h1>
+  <p>Updated wordmark font from industrial condensed to editorial serif</p>
+</div>
+
+<div class="content">
+
+<!-- ========================================= -->
+<!-- FULL LOGO — LIGHT                         -->
+<!-- ========================================= -->
+<div class="section-label">Primary Logo</div>
+
+<div class="logo-box">
+  <div class="logo-display">
+    <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:300px">
+      <!-- Blueprint mark -->
+      <g transform="translate(0,-6)">
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#0A0A0A" stroke-width="1.5"/>
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <!-- DM Serif Display wordmark -->
+      <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#0A0A0A">Vettd</text>
+      <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+    </svg>
+  </div>
+  <div class="logo-label">Primary — Light background</div>
+</div>
+
+<div class="logo-box">
+  <div class="logo-display dark">
+    <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:300px">
+      <g transform="translate(0,-6)">
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#FFFFFF" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#FFFFFF" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#FFFFFF" stroke-width="1.5"/>
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#FFFFFF" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#FFFFFF" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#FFFFFF" stroke-width="1.5"/>
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#FFFFFF">Vettd</text>
+      <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+    </svg>
+  </div>
+  <div class="logo-label">Primary — Dark background</div>
+</div>
+
+<!-- ========================================= -->
+<!-- ICON MARKS                                -->
+<!-- ========================================= -->
+<div class="section-label">App Icon / Favicon</div>
+
+<div class="grid-3">
+  <div class="logo-box">
+    <div class="logo-display dark" style="padding:32px;min-height:140px">
+      <div class="icon-box" style="background:#1C1C1E">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:40px">
+          <rect x="6" y="4" width="16" height="40" rx="1" fill="none" stroke="#fff" stroke-width="2"/>
+          <line x1="6" y1="14" x2="22" y2="14" stroke="#fff" stroke-width="1.5"/>
+          <line x1="6" y1="24" x2="22" y2="24" stroke="#fff" stroke-width="1.5"/>
+          <line x1="6" y1="34" x2="22" y2="34" stroke="#fff" stroke-width="1.5"/>
+          <rect x="26" y="16" width="14" height="28" rx="1" fill="none" stroke="#fff" stroke-width="2"/>
+          <line x1="26" y1="28" x2="40" y2="28" stroke="#fff" stroke-width="1.5"/>
+          <path d="M31 20 L34 23 L42 15" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="logo-label">Icon on dark</div>
+  </div>
+
+  <div class="logo-box">
+    <div class="logo-display" style="padding:32px;min-height:140px">
+      <div class="icon-box" style="background:var(--gray-50);border:1px solid var(--gray-100)">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:40px">
+          <rect x="6" y="4" width="16" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+          <line x1="6" y1="14" x2="22" y2="14" stroke="#0A0A0A" stroke-width="1.5"/>
+          <line x1="6" y1="24" x2="22" y2="24" stroke="#0A0A0A" stroke-width="1.5"/>
+          <line x1="6" y1="34" x2="22" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+          <rect x="26" y="16" width="14" height="28" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+          <line x1="26" y1="28" x2="40" y2="28" stroke="#0A0A0A" stroke-width="1.5"/>
+          <path d="M31 20 L34 23 L42 15" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="logo-label">Icon on light</div>
+  </div>
+
+  <div class="logo-box">
+    <div class="logo-display accent-bg" style="padding:32px;min-height:140px">
+      <div class="icon-box" style="background:rgba(0,0,0,0.15);border-radius:16px">
+        <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:40px">
+          <rect x="6" y="4" width="16" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+          <line x1="6" y1="14" x2="22" y2="14" stroke="#0A0A0A" stroke-width="1.5"/>
+          <line x1="6" y1="24" x2="22" y2="24" stroke="#0A0A0A" stroke-width="1.5"/>
+          <line x1="6" y1="34" x2="22" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+          <rect x="26" y="16" width="14" height="28" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2"/>
+          <line x1="26" y1="28" x2="40" y2="28" stroke="#0A0A0A" stroke-width="1.5"/>
+          <path d="M31 20 L34 23 L42 15" stroke="#0A0A0A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+    </div>
+    <div class="logo-label">Icon on accent</div>
+  </div>
+</div>
+
+<!-- ========================================= -->
+<!-- SIZE VARIATIONS                           -->
+<!-- ========================================= -->
+<div class="section-label">Scale Test</div>
+
+<div class="logo-box">
+  <div class="logo-display" style="flex-direction:column;gap:32px;align-items:flex-start;padding:40px 48px">
+    <!-- Large -->
+    <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:300px">
+      <g transform="translate(0,-6)">
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#0A0A0A" stroke-width="1.5"/>
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#0A0A0A">Vettd</text>
+      <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+    </svg>
+    <!-- Medium -->
+    <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:220px">
+      <g transform="translate(0,-6)">
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#0A0A0A" stroke-width="1.5"/>
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#0A0A0A">Vettd</text>
+      <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+    </svg>
+    <!-- Small -->
+    <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:140px">
+      <g transform="translate(0,-6)">
+        <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="8" y1="18" x2="26" y2="18" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="30" x2="26" y2="30" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="8" y1="42" x2="26" y2="42" stroke="#0A0A0A" stroke-width="1.5"/>
+        <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#0A0A0A" stroke-width="2.5"/>
+        <line x1="32" y1="34" x2="46" y2="34" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="32" y1="47" x2="46" y2="47" stroke="#0A0A0A" stroke-width="1.5"/>
+        <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+        <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </g>
+      <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#0A0A0A">Vettd</text>
+      <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+    </svg>
+  </div>
+  <div class="logo-label">300px &middot; 220px &middot; 140px — minimum recommended 120px</div>
+</div>
+
+<!-- ========================================= -->
+<!-- IN-APP CONTEXT MOCKUP                     -->
+<!-- ========================================= -->
+<div class="section-label">In-App Context</div>
+
+<div class="mockup">
+  <div style="display:flex;min-height:360px">
+    <div class="mockup-sidebar">
+      <!-- Logo in sidebar -->
+      <div style="padding:4px 12px 16px;margin-bottom:8px;border-bottom:1px solid #2C2C2E">
+        <svg viewBox="0 0 300 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:140px">
+          <g>
+            <rect x="8" y="6" width="18" height="54" rx="1" fill="none" stroke="#fff" stroke-width="2.5"/>
+            <line x1="8" y1="18" x2="26" y2="18" stroke="#fff" stroke-width="1.5"/>
+            <line x1="8" y1="30" x2="26" y2="30" stroke="#fff" stroke-width="1.5"/>
+            <line x1="8" y1="42" x2="26" y2="42" stroke="#fff" stroke-width="1.5"/>
+            <rect x="32" y="20" width="14" height="40" rx="1" fill="none" stroke="#fff" stroke-width="2.5"/>
+            <line x1="32" y1="34" x2="46" y2="34" stroke="#fff" stroke-width="1.5"/>
+            <line x1="32" y1="47" x2="46" y2="47" stroke="#fff" stroke-width="1.5"/>
+            <line x1="4" y1="60" x2="50" y2="60" stroke="#00D4AA" stroke-width="2"/>
+            <path d="M39 24 L42 27 L48 19" stroke="#00D4AA" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+          </g>
+          <text x="64" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#FFFFFF">Vettd</text>
+          <text x="158" y="44" font-family="'DM Serif Display', Georgia, serif" font-size="40" font-weight="400" fill="#00D4AA">RE</text>
+        </svg>
+      </div>
+      <div class="nav-item active">&#9632;&nbsp; Dashboard</div>
+      <div class="nav-item">&#9632;&nbsp; Contacts</div>
+      <div class="nav-item">&#9632;&nbsp; Pipeline</div>
+      <div class="nav-item">&#9632;&nbsp; Messages</div>
+      <div class="nav-item">&#9632;&nbsp; Market Intel</div>
+      <div class="nav-item">&#9632;&nbsp; Brokerage</div>
+      <div class="nav-item">&#9632;&nbsp; Deals</div>
+      <div class="nav-item">&#9632;&nbsp; Leasing AI</div>
+      <div style="flex:1"></div>
+      <div class="nav-item" style="font-size:12px;color:#636366">&#9881;&nbsp; Settings</div>
+    </div>
+    <div style="flex:1;padding:28px;background:var(--gray-50)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <p style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--black)">Dashboard</p>
+          <p style="font-size:13px;color:var(--gray-400);margin-top:2px">Welcome back, Nathan</p>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button style="padding:9px 18px;background:var(--black);color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;font-family:var(--font-body);cursor:pointer">+ New Deal</button>
+        </div>
+      </div>
+      <!-- Stat cards -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:24px">
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:12px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Active Deals</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">24</p>
+          <p style="font-size:11px;color:#00D4AA;margin-top:4px">&#9650; 12%</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:12px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Pipeline</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">$4.2M</p>
+          <p style="font-size:11px;color:#FF3B30;margin-top:4px">&#9660; 3%</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:12px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Conversion</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">18.4%</p>
+          <p style="font-size:11px;color:var(--gray-300);margin-top:4px">&mdash; flat</p>
+        </div>
+        <div style="background:white;border:1px solid var(--gray-100);border-radius:12px;padding:16px">
+          <p style="font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--gray-300);font-weight:500">Avg Response</p>
+          <p style="font-family:var(--font-mono);font-size:28px;font-weight:600;margin-top:4px">2.4m</p>
+          <p style="font-size:11px;color:#00D4AA;margin-top:4px">&#9650; faster</p>
+        </div>
+      </div>
+      <!-- Table preview -->
+      <div style="background:white;border:1px solid var(--gray-100);border-radius:12px;overflow:hidden">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center">
+          <p style="font-family:'DM Serif Display',serif;font-size:18px">Recent Activity</p>
+          <span style="font-size:12px;color:var(--accent);font-weight:500;cursor:pointer">View all &rarr;</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <tr style="background:var(--gray-50)">
+            <td style="padding:10px 20px;font-weight:500">123 Broadway</td>
+            <td style="color:var(--gray-400)">Multifamily &middot; 24 units</td>
+            <td style="font-family:var(--font-mono);font-size:12px">$4,250,000</td>
+            <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(0,212,170,0.1);color:#00B894;font-size:11px;font-weight:500"><span style="width:5px;height:5px;border-radius:50%;background:#00D4AA"></span>Active</span></td>
+          </tr>
+          <tr>
+            <td style="padding:10px 20px;font-weight:500">456 Park Ave</td>
+            <td style="color:var(--gray-400)">Mixed Use &middot; 8 units</td>
+            <td style="font-family:var(--font-mono);font-size:12px">$12,800,000</td>
+            <td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:99px;background:rgba(255,107,43,0.1);color:#E55A1B;font-size:11px;font-weight:500"><span style="width:5px;height:5px;border-radius:50%;background:#FF6B2B"></span>Review</span></td>
+          </tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  <strong>Design rationale:</strong> The DM Serif Display wordmark adds editorial warmth and authority to the technical precision of the blueprint mark. The contrast between the geometric wireframe icon and the classic serif type creates a "data meets real estate legacy" tension that feels uniquely VettdRE — technical intelligence wrapped in professional gravitas. The teal accent pops against both the serif letterforms and the wireframe lines without competing.
+</div>
+
+</div>
+</body>
+</html>

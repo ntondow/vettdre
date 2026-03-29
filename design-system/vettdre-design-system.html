@@ -1,0 +1,1909 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VettdRE Design System v1.0</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy-50:#F0F4FA;--navy-100:#D9E2F2;--navy-200:#B3C5E6;--navy-300:#7A9AD4;
+  --navy-400:#4A73BF;--navy-500:#1E40AF;--navy-600:#18338C;--navy-700:#122669;
+  --navy-800:#0C1A47;--navy-900:#060D24;
+  --gold-50:#FFFBEB;--gold-100:#FEF3C7;--gold-200:#FDE68A;--gold-300:#FCD34D;
+  --gold-400:#FBBF24;--gold-500:#D4A012;--gold-600:#B8860B;--gold-700:#92670A;
+  --slate-50:#F8FAFC;--slate-100:#F1F5F9;--slate-200:#E2E8F0;--slate-300:#CBD5E1;
+  --slate-400:#94A3B8;--slate-500:#64748B;--slate-600:#475569;--slate-700:#334155;
+  --slate-800:#1E293B;--slate-900:#0F172A;
+  --success:#059669;--warning:#D97706;--error:#DC2626;--info:#2563EB;
+  --success-light:#ECFDF5;--warning-light:#FFFBEB;--error-light:#FEF2F2;--info-light:#EFF6FF;
+  --radius-sm:4px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-full:9999px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,0.1);--shadow-md:0 4px 6px -1px rgba(0,0,0,0.1);
+  --shadow-lg:0 10px 15px -3px rgba(0,0,0,0.1);--shadow-xl:0 20px 25px -5px rgba(0,0,0,0.1);
+  --shadow-navy:0 4px 14px rgba(30,64,175,0.25);--shadow-gold:0 4px 14px rgba(212,160,18,0.25);
+  --font-display:'DM Serif Display',Georgia,serif;
+  --font-body:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  --font-mono:'JetBrains Mono','SF Mono',monospace;
+  --ease-default:cubic-bezier(0.4,0,0.2,1);--ease-spring:cubic-bezier(0.16,1,0.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--font-body);color:var(--slate-800);background:var(--slate-50);line-height:1.6}
+.ds-layout{display:flex;min-height:100vh}
+.ds-nav{position:fixed;top:0;left:0;width:260px;height:100vh;overflow-y:auto;background:#fff;border-right:1px solid var(--slate-200);padding:24px 0;z-index:20}
+.ds-nav-logo{padding:0 24px 24px;border-bottom:1px solid var(--slate-200);margin-bottom:16px}
+.ds-nav-logo svg{width:140px;height:auto}
+.ds-nav-label{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate-400);padding:16px 24px 8px}
+.ds-nav a{display:block;padding:6px 24px;font-size:14px;color:var(--slate-600);text-decoration:none;transition:all 150ms}
+.ds-nav a:hover{color:var(--navy-500);background:var(--navy-50)}
+.ds-main{margin-left:260px;flex:1;max-width:1180px;padding:48px 48px 120px}
+.ds-hero{padding:64px 0 48px;border-bottom:1px solid var(--slate-200);margin-bottom:48px}
+.ds-hero h1{font-family:var(--font-display);font-size:3rem;color:var(--slate-900);letter-spacing:-0.02em}
+.ds-hero p{font-size:1.125rem;color:var(--slate-500);margin-top:12px;max-width:640px}
+.ds-version{display:inline-block;background:var(--navy-500);color:#fff;font-size:12px;font-weight:600;padding:4px 12px;border-radius:var(--radius-full);margin-top:16px}
+section{margin-bottom:64px}
+section > h2{font-family:var(--font-display);font-size:2rem;color:var(--slate-900);margin-bottom:8px;padding-bottom:16px;border-bottom:2px solid var(--navy-500);display:inline-block}
+section > p.desc{color:var(--slate-500);margin-bottom:32px;max-width:640px}
+h3{font-size:1.25rem;font-weight:600;color:var(--slate-800);margin:32px 0 16px}
+h4{font-size:1rem;font-weight:600;color:var(--slate-700);margin:24px 0 12px}
+.subsection{margin-bottom:40px}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.card{background:#fff;border:1px solid var(--slate-200);border-radius:var(--radius-lg);padding:24px;transition:box-shadow 200ms}
+.card:hover{box-shadow:var(--shadow-md)}
+.swatch{width:100%;height:56px;border-radius:var(--radius-md);margin-bottom:8px;border:1px solid rgba(0,0,0,0.06)}
+.swatch-label{font-size:12px;font-weight:500;color:var(--slate-600)}
+.swatch-value{font-family:var(--font-mono);font-size:11px;color:var(--slate-400)}
+.code-block{background:var(--slate-900);color:#e2e8f0;padding:16px 20px;border-radius:var(--radius-md);font-family:var(--font-mono);font-size:13px;line-height:1.6;overflow-x:auto;margin:16px 0}
+.code-inline{background:var(--slate-100);color:var(--navy-600);padding:2px 6px;border-radius:4px;font-family:var(--font-mono);font-size:13px}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:3px 8px;border-radius:var(--radius-full);margin:2px}
+.tag-required{background:var(--error-light);color:var(--error)}
+.tag-a11y{background:#F0FDF4;color:#166534}
+.tag-state{background:var(--info-light);color:var(--info)}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+th{text-align:left;padding:10px 12px;background:var(--slate-100);font-weight:600;color:var(--slate-700);border-bottom:2px solid var(--slate-200)}
+td{padding:10px 12px;border-bottom:1px solid var(--slate-100);color:var(--slate-600)}
+tr:hover td{background:var(--slate-50)}
+.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin:16px 0}
+.do-card,.dont-card{padding:20px;border-radius:var(--radius-lg);border:1px solid}
+.do-card{border-color:#BBF7D0;background:#F0FDF4}
+.dont-card{border-color:#FECACA;background:#FEF2F2}
+.do-card h4::before{content:"\2713 ";color:var(--success)}
+.dont-card h4::before{content:"\2717 ";color:var(--error)}
+.principle-card{padding:32px;border-left:4px solid var(--navy-500);background:#fff;border-radius:0 var(--radius-lg) var(--radius-lg) 0;box-shadow:var(--shadow-sm);margin-bottom:16px}
+.principle-card h4{margin-top:0;color:var(--navy-600);font-size:1.125rem}
+.component-preview{background:var(--slate-50);border:1px solid var(--slate-200);border-radius:var(--radius-lg);padding:32px;margin:16px 0;display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.anatomy-list{list-style:none;padding:0;margin:12px 0}
+.anatomy-list li{padding:6px 0;border-bottom:1px solid var(--slate-100);font-size:14px;color:var(--slate-600)}
+.anatomy-list li strong{color:var(--slate-800)}
+.logo-display{background:linear-gradient(135deg,var(--slate-50),#fff);border:1px solid var(--slate-200);border-radius:var(--radius-xl);padding:48px;text-align:center;margin:24px 0}
+.logo-dark{background:linear-gradient(135deg,var(--slate-900),var(--navy-900))}
+@media(max-width:900px){.ds-nav{display:none}.ds-main{margin-left:0;padding:24px}.grid-2,.grid-3,.grid-4,.do-dont{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="ds-layout">
+<nav class="ds-nav">
+<div class="ds-nav-logo">
+<svg viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M6 8 L26 2 L46 8 L46 38 Q46 52 26 60 Q6 52 6 38 Z" fill="url(#navyG)"/>
+<defs><linearGradient id="navyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E40AF"/><stop offset="100%" stop-color="#122669"/></linearGradient><linearGradient id="goldG" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D4A012"/></linearGradient></defs>
+<rect x="16" y="16" width="4" height="18" rx="1" fill="rgba(255,255,255,0.25)"/>
+<rect x="24" y="12" width="4" height="22" rx="1" fill="rgba(255,255,255,0.35)"/>
+<rect x="32" y="18" width="4" height="16" rx="1" fill="rgba(255,255,255,0.25)"/>
+<path d="M17 34 L23 40 L37 26" stroke="url(#goldG)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<text x="60" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#0F172A" letter-spacing="-0.5">Vettd</text>
+<text x="170" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#D4A012" letter-spacing="-0.5">RE</text>
+</svg>
+</div>
+<span class="ds-nav-label">Foundations</span>
+<a href="#principles">Design Principles</a>
+<a href="#logo">Logo & Brand</a>
+<a href="#colors">Color System</a>
+<a href="#typography">Typography</a>
+<a href="#spacing">Spacing & Grid</a>
+<a href="#elevation">Elevation & Shadow</a>
+<a href="#motion">Motion</a>
+<span class="ds-nav-label">Components</span>
+<a href="#buttons">Buttons</a>
+<a href="#inputs">Text Inputs</a>
+<a href="#select">Select & Dropdown</a>
+<a href="#checkbox">Checkbox & Radio</a>
+<a href="#toggle">Toggle Switch</a>
+<a href="#badges">Badges & Tags</a>
+<a href="#avatars">Avatars</a>
+<a href="#cards">Cards</a>
+<a href="#tables">Data Tables</a>
+<a href="#modals">Modals & Dialogs</a>
+<a href="#toast">Toast Notifications</a>
+<a href="#tabs">Tabs</a>
+<a href="#sidebar-comp">Sidebar Navigation</a>
+<a href="#breadcrumbs">Breadcrumbs</a>
+<a href="#pagination">Pagination</a>
+<a href="#tooltips">Tooltips</a>
+<a href="#skeleton">Skeleton Loaders</a>
+<a href="#progress">Progress Indicators</a>
+<a href="#empty-states">Empty States</a>
+<a href="#stat-cards">Stat Cards</a>
+<a href="#kanban">Kanban Board</a>
+<a href="#charts">Charts</a>
+<a href="#map-markers">Map Markers</a>
+<a href="#timeline">Activity Timeline</a>
+<a href="#command">Command Palette</a>
+<a href="#sheets">Bottom Sheets</a>
+<a href="#stepper">Stepper / Wizard</a>
+<a href="#alert">Alert Banners</a>
+<a href="#file-upload">File Upload</a>
+<a href="#date-picker">Date Picker</a>
+<a href="#accordion">Accordion</a>
+<a href="#search-bar">Search Bar</a>
+<span class="ds-nav-label">Guidelines</span>
+<a href="#patterns">Design Patterns</a>
+<a href="#a11y">Accessibility</a>
+<a href="#dos-donts">Do's & Don'ts</a>
+<a href="#handoff">Developer Handoff</a>
+<a href="#tokens-ref">Tokens Reference</a>
+</nav>
+<main class="ds-main">
+<div class="ds-hero">
+<h1>VettdRE Design System</h1>
+<p>A comprehensive, production-ready design language for the AI-native real estate platform. Built for NYC real estate professionals who demand precision, clarity, and intelligence.</p>
+<span class="ds-version">v1.0.0 &mdash; March 2026</span>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION: DESIGN PRINCIPLES                   -->
+<!-- ============================================ -->
+<section id="principles">
+<h2>Design Principles</h2>
+<p class="desc">Six core principles guide every design decision across VettdRE. They ensure consistency, usability, and a premium experience befitting NYC's most demanding real estate professionals.</p>
+
+<div class="principle-card">
+<h4>1. Intelligence Forward</h4>
+<p>AI insights should surface naturally within the workflow, not hide behind extra clicks. Data-rich interfaces earn trust through transparency — show confidence scores, source attribution, and freshness timestamps. Every AI action must be explainable.</p>
+</div>
+
+<div class="principle-card">
+<h4>2. Precision Over Decoration</h4>
+<p>Real estate decisions involve millions of dollars. Every pixel must serve a purpose. Favor clear data hierarchy, scannable layouts, and decisive typography over ornamental flourish. Remove anything that doesn't help the user make a better decision faster.</p>
+</div>
+
+<div class="principle-card">
+<h4>3. Progressive Disclosure</h4>
+<p>Show the essential information first, then reveal depth on demand. Building profiles start with key metrics; detail tabs expand into violations, permits, and ownership chains. Never overwhelm — always invite exploration.</p>
+</div>
+
+<div class="principle-card">
+<h4>4. Contextual Density</h4>
+<p>Professional users want information density — but calibrated to context. Dashboards can be data-rich; onboarding must be spacious. Mobile demands ruthless prioritization. The same data may need three different presentations across three contexts.</p>
+</div>
+
+<div class="principle-card">
+<h4>5. Trust Through Consistency</h4>
+<p>Every interaction pattern, every color meaning, every spacing decision must be predictable. Green always means positive. Navy always anchors primary actions. The 8px grid is sacred. Consistency compounds into trust.</p>
+</div>
+
+<div class="principle-card">
+<h4>6. Speed as a Feature</h4>
+<p>Performance is a design choice. Skeleton loaders appear within 100ms. Progressive rendering shows data as it arrives. Optimistic updates make interactions feel instant. Perceived speed is as important as actual speed.</p>
+</div>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: LOGO & BRAND                        -->
+<!-- ============================================ -->
+<section id="logo">
+<h2>Logo & Brand Identity</h2>
+<p class="desc">The VettdRE logo combines a shield-form mark with a serif wordmark. The shield symbolizes verified intelligence and protection; the embedded checkmark and building silhouettes convey real estate expertise and due diligence.</p>
+
+<h3>Primary Logo — Light Background</h3>
+<div class="logo-display">
+<svg viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+<defs><linearGradient id="nG1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E40AF"/><stop offset="100%" stop-color="#122669"/></linearGradient><linearGradient id="gG1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D4A012"/></linearGradient></defs>
+<path d="M6 8 L26 2 L46 8 L46 38 Q46 52 26 60 Q6 52 6 38 Z" fill="url(#nG1)"/>
+<rect x="16" y="16" width="4" height="18" rx="1" fill="rgba(255,255,255,0.25)"/>
+<rect x="24" y="12" width="4" height="22" rx="1" fill="rgba(255,255,255,0.35)"/>
+<rect x="32" y="18" width="4" height="16" rx="1" fill="rgba(255,255,255,0.25)"/>
+<path d="M17 34 L23 40 L37 26" stroke="url(#gG1)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<text x="60" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#0F172A" letter-spacing="-0.5">Vettd</text>
+<text x="170" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#D4A012" letter-spacing="-0.5">RE</text>
+</svg>
+</div>
+
+<h3>Primary Logo — Dark Background</h3>
+<div class="logo-display logo-dark">
+<svg viewBox="0 0 280 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:280px">
+<defs><linearGradient id="nG2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4A73BF"/><stop offset="100%" stop-color="#1E40AF"/></linearGradient><linearGradient id="gG2" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D4A012"/></linearGradient></defs>
+<path d="M6 8 L26 2 L46 8 L46 38 Q46 52 26 60 Q6 52 6 38 Z" fill="url(#nG2)"/>
+<rect x="16" y="16" width="4" height="18" rx="1" fill="rgba(255,255,255,0.3)"/>
+<rect x="24" y="12" width="4" height="22" rx="1" fill="rgba(255,255,255,0.4)"/>
+<rect x="32" y="18" width="4" height="16" rx="1" fill="rgba(255,255,255,0.3)"/>
+<path d="M17 34 L23 40 L37 26" stroke="url(#gG2)" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+<text x="60" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#F1F5F9" letter-spacing="-0.5">Vettd</text>
+<text x="170" y="42" font-family="'DM Serif Display',Georgia,serif" font-size="36" font-weight="700" fill="#FBBF24" letter-spacing="-0.5">RE</text>
+</svg>
+</div>
+
+<h3>Icon Mark Only</h3>
+<div class="grid-3">
+<div class="logo-display" style="padding:32px">
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:64px">
+<defs><linearGradient id="nG3" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1E40AF"/><stop offset="100%" stop-color="#122669"/></linearGradient><linearGradient id="gG3" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D4A012"/></linearGradient></defs>
+<path d="M8 12 L32 4 L56 12 L56 40 Q56 56 32 62 Q8 56 8 40 Z" fill="url(#nG3)"/>
+<rect x="20" y="20" width="5" height="20" rx="1.5" fill="rgba(255,255,255,0.25)"/>
+<rect x="29.5" y="15" width="5" height="25" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+<rect x="39" y="22" width="5" height="18" rx="1.5" fill="rgba(255,255,255,0.25)"/>
+<path d="M21 38 L28 45 L44 29" stroke="url(#gG3)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
+<p style="margin-top:12px;font-size:13px;color:var(--slate-400)">App icon / Favicon</p>
+</div>
+<div class="logo-display logo-dark" style="padding:32px">
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" style="width:64px">
+<defs><linearGradient id="nG4" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#4A73BF"/><stop offset="100%" stop-color="#1E40AF"/></linearGradient><linearGradient id="gG4" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#FBBF24"/><stop offset="100%" stop-color="#D4A012"/></linearGradient></defs>
+<path d="M8 12 L32 4 L56 12 L56 40 Q56 56 32 62 Q8 56 8 40 Z" fill="url(#nG4)"/>
+<rect x="20" y="20" width="5" height="20" rx="1.5" fill="rgba(255,255,255,0.3)"/>
+<rect x="29.5" y="15" width="5" height="25" rx="1.5" fill="rgba(255,255,255,0.4)"/>
+<rect x="39" y="22" width="5" height="18" rx="1.5" fill="rgba(255,255,255,0.3)"/>
+<path d="M21 38 L28 45 L44 29" stroke="url(#gG4)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
+<p style="margin-top:12px;font-size:13px;color:var(--slate-400)">Dark mode icon</p>
+</div>
+<div class="card" style="text-align:center;padding:32px">
+<p style="font-size:13px;color:var(--slate-500);margin-bottom:12px"><strong>Clear Space</strong></p>
+<p style="font-size:13px;color:var(--slate-400)">Minimum clear space = 1x height of shield mark on all sides. Never place the logo closer than this to other elements.</p>
+<p style="margin-top:12px;font-size:13px;color:var(--slate-400)"><strong>Minimum size:</strong> 32px (icon), 120px (full logo)</p>
+</div>
+</div>
+
+<h3>Logo Construction</h3>
+<div class="card">
+<table>
+<tr><th>Element</th><th>Meaning</th><th>Spec</th></tr>
+<tr><td>Shield form</td><td>Trust, verification, protection</td><td>Navy gradient #1E40AF &rarr; #122669</td></tr>
+<tr><td>Building silhouettes</td><td>NYC skyline, real estate focus</td><td>White 25-35% opacity, rounded 1px radius</td></tr>
+<tr><td>Gold checkmark</td><td>Verified, vetted intelligence</td><td>Gold gradient #FBBF24 &rarr; #D4A012, 3.5px stroke</td></tr>
+<tr><td>"Vettd" wordmark</td><td>Brand name &mdash; verified/vetted</td><td>DM Serif Display 700, Slate-900</td></tr>
+<tr><td>"RE" accent</td><td>Real Estate domain</td><td>DM Serif Display 700, Gold-500</td></tr>
+</table>
+</div>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: COLOR SYSTEM                        -->
+<!-- ============================================ -->
+<section id="colors">
+<h2>Color System</h2>
+<p class="desc">A three-pillar color system: Navy (authority, primary actions), Gold (accent, premium), and Slate (neutral UI). Each scale has 10 steps, designed for WCAG AA+ contrast in both light and dark modes.</p>
+
+<h3>Brand Navy</h3>
+<p style="font-size:14px;color:var(--slate-500);margin-bottom:16px">Primary brand color. Used for CTAs, active states, navigation anchors, and heading emphasis. Contrast ratio of Navy-500 on white: <strong>7.2:1</strong> (AAA).</p>
+<div class="grid-4" style="grid-template-columns:repeat(5,1fr)">
+<div><div class="swatch" style="background:#F0F4FA"></div><div class="swatch-label">50</div><div class="swatch-value">#F0F4FA</div></div>
+<div><div class="swatch" style="background:#D9E2F2"></div><div class="swatch-label">100</div><div class="swatch-value">#D9E2F2</div></div>
+<div><div class="swatch" style="background:#B3C5E6"></div><div class="swatch-label">200</div><div class="swatch-value">#B3C5E6</div></div>
+<div><div class="swatch" style="background:#7A9AD4"></div><div class="swatch-label">300</div><div class="swatch-value">#7A9AD4</div></div>
+<div><div class="swatch" style="background:#4A73BF"></div><div class="swatch-label">400</div><div class="swatch-value">#4A73BF</div></div>
+<div><div class="swatch" style="background:#1E40AF"></div><div class="swatch-label">500 &bull; Primary</div><div class="swatch-value">#1E40AF</div></div>
+<div><div class="swatch" style="background:#18338C"></div><div class="swatch-label">600</div><div class="swatch-value">#18338C</div></div>
+<div><div class="swatch" style="background:#122669"></div><div class="swatch-label">700</div><div class="swatch-value">#122669</div></div>
+<div><div class="swatch" style="background:#0C1A47"></div><div class="swatch-label">800</div><div class="swatch-value">#0C1A47</div></div>
+<div><div class="swatch" style="background:#060D24"></div><div class="swatch-label">900</div><div class="swatch-value">#060D24</div></div>
+</div>
+
+<h3>Brand Gold</h3>
+<p style="font-size:14px;color:var(--slate-500);margin-bottom:16px">Accent color conveying premium quality and verified data. Use sparingly for emphasis, badges, and the "RE" in the logotype. Gold-500 on Navy-900: <strong>8.4:1</strong> (AAA).</p>
+<div class="grid-4" style="grid-template-columns:repeat(5,1fr)">
+<div><div class="swatch" style="background:#FFFBEB"></div><div class="swatch-label">50</div><div class="swatch-value">#FFFBEB</div></div>
+<div><div class="swatch" style="background:#FEF3C7"></div><div class="swatch-label">100</div><div class="swatch-value">#FEF3C7</div></div>
+<div><div class="swatch" style="background:#FDE68A"></div><div class="swatch-label">200</div><div class="swatch-value">#FDE68A</div></div>
+<div><div class="swatch" style="background:#FCD34D"></div><div class="swatch-label">300</div><div class="swatch-value">#FCD34D</div></div>
+<div><div class="swatch" style="background:#FBBF24"></div><div class="swatch-label">400</div><div class="swatch-value">#FBBF24</div></div>
+<div><div class="swatch" style="background:#D4A012"></div><div class="swatch-label">500 &bull; Accent</div><div class="swatch-value">#D4A012</div></div>
+<div><div class="swatch" style="background:#B8860B"></div><div class="swatch-label">600</div><div class="swatch-value">#B8860B</div></div>
+<div><div class="swatch" style="background:#92670A"></div><div class="swatch-label">700</div><div class="swatch-value">#92670A</div></div>
+<div><div class="swatch" style="background:#6B4D08"></div><div class="swatch-label">800</div><div class="swatch-value">#6B4D08</div></div>
+<div><div class="swatch" style="background:#453206"></div><div class="swatch-label">900</div><div class="swatch-value">#453206</div></div>
+</div>
+
+<h3>Neutral Slate</h3>
+<p style="font-size:14px;color:var(--slate-500);margin-bottom:16px">The backbone of the UI — backgrounds, borders, body text, and secondary elements. Slate-600 on white: <strong>5.7:1</strong> (AA).</p>
+<div class="grid-4" style="grid-template-columns:repeat(5,1fr)">
+<div><div class="swatch" style="background:#F8FAFC"></div><div class="swatch-label">50 &bull; App BG</div><div class="swatch-value">#F8FAFC</div></div>
+<div><div class="swatch" style="background:#F1F5F9"></div><div class="swatch-label">100</div><div class="swatch-value">#F1F5F9</div></div>
+<div><div class="swatch" style="background:#E2E8F0"></div><div class="swatch-label">200 &bull; Border</div><div class="swatch-value">#E2E8F0</div></div>
+<div><div class="swatch" style="background:#CBD5E1"></div><div class="swatch-label">300</div><div class="swatch-value">#CBD5E1</div></div>
+<div><div class="swatch" style="background:#94A3B8"></div><div class="swatch-label">400 &bull; Placeholder</div><div class="swatch-value">#94A3B8</div></div>
+<div><div class="swatch" style="background:#64748B"></div><div class="swatch-label">500</div><div class="swatch-value">#64748B</div></div>
+<div><div class="swatch" style="background:#475569"></div><div class="swatch-label">600 &bull; Body</div><div class="swatch-value">#475569</div></div>
+<div><div class="swatch" style="background:#334155"></div><div class="swatch-label">700</div><div class="swatch-value">#334155</div></div>
+<div><div class="swatch" style="background:#1E293B"></div><div class="swatch-label">800 &bull; Heading</div><div class="swatch-value">#1E293B</div></div>
+<div><div class="swatch" style="background:#0F172A"></div><div class="swatch-label">900</div><div class="swatch-value">#0F172A</div></div>
+</div>
+
+<h3>Semantic Colors</h3>
+<div class="grid-4">
+<div class="card" style="text-align:center">
+<div class="swatch" style="background:#059669"></div>
+<div class="swatch-label"><strong>Success</strong> #059669</div>
+<div style="font-size:12px;color:var(--slate-400);margin-top:4px">Closed deals, positive metrics, confirmations</div>
+</div>
+<div class="card" style="text-align:center">
+<div class="swatch" style="background:#D97706"></div>
+<div class="swatch-label"><strong>Warning</strong> #D97706</div>
+<div style="font-size:12px;color:var(--slate-400);margin-top:4px">Expiring licenses, compliance alerts</div>
+</div>
+<div class="card" style="text-align:center">
+<div class="swatch" style="background:#DC2626"></div>
+<div class="swatch-label"><strong>Error</strong> #DC2626</div>
+<div style="font-size:12px;color:var(--slate-400);margin-top:4px">Validation errors, overdue tasks, violations</div>
+</div>
+<div class="card" style="text-align:center">
+<div class="swatch" style="background:#2563EB"></div>
+<div class="swatch-label"><strong>Info</strong> #2563EB</div>
+<div style="font-size:12px;color:var(--slate-400);margin-top:4px">Links, informational banners, tooltips</div>
+</div>
+</div>
+
+<h3>Dark Mode Palette</h3>
+<div class="grid-3">
+<div class="card" style="background:#0B1120;color:#F1F5F9;border-color:#1E293B">
+<h4 style="color:#F1F5F9;margin-top:0">Backgrounds</h4>
+<div style="display:flex;gap:8px;margin:12px 0">
+<div style="width:40px;height:40px;border-radius:8px;background:#0B1120;border:1px solid #1E293B" title="Primary"></div>
+<div style="width:40px;height:40px;border-radius:8px;background:#111827;border:1px solid #1E293B" title="Secondary"></div>
+<div style="width:40px;height:40px;border-radius:8px;background:#1F2937;border:1px solid #374151" title="Tertiary"></div>
+</div>
+<p style="font-size:12px;color:#94A3B8">Primary: #0B1120 &middot; Secondary: #111827 &middot; Tertiary: #1F2937</p>
+</div>
+<div class="card" style="background:#111827;color:#F1F5F9;border-color:#1E293B">
+<h4 style="color:#F1F5F9;margin-top:0">Surfaces</h4>
+<div style="display:flex;gap:8px;margin:12px 0">
+<div style="width:40px;height:40px;border-radius:8px;background:#1E293B;border:1px solid #374151" title="Card"></div>
+<div style="width:40px;height:40px;border-radius:8px;background:#0F172A;border:1px solid #1E293B" title="Input"></div>
+<div style="width:40px;height:40px;border-radius:8px;background:#374151;border:1px solid #475569" title="Hover"></div>
+</div>
+<p style="font-size:12px;color:#94A3B8">Card: #1E293B &middot; Input: #0F172A &middot; Hover: #374151</p>
+</div>
+<div class="card" style="background:#0B1120;color:#F1F5F9;border-color:#1E293B">
+<h4 style="color:#F1F5F9;margin-top:0">Text on Dark</h4>
+<p style="font-size:14px;color:#F1F5F9;margin:4px 0">Primary text <span style="font-size:11px;color:#64748B">#F1F5F9</span></p>
+<p style="font-size:14px;color:#94A3B8;margin:4px 0">Secondary text <span style="font-size:11px;color:#64748B">#94A3B8</span></p>
+<p style="font-size:14px;color:#64748B;margin:4px 0">Tertiary text <span style="font-size:11px;color:#475569">#64748B</span></p>
+</div>
+</div>
+
+<h3>Contrast Ratios (WCAG Compliance)</h3>
+<table>
+<tr><th>Pair</th><th>Ratio</th><th>Level</th><th>Usage</th></tr>
+<tr><td>Navy-500 on White</td><td>7.2:1</td><td><span class="tag tag-a11y">AAA</span></td><td>Primary buttons, links</td></tr>
+<tr><td>Slate-800 on White</td><td>12.6:1</td><td><span class="tag tag-a11y">AAA</span></td><td>Headings</td></tr>
+<tr><td>Slate-600 on White</td><td>5.7:1</td><td><span class="tag tag-a11y">AA</span></td><td>Body text</td></tr>
+<tr><td>Slate-400 on White</td><td>3.2:1</td><td><span class="tag tag-a11y">AA Large</span></td><td>Placeholder only (18px+)</td></tr>
+<tr><td>Gold-500 on Navy-900</td><td>8.4:1</td><td><span class="tag tag-a11y">AAA</span></td><td>Accent on dark surfaces</td></tr>
+<tr><td>White on Navy-500</td><td>7.2:1</td><td><span class="tag tag-a11y">AAA</span></td><td>Button labels</td></tr>
+<tr><td>Dark text #F1F5F9 on #0B1120</td><td>15.3:1</td><td><span class="tag tag-a11y">AAA</span></td><td>Dark mode primary text</td></tr>
+<tr><td>Error on White</td><td>4.6:1</td><td><span class="tag tag-a11y">AA</span></td><td>Error messages</td></tr>
+<tr><td>Success on White</td><td>4.6:1</td><td><span class="tag tag-a11y">AA</span></td><td>Success indicators</td></tr>
+</table>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: TYPOGRAPHY                          -->
+<!-- ============================================ -->
+<section id="typography">
+<h2>Typography</h2>
+<p class="desc">A structured 12-level type scale pairing DM Serif Display (editorial authority) with Inter (Swiss precision). Every level has responsive behavior across mobile, tablet, and desktop breakpoints.</p>
+
+<h3>Font Families</h3>
+<div class="grid-3">
+<div class="card">
+<p style="font-family:'DM Serif Display',serif;font-size:28px;color:var(--slate-900)">DM Serif Display</p>
+<p style="font-size:13px;color:var(--slate-400);margin-top:8px"><strong>Role:</strong> Display headings, hero text, logo</p>
+<p style="font-size:13px;color:var(--slate-400)"><strong>Weights:</strong> 400 (Regular)</p>
+<p style="font-size:13px;color:var(--slate-400)"><strong>Source:</strong> Google Fonts</p>
+</div>
+<div class="card">
+<p style="font-family:'Inter',sans-serif;font-size:20px;font-weight:600;color:var(--slate-900)">Inter</p>
+<p style="font-family:'Inter',sans-serif;font-size:15px;font-weight:400;color:var(--slate-600);margin-top:4px">The quick brown fox jumps over the lazy dog.</p>
+<p style="font-size:13px;color:var(--slate-400);margin-top:8px"><strong>Role:</strong> UI text, headings, body, labels</p>
+<p style="font-size:13px;color:var(--slate-400)"><strong>Weights:</strong> 300, 400, 500, 600, 700, 800</p>
+</div>
+<div class="card">
+<p style="font-family:'JetBrains Mono',monospace;font-size:16px;color:var(--slate-900)">JetBrains Mono</p>
+<p style="font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--slate-600);margin-top:4px">BBL: 1-00234-0056</p>
+<p style="font-size:13px;color:var(--slate-400);margin-top:8px"><strong>Role:</strong> Data values, BBL numbers, code, IDs</p>
+<p style="font-size:13px;color:var(--slate-400)"><strong>Weights:</strong> 400, 500, 600</p>
+</div>
+</div>
+
+<h3>Type Scale (12 Levels)</h3>
+<table>
+<tr><th>Token</th><th>Desktop</th><th>Tablet</th><th>Mobile</th><th>Line-Height</th><th>Weight</th><th>Letter-Spacing</th></tr>
+<tr><td style="font-weight:600">display-2xl</td><td>72px / 4.5rem</td><td>56px / 3.5rem</td><td>40px / 2.5rem</td><td>1.1</td><td>700</td><td>-0.025em</td></tr>
+<tr><td style="font-weight:600">display-xl</td><td>60px / 3.75rem</td><td>48px / 3rem</td><td>36px / 2.25rem</td><td>1.1</td><td>700</td><td>-0.025em</td></tr>
+<tr><td style="font-weight:600">display-lg</td><td>48px / 3rem</td><td>40px / 2.5rem</td><td>30px / 1.875rem</td><td>1.15</td><td>700</td><td>-0.02em</td></tr>
+<tr><td style="font-weight:600">heading-xl</td><td>36px / 2.25rem</td><td>30px / 1.875rem</td><td>24px / 1.5rem</td><td>1.2</td><td>700</td><td>-0.015em</td></tr>
+<tr><td style="font-weight:600">heading-lg</td><td>30px / 1.875rem</td><td>24px / 1.5rem</td><td>20px / 1.25rem</td><td>1.25</td><td>600</td><td>-0.01em</td></tr>
+<tr><td style="font-weight:600">heading-md</td><td>24px / 1.5rem</td><td>20px / 1.25rem</td><td>18px / 1.125rem</td><td>1.3</td><td>600</td><td>-0.005em</td></tr>
+<tr><td style="font-weight:600">heading-sm</td><td>20px / 1.25rem</td><td>18px / 1.125rem</td><td>16px / 1rem</td><td>1.35</td><td>600</td><td>0</td></tr>
+<tr><td style="font-weight:600">body-lg</td><td>18px / 1.125rem</td><td colspan="2">16px / 1rem</td><td>1.6</td><td>400</td><td>0</td></tr>
+<tr><td style="font-weight:600">body-md</td><td colspan="3">16px / 1rem</td><td>1.5</td><td>400</td><td>0</td></tr>
+<tr><td style="font-weight:600">body-sm</td><td colspan="3">14px / 0.875rem</td><td>1.5</td><td>400</td><td>0</td></tr>
+<tr><td style="font-weight:600">caption</td><td colspan="3">12px / 0.75rem</td><td>1.4</td><td>500</td><td>0.01em</td></tr>
+<tr><td style="font-weight:600">overline</td><td colspan="3">11px / 0.6875rem</td><td>1.4</td><td>600</td><td>0.08em &middot; UPPERCASE</td></tr>
+</table>
+
+<h3>Type Scale Preview</h3>
+<div class="card" style="padding:32px">
+<p style="font-family:'DM Serif Display',serif;font-size:3rem;line-height:1.15;letter-spacing:-0.02em;color:var(--slate-900)">Display Large</p>
+<p style="font-size:1.5rem;font-weight:600;line-height:1.3;color:var(--slate-800);margin-top:16px">Heading Medium</p>
+<p style="font-size:1.25rem;font-weight:600;line-height:1.35;color:var(--slate-800);margin-top:12px">Heading Small</p>
+<p style="font-size:1rem;line-height:1.5;color:var(--slate-600);margin-top:12px">Body medium (default) &mdash; This is the standard body text used throughout the application for descriptions, form labels, and general content. It should be comfortable to read at any screen size.</p>
+<p style="font-size:0.875rem;line-height:1.5;color:var(--slate-500);margin-top:8px">Body small &mdash; Used for secondary descriptions, table cells, and compact UI areas.</p>
+<p style="font-size:0.75rem;line-height:1.4;font-weight:500;color:var(--slate-400);margin-top:8px">Caption &mdash; Timestamps, metadata, helper text</p>
+<p style="font-size:0.6875rem;line-height:1.4;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate-400);margin-top:8px">Overline &mdash; Section labels, categories</p>
+<p style="font-family:'JetBrains Mono',monospace;font-size:0.875rem;color:var(--navy-600);margin-top:12px">BBL: 1-00234-0056 &middot; $4,250,000 &middot; 12.4% IRR</p>
+</div>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: SPACING & GRID                      -->
+<!-- ============================================ -->
+<section id="spacing">
+<h2>Spacing & Grid</h2>
+<p class="desc">An 8px base unit framework with a 12-column responsive grid. All spacing values are multiples of 4px, with 8px as the primary rhythm.</p>
+
+<h3>8px Spacing Scale</h3>
+<div class="card" style="overflow-x:auto">
+<table>
+<tr><th>Token</th><th>Value</th><th>Visual</th><th>Common Usage</th></tr>
+<tr><td><code class="code-inline">space-0.5</code></td><td>2px</td><td><div style="width:2px;height:16px;background:var(--navy-500);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Hairline gaps</td></tr>
+<tr><td><code class="code-inline">space-1</code></td><td>4px</td><td><div style="width:4px;height:16px;background:var(--navy-500);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Icon-to-label gap, tight padding</td></tr>
+<tr><td><code class="code-inline">space-2</code></td><td>8px</td><td><div style="width:8px;height:16px;background:var(--navy-500);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Base unit. Badge padding, input icon gap</td></tr>
+<tr><td><code class="code-inline">space-3</code></td><td>12px</td><td><div style="width:12px;height:16px;background:var(--navy-400);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Button padding (vertical)</td></tr>
+<tr><td><code class="code-inline">space-4</code></td><td>16px</td><td><div style="width:16px;height:16px;background:var(--navy-400);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Default padding, card padding (compact)</td></tr>
+<tr><td><code class="code-inline">space-6</code></td><td>24px</td><td><div style="width:24px;height:16px;background:var(--navy-300);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Card padding (standard), form group gap</td></tr>
+<tr><td><code class="code-inline">space-8</code></td><td>32px</td><td><div style="width:32px;height:16px;background:var(--navy-300);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Section gap, modal padding</td></tr>
+<tr><td><code class="code-inline">space-12</code></td><td>48px</td><td><div style="width:48px;height:16px;background:var(--navy-200);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Large section gap</td></tr>
+<tr><td><code class="code-inline">space-16</code></td><td>64px</td><td><div style="width:64px;height:16px;background:var(--navy-200);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Page section vertical rhythm</td></tr>
+<tr><td><code class="code-inline">space-24</code></td><td>96px</td><td><div style="width:96px;height:16px;background:var(--navy-100);border-radius:2px;display:inline-block;vertical-align:middle"></div></td><td>Hero section spacing</td></tr>
+</table>
+</div>
+
+<h3>12-Column Grid</h3>
+<div class="card">
+<table>
+<tr><th>Breakpoint</th><th>Min Width</th><th>Columns</th><th>Gutter</th><th>Margin</th><th>Typical Layout</th></tr>
+<tr><td><code class="code-inline">sm</code></td><td>640px</td><td>4</td><td>16px</td><td>16px</td><td>Stack, single column</td></tr>
+<tr><td><code class="code-inline">md</code></td><td>768px</td><td>8</td><td>24px</td><td>32px</td><td>Sidebar appears, 2-column forms</td></tr>
+<tr><td><code class="code-inline">lg</code></td><td>1024px</td><td>12</td><td>24px</td><td>32px</td><td>Full sidebar + content</td></tr>
+<tr><td><code class="code-inline">xl</code></td><td>1280px</td><td>12</td><td>32px</td><td>auto</td><td>3-pane layouts (messages)</td></tr>
+<tr><td><code class="code-inline">2xl</code></td><td>1536px</td><td>12</td><td>32px</td><td>auto</td><td>Wide data tables, dashboards</td></tr>
+</table>
+<p style="font-size:13px;color:var(--slate-400);margin-top:12px"><strong>Max content width:</strong> 1440px, centered with auto margins.</p>
+</div>
+
+<h3>Common Layout Patterns</h3>
+<div class="grid-2">
+<div class="card">
+<h4 style="margin-top:0">Sidebar + Content</h4>
+<div style="display:flex;gap:2px;height:80px">
+<div style="width:60px;background:var(--navy-100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--navy-600)">3 col</div>
+<div style="flex:1;background:var(--slate-100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--slate-500)">9 col</div>
+</div>
+<p style="font-size:12px;color:var(--slate-400);margin-top:8px">Dashboard, Settings, Brokerage pages</p>
+</div>
+<div class="card">
+<h4 style="margin-top:0">Three-Pane (Messages)</h4>
+<div style="display:flex;gap:2px;height:80px">
+<div style="width:50px;background:var(--navy-100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--navy-600)">3</div>
+<div style="flex:1;background:var(--slate-100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--slate-500)">5</div>
+<div style="width:70px;background:var(--gold-50);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--gold-700)">4</div>
+</div>
+<p style="font-size:12px;color:var(--slate-400);margin-top:8px">List + Detail + CRM sidebar</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: ELEVATION & SHADOW                  -->
+<!-- ============================================ -->
+<section id="elevation">
+<h2>Elevation & Shadow</h2>
+<p class="desc">A 6-level elevation system plus branded shadows. Higher elevation = more prominent interactive surface.</p>
+<div class="grid-3">
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,0.05);text-align:center"><strong>xs</strong><p style="font-size:12px;color:var(--slate-400)">Flat cards</p></div>
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1),0 1px 2px rgba(0,0,0,0.06);text-align:center"><strong>sm</strong><p style="font-size:12px;color:var(--slate-400)">Default cards</p></div>
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1),0 2px 4px -2px rgba(0,0,0,0.1);text-align:center"><strong>md</strong><p style="font-size:12px;color:var(--slate-400)">Hovered cards</p></div>
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 10px 15px -3px rgba(0,0,0,0.1),0 4px 6px -4px rgba(0,0,0,0.1);text-align:center"><strong>lg</strong><p style="font-size:12px;color:var(--slate-400)">Dropdowns</p></div>
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 20px 25px -5px rgba(0,0,0,0.1),0 8px 10px -6px rgba(0,0,0,0.1);text-align:center"><strong>xl</strong><p style="font-size:12px;color:var(--slate-400)">Modals, popovers</p></div>
+<div style="background:#fff;padding:24px;border-radius:12px;box-shadow:0 4px 14px rgba(30,64,175,0.25);text-align:center"><strong style="color:var(--navy-500)">Navy</strong><p style="font-size:12px;color:var(--slate-400)">Branded elevation</p></div>
+</div>
+</section>
+
+<!-- ============================================ -->
+<!-- SECTION: MOTION                              -->
+<!-- ============================================ -->
+<section id="motion">
+<h2>Motion</h2>
+<p class="desc">Purposeful, restrained animation that supports spatial understanding and responsiveness without introducing delay.</p>
+<table>
+<tr><th>Token</th><th>Duration</th><th>Easing</th><th>Usage</th></tr>
+<tr><td><code class="code-inline">instant</code></td><td>50ms</td><td>linear</td><td>Color changes, opacity micro-shifts</td></tr>
+<tr><td><code class="code-inline">fast</code></td><td>150ms</td><td>ease-default</td><td>Button hover, toggle, checkbox</td></tr>
+<tr><td><code class="code-inline">normal</code></td><td>250ms</td><td>ease-default</td><td>Default transitions, focus rings</td></tr>
+<tr><td><code class="code-inline">moderate</code></td><td>350ms</td><td>ease-spring</td><td>Modal enter, drawer slide, sheet</td></tr>
+<tr><td><code class="code-inline">slow</code></td><td>500ms</td><td>ease-out</td><td>Page transitions, skeleton fade-in</td></tr>
+<tr><td><code class="code-inline">glacial</code></td><td>700ms</td><td>ease-spring</td><td>Staggered reveal animations, chart draws</td></tr>
+</table>
+<div class="code-block">/* CSS Custom Properties */
+--duration-fast: 150ms;
+--duration-normal: 250ms;
+--duration-moderate: 350ms;
+--ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+--ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+
+/* Example usage */
+.button { transition: all var(--duration-fast) var(--ease-default); }
+.modal  { animation: modal-in var(--duration-moderate) var(--ease-spring); }
+
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.95) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}</div>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: BUTTONS                            -->
+<!-- ============================================== -->
+<section id="buttons">
+<h2>1. Buttons</h2>
+<p class="desc">The primary interactive element. Six variants across four sizes, each with five states.</p>
+
+<h3>Variants</h3>
+<div class="component-preview">
+<button style="background:var(--navy-500);color:#fff;padding:10px 20px;border:none;border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer">Primary</button>
+<button style="background:#fff;color:var(--navy-500);padding:10px 20px;border:1.5px solid var(--navy-500);border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer">Secondary</button>
+<button style="background:transparent;color:var(--navy-500);padding:10px 20px;border:none;border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer">Ghost</button>
+<button style="background:var(--error);color:#fff;padding:10px 20px;border:none;border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer">Destructive</button>
+<button style="background:var(--gold-400);color:var(--slate-900);padding:10px 20px;border:none;border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:600;cursor:pointer">Gold Accent</button>
+<button style="background:transparent;color:var(--navy-500);padding:10px 20px;border:none;border-radius:var(--radius-md);font-family:var(--font-body);font-size:14px;font-weight:500;cursor:pointer;text-decoration:underline">Link</button>
+</div>
+
+<h3>Sizes</h3>
+<div class="component-preview">
+<button style="background:var(--navy-500);color:#fff;padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:600;font-family:var(--font-body)">XS (28px)</button>
+<button style="background:var(--navy-500);color:#fff;padding:8px 16px;border:none;border-radius:var(--radius-md);font-size:13px;font-weight:600;font-family:var(--font-body)">SM (36px)</button>
+<button style="background:var(--navy-500);color:#fff;padding:10px 20px;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;font-family:var(--font-body)">MD (40px)</button>
+<button style="background:var(--navy-500);color:#fff;padding:14px 28px;border:none;border-radius:var(--radius-md);font-size:16px;font-weight:600;font-family:var(--font-body)">LG (48px)</button>
+</div>
+
+<h3>States</h3>
+<table>
+<tr><th>State</th><th>Primary</th><th>Secondary</th><th>Behavior</th></tr>
+<tr><td>Default</td><td>bg: navy-500, text: white</td><td>bg: white, border: navy-500</td><td>Cursor: pointer</td></tr>
+<tr><td>Hover</td><td>bg: navy-600, shadow: navy</td><td>bg: navy-50</td><td>150ms ease transition</td></tr>
+<tr><td>Active</td><td>bg: navy-700, scale: 0.98</td><td>bg: navy-100</td><td>Haptic-like press</td></tr>
+<tr><td>Focus</td><td colspan="2">2px navy-300 ring, 2px offset</td><td>Keyboard navigation</td></tr>
+<tr><td>Disabled</td><td>bg: slate-200, text: slate-400</td><td>border: slate-300, text: slate-400</td><td>Cursor: not-allowed, opacity: 0.6</td></tr>
+<tr><td>Loading</td><td colspan="2">Spinner replaces label, same dimensions</td><td>Pointer-events: none</td></tr>
+</table>
+
+<h3>Anatomy</h3>
+<ul class="anatomy-list">
+<li><strong>Container:</strong> Height 28/36/40/48px, padding 12-28px horizontal, radius-md (8px)</li>
+<li><strong>Label:</strong> Inter 600, 12/13/14/16px, centered</li>
+<li><strong>Leading icon (optional):</strong> 16/20px, 8px gap to label</li>
+<li><strong>Trailing icon (optional):</strong> 16/20px, 8px gap from label</li>
+<li><strong>Focus ring:</strong> 2px solid navy-300, 2px offset from container</li>
+</ul>
+
+<h3>Accessibility</h3>
+<p><span class="tag tag-a11y">WCAG AA</span> <span class="tag tag-required">Required</span></p>
+<ul class="anatomy-list">
+<li>All buttons use <code class="code-inline">&lt;button&gt;</code> element (never <code class="code-inline">&lt;div&gt;</code>)</li>
+<li>Minimum touch target: 44x44px (WCAG 2.5.5)</li>
+<li>Focus visible ring on keyboard tab</li>
+<li>Icon-only buttons require <code class="code-inline">aria-label</code></li>
+<li>Loading state: <code class="code-inline">aria-busy="true"</code>, <code class="code-inline">aria-disabled="true"</code></li>
+<li>Disabled buttons remain in tab order with <code class="code-inline">aria-disabled</code></li>
+</ul>
+
+<h3>Code Spec</h3>
+<div class="code-block">// Tailwind classes
+// Primary:  bg-blue-800 hover:bg-blue-900 text-white font-semibold rounded-lg px-5 py-2.5
+// Secondary: border-2 border-blue-800 text-blue-800 hover:bg-blue-50 font-semibold rounded-lg
+// Ghost:    text-blue-800 hover:bg-slate-100 font-semibold rounded-lg
+// Focus:    focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2</div>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: TEXT INPUTS                         -->
+<!-- ============================================== -->
+<section id="inputs">
+<h2>2. Text Inputs</h2>
+<p class="desc">Form inputs for all text entry — addresses, names, numbers, and multi-line content.</p>
+
+<h3>Variants</h3>
+<div class="component-preview" style="flex-direction:column;align-items:stretch;max-width:400px">
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:14px;font-weight:500;color:var(--slate-700);margin-bottom:6px">Address</label>
+<input type="text" placeholder="123 Broadway, New York" style="width:100%;padding:10px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-md);font-size:14px;font-family:var(--font-body);outline:none;color:var(--slate-800)" />
+<p style="font-size:12px;color:var(--slate-400);margin-top:4px">Enter the full street address</p>
+</div>
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:14px;font-weight:500;color:var(--slate-700);margin-bottom:6px">BBL Number</label>
+<input type="text" value="1-00234-0056" style="width:100%;padding:10px 12px;border:2px solid var(--navy-500);border-radius:var(--radius-md);font-size:14px;font-family:var(--font-mono);outline:none;color:var(--slate-800);box-shadow:0 0 0 3px rgba(30,64,175,0.1)" />
+</div>
+<div>
+<label style="display:block;font-size:14px;font-weight:500;color:var(--error);margin-bottom:6px">Email *</label>
+<input type="text" value="invalid-email" style="width:100%;padding:10px 12px;border:2px solid var(--error);border-radius:var(--radius-md);font-size:14px;font-family:var(--font-body);outline:none;color:var(--slate-800);background:var(--error-light)" />
+<p style="font-size:12px;color:var(--error);margin-top:4px">Please enter a valid email address</p>
+</div>
+</div>
+
+<h3>States</h3>
+<table>
+<tr><th>State</th><th>Border</th><th>Background</th><th>Shadow/Ring</th></tr>
+<tr><td>Default</td><td>1px slate-200</td><td>White</td><td>None</td></tr>
+<tr><td>Hover</td><td>1px slate-300</td><td>White</td><td>None</td></tr>
+<tr><td>Focused</td><td>2px navy-500</td><td>White</td><td>0 0 0 3px navy-500/10%</td></tr>
+<tr><td>Filled</td><td>1px slate-300</td><td>White</td><td>None</td></tr>
+<tr><td>Error</td><td>2px error</td><td>error-light</td><td>0 0 0 3px error/10%</td></tr>
+<tr><td>Disabled</td><td>1px slate-200</td><td>slate-50</td><td>None, opacity 0.6</td></tr>
+</table>
+
+<h3>Anatomy</h3>
+<ul class="anatomy-list">
+<li><strong>Label:</strong> Inter 500, 14px, slate-700, 6px margin-bottom</li>
+<li><strong>Container:</strong> 40px height (sm: 36px), 12px horizontal padding, radius-md</li>
+<li><strong>Placeholder:</strong> Inter 400, 14px, slate-400</li>
+<li><strong>Helper text:</strong> Inter 400, 12px, slate-400, 4px margin-top</li>
+<li><strong>Error text:</strong> Inter 400, 12px, error, 4px margin-top</li>
+<li><strong>Leading icon:</strong> 20px, slate-400, 8px gap</li>
+<li><strong>Character count:</strong> Mono 400, 11px, right-aligned</li>
+</ul>
+
+<h3>Accessibility</h3>
+<p><span class="tag tag-a11y">WCAG AA</span></p>
+<ul class="anatomy-list">
+<li>Always use <code class="code-inline">&lt;label&gt;</code> with <code class="code-inline">htmlFor</code> matching input ID</li>
+<li>Error states: <code class="code-inline">aria-invalid="true"</code>, <code class="code-inline">aria-describedby</code> pointing to error message</li>
+<li>Required fields: <code class="code-inline">aria-required="true"</code> + visual asterisk</li>
+<li>Helper text linked via <code class="code-inline">aria-describedby</code></li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: SELECT & DROPDOWN                  -->
+<!-- ============================================== -->
+<section id="select">
+<h2>3. Select & Dropdown</h2>
+<p class="desc">Single and multi-select dropdowns for filtering, form selection, and pipeline stage picking.</p>
+
+<h3>Variants</h3>
+<div class="component-preview" style="flex-direction:column;align-items:stretch;max-width:400px">
+<div style="margin-bottom:16px">
+<label style="display:block;font-size:14px;font-weight:500;color:var(--slate-700);margin-bottom:6px">Borough</label>
+<div style="position:relative">
+<select style="width:100%;padding:10px 36px 10px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-md);font-size:14px;font-family:var(--font-body);appearance:none;background:white;color:var(--slate-800);cursor:pointer">
+<option>Manhattan</option><option>Brooklyn</option><option>Queens</option><option>Bronx</option><option>Staten Island</option>
+</select>
+<span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--slate-400)">&#9662;</span>
+</div>
+</div>
+</div>
+
+<h3>Dropdown Menu Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Container:</strong> White bg, radius-lg, shadow-lg, border 1px slate-200, max-height 320px with scroll</li>
+<li><strong>Option item:</strong> 36px height, 12px padding, body-sm, hover: slate-50 bg</li>
+<li><strong>Selected item:</strong> Navy-50 bg, navy-500 text, checkmark icon trailing</li>
+<li><strong>Group header:</strong> Overline style, 8px top padding, non-selectable</li>
+<li><strong>Search input:</strong> Sticky top, 40px, with search icon</li>
+<li><strong>Animation:</strong> Scale 0.95&rarr;1 + opacity, 150ms ease-spring</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: CHECKBOX & RADIO                   -->
+<!-- ============================================== -->
+<section id="checkbox">
+<h2>4. Checkbox & Radio</h2>
+<p class="desc">Boolean and single-choice selection controls used throughout forms and filter panels.</p>
+
+<h3>Preview</h3>
+<div class="component-preview">
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--slate-700)">
+<span style="width:20px;height:20px;border:2px solid var(--navy-500);border-radius:4px;background:var(--navy-500);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700">&#10003;</span>
+Active lead
+</label>
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--slate-700)">
+<span style="width:20px;height:20px;border:2px solid var(--slate-300);border-radius:4px;display:inline-block"></span>
+Under contract
+</label>
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--slate-700)">
+<span style="width:20px;height:20px;border:2px solid var(--navy-500);border-radius:50%;display:flex;align-items:center;justify-content:center"><span style="width:10px;height:10px;border-radius:50%;background:var(--navy-500)"></span></span>
+Buy-side
+</label>
+<label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--slate-700)">
+<span style="width:20px;height:20px;border:2px solid var(--slate-300);border-radius:50%;display:inline-block"></span>
+Sell-side
+</label>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Size:</strong> 20x20px (touch target 44x44px via padding)</li>
+<li><strong>Checkbox radius:</strong> 4px; Radio radius: 50%</li>
+<li><strong>Unchecked:</strong> 2px border slate-300, white fill</li>
+<li><strong>Checked:</strong> Navy-500 fill, white checkmark/dot</li>
+<li><strong>Indeterminate:</strong> Navy-500 fill, white dash</li>
+<li><strong>Focus ring:</strong> 2px navy-300, 2px offset</li>
+<li><strong>Label gap:</strong> 8px from control</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: TOGGLE                             -->
+<!-- ============================================== -->
+<section id="toggle">
+<h2>5. Toggle Switch</h2>
+<p class="desc">Binary on/off switches for settings, feature flags, and automation enables.</p>
+
+<h3>Preview</h3>
+<div class="component-preview">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="width:44px;height:24px;border-radius:12px;background:var(--navy-500);position:relative;cursor:pointer"><div style="width:20px;height:20px;border-radius:50%;background:white;position:absolute;right:2px;top:2px;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div></div>
+<span style="font-size:14px;color:var(--slate-700)">Email notifications</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px;margin-left:32px">
+<div style="width:44px;height:24px;border-radius:12px;background:var(--slate-200);position:relative;cursor:pointer"><div style="width:20px;height:20px;border-radius:50%;background:white;position:absolute;left:2px;top:2px;box-shadow:0 1px 3px rgba(0,0,0,0.2)"></div></div>
+<span style="font-size:14px;color:var(--slate-400)">SMS alerts</span>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Track:</strong> 44x24px, radius-full</li>
+<li><strong>Thumb:</strong> 20x20px circle, white, shadow-sm</li>
+<li><strong>Off:</strong> Track slate-200, thumb left</li>
+<li><strong>On:</strong> Track navy-500, thumb right</li>
+<li><strong>Transition:</strong> 150ms ease-spring</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="switch"</code>, <code class="code-inline">aria-checked</code></li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: BADGES & TAGS                      -->
+<!-- ============================================== -->
+<section id="badges">
+<h2>6. Badges & Tags</h2>
+<p class="desc">Status indicators, category labels, and count badges. Central to pipeline stages, contact statuses, and compliance states.</p>
+
+<h3>Status Badges</h3>
+<div class="component-preview">
+<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-full);background:var(--success-light);color:#065F46;font-size:13px;font-weight:500"><span style="width:6px;height:6px;border-radius:50%;background:var(--success)"></span>Active</span>
+<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-full);background:var(--warning-light);color:#92400E;font-size:13px;font-weight:500"><span style="width:6px;height:6px;border-radius:50%;background:var(--warning)"></span>Pending</span>
+<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-full);background:var(--error-light);color:#991B1B;font-size:13px;font-weight:500"><span style="width:6px;height:6px;border-radius:50%;background:var(--error)"></span>Overdue</span>
+<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-full);background:var(--info-light);color:#1E40AF;font-size:13px;font-weight:500"><span style="width:6px;height:6px;border-radius:50%;background:var(--info)"></span>In Progress</span>
+<span style="display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-full);background:var(--slate-100);color:var(--slate-600);font-size:13px;font-weight:500">Inactive</span>
+</div>
+
+<h3>Pipeline Stage Badges</h3>
+<div class="component-preview">
+<span style="padding:4px 10px;border-radius:var(--radius-full);background:var(--navy-50);color:var(--navy-600);font-size:12px;font-weight:600;border:1px solid var(--navy-200)">New Lead</span>
+<span style="padding:4px 10px;border-radius:var(--radius-full);background:#EFF6FF;color:#1D4ED8;font-size:12px;font-weight:600;border:1px solid #BFDBFE">Contacted</span>
+<span style="padding:4px 10px;border-radius:var(--radius-full);background:var(--gold-50);color:var(--gold-700);font-size:12px;font-weight:600;border:1px solid var(--gold-200)">Showing</span>
+<span style="padding:4px 10px;border-radius:var(--radius-full);background:#FFF7ED;color:#C2410C;font-size:12px;font-weight:600;border:1px solid #FED7AA">Offer</span>
+<span style="padding:4px 10px;border-radius:var(--radius-full);background:var(--success-light);color:#047857;font-size:12px;font-weight:600;border:1px solid #A7F3D0">Closed</span>
+</div>
+
+<h3>Count Badges</h3>
+<div class="component-preview">
+<span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:var(--radius-full);background:var(--error);color:white;font-size:11px;font-weight:700">3</span>
+<span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:var(--radius-full);background:var(--navy-500);color:white;font-size:11px;font-weight:700">12</span>
+<span style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:var(--radius-full);background:var(--gold-400);color:var(--slate-900);font-size:11px;font-weight:700">99+</span>
+</div>
+
+<h3>Anatomy & Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Status badge:</strong> Height 26px, pill shape, 12px horiz padding, leading dot 6px</li>
+<li><strong>Count badge:</strong> Min 20px circle, 6px horiz padding, centered text</li>
+<li><strong>Font:</strong> Inter 500 (status), 700 (count), 11-13px</li>
+<li><strong>Never use color alone;</strong> always pair with dot, icon, or text label</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: AVATARS                            -->
+<!-- ============================================== -->
+<section id="avatars">
+<h2>7. Avatars</h2>
+<p class="desc">User, contact, and agent identity indicators. Supports photo, initials, and icon fallback.</p>
+
+<h3>Preview</h3>
+<div class="component-preview">
+<div style="width:24px;height:24px;border-radius:50%;background:var(--navy-200);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--navy-700)">XS</div>
+<div style="width:32px;height:32px;border-radius:50%;background:var(--navy-100);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--navy-600)">SM</div>
+<div style="width:40px;height:40px;border-radius:50%;background:var(--gold-100);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600;color:var(--gold-700)">NT</div>
+<div style="width:48px;height:48px;border-radius:50%;background:var(--navy-500);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;color:white">JD</div>
+<div style="width:64px;height:64px;border-radius:50%;background:var(--slate-200);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600;color:var(--slate-500)">XL</div>
+<!-- Group -->
+<div style="display:flex;margin-left:16px">
+<div style="width:32px;height:32px;border-radius:50%;background:var(--navy-500);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:white;border:2px solid white">A</div>
+<div style="width:32px;height:32px;border-radius:50%;background:var(--gold-400);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:var(--slate-900);border:2px solid white;margin-left:-8px">B</div>
+<div style="width:32px;height:32px;border-radius:50%;background:var(--slate-200);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--slate-500);border:2px solid white;margin-left:-8px">+3</div>
+</div>
+</div>
+
+<h3>Sizes</h3>
+<table>
+<tr><th>Size</th><th>Pixels</th><th>Font</th><th>Usage</th></tr>
+<tr><td>XS</td><td>24px</td><td>10px</td><td>Inline mentions, dense lists</td></tr>
+<tr><td>SM</td><td>32px</td><td>12px</td><td>Table rows, sidebar items</td></tr>
+<tr><td>MD</td><td>40px</td><td>14px</td><td>Default, cards, headers</td></tr>
+<tr><td>LG</td><td>48px</td><td>16px</td><td>Profile cards, dossier</td></tr>
+<tr><td>XL</td><td>64px</td><td>20px</td><td>Profile page hero</td></tr>
+</table>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: CARDS                              -->
+<!-- ============================================== -->
+<section id="cards">
+<h2>8. Cards</h2>
+<p class="desc">The foundational container for content grouping. Used for building profiles, contact cards, stat displays, and settings panels.</p>
+
+<h3>Variants</h3>
+<div class="grid-3">
+<div style="background:#fff;border:1px solid var(--slate-200);border-radius:var(--radius-lg);padding:24px">
+<p style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate-400);margin-bottom:8px">Default Card</p>
+<p style="font-size:14px;color:var(--slate-600)">White bg, 1px border, 12px radius, 24px padding. Standard container.</p>
+</div>
+<div style="background:#fff;border:1px solid var(--slate-200);border-radius:var(--radius-lg);padding:24px;box-shadow:var(--shadow-sm);cursor:pointer;transition:all 200ms" onmouseover="this.style.boxShadow='0 4px 6px -1px rgba(0,0,0,0.1)';this.style.borderColor='#B3C5E6'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.1)';this.style.borderColor='#E2E8F0'">
+<p style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--slate-400);margin-bottom:8px">Interactive Card</p>
+<p style="font-size:14px;color:var(--slate-600)">Hover elevates shadow and highlights border. For clickable items.</p>
+</div>
+<div style="background:linear-gradient(135deg,var(--navy-500),var(--navy-700));border-radius:var(--radius-lg);padding:24px;color:white">
+<p style="font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.6);margin-bottom:8px">Accent Card</p>
+<p style="font-size:14px;color:rgba(255,255,255,0.9)">Navy gradient bg for featured content, CTAs, or premium upsells.</p>
+</div>
+</div>
+
+<h3>Card Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Default:</strong> bg white, border 1px slate-200, radius-lg (12px), padding 24px, shadow none</li>
+<li><strong>Interactive:</strong> Same + shadow-sm + hover: shadow-md, border navy-200, cursor pointer</li>
+<li><strong>Accent:</strong> bg navy gradient, text white, no border</li>
+<li><strong>Inset:</strong> bg slate-50, border none, for nested grouping</li>
+<li><strong>Border-top accent:</strong> 3px top border in navy-500 or gold-400</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: DATA TABLES                        -->
+<!-- ============================================== -->
+<section id="tables">
+<h2>9. Data Tables</h2>
+<p class="desc">Dense data display for transactions, contacts, agents, and compliance tracking. Optimized for scanning large datasets.</p>
+
+<h3>Preview</h3>
+<div class="card" style="padding:0;overflow:hidden">
+<table style="margin:0">
+<thead>
+<tr><th style="padding:12px 16px">Address</th><th>Type</th><th>Units</th><th>Price</th><th>Status</th></tr>
+</thead>
+<tbody>
+<tr><td style="padding:12px 16px;font-weight:500;color:var(--slate-800)">123 Broadway</td><td>Multifamily</td><td style="font-family:var(--font-mono)">24</td><td style="font-family:var(--font-mono)">$4,250,000</td><td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-full);background:var(--success-light);color:#065F46;font-size:12px;font-weight:500"><span style="width:5px;height:5px;border-radius:50%;background:var(--success)"></span>Active</span></td></tr>
+<tr style="background:var(--slate-50)"><td style="padding:12px 16px;font-weight:500;color:var(--slate-800)">456 Park Ave</td><td>Mixed Use</td><td style="font-family:var(--font-mono)">8</td><td style="font-family:var(--font-mono)">$12,800,000</td><td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-full);background:var(--warning-light);color:#92400E;font-size:12px;font-weight:500"><span style="width:5px;height:5px;border-radius:50%;background:var(--warning)"></span>Pending</span></td></tr>
+<tr><td style="padding:12px 16px;font-weight:500;color:var(--slate-800)">789 5th Ave</td><td>Office</td><td style="font-family:var(--font-mono)">1</td><td style="font-family:var(--font-mono)">$28,500,000</td><td><span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-full);background:var(--info-light);color:#1E40AF;font-size:12px;font-weight:500"><span style="width:5px;height:5px;border-radius:50%;background:var(--info)"></span>Review</span></td></tr>
+</tbody>
+</table>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Header:</strong> bg slate-100, body-sm 600, slate-700, 12px vertical padding, sticky top</li>
+<li><strong>Row:</strong> 48px min-height, alternating bg (white / slate-50), hover: slate-50</li>
+<li><strong>Cell padding:</strong> 12px vertical, 16px horizontal</li>
+<li><strong>Numeric data:</strong> JetBrains Mono, right-aligned</li>
+<li><strong>Sort indicator:</strong> Chevron icon after sortable column header</li>
+<li><strong>Selected row:</strong> bg navy-50, left inset box-shadow 3px navy-500</li>
+<li><strong>Pagination:</strong> Below table, right-aligned, showing "1-25 of 142"</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: MODALS & DIALOGS                   -->
+<!-- ============================================== -->
+<section id="modals">
+<h2>10. Modals & Dialogs</h2>
+<p class="desc">Overlay containers for confirmations, forms, building profiles, and complex workflows. Two sizes: standard (480px) and wide (720px).</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Backdrop:</strong> bg-black/30%, click-to-dismiss (except confirmation dialogs)</li>
+<li><strong>Container:</strong> White, radius-xl (16px), shadow-2xl, max-height 85vh with scroll</li>
+<li><strong>Header:</strong> 24px padding, heading-sm, close button top-right (24px icon)</li>
+<li><strong>Body:</strong> 24px horizontal padding, 16px vertical</li>
+<li><strong>Footer:</strong> 24px padding, border-top slate-100, right-aligned buttons with 12px gap</li>
+<li><strong>Entry animation:</strong> <code class="code-inline">modal-in</code> 350ms ease-spring (scale 0.95 + translateY 8px + opacity)</li>
+<li><strong>Exit:</strong> opacity fade 150ms</li>
+<li><strong>Focus trap:</strong> Tab cycles within modal; Escape closes</li>
+<li><strong>Standard width:</strong> 480px | <strong>Wide:</strong> 720px | <strong>Full (mobile):</strong> 100vw &times; 100dvh</li>
+</ul>
+
+<h3>Confirmation Dialog</h3>
+<ul class="anatomy-list">
+<li>Max-width 400px, centered</li>
+<li>Icon (optional): 48px, semantic color circle bg</li>
+<li>Title: heading-sm, centered or left</li>
+<li>Description: body-sm, slate-500</li>
+<li>Actions: secondary (cancel) + primary/destructive, full-width on mobile</li>
+<li>No backdrop dismiss for destructive actions</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: TOAST NOTIFICATIONS                -->
+<!-- ============================================== -->
+<section id="toast">
+<h2>11. Toast Notifications</h2>
+<p class="desc">Ephemeral feedback messages for actions — save confirmations, error alerts, and system notifications.</p>
+
+<h3>Preview</h3>
+<div style="display:flex;flex-direction:column;gap:12px;max-width:420px">
+<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:white;border:1px solid var(--slate-200);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg)">
+<span style="width:8px;height:8px;border-radius:50%;background:var(--success);flex-shrink:0"></span>
+<span style="font-size:14px;color:var(--slate-700);flex:1">Contact saved successfully</span>
+<span style="color:var(--slate-400);cursor:pointer;font-size:18px">&times;</span>
+</div>
+<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--error-light);border:1px solid #FECACA;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg)">
+<span style="width:8px;height:8px;border-radius:50%;background:var(--error);flex-shrink:0"></span>
+<span style="font-size:14px;color:#991B1B;flex:1">Failed to sync Gmail. Retry?</span>
+<span style="color:#991B1B;cursor:pointer;font-size:18px">&times;</span>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Position:</strong> Bottom-right, 24px from edges (mobile: bottom-center, full-width with margin)</li>
+<li><strong>Width:</strong> 360-420px, stacking upward with 8px gap</li>
+<li><strong>Auto-dismiss:</strong> 5s for success/info, persistent for error (user must close)</li>
+<li><strong>Entry:</strong> slide-up 250ms + opacity | <strong>Exit:</strong> slide-right 200ms + fade</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="alert"</code>, <code class="code-inline">aria-live="polite"</code> (assertive for errors)</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: TABS                               -->
+<!-- ============================================== -->
+<section id="tabs">
+<h2>12. Tabs</h2>
+<p class="desc">Content organization for multi-section views — contact dossiers, building profiles, settings pages.</p>
+
+<h3>Preview</h3>
+<div style="border-bottom:2px solid var(--slate-200);display:flex;gap:0">
+<button style="padding:12px 20px;font-size:14px;font-weight:600;color:var(--navy-500);border:none;background:transparent;border-bottom:2px solid var(--navy-500);margin-bottom:-2px;cursor:pointer;font-family:var(--font-body)">Overview</button>
+<button style="padding:12px 20px;font-size:14px;font-weight:500;color:var(--slate-400);border:none;background:transparent;cursor:pointer;font-family:var(--font-body)">Details</button>
+<button style="padding:12px 20px;font-size:14px;font-weight:500;color:var(--slate-400);border:none;background:transparent;cursor:pointer;font-family:var(--font-body)">Activity</button>
+<button style="padding:12px 20px;font-size:14px;font-weight:500;color:var(--slate-400);border:none;background:transparent;cursor:pointer;font-family:var(--font-body)">Deals <span style="background:var(--slate-100);padding:1px 6px;border-radius:var(--radius-full);font-size:11px;font-weight:600;margin-left:4px">4</span></button>
+</div>
+
+<h3>Variants</h3>
+<table>
+<tr><th>Variant</th><th>Usage</th><th>Spec</th></tr>
+<tr><td>Underline (default)</td><td>Page-level tabs, dossiers</td><td>2px bottom border navy-500 on active</td></tr>
+<tr><td>Pill</td><td>Filters, inline toggles</td><td>navy-50 bg + navy-600 text on active, radius-full</td></tr>
+<tr><td>Segmented</td><td>Binary/ternary choices</td><td>Contained group with active: white bg + shadow</td></tr>
+</table>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Height:</strong> 44px (including border)</li>
+<li><strong>Active:</strong> navy-500 text, 600 weight, 2px bottom border navy-500</li>
+<li><strong>Inactive:</strong> slate-400 text, 500 weight, no border</li>
+<li><strong>Hover:</strong> slate-600 text</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="tablist"</code>, <code class="code-inline">role="tab"</code>, <code class="code-inline">aria-selected</code>, arrow key navigation</li>
+<li><strong>Mobile:</strong> Horizontal scroll with fade mask, pb-safe</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: SIDEBAR NAV                        -->
+<!-- ============================================== -->
+<section id="sidebar-comp">
+<h2>13. Sidebar Navigation</h2>
+<p class="desc">The primary desktop navigation. 240px fixed width, hidden on mobile where bottom tab bar takes over.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Width:</strong> 240px (desktop, <code class="code-inline">hidden md:flex</code>)</li>
+<li><strong>Background:</strong> White, right border 1px slate-200</li>
+<li><strong>Logo:</strong> Top, 24px padding, border-bottom</li>
+<li><strong>Nav item:</strong> 40px height, 16px left padding, body-sm, slate-600</li>
+<li><strong>Active item:</strong> navy-50 bg, navy-600 text, 3px left border navy-500</li>
+<li><strong>Hover:</strong> slate-50 bg</li>
+<li><strong>Icon:</strong> 20px, 12px gap to label</li>
+<li><strong>Section divider:</strong> overline style, 16px top margin</li>
+<li><strong>Collapse:</strong> 64px width, icon-only, tooltip on hover</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: BREADCRUMBS                        -->
+<!-- ============================================== -->
+<section id="breadcrumbs">
+<h2>14. Breadcrumbs</h2>
+<p class="desc">Hierarchical location indicator for deep page structures.</p>
+
+<h3>Preview</h3>
+<div class="component-preview">
+<nav style="display:flex;align-items:center;gap:8px;font-size:14px">
+<a href="#" style="color:var(--slate-400);text-decoration:none">Brokerage</a>
+<span style="color:var(--slate-300)">/</span>
+<a href="#" style="color:var(--slate-400);text-decoration:none">Transactions</a>
+<span style="color:var(--slate-300)">/</span>
+<span style="color:var(--slate-700);font-weight:500">TXN-2024-0042</span>
+</nav>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Separator:</strong> "/" in slate-300, 8px gap</li>
+<li><strong>Link items:</strong> body-sm, slate-400, hover: navy-500, underline on hover</li>
+<li><strong>Current (last):</strong> body-sm 500 weight, slate-700, non-interactive</li>
+<li><strong>Overflow:</strong> Ellipsis middle items on mobile, show first + last</li>
+<li><strong>A11y:</strong> <code class="code-inline">&lt;nav aria-label="Breadcrumb"&gt;</code></li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: PAGINATION                         -->
+<!-- ============================================== -->
+<section id="pagination">
+<h2>15. Pagination</h2>
+<p class="desc">Page navigation for data tables and list views.</p>
+
+<h3>Preview</h3>
+<div class="component-preview">
+<div style="display:flex;align-items:center;gap:4px">
+<button style="width:36px;height:36px;border:1px solid var(--slate-200);border-radius:var(--radius-md);background:white;color:var(--slate-400);cursor:pointer;font-size:14px">&laquo;</button>
+<button style="width:36px;height:36px;border:none;border-radius:var(--radius-md);background:var(--navy-500);color:white;cursor:pointer;font-size:14px;font-weight:600">1</button>
+<button style="width:36px;height:36px;border:1px solid var(--slate-200);border-radius:var(--radius-md);background:white;color:var(--slate-600);cursor:pointer;font-size:14px">2</button>
+<button style="width:36px;height:36px;border:1px solid var(--slate-200);border-radius:var(--radius-md);background:white;color:var(--slate-600);cursor:pointer;font-size:14px">3</button>
+<span style="color:var(--slate-400);padding:0 4px">...</span>
+<button style="width:36px;height:36px;border:1px solid var(--slate-200);border-radius:var(--radius-md);background:white;color:var(--slate-600);cursor:pointer;font-size:14px">12</button>
+<button style="width:36px;height:36px;border:1px solid var(--slate-200);border-radius:var(--radius-md);background:white;color:var(--slate-600);cursor:pointer;font-size:14px">&raquo;</button>
+</div>
+<span style="font-size:13px;color:var(--slate-400);margin-left:16px">Showing 1&ndash;25 of 297</span>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Button size:</strong> 36px square, radius-md</li>
+<li><strong>Active page:</strong> navy-500 bg, white text</li>
+<li><strong>Inactive:</strong> white bg, slate-200 border, slate-600 text</li>
+<li><strong>Disabled:</strong> slate-100 bg, slate-300 text</li>
+<li><strong>Ellipsis:</strong> Non-interactive "..." for collapsed ranges</li>
+<li><strong>Mobile:</strong> Simplified to prev/next + page count text</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: TOOLTIPS                           -->
+<!-- ============================================== -->
+<section id="tooltips">
+<h2>16. Tooltips</h2>
+<p class="desc">Contextual hints for icon buttons, truncated text, and data explanations.</p>
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Background:</strong> slate-900 (light mode), slate-100 (dark mode)</li>
+<li><strong>Text:</strong> 12px 500 weight, white / slate-800</li>
+<li><strong>Padding:</strong> 6px 10px, radius-md</li>
+<li><strong>Arrow:</strong> 6px CSS triangle matching bg</li>
+<li><strong>Delay:</strong> 300ms hover before show, 150ms fade-in</li>
+<li><strong>Max width:</strong> 240px, word-wrap</li>
+<li><strong>Placement:</strong> Auto with flip/shift (top preferred)</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="tooltip"</code>, trigger has <code class="code-inline">aria-describedby</code></li>
+<li><strong>Z-index:</strong> 70 (tooltip layer)</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: SKELETON LOADERS                   -->
+<!-- ============================================== -->
+<section id="skeleton">
+<h2>17. Skeleton Loaders</h2>
+<p class="desc">Placeholder loading states that match the layout of incoming content. Must appear within 100ms of data request.</p>
+
+<h3>Preview</h3>
+<div class="card" style="max-width:400px">
+<div style="display:flex;gap:12px;align-items:center;margin-bottom:16px">
+<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(90deg,var(--slate-100) 25%,var(--slate-200) 50%,var(--slate-100) 75%);background-size:200%;animation:shimmer 1.5s infinite"></div>
+<div style="flex:1"><div style="height:14px;width:60%;border-radius:4px;background:linear-gradient(90deg,var(--slate-100) 25%,var(--slate-200) 50%,var(--slate-100) 75%);background-size:200%;animation:shimmer 1.5s infinite;margin-bottom:6px"></div>
+<div style="height:10px;width:40%;border-radius:4px;background:linear-gradient(90deg,var(--slate-100) 25%,var(--slate-200) 50%,var(--slate-100) 75%);background-size:200%;animation:shimmer 1.5s infinite"></div></div>
+</div>
+<div style="height:12px;width:100%;border-radius:4px;background:linear-gradient(90deg,var(--slate-100) 25%,var(--slate-200) 50%,var(--slate-100) 75%);background-size:200%;animation:shimmer 1.5s infinite;margin-bottom:8px"></div>
+<div style="height:12px;width:85%;border-radius:4px;background:linear-gradient(90deg,var(--slate-100) 25%,var(--slate-200) 50%,var(--slate-100) 75%);background-size:200%;animation:shimmer 1.5s infinite"></div>
+</div>
+<style>@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Shape:</strong> Match actual content dimensions (text = 12-14px height bars, avatar = circle, card = full rectangle)</li>
+<li><strong>Color:</strong> slate-100 base, slate-200 shimmer sweep</li>
+<li><strong>Animation:</strong> Linear gradient sweep, 1.5s infinite</li>
+<li><strong>Radius:</strong> Match underlying element's radius</li>
+<li><strong>Behavior:</strong> Show within 100ms; crossfade to real content (250ms fade)</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: PROGRESS INDICATORS                -->
+<!-- ============================================== -->
+<section id="progress">
+<h2>18. Progress Indicators</h2>
+<p class="desc">Linear bars, circular spinners, and step indicators for multi-phase operations.</p>
+
+<h3>Preview</h3>
+<div class="component-preview" style="flex-direction:column;align-items:stretch;max-width:400px">
+<div>
+<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;font-weight:500;color:var(--slate-600)">Data Fusion</span><span style="font-size:12px;font-family:var(--font-mono);color:var(--slate-400)">72%</span></div>
+<div style="height:8px;background:var(--slate-100);border-radius:var(--radius-full);overflow:hidden"><div style="width:72%;height:100%;background:var(--navy-500);border-radius:var(--radius-full);transition:width 500ms var(--ease-spring)"></div></div>
+</div>
+<div style="margin-top:16px;display:flex;gap:16px;align-items:center">
+<div style="width:32px;height:32px;border:3px solid var(--slate-200);border-top-color:var(--navy-500);border-radius:50%;animation:spin 0.8s linear infinite"></div>
+<span style="font-size:14px;color:var(--slate-500)">Loading building profile...</span>
+</div>
+</div>
+<style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Linear bar:</strong> 6-8px height, radius-full, slate-100 track, navy-500 fill</li>
+<li><strong>Spinner:</strong> 20/32/48px, 3px border, navy-500 segment, 0.8s spin</li>
+<li><strong>Determinate:</strong> Show percentage label above bar</li>
+<li><strong>Indeterminate:</strong> Repeating left-to-right sweep</li>
+<li><strong>Multi-step:</strong> Segmented bar with step labels below</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: EMPTY STATES                       -->
+<!-- ============================================== -->
+<section id="empty-states">
+<h2>19. Empty States</h2>
+<p class="desc">First-run and zero-data views that guide users toward first action.</p>
+
+<h3>Preview</h3>
+<div class="card" style="text-align:center;padding:48px 32px;max-width:480px;margin:0 auto">
+<div style="width:64px;height:64px;border-radius:16px;background:var(--navy-50);display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:28px">&#127970;</div>
+<p style="font-size:18px;font-weight:600;color:var(--slate-800)">No properties yet</p>
+<p style="font-size:14px;color:var(--slate-400);margin:8px 0 24px;max-width:320px;margin-left:auto;margin-right:auto">Start by searching Market Intel for NYC buildings, or import your existing portfolio.</p>
+<button style="background:var(--navy-500);color:white;padding:10px 24px;border:none;border-radius:var(--radius-md);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font-body)">Search Properties</button>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Icon/illustration:</strong> 64px, in branded container (navy-50 bg, 16px radius)</li>
+<li><strong>Headline:</strong> heading-sm, slate-800, centered</li>
+<li><strong>Description:</strong> body-sm, slate-400, max 320px, centered</li>
+<li><strong>CTA:</strong> Primary button, centered, 24px top margin</li>
+<li><strong>Container:</strong> Centered in available space with 48px vertical padding</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: STAT CARDS                         -->
+<!-- ============================================== -->
+<section id="stat-cards">
+<h2>20. Stat Cards</h2>
+<p class="desc">KPI displays for dashboards, analytics, and agent performance tracking.</p>
+
+<h3>Preview</h3>
+<div class="grid-4">
+<div class="card" style="padding:20px">
+<p style="font-size:12px;font-weight:500;color:var(--slate-400);margin-bottom:4px">Active Deals</p>
+<p style="font-size:28px;font-weight:700;color:var(--slate-900);font-family:var(--font-mono);letter-spacing:-0.02em">24</p>
+<p style="font-size:12px;color:var(--success);margin-top:4px">&#9650; 12% vs last month</p>
+</div>
+<div class="card" style="padding:20px">
+<p style="font-size:12px;font-weight:500;color:var(--slate-400);margin-bottom:4px">Pipeline Value</p>
+<p style="font-size:28px;font-weight:700;color:var(--slate-900);font-family:var(--font-mono);letter-spacing:-0.02em">$4.2M</p>
+<p style="font-size:12px;color:var(--error);margin-top:4px">&#9660; 3% vs last month</p>
+</div>
+<div class="card" style="padding:20px">
+<p style="font-size:12px;font-weight:500;color:var(--slate-400);margin-bottom:4px">Conversion Rate</p>
+<p style="font-size:28px;font-weight:700;color:var(--slate-900);font-family:var(--font-mono);letter-spacing:-0.02em">18.4%</p>
+<p style="font-size:12px;color:var(--slate-400);margin-top:4px">&mdash; No change</p>
+</div>
+<div class="card" style="padding:20px">
+<p style="font-size:12px;font-weight:500;color:var(--slate-400);margin-bottom:4px">Avg. Response</p>
+<p style="font-size:28px;font-weight:700;color:var(--slate-900);font-family:var(--font-mono);letter-spacing:-0.02em">2.4m</p>
+<p style="font-size:12px;color:var(--success);margin-top:4px">&#9650; 0.8m faster</p>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Label:</strong> caption style, slate-400</li>
+<li><strong>Value:</strong> JetBrains Mono 700, 28px, slate-900, -0.02em tracking</li>
+<li><strong>Trend:</strong> caption, success (up) / error (down) / slate-400 (flat), with triangle</li>
+<li><strong>Sparkline (optional):</strong> 48px tall, right-aligned, matching trend color</li>
+<li><strong>Card padding:</strong> 20px, standard card border + radius</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: KANBAN BOARD                       -->
+<!-- ============================================== -->
+<section id="kanban">
+<h2>21. Kanban Board</h2>
+<p class="desc">Drag-and-drop pipeline board for deals and transactions.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Column:</strong> Min-width 280px, max 320px, slate-50 bg, radius-lg, 12px padding</li>
+<li><strong>Column header:</strong> heading-sm, left-aligned, with count badge and total value</li>
+<li><strong>Deal card:</strong> White bg, radius-md, shadow-xs, 12px padding, 8px gap between cards</li>
+<li><strong>Card content:</strong> Address (body-sm 500), value (mono 600), contact name, days in stage</li>
+<li><strong>Drag handle:</strong> 6-dot grip icon, slate-300, visible on hover</li>
+<li><strong>Drop zone:</strong> 2px dashed navy-300 border, navy-50 bg, 48px min-height</li>
+<li><strong>Dragging card:</strong> Elevated shadow-lg, slight rotation (1deg), opacity 0.95</li>
+<li><strong>Horizontal scroll:</strong> Columns overflow-x auto, scroll-snap-type: x mandatory</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: CHARTS                             -->
+<!-- ============================================== -->
+<section id="charts">
+<h2>22. Charts & Data Visualization</h2>
+<p class="desc">Recharts-based visualization components using the data-viz color palette.</p>
+
+<h3>Color Palette</h3>
+<div class="component-preview">
+<div style="display:flex;gap:4px">
+<div style="width:32px;height:32px;border-radius:6px;background:#1E40AF" title="Navy"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#D4A012" title="Gold"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#059669" title="Emerald"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#DC2626" title="Red"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#7C3AED" title="Violet"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#EA580C" title="Orange"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#0891B2" title="Cyan"></div>
+<div style="width:32px;height:32px;border-radius:6px;background:#DB2777" title="Pink"></div>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Grid lines:</strong> slate-100, dashed for secondary axis</li>
+<li><strong>Axis labels:</strong> caption style, slate-400</li>
+<li><strong>Axis ticks:</strong> Mono 400, 11px, slate-400</li>
+<li><strong>Tooltip:</strong> White bg, shadow-lg, radius-md, body-sm</li>
+<li><strong>Legend:</strong> Below chart, horizontal, caption style with color dot</li>
+<li><strong>Line chart:</strong> 2px stroke, dot markers on hover only</li>
+<li><strong>Bar chart:</strong> radius-sm top corners, 4px gap between groups</li>
+<li><strong>Pie/Donut:</strong> 2px white gap between segments, center label optional</li>
+<li><strong>Animation:</strong> Draw-in 700ms ease-spring on mount</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: MAP MARKERS                        -->
+<!-- ============================================== -->
+<section id="map-markers">
+<h2>23. Map Markers</h2>
+<p class="desc">Leaflet circleMarker-based building indicators for Market Intel map search.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Shape:</strong> circleMarker (not Marker) for performance at scale</li>
+<li><strong>Default:</strong> 8px radius, navy-500 fill, 0.7 opacity, 2px white stroke</li>
+<li><strong>Hovered:</strong> 10px radius, 0.9 opacity, navy-400 fill</li>
+<li><strong>Selected:</strong> 12px radius, gold-400 fill, 3px navy-700 stroke</li>
+<li><strong>Cluster:</strong> Navy-500 circle with white count label, size scales with count</li>
+<li><strong>Color coding:</strong> By property type, using data-viz categorical palette</li>
+<li><strong>Popup:</strong> Standard card (white, radius-lg, shadow-lg) with address, type, units, value</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: ACTIVITY TIMELINE                  -->
+<!-- ============================================== -->
+<section id="timeline">
+<h2>24. Activity Timeline</h2>
+<p class="desc">Chronological feed of CRM activities — emails, calls, notes, showings, and deal updates.</p>
+
+<h3>Preview</h3>
+<div style="max-width:480px;padding-left:24px;border-left:2px solid var(--slate-200)">
+<div style="position:relative;padding-bottom:24px">
+<div style="position:absolute;left:-31px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--navy-500);border:2px solid white"></div>
+<p style="font-size:12px;color:var(--slate-400);margin-bottom:4px">Mar 7, 2026 &middot; 3:42 PM</p>
+<p style="font-size:14px;color:var(--slate-700)"><strong>Email sent</strong> &mdash; Follow-up regarding 123 Broadway showing</p>
+</div>
+<div style="position:relative;padding-bottom:24px">
+<div style="position:absolute;left:-31px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--success);border:2px solid white"></div>
+<p style="font-size:12px;color:var(--slate-400);margin-bottom:4px">Mar 6, 2026 &middot; 11:15 AM</p>
+<p style="font-size:14px;color:var(--slate-700)"><strong>Showing completed</strong> &mdash; Prospect rated 4/5 interest</p>
+</div>
+<div style="position:relative">
+<div style="position:absolute;left:-31px;top:2px;width:16px;height:16px;border-radius:50%;background:var(--gold-400);border:2px solid white"></div>
+<p style="font-size:12px;color:var(--slate-400);margin-bottom:4px">Mar 5, 2026 &middot; 9:00 AM</p>
+<p style="font-size:14px;color:var(--slate-700)"><strong>AI enrichment</strong> &mdash; Contact verified via People Data Labs</p>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Line:</strong> 2px solid slate-200, left-aligned</li>
+<li><strong>Dot:</strong> 16px circle on the line, color by activity type</li>
+<li><strong>Timestamp:</strong> caption, slate-400</li>
+<li><strong>Content:</strong> body-sm, bold action + description</li>
+<li><strong>AI-generated:</strong> Sparkle icon indicator + "AI" tag</li>
+<li><strong>Spacing:</strong> 24px gap between entries</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: COMMAND PALETTE                    -->
+<!-- ============================================== -->
+<section id="command">
+<h2>25. Command Palette</h2>
+<p class="desc">Quick-access search overlay triggered by Cmd+K for power users.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Trigger:</strong> Cmd+K (Mac) / Ctrl+K (Win)</li>
+<li><strong>Container:</strong> 560px width, centered, radius-xl, shadow-2xl, white bg</li>
+<li><strong>Search input:</strong> 48px height, no border, large icon, body-lg placeholder</li>
+<li><strong>Results:</strong> Grouped by category (Contacts, Properties, Actions)</li>
+<li><strong>Result item:</strong> 40px height, icon + label + shortcut badge, hover: slate-50</li>
+<li><strong>Active item:</strong> navy-50 bg, keyboard arrow navigation</li>
+<li><strong>Entry:</strong> Backdrop fade + modal scale-in 250ms</li>
+<li><strong>Max results:</strong> 8 per category, "View all" link</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="combobox"</code>, <code class="code-inline">aria-expanded</code>, live results</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: BOTTOM SHEETS (MOBILE)             -->
+<!-- ============================================== -->
+<section id="sheets">
+<h2>26. Bottom Sheets</h2>
+<p class="desc">Mobile-optimized slide-up panels replacing modals on small screens.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Trigger:</strong> Any modal or complex action on <code class="code-inline">max-width: 768px</code></li>
+<li><strong>Handle:</strong> 32px &times; 4px pill, slate-300, centered, 12px top</li>
+<li><strong>Container:</strong> White, radius-xl top corners only, shadow-2xl</li>
+<li><strong>Height:</strong> Auto (content) up to 85dvh, scrollable body</li>
+<li><strong>Animation:</strong> <code class="code-inline">slide-up-sheet</code> 350ms ease-spring</li>
+<li><strong>Gesture:</strong> Swipe down to dismiss (velocity threshold)</li>
+<li><strong>Safe area:</strong> <code class="code-inline">pb-safe</code> for notched devices</li>
+<li><strong>Backdrop:</strong> bg-black/30% with tap-to-dismiss</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: STEPPER / WIZARD                   -->
+<!-- ============================================== -->
+<section id="stepper">
+<h2>27. Stepper / Wizard</h2>
+<p class="desc">Multi-step forms for leasing setup, deal creation, and onboarding flows.</p>
+
+<h3>Preview</h3>
+<div class="component-preview" style="justify-content:center">
+<div style="display:flex;align-items:center;gap:0">
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:32px;height:32px;border-radius:50%;background:var(--navy-500);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">&#10003;</div>
+<span style="font-size:13px;font-weight:500;color:var(--navy-600)">Property</span>
+</div>
+<div style="width:48px;height:2px;background:var(--navy-500);margin:0 8px"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:32px;height:32px;border-radius:50%;background:var(--navy-500);color:white;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700">2</div>
+<span style="font-size:13px;font-weight:600;color:var(--navy-600)">Units</span>
+</div>
+<div style="width:48px;height:2px;background:var(--slate-200);margin:0 8px"></div>
+<div style="display:flex;align-items:center;gap:8px">
+<div style="width:32px;height:32px;border-radius:50%;background:var(--slate-100);color:var(--slate-400);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600">3</div>
+<span style="font-size:13px;color:var(--slate-400)">Channels</span>
+</div>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Step circle:</strong> 32px, navy-500 (active/complete) or slate-100 (pending)</li>
+<li><strong>Connector:</strong> 2px line, navy-500 (passed) or slate-200 (pending), 48px width</li>
+<li><strong>Completed step:</strong> Checkmark icon replaces number</li>
+<li><strong>Current step:</strong> Number, bold label</li>
+<li><strong>Mobile:</strong> Compact to step dots only with current label below</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: ALERT BANNERS                      -->
+<!-- ============================================== -->
+<section id="alert">
+<h2>28. Alert Banners</h2>
+<p class="desc">Persistent informational banners for system messages, compliance alerts, and promotional notices.</p>
+
+<h3>Preview</h3>
+<div style="display:flex;flex-direction:column;gap:12px;max-width:560px">
+<div style="padding:12px 16px;border-radius:var(--radius-md);background:var(--info-light);border:1px solid #BFDBFE;display:flex;gap:12px;align-items:flex-start">
+<span style="color:var(--info);font-size:18px;flex-shrink:0">&#9432;</span>
+<div><p style="font-size:14px;font-weight:500;color:#1E40AF">Gmail sync is running</p><p style="font-size:13px;color:#3B82F6;margin-top:2px">Initial import may take a few minutes. You can continue working.</p></div>
+</div>
+<div style="padding:12px 16px;border-radius:var(--radius-md);background:var(--warning-light);border:1px solid #FDE68A;display:flex;gap:12px;align-items:flex-start">
+<span style="color:var(--warning);font-size:18px;flex-shrink:0">&#9888;</span>
+<div><p style="font-size:14px;font-weight:500;color:#92400E">License expiring in 14 days</p><p style="font-size:13px;color:#B45309;margin-top:2px">Agent John Doe's real estate license expires on March 22, 2026.</p></div>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Variants:</strong> Info (blue), Warning (amber), Error (red), Success (green)</li>
+<li><strong>Container:</strong> Semantic light bg, 1px semantic border, radius-md, 12-16px padding</li>
+<li><strong>Icon:</strong> 20px, semantic color, left-aligned</li>
+<li><strong>Title:</strong> body-sm 500, semantic dark text</li>
+<li><strong>Description:</strong> body-sm 400, lighter semantic text</li>
+<li><strong>Dismissible:</strong> Optional close button, top-right</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: FILE UPLOAD                        -->
+<!-- ============================================== -->
+<section id="file-upload">
+<h2>29. File Upload</h2>
+<p class="desc">Drag-and-drop and click-to-upload areas for documents, CSVs, and compliance files.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Drop zone:</strong> 2px dashed slate-300 border, slate-50 bg, radius-lg, 48px min-height</li>
+<li><strong>Active drag:</strong> 2px dashed navy-400 border, navy-50 bg</li>
+<li><strong>Icon:</strong> Upload arrow, 32px, slate-400</li>
+<li><strong>Text:</strong> "Drag files here or <u>browse</u>" body-sm</li>
+<li><strong>Accepted types:</strong> Caption, slate-400</li>
+<li><strong>File list:</strong> Below zone, name + size + progress bar + remove button</li>
+<li><strong>Progress:</strong> Linear bar, navy-500, 4px height</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: DATE PICKER                        -->
+<!-- ============================================== -->
+<section id="date-picker">
+<h2>30. Date Picker</h2>
+<p class="desc">Calendar selector for scheduling showings, setting due dates, and filtering by date range.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Container:</strong> 320px wide, white bg, shadow-lg, radius-lg</li>
+<li><strong>Header:</strong> Month/year with prev/next arrows, heading-sm</li>
+<li><strong>Day grid:</strong> 7 columns, each cell 40px square</li>
+<li><strong>Today:</strong> navy-100 bg circle</li>
+<li><strong>Selected:</strong> navy-500 bg, white text, circle</li>
+<li><strong>Range:</strong> navy-50 bg between dates, navy-500 circles on endpoints</li>
+<li><strong>Disabled dates:</strong> slate-300 text, not clickable</li>
+<li><strong>Time picker (optional):</strong> Below calendar, HH:MM with AM/PM toggle</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: ACCORDION                          -->
+<!-- ============================================== -->
+<section id="accordion">
+<h2>31. Accordion</h2>
+<p class="desc">Collapsible content sections for FAQs, settings groups, and building profile detail tabs.</p>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Header:</strong> 48px height, body-md 500, slate-800, chevron right (rotates 90deg on expand)</li>
+<li><strong>Divider:</strong> 1px slate-100 between items</li>
+<li><strong>Body:</strong> 16px padding, body-sm, slate-600</li>
+<li><strong>Animation:</strong> Height auto with 250ms ease, content fade 150ms</li>
+<li><strong>Single vs multi:</strong> Configurable — single allows one panel open; multi allows multiple</li>
+<li><strong>A11y:</strong> <code class="code-inline">role="region"</code>, <code class="code-inline">aria-expanded</code>, Enter/Space toggle</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- COMPONENTS: SEARCH BAR                         -->
+<!-- ============================================== -->
+<section id="search-bar">
+<h2>32. Search Bar</h2>
+<p class="desc">The primary search input used across Market Intel, contacts, messages, and command palette.</p>
+
+<h3>Preview</h3>
+<div class="component-preview" style="max-width:480px">
+<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid var(--slate-200);border-radius:var(--radius-lg);background:white;width:100%">
+<span style="color:var(--slate-400);font-size:18px">&#128269;</span>
+<input type="text" placeholder="Search addresses, BBLs, contacts..." style="border:none;outline:none;font-size:14px;font-family:var(--font-body);color:var(--slate-800);flex:1;background:transparent" />
+<span style="font-size:11px;color:var(--slate-300);border:1px solid var(--slate-200);padding:2px 6px;border-radius:4px">&#8984;K</span>
+</div>
+</div>
+
+<h3>Spec</h3>
+<ul class="anatomy-list">
+<li><strong>Height:</strong> 40px (compact) / 48px (hero)</li>
+<li><strong>Icon:</strong> Search magnifying glass, 20px, slate-400, left</li>
+<li><strong>Placeholder:</strong> body-sm, slate-400</li>
+<li><strong>Keyboard shortcut:</strong> Right-aligned badge showing Cmd+K</li>
+<li><strong>Dropdown results:</strong> Below input, max 8 results, grouped by type</li>
+<li><strong>Clear button:</strong> X icon appears when input has value</li>
+<li><strong>Focused:</strong> Navy-500 border, shadow ring</li>
+</ul>
+</section>
+
+<!-- ============================================== -->
+<!-- SECTION: DESIGN PATTERNS                       -->
+<!-- ============================================== -->
+<section id="patterns">
+<h2>Design Patterns</h2>
+<p class="desc">Reusable interaction and layout patterns that combine components into higher-order experiences.</p>
+
+<h3>1. Master-Detail (Three-Pane)</h3>
+<div class="card">
+<p style="font-size:14px;color:var(--slate-600);margin-bottom:12px">Used in Messages, Contacts, Transactions. List on left, detail center, context panel right.</p>
+<table>
+<tr><th>Element</th><th>Width</th><th>Behavior</th></tr>
+<tr><td>List panel</td><td>320px fixed</td><td>Scrollable, virtual list for 500+ items</td></tr>
+<tr><td>Detail panel</td><td>Flexible (fill)</td><td>Scroll independent of list</td></tr>
+<tr><td>Context panel</td><td>320px, collapsible</td><td>CRM sidebar, enrichment data</td></tr>
+</table>
+<p style="font-size:13px;color:var(--slate-400);margin-top:8px"><strong>Mobile:</strong> Collapses to single-pane stack with back navigation.</p>
+</div>
+
+<h3>2. Slide-Over Profile</h3>
+<div class="card">
+<p style="font-size:14px;color:var(--slate-600);margin-bottom:12px">Building profiles in Market Intel. Opens from right edge, 560px width.</p>
+<table>
+<tr><th>Element</th><th>Spec</th></tr>
+<tr><td>Width</td><td>560px (desktop), full-width (mobile as bottom sheet)</td></tr>
+<tr><td>Header</td><td>Address + type + close button, sticky top</td></tr>
+<tr><td>Tab bar</td><td>Underline tabs: Overview, Violations, Permits, Contacts, AI Analysis</td></tr>
+<tr><td>Loading</td><td>3-phase progressive render via data-fusion-engine</td></tr>
+<tr><td>Entry</td><td>Slide from right, 350ms ease-spring</td></tr>
+</table>
+</div>
+
+<h3>3. Form Layout</h3>
+<div class="card">
+<p style="font-size:14px;color:var(--slate-600);margin-bottom:12px">Consistent form patterns across settings, deal creation, and contact editing.</p>
+<ul class="anatomy-list">
+<li><strong>Section grouping:</strong> Cards with heading-sm title, 24px internal padding</li>
+<li><strong>Field layout:</strong> Single column (mobile), 2-column grid at md+ (24px gap)</li>
+<li><strong>Field spacing:</strong> 20px gap between fields</li>
+<li><strong>Required indicator:</strong> Red asterisk after label</li>
+<li><strong>Actions:</strong> Sticky bottom bar with cancel (secondary) + save (primary), right-aligned</li>
+<li><strong>Validation:</strong> Inline, below field, shown on blur (not on type)</li>
+</ul>
+</div>
+
+<h3>4. Data Loading</h3>
+<div class="card">
+<p style="font-size:14px;color:var(--slate-600);margin-bottom:12px">Progressive rendering strategy for data-heavy views.</p>
+<ul class="anatomy-list">
+<li><strong>Phase 1 (&lt;100ms):</strong> Skeleton loader matching content shape</li>
+<li><strong>Phase 2 (100-500ms):</strong> Primary data renders, secondary still loading</li>
+<li><strong>Phase 3 (500ms+):</strong> All data settled, full interactive state</li>
+<li><strong>Error:</strong> Inline error card with retry button (not full-page error)</li>
+<li><strong>Empty:</strong> Empty state component with guidance CTA</li>
+<li><strong>Optimistic updates:</strong> Immediate UI change, revert on failure</li>
+</ul>
+</div>
+
+<h3>5. Mobile Navigation</h3>
+<div class="card">
+<ul class="anatomy-list">
+<li><strong>Bottom tab bar:</strong> Fixed bottom, 5 tabs, 56px height + pb-safe</li>
+<li><strong>Active tab:</strong> Navy-500 icon + label (caption 600)</li>
+<li><strong>Inactive tab:</strong> Slate-400 icon + label</li>
+<li><strong>Badge:</strong> Red count dot on Messages tab for unread</li>
+<li><strong>More menu:</strong> Opens bottom sheet with full navigation grid</li>
+<li><strong>Landscape:</strong> Same layout, tabs remain bottom</li>
+</ul>
+</div>
+
+<h3>6. AI-Powered Content</h3>
+<div class="card">
+<p style="font-size:14px;color:var(--slate-600);margin-bottom:12px">Visual treatment for AI-generated insights, analysis, and suggestions.</p>
+<ul class="anatomy-list">
+<li><strong>AI indicator:</strong> Sparkle icon (&#10024;) + "AI" badge, navy-50 bg</li>
+<li><strong>Confidence display:</strong> 0-95% with color gradient (low=amber, mid=blue, high=green)</li>
+<li><strong>Source attribution:</strong> Caption text listing data sources with timestamps</li>
+<li><strong>AI card variant:</strong> Subtle gradient left-border (navy-500 to gold-400)</li>
+<li><strong>Streaming text:</strong> Typewriter cursor animation during generation</li>
+<li><strong>Editable:</strong> AI-generated content always editable by user</li>
+</ul>
+</div>
+</section>
+
+<!-- ============================================== -->
+<!-- SECTION: ACCESSIBILITY                         -->
+<!-- ============================================== -->
+<section id="a11y">
+<h2>Accessibility</h2>
+<p class="desc">VettdRE targets WCAG 2.1 Level AA compliance. Accessibility is not optional; it is a core engineering requirement.</p>
+
+<h3>Requirements Matrix</h3>
+<table>
+<tr><th>Criterion</th><th>Level</th><th>Implementation</th></tr>
+<tr><td>Color contrast (text)</td><td>AA</td><td>Minimum 4.5:1 for body, 3:1 for large text (18px+)</td></tr>
+<tr><td>Color contrast (UI)</td><td>AA</td><td>Minimum 3:1 for borders, icons, interactive elements</td></tr>
+<tr><td>Focus indicators</td><td>AA</td><td>2px navy-300 ring, 2px offset, always visible on :focus-visible</td></tr>
+<tr><td>Touch targets</td><td>AAA</td><td>Minimum 44x44px clickable area</td></tr>
+<tr><td>Keyboard navigation</td><td>AA</td><td>All interactive elements reachable via Tab, operable via Enter/Space</td></tr>
+<tr><td>Screen reader</td><td>AA</td><td>Semantic HTML, ARIA labels, live regions for dynamic content</td></tr>
+<tr><td>Reduced motion</td><td>AA</td><td><code class="code-inline">prefers-reduced-motion: reduce</code> disables all non-essential animation</td></tr>
+<tr><td>Error identification</td><td>AA</td><td>Errors identified by icon + text + color (never color alone)</td></tr>
+<tr><td>Form labels</td><td>A</td><td>Every input has a visible label or aria-label</td></tr>
+</table>
+
+<h3>Key Patterns</h3>
+<div class="code-block">/* Focus ring — applies to all interactive elements */
+:focus-visible {
+  outline: 2px solid var(--navy-300);
+  outline-offset: 2px;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Screen reader only text */
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}</div>
+</section>
+
+<!-- ============================================== -->
+<!-- SECTION: DO'S AND DON'TS                       -->
+<!-- ============================================== -->
+<section id="dos-donts">
+<h2>Do's & Don'ts</h2>
+<p class="desc">Clear guidance for consistent implementation across the platform.</p>
+
+<h3>Color</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Use semantic colors for meaning</h4>
+<p style="font-size:14px">Green for success/closed, red for errors/overdue, amber for warnings. Always pair color with icon or text label.</p>
+</div>
+<div class="dont-card">
+<h4>Use color as sole indicator</h4>
+<p style="font-size:14px">Never rely only on color to convey status. 8% of males have color vision deficiency. Always add text or iconography.</p>
+</div>
+</div>
+
+<h3>Typography</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Use the type scale consistently</h4>
+<p style="font-size:14px">Stick to the 12 defined levels. DM Serif Display for display headings only; Inter for everything else.</p>
+</div>
+<div class="dont-card">
+<h4>Invent custom font sizes</h4>
+<p style="font-size:14px">Never use arbitrary sizes like 17px or 22px. If the scale doesn't have what you need, discuss adding a new level.</p>
+</div>
+</div>
+
+<h3>Spacing</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Respect the 8px grid</h4>
+<p style="font-size:14px">All spacing values must be multiples of 4px. Primary rhythm is 8px. Use tokens (space-2, space-4, space-6, etc.).</p>
+</div>
+<div class="dont-card">
+<h4>Use arbitrary padding or margins</h4>
+<p style="font-size:14px">Never use values like padding: 13px or margin: 7px. If it doesn't align to the grid, it will look inconsistent.</p>
+</div>
+</div>
+
+<h3>Components</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Use existing components</h4>
+<p style="font-size:14px">Check the design system first. If a component exists that solves your need, use it. Extend with variants if needed.</p>
+</div>
+<div class="dont-card">
+<h4>Build one-off custom components</h4>
+<p style="font-size:14px">Don't create a new button variant or card style for a single use case. If you need something new, propose it as a system addition.</p>
+</div>
+</div>
+
+<h3>Data Display</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Use JetBrains Mono for numbers</h4>
+<p style="font-size:14px">Monetary values, BBLs, percentages, dates in tables, and IDs all use the monospace font for alignment and readability.</p>
+</div>
+<div class="dont-card">
+<h4>Mix fonts in data contexts</h4>
+<p style="font-size:14px">Don't display $4,250,000 in Inter next to 12.4% in JetBrains Mono. Be consistent within a data context.</p>
+</div>
+</div>
+
+<h3>Mobile</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Design mobile-first, then expand</h4>
+<p style="font-size:14px">Start with the mobile layout. Use pb-safe for notch devices. Bottom sheets replace modals. Bottom tab bar for nav.</p>
+</div>
+<div class="dont-card">
+<h4>Simply shrink the desktop layout</h4>
+<p style="font-size:14px">Mobile is not a smaller desktop. Rethink information priority, collapse multi-pane to single-pane, use touch-appropriate targets.</p>
+</div>
+</div>
+
+<h3>AI Content</h3>
+<div class="do-dont">
+<div class="do-card">
+<h4>Always indicate AI-generated content</h4>
+<p style="font-size:14px">Mark AI outputs with the sparkle icon and "AI" badge. Show confidence scores. List data sources with freshness timestamps.</p>
+</div>
+<div class="dont-card">
+<h4>Present AI content as absolute truth</h4>
+<p style="font-size:14px">Never hide that content is AI-generated. Never show 100% confidence. Always provide a way for users to edit or override AI suggestions.</p>
+</div>
+</div>
+</section>
+
+<!-- ============================================== -->
+<!-- SECTION: DEVELOPER HANDOFF                     -->
+<!-- ============================================== -->
+<section id="handoff">
+<h2>Developer Handoff Guide</h2>
+<p class="desc">Implementation reference for translating this design system into production Next.js + Tailwind CSS code.</p>
+
+<h3>Technology Mapping</h3>
+<table>
+<tr><th>Design Token</th><th>Implementation</th></tr>
+<tr><td>Colors</td><td>CSS custom properties in <code class="code-inline">globals.css</code> + Tailwind <code class="code-inline">extend.colors</code></td></tr>
+<tr><td>Typography</td><td>Google Fonts CDN + Tailwind <code class="code-inline">fontFamily</code> extend</td></tr>
+<tr><td>Spacing</td><td>Tailwind default scale (already 4px-based)</td></tr>
+<tr><td>Radius</td><td>Tailwind <code class="code-inline">borderRadius</code> extend with token names</td></tr>
+<tr><td>Shadows</td><td>Tailwind <code class="code-inline">boxShadow</code> extend with branded shadows</td></tr>
+<tr><td>Motion</td><td>CSS custom properties for durations + easings</td></tr>
+<tr><td>Icons</td><td>Lucide React (20px default, stroke-width 1.75)</td></tr>
+<tr><td>Components</td><td>shadcn/ui base + custom variants per this system</td></tr>
+</table>
+
+<h3>Tailwind Config Extension</h3>
+<div class="code-block">// tailwind.config.ts
+import type { Config } from "tailwindcss";
+
+const config: Config = {
+  theme: {
+    extend: {
+      colors: {
+        navy: {
+          50: '#F0F4FA', 100: '#D9E2F2', 200: '#B3C5E6',
+          300: '#7A9AD4', 400: '#4A73BF', 500: '#1E40AF',
+          600: '#18338C', 700: '#122669', 800: '#0C1A47', 900: '#060D24',
+        },
+        gold: {
+          50: '#FFFBEB', 100: '#FEF3C7', 200: '#FDE68A',
+          300: '#FCD34D', 400: '#FBBF24', 500: '#D4A012',
+          600: '#B8860B', 700: '#92670A', 800: '#6B4D08', 900: '#453206',
+        },
+      },
+      fontFamily: {
+        display: ['DM Serif Display', 'Georgia', 'serif'],
+        body: ['Inter', '-apple-system', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'monospace'],
+      },
+      boxShadow: {
+        navy: '0 4px 14px rgba(30, 64, 175, 0.25)',
+        gold: '0 4px 14px rgba(212, 160, 18, 0.25)',
+      },
+      borderRadius: {
+        md: '8px', lg: '12px', xl: '16px', '2xl': '24px',
+      },
+      animation: {
+        'modal-in': 'modal-in 350ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-up': 'slide-up 250ms cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in': 'fade-in 250ms ease',
+        shimmer: 'shimmer 1.5s infinite',
+      },
+    },
+  },
+};</div>
+
+<h3>Component File Structure</h3>
+<div class="code-block">src/components/ui/
+  button.tsx          # 6 variants, 4 sizes, loading state
+  input.tsx           # Text, textarea, with label + helper + error
+  select.tsx          # Single + multi-select with search
+  checkbox.tsx        # Checkbox + radio + indeterminate
+  toggle.tsx          # Switch component
+  badge.tsx           # Status, pipeline, count variants
+  avatar.tsx          # Photo, initials, group
+  card.tsx            # Default, interactive, accent, inset
+  data-table.tsx      # Sortable, selectable, paginated
+  modal.tsx           # Standard + wide + confirmation dialog
+  toast.tsx           # Provider + trigger, 4 semantic types
+  tabs.tsx            # Underline, pill, segmented
+  breadcrumb.tsx      # Auto-collapsing breadcrumb
+  pagination.tsx      # Full + compact modes
+  tooltip.tsx         # With arrow, auto-placement
+  skeleton.tsx        # Shimmer loader, shape variants
+  progress.tsx        # Linear + circular + stepped
+  empty-state.tsx     # Icon + title + description + CTA
+  stat-card.tsx       # Value + trend + sparkline
+  alert-banner.tsx    # 4 semantic types, dismissible
+  search-bar.tsx      # With shortcut hint + dropdown
+  accordion.tsx       # Single + multi expand
+  date-picker.tsx     # Calendar with range support
+  command-palette.tsx # Cmd+K overlay
+  file-upload.tsx     # Drop zone + file list
+  bottom-sheet.tsx    # Mobile sheet with gesture</div>
+
+<h3>Naming Conventions</h3>
+<table>
+<tr><th>Category</th><th>Convention</th><th>Example</th></tr>
+<tr><td>CSS variables</td><td><code class="code-inline">--{category}-{name}</code></td><td><code class="code-inline">--navy-500</code>, <code class="code-inline">--shadow-lg</code></td></tr>
+<tr><td>Tailwind classes</td><td>Standard + extended tokens</td><td><code class="code-inline">bg-navy-500</code>, <code class="code-inline">shadow-navy</code></td></tr>
+<tr><td>Component props</td><td>camelCase, variant-based</td><td><code class="code-inline">variant="primary"</code>, <code class="code-inline">size="md"</code></td></tr>
+<tr><td>Component files</td><td>kebab-case.tsx</td><td><code class="code-inline">data-table.tsx</code></td></tr>
+<tr><td>Token JSON keys</td><td>camelCase nested</td><td><code class="code-inline">color.brand.navy.500</code></td></tr>
+</table>
+
+<h3>Implementation Checklist</h3>
+<table>
+<tr><th>Step</th><th>Action</th><th>Files</th></tr>
+<tr><td>1</td><td>Install Google Fonts (DM Serif Display, Inter, JetBrains Mono)</td><td>layout.tsx or globals.css @import</td></tr>
+<tr><td>2</td><td>Add CSS custom properties from tokens.json</td><td>globals.css :root block</td></tr>
+<tr><td>3</td><td>Extend Tailwind config with brand colors, fonts, shadows</td><td>tailwind.config.ts</td></tr>
+<tr><td>4</td><td>Add keyframe animations (modal-in, slide-up, shimmer, fade-in)</td><td>globals.css @keyframes</td></tr>
+<tr><td>5</td><td>Implement base components starting with Button, Input, Card</td><td>components/ui/*.tsx</td></tr>
+<tr><td>6</td><td>Add focus-visible ring and reduced-motion media query</td><td>globals.css</td></tr>
+<tr><td>7</td><td>Create dark mode CSS variable set under <code class="code-inline">[data-theme="dark"]</code></td><td>globals.css</td></tr>
+<tr><td>8</td><td>Audit all existing pages against component library</td><td>All page files</td></tr>
+</table>
+</section>
+
+<!-- ============================================== -->
+<!-- SECTION: TOKENS REFERENCE                      -->
+<!-- ============================================== -->
+<section id="tokens-ref">
+<h2>Design Tokens Reference</h2>
+<p class="desc">The complete token set is available as a structured JSON file at <code class="code-inline">design-system/tokens.json</code>. It follows the W3C Design Tokens specification and can be consumed by Style Dictionary, Figma Token Studio, or any token pipeline.</p>
+
+<h3>Token Categories</h3>
+<table>
+<tr><th>Category</th><th>Count</th><th>Description</th></tr>
+<tr><td>color.brand</td><td>30</td><td>Navy (10), Gold (10), Slate (10) scales</td></tr>
+<tr><td>color.semantic</td><td>20</td><td>Success, Warning, Error, Info &times; 5 shades</td></tr>
+<tr><td>color.dark</td><td>12</td><td>Dark mode backgrounds, surfaces, text</td></tr>
+<tr><td>color.light</td><td>12</td><td>Light mode backgrounds, surfaces, text</td></tr>
+<tr><td>color.data-viz</td><td>8+14</td><td>Categorical (8) + Sequential palettes</td></tr>
+<tr><td>typography.scale</td><td>12</td><td>Display through overline, with responsive sizes</td></tr>
+<tr><td>typography.fontFamily</td><td>4</td><td>Display, heading, body, mono</td></tr>
+<tr><td>spacing</td><td>14</td><td>0 through 128px (8px base)</td></tr>
+<tr><td>grid</td><td>5+5</td><td>Breakpoints + gutter/margin per breakpoint</td></tr>
+<tr><td>radius</td><td>7</td><td>none through full</td></tr>
+<tr><td>shadow</td><td>9</td><td>xs through 2xl + inner + branded</td></tr>
+<tr><td>motion</td><td>6+6</td><td>Durations + easings</td></tr>
+<tr><td>zIndex</td><td>10</td><td>Layering hierarchy</td></tr>
+<tr><td>iconSize</td><td>5</td><td>12-32px</td></tr>
+</table>
+<p style="font-size:14px;color:var(--slate-500);margin-top:16px"><strong>Total tokens: 170+</strong></p>
+</section>
+
+</main>
+</div>
+</body>
+</html>
