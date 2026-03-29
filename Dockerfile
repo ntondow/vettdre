@@ -61,6 +61,10 @@ COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 # Copy runtime data (Zillow)
 COPY --from=builder /app/data ./data
 
+# Fix permissions for non-root user
+RUN chown -R nextjs:nodejs /app/public /app/data
+
+
 USER nextjs
 EXPOSE 8080
 
