@@ -359,3 +359,294 @@ export async function bulkUpdateStatus(submissionIds: string[], status: string) 
     return { success: false, count: 0 };
   }
 }
+
+// ── Agent Deal Submission (new flow) ─────────────────────────
+
+export async function submitDeal(input: DealSubmissionInput & { submissionSource?: string }) {
+  try {
+    const { userId, orgId } = await getCurrentOrg();
+
+    // Find the agent by userId
+    const agent = await prisma.brokerAgent.findFirst({
+      where: { orgId, userId },
+    });
+
+    // If brokerage exclusive, auto-fill from BmsProperty
+    let landlordData: Record<string, unknown> = {};
+    if (input.exclusiveType === "brokerage" && input.bmsPropertyId) {
+      const prop = await prisma.bmsProperty.findFirst({
+        where: { id: input.bmsPropertyId, orgId },
+      });
+      if (prop) {
+        landlordData = {
+          landlordName: prop.landlordName || null,
+          landlordEmail: prop.landlordEmail || null,
+          landlordPhone: prop.landlordPhone || null,
+          managementCo: prop.managementCo || null,
+          landlordAddress: prop.billingEntityAddress || null,
+        };
+      }
+    }
+
+    const submission = await prisma.dealSubmission.create({
+      data: {
+        orgId,
+        agentId: agent?.id || null,
+
+        agentFirstName: input.agentFirstName,
+        agentLastName: input.agentLastName,
+        agentEmail: input.agentEmail,
+        agentPhone: input.agentPhone || null,
+        agentLicense: input.agentLicense || null,
+
+        exclusiveType: input.exclusiveType || null,
+        bmsPropertyId: input.bmsPropertyId || null,
+
+        propertyAddress: input.propertyAddress,
+        unit: input.unit || null,
+        city: input.city || null,
+        state: input.state || "NY",
+
+        // Landlord info (auto-filled or manual)
+        landlordName: (landlordData.landlordName as string) || input.landlordName || null,
+        landlordEmail: (landlordData.landlordEmail as string) || input.landlordEmail || null,
+        landlordPhone: (landlordData.landlordPhone as string) || input.landlordPhone || null,
+        landlordAddress: (landlordData.landlordAddress as string) || input.landlordAddress || null,
+        managementCo: (landlordData.managementCo as string) || input.managementCo || null,
+
+        dealType: input.dealType as BmsDealType,
+        transactionValue: input.transactionValue,
+        closingDate: input.closingDate ? new Date(input.closingDate) : null,
+
+        // Lease-specific
+        leaseStartDate: input.leaseStartDate ? new Date(input.leaseStartDate) : null,
+        leaseEndDate: input.leaseEndDate ? new Date(input.leaseEndDate) : null,
+        monthlyRent: input.monthlyRent ?? null,
+
+        // Tenant info
+        tenantName: input.tenantName || null,
+        tenantEmail: input.tenantEmail || null,
+        tenantPhone: input.tenantPhone || null,
+
+        commissionType: input.commissionType || "percentage",
+        commissionPct: input.commissionPct ?? null,
+        commissionFlat: input.commissionFlat ?? null,
+        totalCommission: input.totalCommission,
+        agentSplitPct: input.agentSplitPct,
+        houseSplitPct: input.houseSplitPct,
+        agentPayout: input.agentPayout,
+        housePayout: input.housePayout,
+
+        clientName: input.clientName || null,
+        clientEmail: input.clientEmail || null,
+        clientPhone: input.clientPhone || null,
+        representedSide: input.representedSide || null,
+
+        coBrokeAgent: input.coBrokeAgent || null,
+        coBrokeBrokerage: input.coBrokeBrokerage || null,
+        coAgents: input.coAgents && input.coAgents.length > 0 ? JSON.parse(JSON.stringify(input.coAgents)) : undefined,
+
+        requiredDocs: input.requiredDocs ? JSON.parse(JSON.stringify(input.requiredDocs)) : undefined,
+        notes: input.notes || null,
+
+        status: "submitted",
+        submissionSource: input.submissionSource || "internal",
+      },
+    });
+
+    return JSON.parse(JSON.stringify({ success: true, submission }));
+  } catch (error) {
+    console.error("submitDeal error:", error);
+    return { success: false, error: "Failed to submit deal" };
+  }
+}
+
+// ── Exclusive Properties ─────────────────────────────────────
+
+export async function getExclusiveProperties() {
+  try {
+    const { orgId } = await getCurrentOrg();
+
+    const properties = await prisma.bmsProperty.findMany({
+      where: { orgId, isExclusive: true },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        landlordName: true,
+        landlordEmail: true,
+        landlordPhone: true,
+        billingEntityAddress: true,
+        billingEntityName: true,
+        billingEntityEmail: true,
+        billingEntityPhone: true,
+        managementCo: true,
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return { data: JSON.parse(JSON.stringify(properties)) };
+  } catch (error) {
+    console.error("getExclusiveProperties error:", error);
+    return { data: [] };
+  }
+}
+
+// ── Agent Split Resolution ───────────────────────────────────
+
+export async function getAgentSplitForDeal(agentId: string, exclusiveType: "brokerage" | "personal") {
+  try {
+    const { orgId } = await getCurrentOrg();
+
+    const [agent, org] = await Promise.all([
+      prisma.brokerAgent.findFirst({
+        where: { id: agentId, orgId },
+        select: { houseExclusiveSplitPct: true, personalExclusiveSplitPct: true },
+      }),
+      prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { defaultHouseExclusiveSplitPct: true, defaultPersonalExclusiveSplitPct: true },
+      }),
+    ]);
+
+    let agentSplitPct: number;
+    if (exclusiveType === "brokerage") {
+      agentSplitPct = agent?.houseExclusiveSplitPct
+        ? Number(agent.houseExclusiveSplitPct)
+        : org?.defaultHouseExclusiveSplitPct
+          ? Number(org.defaultHouseExclusiveSplitPct)
+          : 50;
+    } else {
+      agentSplitPct = agent?.personalExclusiveSplitPct
+        ? Number(agent.personalExclusiveSplitPct)
+        : org?.defaultPersonalExclusiveSplitPct
+          ? Number(org.defaultPersonalExclusiveSplitPct)
+          : 70;
+    }
+
+    return { agentSplitPct, houseSplitPct: 100 - agentSplitPct };
+  } catch (error) {
+    console.error("getAgentSplitForDeal error:", error);
+    return { agentSplitPct: 70, houseSplitPct: 30 };
+  }
+}
+
+// ── Submission Stats ─────────────────────────────────────────
+
+export async function getSubmissionStats() {
+  try {
+    const { orgId } = await getCurrentOrg();
+
+    const counts = await prisma.dealSubmission.groupBy({
+      by: ["status"],
+      where: { orgId },
+      _count: { status: true },
+      _sum: { totalCommission: true, agentPayout: true, housePayout: true },
+    });
+
+    const stats: Record<string, { count: number; totalCommission: number; agentPayout: number; housePayout: number }> = {};
+    for (const row of counts) {
+      stats[row.status] = {
+        count: row._count.status,
+        totalCommission: Number(row._sum.totalCommission || 0),
+        agentPayout: Number(row._sum.agentPayout || 0),
+        housePayout: Number(row._sum.housePayout || 0),
+      };
+    }
+
+    return stats;
+  } catch (error) {
+    console.error("getSubmissionStats error:", error);
+    return {};
+  }
+}
+
+// ── Org Agents List ──────────────────────────────────────────
+
+export async function getOrgAgents() {
+  try {
+    const { orgId } = await getCurrentOrg();
+
+    const agents = await prisma.brokerAgent.findMany({
+      where: { orgId, status: "active" },
+      select: { id: true, firstName: true, lastName: true, email: true },
+      orderBy: { firstName: "asc" },
+    });
+
+    return JSON.parse(JSON.stringify(agents));
+  } catch (error) {
+    console.error("getOrgAgents error:", error);
+    return [];
+  }
+}
+
+// ── Approve / Reject ─────────────────────────────────────────
+
+export async function approveSubmission(
+  submissionId: string,
+  overrides?: { exclusiveType?: string; splitPct?: number },
+) {
+  try {
+    const { userId, orgId } = await getCurrentOrg();
+
+    const data: Record<string, unknown> = {
+      status: "approved",
+      approvedBy: userId,
+      approvedAt: new Date(),
+    };
+
+    if (overrides?.exclusiveType) {
+      data.managerOverrideExclusiveType = overrides.exclusiveType;
+    }
+
+    if (overrides?.splitPct !== undefined) {
+      data.managerOverrideSplitPct = overrides.splitPct;
+      data.agentSplitPct = overrides.splitPct;
+      data.houseSplitPct = 100 - overrides.splitPct;
+
+      // Recalculate payouts
+      const sub = await prisma.dealSubmission.findFirst({
+        where: { id: submissionId, orgId },
+        select: { totalCommission: true },
+      });
+      if (sub) {
+        const tc = Number(sub.totalCommission);
+        data.agentPayout = (tc * overrides.splitPct) / 100;
+        data.housePayout = tc - ((tc * overrides.splitPct) / 100);
+      }
+    }
+
+    const submission = await prisma.dealSubmission.update({
+      where: { id: submissionId, orgId },
+      data,
+    });
+
+    logSubmissionAction(orgId, { id: userId }, "approved", submissionId);
+
+    return JSON.parse(JSON.stringify({ success: true, submission }));
+  } catch (error) {
+    console.error("approveSubmission error:", error);
+    return { success: false, error: "Failed to approve submission" };
+  }
+}
+
+export async function rejectSubmission(submissionId: string, reason?: string) {
+  try {
+    const { userId, orgId } = await getCurrentOrg();
+
+    const submission = await prisma.dealSubmission.update({
+      where: { id: submissionId, orgId },
+      data: {
+        status: "rejected",
+        rejectionReason: reason || null,
+      },
+    });
+
+    logSubmissionAction(orgId, { id: userId }, "rejected", submissionId, { reason });
+
+    return JSON.parse(JSON.stringify({ success: true, submission }));
+  } catch (error) {
+    console.error("rejectSubmission error:", error);
+    return { success: false, error: "Failed to reject submission" };
+  }
+}

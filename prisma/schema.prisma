@@ -424,6 +424,10 @@ model Organization {
   brandSettings        BrandSettings?
   bmsSettings          Json?                @map("bms_settings")
   submissionToken      String?              @unique @map("submission_token")
+
+  // Commission split defaults
+  defaultHouseExclusiveSplitPct    Decimal? @default(50) @map("default_house_exclusive_split_pct") @db.Decimal(5, 2)
+  defaultPersonalExclusiveSplitPct Decimal? @default(70) @map("default_personal_exclusive_split_pct") @db.Decimal(5, 2)
   brokerAgents         BrokerAgent[]
   dealSubmissions      DealSubmission[]
   invoices             Invoice[]
@@ -1606,6 +1610,11 @@ model BrokerAgent {
   licenseExpiry   DateTime? @map("license_expiry")
 
   defaultSplitPct  Decimal        @default(70) @map("default_split_pct") @db.Decimal(5, 2)
+
+  // Per-agent split overrides (null = use org defaults)
+  houseExclusiveSplitPct    Decimal? @map("house_exclusive_split_pct") @db.Decimal(5, 2)
+  personalExclusiveSplitPct Decimal? @map("personal_exclusive_split_pct") @db.Decimal(5, 2)
+
   status           String         @default("pending")  // pending | active | inactive | terminated
   brokerageRole    BrokerageRole  @default(agent) @map("brokerage_role")
   commissionPlanId String?        @map("commission_plan_id")
@@ -1657,14 +1666,35 @@ model DealSubmission {
   agentPhone       String?      @map("agent_phone")
   agentLicense     String?      @map("agent_license")
 
+  // Exclusive type
+  exclusiveType    String?      @map("exclusive_type")  // "brokerage" | "personal"
+  bmsPropertyId    String?      @map("bms_property_id")
+
   propertyAddress  String       @map("property_address")
   unit             String?
   city             String?
   state            String       @default("NY")
 
+  // Landlord / billing info (auto-filled for brokerage exclusives)
+  landlordName     String?      @map("landlord_name")
+  landlordEmail    String?      @map("landlord_email")
+  landlordPhone    String?      @map("landlord_phone")
+  landlordAddress  String?      @map("landlord_address")
+  managementCo     String?      @map("management_co")
+
   dealType         BmsDealType  @default(sale) @map("deal_type")
   transactionValue Decimal      @map("transaction_value") @db.Decimal(14, 2)
   closingDate      DateTime?    @map("closing_date")
+
+  // Lease-specific fields
+  leaseStartDate   DateTime?    @map("lease_start_date")
+  leaseEndDate     DateTime?    @map("lease_end_date")
+  monthlyRent      Decimal?     @map("monthly_rent") @db.Decimal(10, 2)
+
+  // Tenant info (for leases)
+  tenantName       String?      @map("tenant_name")
+  tenantEmail      String?      @map("tenant_email")
+  tenantPhone      String?      @map("tenant_phone")
 
   commissionType   String       @default("percentage") @map("commission_type")
   commissionPct    Decimal?     @map("commission_pct") @db.Decimal(5, 2)
@@ -1686,9 +1716,18 @@ model DealSubmission {
   // Multi-agent co-agents: [{ agentId?, name, email, splitPct, role }]
   coAgents         Json?        @map("co_agents")
 
+  // Required documents JSON
+  requiredDocs     Json?        @map("required_docs")
+
   status           String       @default("submitted")
   rejectionReason  String?      @map("rejection_reason")
   notes            String?
+
+  // Manager overrides
+  managerOverrideExclusiveType String?  @map("manager_override_exclusive_type")
+  managerOverrideSplitPct      Decimal? @map("manager_override_split_pct") @db.Decimal(5, 2)
+  approvedBy       String?      @map("approved_by")
+  approvedAt       DateTime?    @map("approved_at")
 
   submissionSource String       @default("internal") @map("submission_source")
 
@@ -1697,11 +1736,13 @@ model DealSubmission {
 
   organization     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   agent            BrokerAgent? @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  bmsProperty      BmsProperty? @relation(fields: [bmsPropertyId], references: [id], onDelete: SetNull)
   invoice          Invoice?
   transaction      Transaction?
 
   @@index([orgId, status])
   @@index([agentEmail])
+  @@index([bmsPropertyId])
   @@map("deal_submissions")
 }
 
@@ -2077,6 +2118,15 @@ model BmsProperty {
   landlordPhone   String?   @map("landlord_phone")
   managementCo    String?   @map("management_co")
 
+  // Exclusive building flag
+  isExclusive     Boolean   @default(false) @map("is_exclusive")
+
+  // Billing entity info
+  billingEntityName    String? @map("billing_entity_name")
+  billingEntityAddress String? @map("billing_entity_address")
+  billingEntityEmail   String? @map("billing_entity_email")
+  billingEntityPhone   String? @map("billing_entity_phone")
+
   totalUnits      Int?      @map("total_units")
   notes           String?
 
@@ -2085,6 +2135,7 @@ model BmsProperty {
 
   organization    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   listings        BmsListing[]
+  dealSubmissions DealSubmission[]
   leasingConfig   LeasingConfig?
 
   @@index([orgId])
