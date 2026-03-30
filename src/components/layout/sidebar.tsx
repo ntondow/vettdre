@@ -149,7 +149,8 @@ export default function Sidebar() {
         {/* Lifecycle sections */}
         <div className="flex-1 space-y-4">
           {NAV_SECTIONS.map((section) => {
-            const hasVisibleItems = section.items.some(item => !item.roles || item.roles.includes(role));
+            const isSuperAdmin = role === "super_admin";
+            const hasVisibleItems = section.items.some(item => isSuperAdmin || !item.roles || item.roles.includes(role));
             if (!hasVisibleItems) return null;
 
             const active = isSectionActive(section);
@@ -167,7 +168,7 @@ export default function Sidebar() {
 
                 <div className="space-y-0.5">
                   {section.items.map((item) => {
-                    if (item.roles && !item.roles.includes(role)) return null;
+                    if (item.roles && !isSuperAdmin && !item.roles.includes(role)) return null;
 
                     if (item.comingSoon) {
                       return (
