@@ -73,6 +73,7 @@ export function buildPrefillValues(data: {
   commissionPct?: number;
   moveInDate?: string;
   agentName: string;
+  agentLicense?: string;
   brokerageName: string;
   termDays?: number;
 }): Record<string, string> {
@@ -90,6 +91,7 @@ export function buildPrefillValues(data: {
     values.moveInDate = new Date(data.moveInDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   }
   values.agentName = data.agentName;
+  if (data.agentLicense) values.agentLicense = data.agentLicense;
   values.brokerageName = data.brokerageName;
   if (data.termDays) values.agreementTerm = `${data.termDays} days`;
   values.date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });

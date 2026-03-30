@@ -231,6 +231,7 @@ export async function createOnboarding(
       commissionPct: input.commissionPct,
       moveInDate: input.moveInDate,
       agentName: agentFullName,
+      agentLicense: agent.licenseNumber || undefined,
       brokerageName: org.name,
       termDays,
     });
