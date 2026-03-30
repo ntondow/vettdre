@@ -62,6 +62,63 @@ export async function prefillPdfFields(
   return doc.save();
 }
 
+/**
+ * Stamp a logo image onto every page of a PDF, replacing the placeholder area.
+ * The logo is centered at the top of each page.
+ * Supports PNG and JPEG.
+ */
+export async function stampLogoOnPdf(
+  pdfBytes: Uint8Array,
+  logoBytes: Uint8Array,
+  logoMimeType: "image/png" | "image/jpeg",
+  options?: { pages?: number[]; maxWidth?: number; maxHeight?: number; yFromTop?: number },
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const pages = doc.getPages();
+
+  // Embed image based on type
+  const image = logoMimeType === "image/png"
+    ? await doc.embedPng(logoBytes)
+    : await doc.embedJpg(logoBytes);
+
+  const maxW = options?.maxWidth ?? 120;
+  const maxH = options?.maxHeight ?? 60;
+  const yFromTop = options?.yFromTop ?? 30;
+
+  // Scale image to fit within max bounds while preserving aspect ratio
+  const imgDims = image.scale(1);
+  const scale = Math.min(maxW / imgDims.width, maxH / imgDims.height, 1);
+  const drawW = imgDims.width * scale;
+  const drawH = imgDims.height * scale;
+
+  // Determine which pages to stamp (default: all)
+  const targetPages = options?.pages ?? pages.map((_, i) => i);
+
+  for (const pageIdx of targetPages) {
+    if (pageIdx < 0 || pageIdx >= pages.length) continue;
+    const page = pages[pageIdx];
+    const { width: pageW, height: pageH } = page.getSize();
+
+    // Center horizontally, position from top
+    const x = (pageW - drawW) / 2;
+    const y = pageH - yFromTop - drawH;
+
+    // Draw white rectangle to cover placeholder text first
+    page.drawRectangle({
+      x: x - 10,
+      y: y - 5,
+      width: drawW + 20,
+      height: drawH + 25,
+      color: rgb(1, 1, 1),
+    });
+
+    // Draw the logo
+    page.drawImage(image, { x, y, width: drawW, height: drawH });
+  }
+
+  return doc.save();
+}
+
 // Build the values map from onboarding data
 export function buildPrefillValues(data: {
   clientFirstName: string;

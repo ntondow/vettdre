@@ -6,7 +6,7 @@ import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/lib/bms-audit";
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import { generateTenantRepAgreementPdf } from "@/lib/onboarding-pdf";
-import { prefillPdfFields, buildPrefillValues } from "@/lib/onboarding-prefill";
+import { prefillPdfFields, buildPrefillValues, stampLogoOnPdf } from "@/lib/onboarding-prefill";
 import { sendOnboardingInviteEmail, sendOnboardingReminder } from "@/lib/onboarding-notifications";
 import type { BrokerageRoleType } from "@/lib/bms-types";
 import type { ClientOnboardingInput } from "@/lib/onboarding-types";
@@ -304,6 +304,23 @@ export async function createOnboarding(
       ];
     }
 
+    // Fetch brokerage logo for stamping onto PDFs (replaces "[YOUR LOGO HERE]" placeholder)
+    let logoBytes: Uint8Array | null = null;
+    let logoMimeType: "image/png" | "image/jpeg" = "image/png";
+    try {
+      const brandSettings = await prisma.brandSettings.findUnique({ where: { orgId: ctx.orgId }, select: { logoUrl: true } });
+      if (brandSettings?.logoUrl) {
+        const logoResp = await fetch(brandSettings.logoUrl);
+        if (logoResp.ok) {
+          logoBytes = new Uint8Array(await logoResp.arrayBuffer());
+          const ct = logoResp.headers.get("content-type") || "";
+          logoMimeType = ct.includes("jpeg") || ct.includes("jpg") ? "image/jpeg" : "image/png";
+        }
+      }
+    } catch (logoErr) {
+      console.error("Logo fetch failed (will skip logo stamping):", logoErr);
+    }
+
     // Pre-fill and upload PDFs for selected templates
     const preparedDocs: Array<{ templateId: string | null; name: string; pdfUrl: string | null; docType: string; sortOrder: number }> = [];
 
@@ -329,7 +346,18 @@ export async function createOnboarding(
           }
 
           if (pdfBytes && pdfBytes.length > 0) {
-            const filledPdf = await prefillPdfFields(pdfBytes, tmplFields, prefillValues);
+            let filledPdf = await prefillPdfFields(pdfBytes, tmplFields, prefillValues);
+
+            // Stamp brokerage logo onto custom/brokerage templates (not government forms)
+            const isGovernmentForm = tmpl.name.includes("DOS-") || tmpl.docType === "nys_disclosure" || tmpl.docType === "fair_housing_notice";
+            if (logoBytes && logoBytes.length > 0 && !isGovernmentForm) {
+              try {
+                filledPdf = await stampLogoOnPdf(new Uint8Array(filledPdf), logoBytes, logoMimeType);
+              } catch (logoStampErr) {
+                console.error(`Logo stamp failed for ${tmpl.name}:`, logoStampErr);
+              }
+            }
+
             const filledPath = `onboarding/${ctx.orgId}/${Date.now()}-prefilled-${i}.pdf`;
             const { error: upErr } = await supabase.storage
               .from("bms-files")
