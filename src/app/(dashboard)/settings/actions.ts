@@ -289,6 +289,45 @@ export async function saveBrandSettings(data: {
   return { success: true };
 }
 
+export async function uploadBrandLogo(formData: FormData): Promise<{ url?: string; error?: string }> {
+  const user = await getAuthUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const file = formData.get("logo") as File | null;
+  if (!file || file.size === 0) return { error: "No file provided" };
+  if (file.size > 2 * 1024 * 1024) return { error: "File too large (max 2MB)" };
+  if (!file.type.startsWith("image/")) return { error: "File must be an image" };
+
+  const { createClient } = await import("@/lib/supabase/server");
+  const supabase = await createClient();
+
+  const ext = file.name.split(".").pop() || "png";
+  const filePath = `branding/${user.orgId}/logo.${ext}`;
+
+  // Upload (upsert to replace existing)
+  const arrayBuf = await file.arrayBuffer();
+  const { error: uploadErr } = await supabase.storage
+    .from("bms-files")
+    .upload(filePath, new Uint8Array(arrayBuf), {
+      contentType: file.type,
+      upsert: true,
+    });
+  if (uploadErr) return { error: `Upload failed: ${uploadErr.message}` };
+
+  const { data: urlData } = supabase.storage.from("bms-files").getPublicUrl(filePath);
+  const publicUrl = urlData?.publicUrl;
+  if (!publicUrl) return { error: "Could not get public URL" };
+
+  // Save to brand settings
+  await prisma.brandSettings.upsert({
+    where: { orgId: user.orgId },
+    create: { orgId: user.orgId, logoUrl: publicUrl },
+    update: { logoUrl: publicUrl },
+  });
+
+  return { url: publicUrl };
+}
+
 // ============================================================
 // Gmail Connection
 // ============================================================
