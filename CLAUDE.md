@@ -91,6 +91,9 @@ VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 
+# Transactional Email (Resend)
+RESEND_API_KEY=                  # Resend API key for onboarding invite/reminder/notification emails
+
 # Error Monitoring (Sentry)
 NEXT_PUBLIC_SENTRY_DSN=          # Sentry DSN (public, identifies project)
 SENTRY_AUTH_TOKEN=               # (Optional) Source map upload auth token

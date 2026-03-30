@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { sendTransactionalEmail, isResendConfigured } from "@/lib/resend";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -11,6 +12,7 @@ interface InviteEmailParams {
   brokerageName: string;
   signingUrl: string;
   personalNote?: string;
+  orgId?: string;
 }
 
 interface CompleteNotificationParams {
@@ -122,61 +124,85 @@ function reminderEmailHtml(params: ReminderParams): string {
 // ── Send Functions ───────────────────────────────────────────
 
 export async function sendOnboardingInviteEmail(params: InviteEmailParams): Promise<void> {
-  try {
-    // Try to find agent's Gmail account for sending
-    const agent = await prisma.brokerAgent.findFirst({
-      where: { email: { contains: params.agentFullName.split(" ")[0], mode: "insensitive" } },
-      select: { userId: true },
-    });
+  const subject = `${params.agentFullName} at ${params.brokerageName} — Please sign your tenant representation documents`;
+  const html = inviteEmailHtml(params);
 
-    let gmailAccount = null;
-    if (agent?.userId) {
-      gmailAccount = await prisma.gmailAccount.findFirst({
-        where: { userId: agent.userId },
-        select: { id: true, email: true },
-      });
+  try {
+    // 1. Try Resend first
+    if (isResendConfigured()) {
+      const result = await sendTransactionalEmail({ to: params.clientEmail, subject, html });
+      if (result.success) {
+        console.log("[Onboarding] Invite sent via Resend to:", params.clientEmail);
+        return;
+      }
+      console.warn("[Onboarding] Resend failed, falling back to Gmail:", result.error);
     }
 
-    if (gmailAccount) {
-      // Use Gmail send
-      const { sendEmail } = await import("@/lib/gmail-send");
-      const user = agent?.userId ? await prisma.user.findUnique({ where: { id: agent.userId }, select: { orgId: true } }) : null;
-      if (user?.orgId) {
+    // 2. Fall back to Gmail if agent has it connected
+    if (params.orgId) {
+      const gmailAccount = await prisma.gmailAccount.findFirst({
+        where: {
+          user: { orgId: params.orgId },
+        },
+        select: { id: true, userId: true },
+      });
+
+      if (gmailAccount) {
+        const { sendEmail } = await import("@/lib/gmail-send");
         await sendEmail({
           gmailAccountId: gmailAccount.id,
-          orgId: user.orgId,
+          orgId: params.orgId,
           to: params.clientEmail,
-          subject: `${params.agentFullName} at ${params.brokerageName} — Please sign your tenant representation documents`,
-          bodyHtml: inviteEmailHtml(params),
+          subject,
+          bodyHtml: html,
         });
+        console.log("[Onboarding] Invite sent via Gmail to:", params.clientEmail);
         return;
       }
     }
 
-    // Fallback: log for now
-    console.warn("[Onboarding] Email send not available — Gmail not connected. Would send invite to:", params.clientEmail);
+    console.warn("[Onboarding] No email provider available — invite not sent to:", params.clientEmail);
     console.warn("[Onboarding] Signing URL:", params.signingUrl);
   } catch (error) {
     console.error("[Onboarding] Failed to send invite email:", error);
-    // Non-fatal — the signing link still works
   }
 }
 
 export async function sendOnboardingCompleteNotification(params: CompleteNotificationParams): Promise<void> {
+  const subject = `${params.clientFullName} has signed all onboarding documents`;
+  const html = completeEmailHtml(params);
+
   try {
-    console.log(`[Onboarding] Notifying agent ${params.agentEmail}: ${params.clientFullName} signed all docs (${params.onboardingId})`);
-    // TODO: Send via Gmail if connected, or queue for email provider
-    // For now, log the notification
+    if (isResendConfigured()) {
+      const result = await sendTransactionalEmail({ to: params.agentEmail, subject, html });
+      if (result.success) {
+        console.log("[Onboarding] Completion notification sent to:", params.agentEmail);
+        return;
+      }
+      console.warn("[Onboarding] Resend failed for completion notification:", result.error);
+    }
+
+    console.log(`[Onboarding] Agent notification (no email provider): ${params.agentEmail} — ${params.clientFullName} signed all docs (${params.onboardingId})`);
   } catch (error) {
     console.error("[Onboarding] Failed to send completion notification:", error);
   }
 }
 
 export async function sendOnboardingReminder(params: ReminderParams): Promise<void> {
+  const subject = `Reminder: Please sign your documents — ${params.daysRemaining > 0 ? `${params.daysRemaining} day${params.daysRemaining !== 1 ? "s" : ""} remaining` : "expiring soon"}`;
+  const html = reminderEmailHtml(params);
+
   try {
-    // Try Gmail send, same as invite
-    console.warn("[Onboarding] Reminder email not yet implemented. Would send to:", params.clientEmail);
-    console.warn("[Onboarding] Signing URL:", params.signingUrl, "Days remaining:", params.daysRemaining);
+    if (isResendConfigured()) {
+      const result = await sendTransactionalEmail({ to: params.clientEmail, subject, html });
+      if (result.success) {
+        console.log("[Onboarding] Reminder sent to:", params.clientEmail);
+        return;
+      }
+      console.warn("[Onboarding] Resend failed for reminder:", result.error);
+    }
+
+    console.warn("[Onboarding] No email provider — reminder not sent to:", params.clientEmail);
   } catch (error) {
     console.error("[Onboarding] Failed to send reminder:", error);
   }

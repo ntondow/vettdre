@@ -318,6 +318,7 @@ export async function createOnboarding(
       brokerageName: org.name,
       signingUrl,
       personalNote: input.notes?.trim() || undefined,
+      orgId: ctx.orgId,
     }).catch((err) => console.error("Invite email send failed:", err));
 
     return { success: true, data: serialize(onboarding) as unknown as Record<string, unknown> };

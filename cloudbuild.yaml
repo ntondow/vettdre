@@ -92,7 +92,8 @@ steps:
         TOKEN_ENCRYPTION_KEY=TOKEN_ENCRYPTION_KEY:latest,
         VAPID_PUBLIC_KEY=VAPID_PUBLIC_KEY:latest,
         VAPID_PRIVATE_KEY=VAPID_PRIVATE_KEY:latest,
-        VAPID_SUBJECT=VAPID_SUBJECT:latest
+        VAPID_SUBJECT=VAPID_SUBJECT:latest,
+        RESEND_API_KEY=RESEND_API_KEY:latest
 
 images:
   - 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/vettdre:$BUILD_ID'
