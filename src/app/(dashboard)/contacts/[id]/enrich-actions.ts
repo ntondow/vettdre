@@ -1,6 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import {
   apolloEnrichPerson,
   apolloEnrichOrganization,
@@ -14,8 +15,43 @@ import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 const PDL_BASE = "https://api.peopledatalabs.com/v5";
 const NYC = "https://data.cityofnewyork.us/resource";
 
+// Helper: get or create the user's org
+async function getOrCreateUserOrg(authUser: { id: string; email?: string; user_metadata?: { full_name?: string } }) {
+  // Check if user already exists in our DB
+  let user = await prisma.user.findUnique({ where: { authProviderId: authUser.id }, include: { organization: true } });
+
+  if (!user) {
+    // First time: create org + user
+    const org = await prisma.organization.create({
+      data: {
+        name: `${authUser.user_metadata?.full_name || "My"}'s Organization`,
+        slug: `org-${authUser.id.slice(0, 8)}`,
+      },
+    });
+
+    user = await prisma.user.create({
+      data: {
+        orgId: org.id,
+        authProviderId: authUser.id,
+        email: authUser.email || "",
+        fullName: authUser.user_metadata?.full_name || "User",
+        role: "owner",
+      },
+      include: { organization: true },
+    });
+  }
+
+  return { user, org: user.organization };
+}
+
 export async function enrichContact(contactId: string) {
-  const contact = await prisma.contact.findUnique({ where: { id: contactId } });
+  const supabase = await createClient();
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  if (!authUser) return { error: "Not authenticated" };
+
+  const { org } = await getOrCreateUserOrg(authUser);
+
+  const contact = await prisma.contact.findFirst({ where: { id: contactId, orgId: org.id } });
   if (!contact) return { error: "Contact not found" };
 
   console.log("=== ENRICHING CONTACT ===", contact.firstName, contact.lastName);
