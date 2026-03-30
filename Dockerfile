@@ -37,8 +37,6 @@ RUN npm run build
 # ---- Production ----
 FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl
-# Install Google Workspace CLI (gws) for AI agent tool access
-RUN npm install -g @googleworkspace/cli
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -63,7 +61,6 @@ COPY --from=builder /app/data ./data
 
 # Fix permissions for non-root user
 RUN chown -R nextjs:nodejs /app/public /app/data
-
 
 USER nextjs
 EXPOSE 8080

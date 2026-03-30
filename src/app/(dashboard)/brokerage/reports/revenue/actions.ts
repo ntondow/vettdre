@@ -6,59 +6,54 @@ import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logPaymentAction } from "@/lib/bms-audit";
 import type { BrokerageRoleType } from "@/lib/bms-types";
 
-// ── Auth Helper ─────────────────────────────────────────────
+// ── Auth Helper ───────────────────────────────────────────────
 
-interface AuthContext {
-  userId: string;
-  orgId: string;
-  role: BrokerageRoleType;
-  fullName: string;
-}
-
-async function getAuthContext(): Promise<AuthContext | null> {
+async function getAuthContext() {
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-
-  let user = await prisma.user.findUnique({
+  if (!authUser) throw new Error("Not authenticated");
+  const user = await prisma.user.findUnique({
     where: { authProviderId: authUser.id },
     include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
   });
-  if (!user && authUser.email) {
-    user = await prisma.user.findFirst({
-      where: { email: authUser.email },
-      include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
-    });
-  }
-  if (!user) return null;
+  if (!user) throw new Error("User not found");
 
-  let role: BrokerageRoleType | null = null;
+  // Resolve brokerage role
+  let role: BrokerageRoleType = "agent";
   if (user.role === "owner" || user.role === "admin") {
     role = "brokerage_admin";
-  } else {
-    const firstOrgUser = await prisma.user.findFirst({
-      where: { orgId: user.orgId },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
-    if (firstOrgUser && firstOrgUser.id === user.id) role = "brokerage_admin";
+  } else if (user.brokerAgent?.brokerageRole) {
+    role = user.brokerAgent.brokerageRole as BrokerageRoleType;
   }
-  if (!role) {
-    const ROLE_MAP: Partial<Record<string, BrokerageRoleType>> = { admin: "brokerage_admin", manager: "manager" };
-    if (user.role && ROLE_MAP[user.role]) role = ROLE_MAP[user.role]!;
-    else if (user.brokerAgent?.brokerageRole) role = user.brokerAgent.brokerageRole as BrokerageRoleType;
-  }
-  if (!role) return null;
 
-  return { userId: user.id, orgId: user.orgId, role, fullName: user.fullName || user.email };
+  return {
+    userId: user.id,
+    orgId: user.orgId,
+    role,
+    agentId: user.brokerAgent?.id || null,
+  };
 }
 
-function num(val: unknown): number {
-  if (val == null) return 0;
-  return Number(val);
+// ── Helpers ───────────────────────────────────────────────────
+
+function toNum(val: unknown): number {
+  if (val === null || val === undefined) return 0;
+  const n = Number(val);
+  return isNaN(n) ? 0 : n;
 }
 
-// ── 1. recordPayout ─────────────────────────────────────────
+function buildDateFilter(startDate?: string, endDate?: string) {
+  const filter: Record<string, unknown> = {};
+  if (startDate) filter.gte = new Date(startDate);
+  if (endDate) {
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    filter.lte = end;
+  }
+  return Object.keys(filter).length > 0 ? filter : undefined;
+}
+
+// ── 1. Record Payout ──────────────────────────────────────────
 
 export async function recordPayout(input: {
   submissionId: string;
@@ -66,12 +61,12 @@ export async function recordPayout(input: {
   paymentDate?: string;
   referenceNumber?: string;
   notes?: string;
-}): Promise<{ success: boolean; paymentId?: string; error?: string }> {
+}) {
   try {
     const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
+
     if (!hasPermission(ctx.role, "record_payment")) {
-      return { success: false, error: "Not authorized" };
+      return { success: false, error: "Insufficient permissions" };
     }
 
     const submission = await prisma.dealSubmission.findFirst({
@@ -79,33 +74,38 @@ export async function recordPayout(input: {
       include: {
         invoice: true,
         transaction: true,
-        agent: { select: { id: true, firstName: true, lastName: true } },
       },
     });
-    if (!submission) return { success: false, error: "Submission not found" };
+
+    if (!submission) {
+      return { success: false, error: "Submission not found" };
+    }
+
     if (submission.status !== "invoiced") {
-      return { success: false, error: "Submission must be in 'invoiced' status to record payout" };
+      return { success: false, error: "Submission must be in invoiced status to record payment" };
     }
 
     const paymentDate = input.paymentDate ? new Date(input.paymentDate) : new Date();
-    const agentPayout = num(submission.agentPayout);
 
     const result = await prisma.$transaction(async (tx) => {
-      // a. Update submission status
+      // 1. Update submission to paid
       await tx.dealSubmission.update({
         where: { id: input.submissionId },
         data: { status: "paid" },
       });
 
-      // b. Update invoice if linked
+      // 2. Update linked invoice to paid
       if (submission.invoice) {
         await tx.invoice.update({
           where: { id: submission.invoice.id },
-          data: { status: "paid", paidDate: paymentDate },
+          data: {
+            status: "paid",
+            paidDate: paymentDate,
+          },
         });
       }
 
-      // c. Update transaction if linked
+      // 3. Update linked transaction payout fields
       if (submission.transaction) {
         await tx.transaction.update({
           where: { id: submission.transaction.id },
@@ -119,377 +119,427 @@ export async function recordPayout(input: {
         });
       }
 
-      // d. Create payment record
-      let payment = null;
-      if (submission.invoice) {
-        payment = await tx.payment.create({
-          data: {
-            orgId: ctx.orgId,
-            invoiceId: submission.invoice.id,
-            agentId: submission.agentId || null,
-            amount: agentPayout,
-            paymentMethod: input.paymentMethod as "check" | "ach" | "wire" | "cash" | "other",
-            paymentDate,
-            referenceNumber: input.referenceNumber || null,
-            notes: input.notes || null,
-          },
-        });
-      }
-
-      return { payment };
-    });
-
-    // e. Audit logs
-    logSubmissionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "paid", input.submissionId, {
-      paymentMethod: input.paymentMethod,
-      amount: agentPayout,
-      agentName: submission.agent ? `${submission.agent.firstName} ${submission.agent.lastName}` : undefined,
-    });
-    if (result.payment) {
-      logPaymentAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "recorded", result.payment.id, {
-        submissionId: input.submissionId,
-        amount: agentPayout,
+      // 4. Create payment record
+      const payment = await tx.payment.create({
+        data: {
+          orgId: ctx.orgId,
+          invoiceId: submission.invoice?.id || "",
+          agentId: submission.agentId || null,
+          amount: submission.agentPayout,
+          paymentMethod: input.paymentMethod as "check" | "ach" | "wire" | "cash" | "stripe" | "other",
+          paymentDate,
+          referenceNumber: input.referenceNumber || null,
+          notes: input.notes || null,
+        },
       });
-    }
 
-    return { success: true, paymentId: result.payment?.id };
-  } catch (error: unknown) {
+      return payment;
+    });
+
+    // Audit logs (fire-and-forget)
+    logSubmissionAction(ctx.orgId, { id: ctx.userId }, "paid", input.submissionId, {
+      paymentMethod: input.paymentMethod,
+      paymentDate: paymentDate.toISOString(),
+      referenceNumber: input.referenceNumber,
+    });
+
+    logPaymentAction(ctx.orgId, { id: ctx.userId }, "recorded", result.id, {
+      submissionId: input.submissionId,
+      amount: toNum(submission.agentPayout),
+      paymentMethod: input.paymentMethod,
+    });
+
+    return { success: true, paymentId: result.id };
+  } catch (error) {
     console.error("recordPayout error:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Failed to record payout" };
+    return { success: false, error: "Failed to record payout" };
   }
 }
 
-// ── 2. getAgentEarningsReport ───────────────────────────────
+// ── 2. Agent Earnings Report ──────────────────────────────────
 
-export async function getAgentEarningsReport(params?: {
+export async function getAgentEarningsReport(filters?: {
   startDate?: string;
   endDate?: string;
   year?: number;
-}): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+}) {
   try {
     const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
+
     if (!hasPermission(ctx.role, "view_reports")) {
-      return { success: false, error: "Not authorized" };
+      return { agents: [], orgTotals: null };
     }
 
-    const year = params?.year ?? new Date().getFullYear();
-    const startDate = params?.startDate ? new Date(params.startDate) : new Date(year, 0, 1);
-    const endDate = params?.endDate ? new Date(params.endDate) : new Date(year, 11, 31, 23, 59, 59);
+    const where: Record<string, unknown> = {
+      orgId: ctx.orgId,
+      status: { in: ["approved", "invoiced", "paid"] },
+    };
+
+    if (filters?.year) {
+      const yearStart = new Date(filters.year, 0, 1);
+      const yearEnd = new Date(filters.year, 11, 31, 23, 59, 59, 999);
+      where.createdAt = { gte: yearStart, lte: yearEnd };
+    } else {
+      const dateFilter = buildDateFilter(filters?.startDate, filters?.endDate);
+      if (dateFilter) where.createdAt = dateFilter;
+    }
 
     const submissions = await prisma.dealSubmission.findMany({
-      where: {
-        orgId: ctx.orgId,
-        status: { in: ["approved", "invoiced", "paid"] },
-        createdAt: { gte: startDate, lte: endDate },
+      where,
+      include: {
+        agent: { select: { id: true, firstName: true, lastName: true, email: true } },
       },
-      select: {
-        agentId: true,
-        agentFirstName: true,
-        agentLastName: true,
-        agentEmail: true,
-        status: true,
-        dealType: true,
-        exclusiveType: true,
-        transactionValue: true,
-        totalCommission: true,
-        agentPayout: true,
-        housePayout: true,
-      },
+      orderBy: { createdAt: "desc" },
     });
 
-    // Get agent details for address/license
-    const agents = await prisma.brokerAgent.findMany({
-      where: { orgId: ctx.orgId },
-      select: { id: true, firstName: true, lastName: true, email: true, licenseNumber: true, address: true, city: true, state: true, zipCode: true },
-    });
-    const agentMap = new Map(agents.map((a) => [a.id, a]));
-
-    // Aggregate per agent
-    const byAgent = new Map<string, {
+    // Group by agent
+    const agentMap = new Map<string, {
       agentId: string;
       agentName: string;
       agentEmail: string;
-      licenseNumber: string;
-      address: string;
       dealCount: number;
       totalCommission: number;
       totalAgentPayout: number;
       totalHousePayout: number;
       paidOut: number;
       pendingPayout: number;
+      avgDealSize: number;
       totalTransactionValue: number;
       dealsByType: Record<string, number>;
-      dealsByExclusive: Record<string, number>;
+      dealsByExclusive: { exclusive: number; coBroke: number };
     }>();
 
-    for (const s of submissions) {
-      const key = s.agentId ?? `${s.agentFirstName}_${s.agentLastName}`;
-      if (!byAgent.has(key)) {
-        const agentDetail = s.agentId ? agentMap.get(s.agentId) : null;
-        const addr = agentDetail ? [agentDetail.address, agentDetail.city, agentDetail.state, agentDetail.zipCode].filter(Boolean).join(", ") : "";
-        byAgent.set(key, {
-          agentId: s.agentId ?? key,
-          agentName: agentDetail ? `${agentDetail.firstName} ${agentDetail.lastName}` : `${s.agentFirstName} ${s.agentLastName}`,
-          agentEmail: agentDetail?.email ?? s.agentEmail,
-          licenseNumber: agentDetail?.licenseNumber ?? "",
-          address: addr,
+    let orgTotalCommission = 0;
+    let orgTotalAgentPayout = 0;
+    let orgTotalHousePayout = 0;
+    let orgTotalPaidOut = 0;
+    let orgTotalPending = 0;
+    let orgTotalDeals = 0;
+    let orgTotalTransactionValue = 0;
+
+    for (const sub of submissions) {
+      const agentKey = sub.agentId || sub.agentEmail;
+      const agentName = sub.agent
+        ? `${sub.agent.firstName} ${sub.agent.lastName}`
+        : `${sub.agentFirstName} ${sub.agentLastName}`;
+      const agentEmail = sub.agent?.email || sub.agentEmail;
+
+      if (!agentMap.has(agentKey)) {
+        agentMap.set(agentKey, {
+          agentId: sub.agentId || agentKey,
+          agentName,
+          agentEmail,
           dealCount: 0,
           totalCommission: 0,
           totalAgentPayout: 0,
           totalHousePayout: 0,
           paidOut: 0,
           pendingPayout: 0,
+          avgDealSize: 0,
           totalTransactionValue: 0,
           dealsByType: {},
-          dealsByExclusive: {},
+          dealsByExclusive: { exclusive: 0, coBroke: 0 },
         });
       }
-      const row = byAgent.get(key)!;
-      row.dealCount++;
-      row.totalCommission += num(s.totalCommission);
-      row.totalAgentPayout += num(s.agentPayout);
-      row.totalHousePayout += num(s.housePayout);
-      row.totalTransactionValue += num(s.transactionValue);
-      if (s.status === "paid") row.paidOut += num(s.agentPayout);
-      else row.pendingPayout += num(s.agentPayout);
-      row.dealsByType[s.dealType] = (row.dealsByType[s.dealType] || 0) + 1;
-      if (s.exclusiveType) row.dealsByExclusive[s.exclusiveType] = (row.dealsByExclusive[s.exclusiveType] || 0) + 1;
+
+      const entry = agentMap.get(agentKey)!;
+      const commission = toNum(sub.totalCommission);
+      const agentPay = toNum(sub.agentPayout);
+      const housePay = toNum(sub.housePayout);
+      const txnValue = toNum(sub.transactionValue);
+
+      entry.dealCount++;
+      entry.totalCommission += commission;
+      entry.totalAgentPayout += agentPay;
+      entry.totalHousePayout += housePay;
+      entry.totalTransactionValue += txnValue;
+
+      if (sub.status === "paid") {
+        entry.paidOut += agentPay;
+      } else {
+        entry.pendingPayout += agentPay;
+      }
+
+      // Deal type breakdown
+      const dt = sub.dealType || "other";
+      entry.dealsByType[dt] = (entry.dealsByType[dt] || 0) + 1;
+
+      // Exclusive vs co-broke
+      if (sub.coBrokeAgent || sub.coBrokeBrokerage) {
+        entry.dealsByExclusive.coBroke++;
+      } else {
+        entry.dealsByExclusive.exclusive++;
+      }
+
+      // Org totals
+      orgTotalCommission += commission;
+      orgTotalAgentPayout += agentPay;
+      orgTotalHousePayout += housePay;
+      orgTotalDeals++;
+      orgTotalTransactionValue += txnValue;
+      if (sub.status === "paid") orgTotalPaidOut += agentPay;
+      else orgTotalPending += agentPay;
     }
 
-    const agentRows = Array.from(byAgent.values())
-      .map((r) => ({ ...r, avgDealSize: r.dealCount > 0 ? r.totalTransactionValue / r.dealCount : 0 }))
+    // Compute avg deal size and sort by payout desc
+    const agents = Array.from(agentMap.values())
+      .map((a) => ({
+        ...a,
+        avgDealSize: a.dealCount > 0 ? a.totalTransactionValue / a.dealCount : 0,
+      }))
       .sort((a, b) => b.totalAgentPayout - a.totalAgentPayout);
 
     const orgTotals = {
-      totalDeals: agentRows.reduce((s, r) => s + r.dealCount, 0),
-      totalCommission: agentRows.reduce((s, r) => s + r.totalCommission, 0),
-      totalAgentPayout: agentRows.reduce((s, r) => s + r.totalAgentPayout, 0),
-      totalHousePayout: agentRows.reduce((s, r) => s + r.totalHousePayout, 0),
-      totalPaidOut: agentRows.reduce((s, r) => s + r.paidOut, 0),
-      totalPending: agentRows.reduce((s, r) => s + r.pendingPayout, 0),
+      totalCommission: orgTotalCommission,
+      totalAgentPayout: orgTotalAgentPayout,
+      totalHousePayout: orgTotalHousePayout,
+      paidOut: orgTotalPaidOut,
+      pendingPayout: orgTotalPending,
+      totalDeals: orgTotalDeals,
+      totalTransactionValue: orgTotalTransactionValue,
+      avgDealSize: orgTotalDeals > 0 ? orgTotalTransactionValue / orgTotalDeals : 0,
     };
 
-    return { success: true, data: { agents: agentRows, orgTotals } };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify({ agents, orgTotals }));
+  } catch (error) {
     console.error("getAgentEarningsReport error:", error);
-    return { success: false, error: "Failed to generate earnings report" };
+    return { agents: [], orgTotals: null };
   }
 }
 
-// ── 3. getRevenuePipeline ───────────────────────────────────
+// ── 3. Revenue Pipeline ───────────────────────────────────────
 
-export async function getRevenuePipeline(params?: {
+export async function getRevenuePipeline(filters?: {
   startDate?: string;
   endDate?: string;
-}): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+}) {
   try {
     const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
+
     if (!hasPermission(ctx.role, "view_reports")) {
-      return { success: false, error: "Not authorized" };
+      return null;
     }
 
     const where: Record<string, unknown> = { orgId: ctx.orgId };
-    if (params?.startDate || params?.endDate) {
-      const createdAt: Record<string, Date> = {};
-      if (params.startDate) createdAt.gte = new Date(params.startDate);
-      if (params.endDate) createdAt.lte = new Date(params.endDate);
-      where.createdAt = createdAt;
-    }
+    const dateFilter = buildDateFilter(filters?.startDate, filters?.endDate);
+    if (dateFilter) where.createdAt = dateFilter;
 
     const submissions = await prisma.dealSubmission.findMany({
       where,
-      select: { status: true, totalCommission: true, agentPayout: true, housePayout: true },
+      select: {
+        status: true,
+        totalCommission: true,
+        agentPayout: true,
+        housePayout: true,
+      },
     });
 
-    const pipeline: Record<string, { count: number; totalCommission: number; totalAgentPayout: number; totalHousePayout: number }> = {};
-    for (const status of ["submitted", "approved", "invoiced", "paid", "rejected"]) {
-      pipeline[status] = { count: 0, totalCommission: 0, totalAgentPayout: 0, totalHousePayout: 0 };
-    }
+    const stages: Record<string, { count: number; totalCommission: number; totalAgentPayout: number; totalHousePayout: number }> = {
+      submitted: { count: 0, totalCommission: 0, totalAgentPayout: 0, totalHousePayout: 0 },
+      approved: { count: 0, totalCommission: 0, totalAgentPayout: 0, totalHousePayout: 0 },
+      invoiced: { count: 0, totalCommission: 0, totalAgentPayout: 0, totalHousePayout: 0 },
+      paid: { count: 0, totalCommission: 0, totalAgentPayout: 0, totalHousePayout: 0 },
+    };
 
-    for (const s of submissions) {
-      const stage = pipeline[s.status];
-      if (stage) {
-        stage.count++;
-        stage.totalCommission += num(s.totalCommission);
-        stage.totalAgentPayout += num(s.agentPayout);
-        stage.totalHousePayout += num(s.housePayout);
+    let totalRevenueCollected = 0;
+    let totalAgentPayoutsCompleted = 0;
+
+    for (const sub of submissions) {
+      const stage = stages[sub.status];
+      if (!stage) continue; // skip rejected, under_review
+
+      const commission = toNum(sub.totalCommission);
+      const agentPay = toNum(sub.agentPayout);
+      const housePay = toNum(sub.housePayout);
+
+      stage.count++;
+      stage.totalCommission += commission;
+      stage.totalAgentPayout += agentPay;
+      stage.totalHousePayout += housePay;
+
+      if (sub.status === "paid") {
+        totalRevenueCollected += housePay;
+        totalAgentPayoutsCompleted += agentPay;
       }
     }
 
-    const paid = pipeline.paid;
-    const approved = pipeline.approved;
-    const invoiced = pipeline.invoiced;
+    const pendingInvoicing = stages.approved.totalCommission;
+    const pendingPayment = stages.invoiced.totalAgentPayout;
 
-    return {
-      success: true,
-      data: {
-        pipeline,
-        totalRevenueCollected: paid.totalHousePayout,
-        totalAgentPayoutsCompleted: paid.totalAgentPayout,
-        pendingInvoicing: approved.totalCommission,
-        pendingPayment: invoiced.totalCommission,
-      },
-    };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify({
+      stages,
+      totalRevenueCollected,
+      totalAgentPayoutsCompleted,
+      pendingInvoicing,
+      pendingPayment,
+    }));
+  } catch (error) {
     console.error("getRevenuePipeline error:", error);
-    return { success: false, error: "Failed to fetch revenue pipeline" };
+    return null;
   }
 }
 
-// ── 4. getRevenueByMonth ────────────────────────────────────
+// ── 4. Revenue by Month ───────────────────────────────────────
 
-export async function getRevenueByMonth(year?: number): Promise<{
-  success: boolean;
-  data?: Array<{ month: number; monthLabel: string; totalCommission: number; houseRevenue: number; agentPayouts: number; dealCount: number }>;
-  error?: string;
-}> {
+export async function getRevenueByMonth(year?: number) {
   try {
     const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
+
     if (!hasPermission(ctx.role, "view_reports")) {
-      return { success: false, error: "Not authorized" };
+      return [];
     }
 
-    const y = year ?? new Date().getFullYear();
-    const startDate = new Date(y, 0, 1);
-    const endDate = new Date(y, 11, 31, 23, 59, 59);
+    const targetYear = year || new Date().getFullYear();
+    const yearStart = new Date(targetYear, 0, 1);
+    const yearEnd = new Date(targetYear, 11, 31, 23, 59, 59, 999);
 
     const submissions = await prisma.dealSubmission.findMany({
       where: {
         orgId: ctx.orgId,
         status: "paid",
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: yearStart, lte: yearEnd },
       },
-      select: { createdAt: true, totalCommission: true, housePayout: true, agentPayout: true },
+      select: {
+        totalCommission: true,
+        agentPayout: true,
+        housePayout: true,
+        updatedAt: true,
+      },
     });
 
-    const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const months = MONTHS.map((label, i) => ({
-      month: i + 1,
-      monthLabel: label,
+    // Initialize 12-month array
+    const months = Array.from({ length: 12 }, (_, i) => ({
+      month: i,
+      label: new Date(targetYear, i, 1).toLocaleString("en-US", { month: "short" }),
       totalCommission: 0,
       houseRevenue: 0,
       agentPayouts: 0,
       dealCount: 0,
     }));
 
-    for (const s of submissions) {
-      const m = new Date(s.createdAt).getMonth();
-      months[m].totalCommission += num(s.totalCommission);
-      months[m].houseRevenue += num(s.housePayout);
-      months[m].agentPayouts += num(s.agentPayout);
-      months[m].dealCount++;
+    for (const sub of submissions) {
+      const monthIndex = sub.updatedAt.getMonth();
+      const entry = months[monthIndex];
+      entry.totalCommission += toNum(sub.totalCommission);
+      entry.houseRevenue += toNum(sub.housePayout);
+      entry.agentPayouts += toNum(sub.agentPayout);
+      entry.dealCount++;
     }
 
-    return { success: true, data: months };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify(months));
+  } catch (error) {
     console.error("getRevenueByMonth error:", error);
-    return { success: false, error: "Failed to fetch monthly revenue" };
+    return [];
   }
 }
 
-// ── 5. get1099Data ──────────────────────────────────────────
+// ── 5. 1099 Data ──────────────────────────────────────────────
 
-export async function get1099Data(year: number): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+export async function get1099Data(year: number) {
   try {
     const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
+
     if (!hasPermission(ctx.role, "view_1099")) {
-      return { success: false, error: "Not authorized" };
+      return { agents: [], summary: null };
     }
 
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year, 11, 31, 23, 59, 59);
+    const yearStart = new Date(year, 0, 1);
+    const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
 
     const submissions = await prisma.dealSubmission.findMany({
       where: {
         orgId: ctx.orgId,
         status: "paid",
-        createdAt: { gte: startDate, lte: endDate },
+        updatedAt: { gte: yearStart, lte: yearEnd },
       },
-      select: {
-        agentId: true,
-        agentFirstName: true,
-        agentLastName: true,
-        agentEmail: true,
-        agentLicense: true,
-        agentPayout: true,
-        createdAt: true,
+      include: {
+        agent: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            address: true,
+            city: true,
+            state: true,
+            zipCode: true,
+            w9OnFile: true,
+          },
+        },
       },
     });
 
-    const agents = await prisma.brokerAgent.findMany({
-      where: { orgId: ctx.orgId },
-      select: { id: true, firstName: true, lastName: true, email: true, licenseNumber: true, address: true, city: true, state: true, zipCode: true },
-    });
-    const agentMap = new Map(agents.map((a) => [a.id, a]));
-
-    const byAgent = new Map<string, {
+    // Group by agent
+    const agentMap = new Map<string, {
       agentId: string;
       agentName: string;
       agentEmail: string;
-      agentLicense: string;
-      agentAddress: string;
-      totalEarnings: number;
-      invoiceCount: number;
-      firstPaymentDate: string | null;
-      lastPaymentDate: string | null;
+      address: string;
+      city: string;
+      state: string;
+      zipCode: string;
+      w9OnFile: boolean;
+      totalPaid: number;
+      dealCount: number;
+      meetsThreshold: boolean;
     }>();
 
-    for (const s of submissions) {
-      const key = s.agentId ?? `${s.agentFirstName}_${s.agentLastName}`;
-      if (!byAgent.has(key)) {
-        const detail = s.agentId ? agentMap.get(s.agentId) : null;
-        const addr = detail ? [detail.address, detail.city, detail.state, detail.zipCode].filter(Boolean).join(", ") : "";
-        byAgent.set(key, {
-          agentId: key,
-          agentName: detail ? `${detail.firstName} ${detail.lastName}` : `${s.agentFirstName} ${s.agentLastName}`,
-          agentEmail: detail?.email ?? s.agentEmail,
-          agentLicense: detail?.licenseNumber ?? s.agentLicense ?? "",
-          agentAddress: addr,
-          totalEarnings: 0,
-          invoiceCount: 0,
-          firstPaymentDate: null,
-          lastPaymentDate: null,
+    for (const sub of submissions) {
+      const agentKey = sub.agentId || sub.agentEmail;
+      const agentName = sub.agent
+        ? `${sub.agent.firstName} ${sub.agent.lastName}`
+        : `${sub.agentFirstName} ${sub.agentLastName}`;
+
+      if (!agentMap.has(agentKey)) {
+        agentMap.set(agentKey, {
+          agentId: sub.agentId || agentKey,
+          agentName,
+          agentEmail: sub.agent?.email || sub.agentEmail,
+          address: sub.agent?.address || "",
+          city: sub.agent?.city || "",
+          state: sub.agent?.state || "NY",
+          zipCode: sub.agent?.zipCode || "",
+          w9OnFile: sub.agent?.w9OnFile ?? false,
+          totalPaid: 0,
+          dealCount: 0,
+          meetsThreshold: false,
         });
       }
-      const row = byAgent.get(key)!;
-      row.totalEarnings += num(s.agentPayout);
-      row.invoiceCount++;
-      const dateStr = new Date(s.createdAt).toISOString();
-      if (!row.firstPaymentDate || dateStr < row.firstPaymentDate) row.firstPaymentDate = dateStr;
-      if (!row.lastPaymentDate || dateStr > row.lastPaymentDate) row.lastPaymentDate = dateStr;
+
+      const entry = agentMap.get(agentKey)!;
+      entry.totalPaid += toNum(sub.agentPayout);
+      entry.dealCount++;
     }
 
-    const allAgents = Array.from(byAgent.values()).sort((a, b) => b.totalEarnings - a.totalEarnings);
-    const above600 = allAgents.filter((a) => a.totalEarnings >= 600);
+    const agents = Array.from(agentMap.values())
+      .map((a) => ({
+        ...a,
+        meetsThreshold: a.totalPaid >= 600,
+      }))
+      .sort((a, b) => b.totalPaid - a.totalPaid);
 
-    return {
-      success: true,
-      data: {
-        agents: allAgents.map((a) => ({ ...a, isAbove600: a.totalEarnings >= 600 })),
-        summary: {
-          totalAgents: allAgents.length,
-          agentsAboveThreshold: above600.length,
-          totalPaid: allAgents.reduce((s, a) => s + a.totalEarnings, 0),
-        },
-      },
+    const summary = {
+      year,
+      totalAgents: agents.length,
+      agentsAboveThreshold: agents.filter((a) => a.meetsThreshold).length,
+      agentsBelowThreshold: agents.filter((a) => !a.meetsThreshold).length,
+      totalPaidOut: agents.reduce((sum, a) => sum + a.totalPaid, 0),
+      missingW9Count: agents.filter((a) => a.meetsThreshold && !a.w9OnFile).length,
     };
-  } catch (error: unknown) {
+
+    return JSON.parse(JSON.stringify({ agents, summary }));
+  } catch (error) {
     console.error("get1099Data error:", error);
-    return { success: false, error: "Failed to generate 1099 data" };
+    return { agents: [], summary: null };
   }
 }
 
-// ── 6. markSubmissionPaid ───────────────────────────────────
+// ── 6. Mark Submission Paid (convenience wrapper) ─────────────
 
-export async function markSubmissionPaid(submissionId: string): Promise<{ success: boolean; error?: string }> {
-  const result = await recordPayout({
+export async function markSubmissionPaid(submissionId: string) {
+  return recordPayout({
     submissionId,
     paymentMethod: "check",
-    paymentDate: new Date().toISOString(),
+    paymentDate: new Date().toISOString().slice(0, 10),
   });
-  return { success: result.success, error: result.error };
 }

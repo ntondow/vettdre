@@ -37,7 +37,9 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/book") ||
     pathname.startsWith("/join") ||
     pathname.startsWith("/submit-deal") ||
+    pathname.startsWith("/sign/") ||
     pathname.startsWith("/leasing-agent") ||
+    pathname.startsWith("/api/onboarding") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/twilio") ||
     pathname.startsWith("/api/book") ||
@@ -117,27 +119,12 @@ export async function updateSession(request: NextRequest) {
         .single();
 
       if (newOrg) {
-        // Create default team for the new org
-        const teamSlug = `team-${Date.now().toString(36)}`;
-        const { data: newTeam } = await supabase
-          .from("teams")
-          .insert({
-            org_id: newOrg.id,
-            name: orgName,
-            slug: teamSlug,
-            type: "generic",
-            settings: {},
-          })
-          .select("id")
-          .single();
-
         // Create user record
         const fullName = user.user_metadata?.full_name || user.email?.split("@")[0] || "User";
         await supabase
           .from("users")
           .insert({
             org_id: newOrg.id,
-            team_id: newTeam?.id || null,
             auth_provider_id: user.id,
             email: user.email!,
             full_name: fullName,

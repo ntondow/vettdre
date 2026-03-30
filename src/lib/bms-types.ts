@@ -10,15 +10,15 @@ export type SubmissionStatus = "submitted" | "under_review" | "approved" | "invo
 export type InvoiceStatusType = "draft" | "sent" | "paid" | "void";
 export type SubmissionSource = "internal" | "external";
 export type AgentStatus = "pending" | "active" | "inactive" | "terminated";
+export type ExclusiveType = "brokerage" | "personal";
 export type CommissionPlanType = "volume_based" | "value_based" | "flat";
 export type CommissionPlanStatus = "active" | "inactive";
-export type ExclusiveType = "brokerage" | "personal";
 
 export interface RequiredDocs {
-  signedLease?: string;       // file URL or upload key
-  agencyDisclosure?: string;
-  fairHousingNotice?: string;
-  commissionAgreement?: string;
+  signedLease: boolean;
+  agencyDisclosure: boolean;
+  fairHousing: boolean;
+  commissionAgreement: boolean;
 }
 
 // ── Interfaces ────────────────────────────────────────────────
@@ -30,34 +30,14 @@ export interface DealSubmissionInput {
   agentPhone?: string;
   agentLicense?: string;
 
-  exclusiveType?: ExclusiveType;
-  bmsPropertyId?: string;
-
   propertyAddress: string;
   unit?: string;
   city?: string;
   state: string;
 
-  // Landlord / billing (auto-filled for brokerage exclusives)
-  landlordName?: string;
-  landlordEmail?: string;
-  landlordPhone?: string;
-  landlordAddress?: string;
-  managementCo?: string;
-
   dealType: DealType;
   transactionValue: number;
   closingDate?: string;
-
-  // Lease-specific
-  leaseStartDate?: string;
-  leaseEndDate?: string;
-  monthlyRent?: number;
-
-  // Tenant info (for leases)
-  tenantName?: string;
-  tenantEmail?: string;
-  tenantPhone?: string;
 
   commissionType: CommissionType;
   commissionPct?: number;
@@ -78,8 +58,22 @@ export interface DealSubmissionInput {
 
   coAgents?: CoAgentInput[];
 
-  requiredDocs?: RequiredDocs;
   notes?: string;
+
+  exclusiveType?: ExclusiveType;
+  bmsPropertyId?: string;
+  landlordName?: string;
+  landlordEmail?: string;
+  landlordPhone?: string;
+  landlordAddress?: string;
+  managementCo?: string;
+  leaseStartDate?: string;
+  leaseEndDate?: string;
+  monthlyRent?: number;
+  tenantName?: string;
+  tenantEmail?: string;
+  tenantPhone?: string;
+  requiredDocs?: RequiredDocs;
 }
 
 export interface DealSubmissionRecord extends DealSubmissionInput {
@@ -89,15 +83,13 @@ export interface DealSubmissionRecord extends DealSubmissionInput {
   status: SubmissionStatus;
   rejectionReason?: string;
   submissionSource: SubmissionSource;
-  approvedBy?: string;
-  approvedAt?: string;
-  managerOverrideExclusiveType?: string;
-  managerOverrideSplitPct?: number;
-  bmsProperty?: BmsPropertyRecord;
   createdAt: string;
   updatedAt: string;
   invoice?: InvoiceRecord;
   agent?: AgentRecord;
+  approvedBy?: string;
+  approvedAt?: string;
+  bmsProperty?: BmsPropertyRecord;
 }
 
 export interface InvoiceInput {
@@ -428,6 +420,8 @@ export interface BrokerageSettings {
   logoUrl: string | null;
   companyName: string | null;
   defaultSplitPct: number;
+  defaultHouseExclusiveSplitPct: number;
+  defaultPersonalExclusiveSplitPct: number;
   defaultPaymentTerms: string;
   invoiceFooterText: string;
   companyLicenseNumber: string;
@@ -789,6 +783,13 @@ export const BMS_PERMISSIONS = {
   // Settings
   manage_brokerage_settings: ["brokerage_admin"],
   manage_roles: ["brokerage_admin"],
+
+  // Client Onboarding
+  client_onboarding_create: ["brokerage_admin", "broker", "manager", "agent"],
+  client_onboarding_view_all: ["brokerage_admin", "broker", "manager"],
+  client_onboarding_view_own: ["brokerage_admin", "broker", "manager", "agent"],
+  client_onboarding_void: ["brokerage_admin", "broker", "manager", "agent"],
+  client_onboarding_resend: ["brokerage_admin", "broker", "manager", "agent"],
 } as const satisfies Record<string, readonly BrokerageRoleType[]>;
 
 export type BmsPermission = keyof typeof BMS_PERMISSIONS;
@@ -849,16 +850,6 @@ export const SUBMISSION_STATUS_LABELS: Record<string, string> = {
   rejected: "Rejected",
 };
 
-export const EXCLUSIVE_TYPE_LABELS: Record<string, string> = {
-  brokerage: "Brokerage Exclusive",
-  personal: "Personal Exclusive",
-};
-
-export const EXCLUSIVE_TYPE_COLORS: Record<string, string> = {
-  brokerage: "bg-blue-100 text-blue-700",
-  personal: "bg-amber-100 text-amber-700",
-};
-
 export const INVOICE_STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
   sent: "Sent",
@@ -882,6 +873,16 @@ export const INVOICE_STATUS_COLORS: Record<string, string> = {
   sent: "bg-blue-100 text-blue-700",
   paid: "bg-green-100 text-green-700",
   void: "bg-red-100 text-red-700",
+};
+
+export const EXCLUSIVE_TYPE_LABELS: Record<string, string> = {
+  brokerage: "Brokerage Exclusive",
+  personal: "Agent Exclusive",
+};
+
+export const EXCLUSIVE_TYPE_COLORS: Record<string, string> = {
+  brokerage: "bg-indigo-100 text-indigo-700",
+  personal: "bg-sky-100 text-sky-700",
 };
 
 export const COMMISSION_PLAN_TYPE_LABELS: Record<string, string> = {
@@ -1355,22 +1356,24 @@ export interface BmsPropertyInput {
   landlordEmail?: string;
   landlordPhone?: string;
   managementCo?: string;
+  totalUnits?: number;
+  notes?: string;
   isExclusive?: boolean;
   billingEntityName?: string;
   billingEntityAddress?: string;
   billingEntityEmail?: string;
   billingEntityPhone?: string;
-  totalUnits?: number;
-  notes?: string;
 }
 
 export interface BmsPropertyRecord extends BmsPropertyInput {
   id: string;
   orgId: string;
+  isExclusive: boolean;
   createdAt: string;
   updatedAt: string;
   _listingCount?: number;
   _availableCount?: number;
+  _dealSubmissionCount?: number;
   _leasedCount?: number;
 }
 

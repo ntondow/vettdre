@@ -226,6 +226,8 @@ export async function updateAgent(agentId: string, input: {
   licenseNumber?: string;
   licenseExpiry?: string;
   defaultSplitPct?: number;
+  houseExclusiveSplitPct?: number | null;
+  personalExclusiveSplitPct?: number | null;
   commissionPlanId?: string;
   status?: string;
   address?: string;
@@ -272,6 +274,8 @@ export async function updateAgent(agentId: string, input: {
         licenseNumber: input.licenseNumber || null,
         licenseExpiry: input.licenseExpiry ? new Date(input.licenseExpiry) : null,
         defaultSplitPct: input.defaultSplitPct ?? 70,
+        houseExclusiveSplitPct: input.houseExclusiveSplitPct ?? null,
+        personalExclusiveSplitPct: input.personalExclusiveSplitPct ?? null,
         commissionPlanId: input.commissionPlanId || null,
         status: input.status || current.status,
         address: input.address || null,

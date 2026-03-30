@@ -40,6 +40,7 @@ import {
   CreditCard,
   Upload,
   ImageIcon,
+  DollarSign,
 } from "lucide-react";
 
 // ── Types ────────────────────────────────────────────────────
@@ -897,6 +898,45 @@ export default function BrokerageSettingsPage() {
                         className="hidden"
                       />
                     </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Commission Splits & Fees */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-slate-400" />
+                  <div>
+                    <h2 className="font-semibold text-slate-900">Commission Splits &amp; Fees</h2>
+                    <p className="text-xs text-slate-500 mt-0.5">Org-wide defaults. Individual agent splits can be set on each agent&apos;s profile.</p>
+                  </div>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={LABEL}>Brokerage Exclusive &mdash; Agent Split %</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={settingsForm.defaultHouseExclusiveSplitPct ?? 35}
+                      onChange={(e) => setField({ defaultHouseExclusiveSplitPct: parseFloat(e.target.value) || 0 })}
+                      className={INPUT}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Default: 35%. Agent gets this %, house gets the remainder.</p>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Agent Exclusive &mdash; Agent Split %</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      step={0.5}
+                      value={settingsForm.defaultPersonalExclusiveSplitPct ?? 70}
+                      onChange={(e) => setField({ defaultPersonalExclusiveSplitPct: parseFloat(e.target.value) || 0 })}
+                      className={INPUT}
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Default: 70%. Agent gets this %, house gets the remainder.</p>
                   </div>
                 </div>
               </div>

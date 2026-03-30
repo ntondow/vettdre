@@ -149,8 +149,7 @@ export default function Sidebar() {
         {/* Lifecycle sections */}
         <div className="flex-1 space-y-4">
           {NAV_SECTIONS.map((section) => {
-            const isSuperAdmin = role === "super_admin";
-            const hasVisibleItems = section.items.some(item => isSuperAdmin || !item.roles || item.roles.includes(role));
+            const hasVisibleItems = section.items.some(item => !item.roles || item.roles.includes(role));
             if (!hasVisibleItems) return null;
 
             const active = isSectionActive(section);
@@ -168,7 +167,7 @@ export default function Sidebar() {
 
                 <div className="space-y-0.5">
                   {section.items.map((item) => {
-                    if (item.roles && !isSuperAdmin && !item.roles.includes(role)) return null;
+                    if (item.roles && !item.roles.includes(role)) return null;
 
                     if (item.comingSoon) {
                       return (
@@ -239,7 +238,7 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
   escalated: number;
   onPaywall: (f: Feature) => void;
 }) {
-  const locked = item.feature && role !== "super_admin" ? !hasPermission(plan as any, item.feature) : false;
+  const locked = item.feature ? !hasPermission(plan as any, item.feature) : false;
   const isActive = !locked && pathname.startsWith(item.href);
   const cls = `w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors relative group text-left ${
     collapsed ? "justify-center" : ""

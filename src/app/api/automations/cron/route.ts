@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
     noActivity: { checked: 0, dispatched: 0 },
     taskOverdue: { checked: 0, dispatched: 0 },
     scheduledActions: { checked: 0, executed: 0, failed: 0 },
+    onboardingExpired: 0,
+    onboardingReminders: 0,
     errors: [] as string[],
   };
 
@@ -62,6 +64,22 @@ export async function GET(request: NextRequest) {
     const msg = error instanceof Error ? error.message : String(error);
     results.errors.push(`scheduled_actions error: ${msg}`);
     console.error("[AUTOMATION CRON] scheduled_actions top-level error:", error);
+  }
+
+  try {
+    await checkOnboardingExpirations(results);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    results.errors.push(`onboarding_expiration error: ${msg}`);
+    console.error("[AUTOMATION CRON] onboarding_expiration top-level error:", error);
+  }
+
+  try {
+    await sendOnboardingReminders(results);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    results.errors.push(`onboarding_reminders error: ${msg}`);
+    console.error("[AUTOMATION CRON] onboarding_reminders top-level error:", error);
   }
 
   console.log("[AUTOMATION CRON] Complete:", JSON.stringify(results));
@@ -294,5 +312,109 @@ async function executeScheduledActions(results: {
       results.errors.push(`scheduled_action (${scheduled.id}): ${msg}`);
       console.error(`[AUTOMATION CRON] scheduled action error for ${scheduled.id}:`, error);
     }
+  }
+}
+
+// ── Client Onboarding: Expire stale onboardings ─────────────
+
+async function checkOnboardingExpirations(results: { onboardingExpired: number; errors: string[] }) {
+  const expired = await prisma.clientOnboarding.findMany({
+    where: {
+      status: { in: ["pending", "partially_signed"] },
+      expiresAt: { lt: new Date() },
+    },
+    select: { id: true },
+    take: 100,
+  });
+
+  if (expired.length > 0) {
+    await prisma.clientOnboarding.updateMany({
+      where: { id: { in: expired.map((o) => o.id) } },
+      data: { status: "expired" },
+    });
+
+    // Create audit logs for each
+    for (const o of expired) {
+      await prisma.signingAuditLog.create({
+        data: {
+          onboardingId: o.id,
+          action: "expired",
+          actorType: "system",
+          actorName: "Cron",
+          metadata: { trigger: "cron_expiration_check" },
+        },
+      }).catch(() => {}); // non-fatal
+    }
+
+    results.onboardingExpired = expired.length;
+    console.log(`[AUTOMATION CRON] Expired ${expired.length} onboardings`);
+  }
+}
+
+// ── Client Onboarding: Send reminders ───────────────────────
+
+async function sendOnboardingReminders(results: { onboardingReminders: number; errors: string[] }) {
+  const { sendOnboardingReminder } = await import("@/lib/onboarding-notifications");
+
+  const active = await prisma.clientOnboarding.findMany({
+    where: {
+      status: { in: ["pending", "partially_signed"] },
+      expiresAt: { gt: new Date() },
+    },
+    include: {
+      agent: { select: { firstName: true, lastName: true } },
+      organization: { select: { name: true } },
+    },
+    take: 50,
+  });
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.vettdre.com";
+
+  for (const o of active) {
+    if (!o.expiresAt) continue;
+
+    const daysRemaining = Math.ceil((new Date(o.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    const termDays = Math.ceil((new Date(o.expiresAt).getTime() - new Date(o.createdAt).getTime()) / (1000 * 60 * 60 * 24));
+
+    // Read reminderCount from metadata (stored on audit logs)
+    const reminderLogs = await prisma.signingAuditLog.count({
+      where: { onboardingId: o.id, action: "reminder_sent" },
+    });
+
+    let shouldRemind = false;
+    if (reminderLogs === 0 && daysRemaining <= termDays * 0.5) shouldRemind = true;
+    else if (reminderLogs === 1 && daysRemaining <= termDays * 0.2) shouldRemind = true;
+    else if (reminderLogs === 2 && daysRemaining <= 1) shouldRemind = true;
+
+    if (!shouldRemind) continue;
+
+    try {
+      await sendOnboardingReminder({
+        clientEmail: o.clientEmail,
+        clientFirstName: o.clientFirstName,
+        agentFullName: o.agent ? `${o.agent.firstName} ${o.agent.lastName}` : "Your Agent",
+        brokerageName: o.organization.name,
+        signingUrl: `${appUrl}/sign/${o.token}`,
+        daysRemaining,
+      });
+
+      await prisma.signingAuditLog.create({
+        data: {
+          onboardingId: o.id,
+          action: "reminder_sent",
+          actorType: "system",
+          actorName: "Cron",
+          metadata: { daysRemaining, reminderNumber: reminderLogs + 1 },
+        },
+      });
+
+      results.onboardingReminders++;
+    } catch (err) {
+      console.error(`[AUTOMATION CRON] Reminder failed for onboarding ${o.id}:`, err);
+    }
+  }
+
+  if (results.onboardingReminders > 0) {
+    console.log(`[AUTOMATION CRON] Sent ${results.onboardingReminders} onboarding reminders`);
   }
 }

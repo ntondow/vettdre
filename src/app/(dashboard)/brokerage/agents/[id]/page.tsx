@@ -129,6 +129,8 @@ interface AgentFormData {
   licenseNumber: string;
   licenseExpiry: string;
   defaultSplitPct: number;
+  houseExclusiveSplitPct: string;
+  personalExclusiveSplitPct: string;
   commissionPlanId: string;
   teamOrOffice: string;
   startDate: string;
@@ -166,7 +168,9 @@ export default function AgentDetailPage({
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<AgentFormData>({
     firstName: "", lastName: "", email: "", phone: "",
-    licenseNumber: "", licenseExpiry: "", defaultSplitPct: 70, commissionPlanId: "",
+    licenseNumber: "", licenseExpiry: "", defaultSplitPct: 70,
+    houseExclusiveSplitPct: "", personalExclusiveSplitPct: "",
+    commissionPlanId: "",
     teamOrOffice: "", startDate: "", w9OnFile: false,
     address: "", city: "", state: "", zipCode: "", dateOfBirth: "", notes: "",
   });
@@ -262,6 +266,8 @@ export default function AgentDetailPage({
       licenseNumber: agent.licenseNumber || "",
       licenseExpiry: agent.licenseExpiry ? agent.licenseExpiry.slice(0, 10) : "",
       defaultSplitPct: Number(agent.defaultSplitPct) || 70,
+      houseExclusiveSplitPct: agent.houseExclusiveSplitPct ? String(Number(agent.houseExclusiveSplitPct)) : "",
+      personalExclusiveSplitPct: agent.personalExclusiveSplitPct ? String(Number(agent.personalExclusiveSplitPct)) : "",
       commissionPlanId: agent.commissionPlanId || "",
       teamOrOffice: agent.teamOrOffice || "",
       startDate: agent.startDate ? agent.startDate.slice(0, 10) : "",
@@ -302,6 +308,8 @@ export default function AgentDetailPage({
         licenseNumber: form.licenseNumber.trim() || undefined,
         licenseExpiry: form.licenseExpiry || undefined,
         defaultSplitPct: form.defaultSplitPct,
+        houseExclusiveSplitPct: form.houseExclusiveSplitPct ? parseFloat(form.houseExclusiveSplitPct) : null,
+        personalExclusiveSplitPct: form.personalExclusiveSplitPct ? parseFloat(form.personalExclusiveSplitPct) : null,
         commissionPlanId: form.commissionPlanId || undefined,
         teamOrOffice: form.teamOrOffice.trim() || undefined,
         startDate: form.startDate || undefined,
@@ -593,6 +601,25 @@ export default function AgentDetailPage({
                       <label className={LABEL}>Default Split %</label>
                       <div className="relative">
                         <input type="number" min={0} max={100} step="0.5" value={form.defaultSplitPct} onChange={(e) => setField({ defaultSplitPct: parseFloat(e.target.value) || 0 })} className={INPUT + " pr-8"} />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 bg-slate-50 rounded-lg">
+                    <div className="sm:col-span-2">
+                      <p className="text-xs font-medium text-slate-500 mb-2">Per-Exclusive Split Overrides <span className="font-normal">(leave blank to use org defaults)</span></p>
+                    </div>
+                    <div>
+                      <label className={LABEL}>Brokerage Exclusive — Agent Split %</label>
+                      <div className="relative">
+                        <input type="number" min={0} max={100} step="0.5" value={form.houseExclusiveSplitPct} onChange={(e) => setField({ houseExclusiveSplitPct: e.target.value })} placeholder="Org default" className={INPUT + " pr-8"} />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+                      </div>
+                    </div>
+                    <div>
+                      <label className={LABEL}>Agent Exclusive — Agent Split %</label>
+                      <div className="relative">
+                        <input type="number" min={0} max={100} step="0.5" value={form.personalExclusiveSplitPct} onChange={(e) => setField({ personalExclusiveSplitPct: e.target.value })} placeholder="Org default" className={INPUT + " pr-8"} />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
                       </div>
                     </div>

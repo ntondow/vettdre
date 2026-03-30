@@ -4,184 +4,114 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/bms-permissions";
 import { logPropertyAction } from "@/lib/bms-audit";
-import type { BmsPropertyInput, BrokerageRoleType } from "@/lib/bms-types";
+import type { BmsPropertyInput } from "@/lib/bms-types";
 
-// ── Auth Helper ─────────────────────────────────────────────
+// ── Auth Helper ───────────────────────────────────────────────
 
-interface AuthContext {
-  userId: string;
-  orgId: string;
-  role: BrokerageRoleType;
-  fullName: string;
-}
-
-async function getAuthContext(): Promise<AuthContext | null> {
+async function getAuthContext() {
   const supabase = await createClient();
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  if (!authUser) throw new Error("Not authenticated");
 
-  let user = await prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { authProviderId: authUser.id },
     include: {
-      brokerAgent: { select: { id: true, brokerageRole: true, status: true } },
+      brokerAgent: {
+        select: { id: true, role: true },
+      },
     },
   });
-  if (!user && authUser.email) {
-    user = await prisma.user.findFirst({
-      where: { email: authUser.email },
-      include: {
-        brokerAgent: { select: { id: true, brokerageRole: true, status: true } },
-      },
-    });
-  }
-  if (!user) return null;
+  if (!user) throw new Error("User not found");
 
-  let role: BrokerageRoleType | null = null;
-
-  if (user.role === "owner" || user.role === "admin") {
-    role = "brokerage_admin";
-  } else {
-    const firstOrgUser = await prisma.user.findFirst({
-      where: { orgId: user.orgId },
-      orderBy: { createdAt: "asc" },
-      select: { id: true },
-    });
-    if (firstOrgUser && firstOrgUser.id === user.id) {
-      role = "brokerage_admin";
-    }
+  const bmsRole = user.brokerAgent?.role ?? "agent";
+  if (!hasPermission(bmsRole as "owner" | "admin" | "manager" | "agent", "manage_brokerage_settings")) {
+    throw new Error("Insufficient permissions");
   }
 
-  if (!role) {
-    const ROLE_MAP: Partial<Record<string, BrokerageRoleType>> = {
-      admin: "brokerage_admin",
-      manager: "manager",
-    };
-    if (user.role && ROLE_MAP[user.role]) {
-      role = ROLE_MAP[user.role]!;
-    } else if (user.brokerAgent?.brokerageRole) {
-      role = user.brokerAgent.brokerageRole as BrokerageRoleType;
-    }
-  }
-
-  if (!role) return null;
-
-  return {
-    userId: user.id,
-    orgId: user.orgId,
-    role,
-    fullName: user.fullName || user.email,
-  };
+  return { userId: user.id, orgId: user.orgId, bmsRole };
 }
 
-// ── Serialization ───────────────────────────────────────────
-
-function serialize<T>(obj: T): T {
-  return JSON.parse(
-    JSON.stringify(obj, (_key, value) => {
-      if (value instanceof Date) return value.toISOString();
-      if (typeof value === "bigint") return Number(value);
-      return value;
-    }),
-  );
-}
-
-// ── 1. getExclusiveBuildings ────────────────────────────────
+// ── 1. List Exclusive Buildings ──────────────────────────────
 
 export async function getExclusiveBuildings(params?: {
   search?: string;
   page?: number;
   limit?: number;
-}): Promise<{
-  success: boolean;
-  data?: Record<string, unknown>[];
-  total?: number;
-  page?: number;
-  totalPages?: number;
-  error?: string;
-}> {
+}) {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
-    if (!hasPermission(ctx.role, "properties_view")) {
-      return { success: false, error: "Not authorized" };
-    }
+    const { orgId } = await getAuthContext();
 
-    const page = Math.max(1, params?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, params?.limit ?? 25));
+    const search = params?.search?.trim() || "";
+    const page = params?.page || 1;
+    const limit = params?.limit || 25;
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {
-      orgId: ctx.orgId,
+      orgId,
       isExclusive: true,
     };
 
-    if (params?.search?.trim()) {
-      const term = params.search.trim();
+    if (search) {
       where.OR = [
-        { name: { contains: term, mode: "insensitive" } },
-        { address: { contains: term, mode: "insensitive" } },
-        { landlordName: { contains: term, mode: "insensitive" } },
-        { billingEntityName: { contains: term, mode: "insensitive" } },
+        { name: { contains: search, mode: "insensitive" } },
+        { address: { contains: search, mode: "insensitive" } },
+        { landlordName: { contains: search, mode: "insensitive" } },
+        { billingEntityName: { contains: search, mode: "insensitive" } },
       ];
     }
 
-    const [properties, total] = await Promise.all([
+    const [data, total] = await Promise.all([
       prisma.bmsProperty.findMany({
         where,
         include: {
-          _count: { select: { listings: true, dealSubmissions: true } },
+          _count: {
+            select: {
+              listings: true,
+              dealSubmissions: true,
+            },
+          },
         },
-        orderBy: { name: "asc" },
+        orderBy: { createdAt: "desc" },
         skip,
         take: limit,
       }),
       prisma.bmsProperty.count({ where }),
     ]);
 
-    const data = properties.map((p) => {
-      const record = serialize(p);
-      return {
-        ...record,
-        _listingCount: p._count.listings,
-        _dealSubmissionCount: p._count.dealSubmissions,
-      };
-    });
-
-    return {
-      success: true,
-      data: data as unknown as Record<string, unknown>[],
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-    };
-  } catch (error: unknown) {
+    return JSON.parse(
+      JSON.stringify({
+        data,
+        total,
+        page,
+        totalPages: Math.ceil(total / limit),
+      }),
+    );
+  } catch (error) {
     console.error("getExclusiveBuildings error:", error);
-    return { success: false, error: "Failed to fetch exclusive buildings" };
+    return { data: [], total: 0, page: 1, totalPages: 0 };
   }
 }
 
-// ── 2. createExclusiveBuilding ──────────────────────────────
+// ── 2. Create Exclusive Building ─────────────────────────────
 
-export async function createExclusiveBuilding(
-  input: BmsPropertyInput,
-): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+export async function createExclusiveBuilding(input: BmsPropertyInput) {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
-    if (!hasPermission(ctx.role, "properties_manage")) {
-      return { success: false, error: "Not authorized" };
-    }
+    const { userId, orgId } = await getAuthContext();
 
-    if (!input.name?.trim()) return { success: false, error: "Building name is required" };
-    if (!input.address?.trim()) return { success: false, error: "Address is required" };
+    if (!input.name?.trim()) {
+      return { success: false, error: "Building name is required" };
+    }
+    if (!input.address?.trim()) {
+      return { success: false, error: "Address is required" };
+    }
 
     const property = await prisma.bmsProperty.create({
       data: {
-        orgId: ctx.orgId,
+        orgId,
         name: input.name.trim(),
-        address: input.address.trim(),
+        address: input.address?.trim() || null,
         city: input.city?.trim() || "New York",
         state: input.state?.trim() || "NY",
         zipCode: input.zipCode?.trim() || null,
@@ -191,52 +121,47 @@ export async function createExclusiveBuilding(
         managementCo: input.managementCo?.trim() || null,
         totalUnits: input.totalUnits ?? null,
         notes: input.notes?.trim() || null,
-        isExclusive: true,
         billingEntityName: input.billingEntityName?.trim() || null,
         billingEntityAddress: input.billingEntityAddress?.trim() || null,
         billingEntityEmail: input.billingEntityEmail?.trim() || null,
         billingEntityPhone: input.billingEntityPhone?.trim() || null,
+        isExclusive: true,
       },
     });
 
-    logPropertyAction(
-      ctx.orgId,
-      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
-      "created",
-      property.id,
-      { name: property.name, address: property.address },
-    );
+    logPropertyAction(orgId, { id: userId }, "created_exclusive", property.id, {
+      name: input.name,
+      address: input.address,
+    });
 
-    return { success: true, data: serialize(property) as unknown as Record<string, unknown> };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify({ success: true, property }));
+  } catch (error) {
     console.error("createExclusiveBuilding error:", error);
-    return { success: false, error: "Failed to create building" };
+    return { success: false, error: "Failed to create exclusive building" };
   }
 }
 
-// ── 3. updateExclusiveBuilding ──────────────────────────────
+// ── 3. Update Exclusive Building ─────────────────────────────
 
 export async function updateExclusiveBuilding(
   id: string,
   input: Partial<BmsPropertyInput>,
-): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+) {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
-    if (!hasPermission(ctx.role, "properties_manage")) {
-      return { success: false, error: "Not authorized" };
-    }
+    const { userId, orgId } = await getAuthContext();
 
     const existing = await prisma.bmsProperty.findFirst({
-      where: { id, orgId: ctx.orgId },
+      where: { id, orgId },
     });
-    if (!existing) return { success: false, error: "Building not found" };
+    if (!existing) {
+      return { success: false, error: "Building not found" };
+    }
 
     const data: Record<string, unknown> = {};
     if (input.name !== undefined) data.name = input.name.trim();
-    if (input.address !== undefined) data.address = input.address.trim();
-    if (input.city !== undefined) data.city = input.city.trim() || "New York";
-    if (input.state !== undefined) data.state = input.state.trim() || "NY";
+    if (input.address !== undefined) data.address = input.address?.trim() || null;
+    if (input.city !== undefined) data.city = input.city?.trim() || null;
+    if (input.state !== undefined) data.state = input.state?.trim() || null;
     if (input.zipCode !== undefined) data.zipCode = input.zipCode?.trim() || null;
     if (input.landlordName !== undefined) data.landlordName = input.landlordName?.trim() || null;
     if (input.landlordEmail !== undefined) data.landlordEmail = input.landlordEmail?.trim() || null;
@@ -244,105 +169,96 @@ export async function updateExclusiveBuilding(
     if (input.managementCo !== undefined) data.managementCo = input.managementCo?.trim() || null;
     if (input.totalUnits !== undefined) data.totalUnits = input.totalUnits ?? null;
     if (input.notes !== undefined) data.notes = input.notes?.trim() || null;
-    if (input.isExclusive !== undefined) data.isExclusive = input.isExclusive;
     if (input.billingEntityName !== undefined) data.billingEntityName = input.billingEntityName?.trim() || null;
     if (input.billingEntityAddress !== undefined) data.billingEntityAddress = input.billingEntityAddress?.trim() || null;
     if (input.billingEntityEmail !== undefined) data.billingEntityEmail = input.billingEntityEmail?.trim() || null;
     if (input.billingEntityPhone !== undefined) data.billingEntityPhone = input.billingEntityPhone?.trim() || null;
 
-    const updated = await prisma.bmsProperty.update({ where: { id }, data });
+    const property = await prisma.bmsProperty.update({
+      where: { id },
+      data,
+    });
 
-    logPropertyAction(
-      ctx.orgId,
-      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
-      "updated",
-      id,
-      { changes: Object.keys(data) },
-    );
+    logPropertyAction(orgId, { id: userId }, "updated_exclusive", id, {
+      name: property.name,
+      updatedFields: Object.keys(data),
+    });
 
-    return { success: true, data: serialize(updated) as unknown as Record<string, unknown> };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify({ success: true, property }));
+  } catch (error) {
     console.error("updateExclusiveBuilding error:", error);
-    return { success: false, error: "Failed to update building" };
+    return { success: false, error: "Failed to update exclusive building" };
   }
 }
 
-// ── 4. deleteExclusiveBuilding ──────────────────────────────
+// ── 4. Delete Exclusive Building ─────────────────────────────
 
-export async function deleteExclusiveBuilding(
-  id: string,
-): Promise<{ success: boolean; error?: string }> {
+export async function deleteExclusiveBuilding(id: string) {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
-    if (!hasPermission(ctx.role, "properties_manage")) {
-      return { success: false, error: "Not authorized" };
-    }
+    const { userId, orgId } = await getAuthContext();
 
     const property = await prisma.bmsProperty.findFirst({
-      where: { id, orgId: ctx.orgId },
-      include: { _count: { select: { dealSubmissions: true } } },
+      where: { id, orgId },
+      include: {
+        _count: { select: { dealSubmissions: true } },
+      },
     });
-    if (!property) return { success: false, error: "Building not found" };
+    if (!property) {
+      return { success: false, error: "Building not found" };
+    }
 
     if (property._count.dealSubmissions > 0) {
       return {
         success: false,
-        error: `Cannot delete — ${property._count.dealSubmissions} deal submission${property._count.dealSubmissions === 1 ? "" : "s"} reference this building. Remove the exclusive flag instead.`,
+        error: `Cannot delete building "${property.name}" because it has ${property._count.dealSubmissions} associated deal submission${property._count.dealSubmissions === 1 ? "" : "s"}. Remove the exclusive flag instead, or reassign the deals first.`,
+        hasSubmissions: true,
+        submissionCount: property._count.dealSubmissions,
       };
     }
 
     await prisma.bmsProperty.delete({ where: { id } });
 
-    logPropertyAction(
-      ctx.orgId,
-      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
-      "deleted",
-      id,
-      { name: property.name, address: property.address },
-    );
+    logPropertyAction(orgId, { id: userId }, "deleted_exclusive", id, {
+      name: property.name,
+      address: property.address,
+    });
 
     return { success: true };
-  } catch (error: unknown) {
+  } catch (error) {
     console.error("deleteExclusiveBuilding error:", error);
-    return { success: false, error: "Failed to delete building" };
+    return { success: false, error: "Failed to delete exclusive building" };
   }
 }
 
-// ── 5. toggleExclusiveFlag ──────────────────────────────────
+// ── 5. Toggle Exclusive Flag ─────────────────────────────────
 
-export async function toggleExclusiveFlag(
-  id: string,
-  isExclusive: boolean,
-): Promise<{ success: boolean; error?: string }> {
+export async function toggleExclusiveFlag(id: string, isExclusive: boolean) {
   try {
-    const ctx = await getAuthContext();
-    if (!ctx) return { success: false, error: "Not authenticated" };
-    if (!hasPermission(ctx.role, "properties_manage")) {
-      return { success: false, error: "Not authorized" };
+    const { userId, orgId } = await getAuthContext();
+
+    const existing = await prisma.bmsProperty.findFirst({
+      where: { id, orgId },
+    });
+    if (!existing) {
+      return { success: false, error: "Building not found" };
     }
 
-    const property = await prisma.bmsProperty.findFirst({
-      where: { id, orgId: ctx.orgId },
-    });
-    if (!property) return { success: false, error: "Building not found" };
-
-    await prisma.bmsProperty.update({
+    const property = await prisma.bmsProperty.update({
       where: { id },
       data: { isExclusive },
     });
 
     logPropertyAction(
-      ctx.orgId,
-      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
-      "updated",
+      orgId,
+      { id: userId },
+      isExclusive ? "marked_exclusive" : "unmarked_exclusive",
       id,
-      { isExclusive, name: property.name },
+      { name: property.name },
     );
 
-    return { success: true };
-  } catch (error: unknown) {
+    return JSON.parse(JSON.stringify({ success: true, property }));
+  } catch (error) {
     console.error("toggleExclusiveFlag error:", error);
-    return { success: false, error: "Failed to update exclusive flag" };
+    return { success: false, error: "Failed to toggle exclusive flag" };
   }
 }

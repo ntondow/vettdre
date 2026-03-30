@@ -1,8 +1,22 @@
-import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { getExclusiveProperties, getAgentSplitForDeal } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
+import { createClient } from "@/lib/supabase/server";
+import prisma from "@/lib/prisma";
+import { getExclusiveProperties } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
 import SubmitDealForm from "./submit-deal-form";
+
+interface ExclusiveBuilding {
+  id: string;
+  name: string;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zipCode?: string | null;
+  landlordName?: string | null;
+  landlordEmail?: string | null;
+  landlordPhone?: string | null;
+  managementCo?: string | null;
+  totalUnits?: number | null;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -11,115 +25,92 @@ export default async function SubmitDealPage() {
   const {
     data: { user: authUser },
   } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
 
-  // Get user + agent + org info
-  let user = await prisma.user.findUnique({
+  if (!authUser) {
+    redirect("/login");
+  }
+
+  const user = await prisma.user.findUnique({
     where: { authProviderId: authUser.id },
     include: {
       brokerAgent: {
         select: {
-          id: true,
           firstName: true,
           lastName: true,
           email: true,
           phone: true,
           licenseNumber: true,
+          defaultSplitPct: true,
           houseExclusiveSplitPct: true,
           personalExclusiveSplitPct: true,
         },
       },
       organization: {
         select: {
-          id: true,
+          bmsSettings: true,
           defaultHouseExclusiveSplitPct: true,
           defaultPersonalExclusiveSplitPct: true,
         },
       },
     },
   });
-  if (!user && authUser.email) {
-    user = await prisma.user.findFirst({
-      where: { email: authUser.email },
-      include: {
-        brokerAgent: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            phone: true,
-            licenseNumber: true,
-            houseExclusiveSplitPct: true,
-            personalExclusiveSplitPct: true,
-          },
-        },
-        organization: {
-          select: {
-            id: true,
-            defaultHouseExclusiveSplitPct: true,
-            defaultPersonalExclusiveSplitPct: true,
-          },
-        },
-      },
-    });
+
+  if (!user) {
+    redirect("/login");
   }
-  if (!user) redirect("/login");
 
-  const agent = user.brokerAgent;
-  const org = user.organization;
+  // Extract agent info
+  const agentInfo = user.brokerAgent
+    ? {
+        firstName: user.brokerAgent.firstName,
+        lastName: user.brokerAgent.lastName,
+        email: user.brokerAgent.email,
+        phone: user.brokerAgent.phone ?? undefined,
+        licenseNumber: user.brokerAgent.licenseNumber ?? undefined,
+      }
+    : {
+        firstName: user.fullName?.split(" ")[0] ?? "",
+        lastName: user.fullName?.split(" ").slice(1).join(" ") ?? "",
+        email: user.email,
+        phone: user.phone ?? undefined,
+        licenseNumber: user.licenseNumber ?? undefined,
+      };
 
-  const agentInfo = {
-    agentId: agent?.id ?? user.id,
-    firstName: agent?.firstName ?? user.fullName?.split(" ")[0] ?? "",
-    lastName: agent?.lastName ?? user.fullName?.split(" ").slice(1).join(" ") ?? "",
-    email: agent?.email ?? user.email,
-    phone: agent?.phone ?? "",
-    licenseNumber: agent?.licenseNumber ?? "",
-  };
-
-  // Org split defaults
+  // Extract org-level default splits from Organization columns
   const orgSplits = {
-    defaultHouseExclusiveSplitPct: org?.defaultHouseExclusiveSplitPct
-      ? Number(org.defaultHouseExclusiveSplitPct)
-      : 50,
-    defaultPersonalExclusiveSplitPct: org?.defaultPersonalExclusiveSplitPct
-      ? Number(org.defaultPersonalExclusiveSplitPct)
+    defaultHouseExclusiveSplitPct: user.organization?.defaultHouseExclusiveSplitPct
+      ? Number(user.organization.defaultHouseExclusiveSplitPct)
+      : 35,
+    defaultPersonalExclusiveSplitPct: user.organization?.defaultPersonalExclusiveSplitPct
+      ? Number(user.organization.defaultPersonalExclusiveSplitPct)
       : 70,
   };
 
-  // Agent split overrides
-  const agentSplitOverrides = {
-    houseExclusiveSplitPct: agent?.houseExclusiveSplitPct
-      ? Number(agent.houseExclusiveSplitPct)
-      : null,
-    personalExclusiveSplitPct: agent?.personalExclusiveSplitPct
-      ? Number(agent.personalExclusiveSplitPct)
-      : null,
-  };
+  // Agent-level split overrides (from BrokerAgent record — null = use org defaults)
+  const agentSplitOverrides = user.brokerAgent
+    ? {
+        houseExclusiveSplitPct: user.brokerAgent.houseExclusiveSplitPct
+          ? Number(user.brokerAgent.houseExclusiveSplitPct)
+          : undefined,
+        personalExclusiveSplitPct: user.brokerAgent.personalExclusiveSplitPct
+          ? Number(user.brokerAgent.personalExclusiveSplitPct)
+          : undefined,
+        defaultSplitPct: Number(user.brokerAgent.defaultSplitPct),
+      }
+    : undefined;
 
-  // Fetch exclusive buildings
+  // Fetch exclusive buildings for the brokerage dropdown
   const exclusivesResult = await getExclusiveProperties();
-  const exclusiveBuildings = (exclusivesResult.data ?? []) as Array<{
-    id: string;
-    name: string;
-    address?: string;
-    landlordName?: string;
-    landlordEmail?: string;
-    landlordPhone?: string;
-    billingEntityAddress?: string;
-    managementCo?: string;
-    billingEntityName?: string;
-    billingEntityEmail?: string;
-    billingEntityPhone?: string;
-  }>;
+  const exclusiveBuildings = (exclusivesResult.data ?? []) as ExclusiveBuilding[];
 
   return (
-    <SubmitDealForm
-      agentInfo={agentInfo}
-      orgSplits={orgSplits}
-      agentSplitOverrides={agentSplitOverrides}
-      exclusiveBuildings={exclusiveBuildings}
-    />
+    <div className="min-h-screen bg-slate-50">
+      <SubmitDealForm
+        agentInfo={agentInfo}
+        orgSplits={orgSplits}
+        agentSplitOverrides={agentSplitOverrides}
+        exclusiveBuildings={exclusiveBuildings}
+      />
+    </div>
   );
 }

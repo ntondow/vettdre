@@ -118,6 +118,8 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
         logoUrl: true,
         bmsSettings: true,
         submissionToken: true,
+        defaultHouseExclusiveSplitPct: true,
+        defaultPersonalExclusiveSplitPct: true,
         brandSettings: {
           select: {
             companyName: true,
@@ -139,6 +141,8 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
         submissionToken: null,
         primaryColor: null,
         accentColor: null,
+        defaultHouseExclusiveSplitPct: 35,
+        defaultPersonalExclusiveSplitPct: 70,
         ...BMS_DEFAULTS,
       } as BrokerageSettings;
     }
@@ -154,6 +158,8 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
       submissionToken: org.submissionToken || null,
       primaryColor: org.brandSettings?.primaryColor || null,
       accentColor: org.brandSettings?.accentColor || null,
+      defaultHouseExclusiveSplitPct: org.defaultHouseExclusiveSplitPct ? Number(org.defaultHouseExclusiveSplitPct) : 35,
+      defaultPersonalExclusiveSplitPct: org.defaultPersonalExclusiveSplitPct ? Number(org.defaultPersonalExclusiveSplitPct) : 70,
       ...bms,
     } as BrokerageSettings;
   } catch (error) {
@@ -167,6 +173,8 @@ export async function getBrokerageSettings(): Promise<BrokerageSettings> {
       submissionToken: null,
       primaryColor: null,
       accentColor: null,
+      defaultHouseExclusiveSplitPct: 35,
+      defaultPersonalExclusiveSplitPct: 70,
       ...BMS_DEFAULTS,
     } as BrokerageSettings;
   }
@@ -183,6 +191,8 @@ export async function updateBrokerageSettings(input: {
   primaryColor?: string;
   accentColor?: string;
   defaultSplitPct?: number;
+  defaultHouseExclusiveSplitPct?: number;
+  defaultPersonalExclusiveSplitPct?: number;
   defaultPaymentTerms?: string;
   invoiceFooterText?: string;
   companyLicenseNumber?: string;
@@ -205,6 +215,8 @@ export async function updateBrokerageSettings(input: {
     if (input.name !== undefined) orgUpdate.name = input.name;
     if (input.address !== undefined) orgUpdate.address = input.address || null;
     if (input.phone !== undefined) orgUpdate.phone = input.phone || null;
+    if (input.defaultHouseExclusiveSplitPct !== undefined) orgUpdate.defaultHouseExclusiveSplitPct = input.defaultHouseExclusiveSplitPct;
+    if (input.defaultPersonalExclusiveSplitPct !== undefined) orgUpdate.defaultPersonalExclusiveSplitPct = input.defaultPersonalExclusiveSplitPct;
 
     // 2. Merge bmsSettings JSON
     const hasBmsFields =

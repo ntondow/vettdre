@@ -19,6 +19,7 @@ import {
   Home,
   Building2,
   Trophy,
+  UserPlus,
 } from "lucide-react";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { getCurrentBrokerageRole } from "@/lib/bms-auth";
@@ -56,6 +57,8 @@ const ADMIN_NAV: NavGroup[] = [
   {
     group: "Deals",
     items: [
+      { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
+      { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
       { href: "/brokerage/deal-submissions", icon: FileText, label: "Submissions" },
       { href: "/brokerage/invoices", icon: Receipt, label: "Invoices" },
       { href: "/brokerage/invoices/bulk", icon: Package, label: "Bulk Invoices" },
@@ -96,6 +99,7 @@ const AGENT_NAV: NavGroup[] = [
     group: "My Brokerage",
     items: [
       { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
+      { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
     ],
   },

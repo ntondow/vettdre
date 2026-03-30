@@ -50,6 +50,8 @@ export const PAGE_PERMISSION_MAP: Record<string, BmsPermission> = {
   "/brokerage/settings": "manage_brokerage_settings",
   "/brokerage/settings/exclusives": "properties_manage",
   "/brokerage/reports/revenue": "view_reports",
+  "/brokerage/client-onboarding": "client_onboarding_view_own",
+  "/brokerage/client-onboarding/new": "client_onboarding_create",
 };
 
 export function canAccessPage(role: BrokerageRoleType, page: string): boolean {

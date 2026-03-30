@@ -1,20 +1,12 @@
-/**
- * Reference data loader — fetches configurable lookup data from the database.
- * Falls back to null so callers can use hardcoded defaults.
- */
+// ============================================================
+// Reference Data — Stub for ReferenceDataCatalog reads
+// Returns null — callers use hardcoded fallbacks
+// TODO: Implement when ReferenceDataCatalog model is added
+// ============================================================
 
-import { prisma } from "@/lib/prisma";
-
-export async function getReferenceData<T = unknown>(
-  category: string,
-  key: string
+export async function getReferenceData<T>(
+  _category: string,
+  _key: string,
 ): Promise<T | null> {
-  try {
-    // Check if the ReferenceData table exists and has the data
-    // For now this is a stub — returns null so callers fall back to hardcoded defaults
-    // TODO: Create ReferenceData model in Prisma schema and wire up
-    return null;
-  } catch {
-    return null;
-  }
+  return null;
 }
