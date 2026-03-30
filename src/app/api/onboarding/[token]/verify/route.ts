@@ -17,7 +17,9 @@ export async function GET(
         agent: { select: { firstName: true, lastName: true, licenseNumber: true } },
         organization: { select: { name: true } },
         documents: {
-          select: { id: true, docType: true, title: true, status: true, sortOrder: true },
+          select: { id: true, docType: true, title: true, status: true, sortOrder: true, pdfUrl: true, templateId: true,
+            template: { select: { fields: true } },
+          },
           orderBy: { sortOrder: "asc" },
         },
       },
@@ -66,6 +68,10 @@ export async function GET(
         docTitle: d.title,
         status: d.status,
         docOrder: d.sortOrder,
+        pdfUrl: d.pdfUrl ?? null,
+        fields: Array.isArray((d as Record<string, unknown>).template?.fields)
+          ? ((d as Record<string, unknown>).template as { fields: unknown[] }).fields
+          : [],
       })),
     });
   } catch (error) {

@@ -6,6 +6,7 @@ import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/lib/bms-audit";
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import { generateTenantRepAgreementPdf } from "@/lib/onboarding-pdf";
+import { prefillPdfFields, buildPrefillValues } from "@/lib/onboarding-prefill";
 import { sendOnboardingInviteEmail, sendOnboardingReminder } from "@/lib/onboarding-notifications";
 import type { BrokerageRoleType } from "@/lib/bms-types";
 import type { ClientOnboardingInput } from "@/lib/onboarding-types";
@@ -216,36 +217,140 @@ export async function createOnboarding(
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + termDays);
 
-    // Generate Tenant Rep Agreement PDF
-    const pdfBytes = await generateTenantRepAgreementPdf({
-      brokerageName: org.name,
-      agentFullName: `${agent.firstName} ${agent.lastName}`,
-      agentLicense: agent.licenseNumber || "N/A",
+    const agentFullName = `${agent.firstName} ${agent.lastName}`;
+    const supabase = await createClient();
+
+    // Build prefill values for templates
+    const prefillValues = buildPrefillValues({
       clientFirstName: input.clientFirstName.trim(),
       clientLastName: input.clientLastName.trim(),
-      commissionAmount: input.commissionPct ?? 0,
-      commissionType: "percentage",
+      clientEmail: input.clientEmail.trim(),
+      propertyAddress: input.propertyAddress?.trim(),
+      unitNumber: input.unitNumber?.trim(),
+      monthlyRent: input.monthlyRent,
+      commissionPct: input.commissionPct,
+      moveInDate: input.moveInDate,
+      agentName: agentFullName,
+      brokerageName: org.name,
       termDays,
     });
 
-    // Upload PDF to Supabase Storage
-    let pdfUrl: string | null = null;
-    try {
-      const supabase = await createClient();
-      const fileName = `onboarding/${ctx.orgId}/${Date.now()}-tenant-rep-agreement.pdf`;
-      const { error: uploadError } = await supabase.storage
-        .from("bms-files")
-        .upload(fileName, pdfBytes, { contentType: "application/pdf", upsert: false });
+    // Resolve which templates to use
+    const hasSelectedTemplates = Array.isArray(input.selectedTemplateIds) && input.selectedTemplateIds.length > 0;
+    let selectedTemplates: Array<{ id: string; name: string; templatePdfUrl: string; fields: unknown; docType: string }> = [];
 
-      if (!uploadError) {
-        const { data: urlData } = supabase.storage.from("bms-files").getPublicUrl(fileName);
-        pdfUrl = urlData?.publicUrl ?? null;
-      } else {
-        console.error("PDF upload error:", uploadError);
+    if (hasSelectedTemplates) {
+      const dbTemplates = await prisma.documentTemplate.findMany({
+        where: { id: { in: input.selectedTemplateIds }, orgId: ctx.orgId, isActive: true },
+        orderBy: { sortOrder: "asc" },
+      });
+      selectedTemplates = dbTemplates.map((t) => ({
+        id: t.id,
+        name: t.name,
+        templatePdfUrl: t.templatePdfUrl,
+        fields: t.fields,
+        docType: "tenant_rep_agreement",
+      }));
+    } else {
+      // Auto-select default templates if none specified
+      const defaults = await prisma.documentTemplate.findMany({
+        where: { orgId: ctx.orgId, isDefault: true, isActive: true },
+        orderBy: { sortOrder: "asc" },
+      });
+      if (defaults.length > 0) {
+        selectedTemplates = defaults.map((t) => ({
+          id: t.id,
+          name: t.name,
+          templatePdfUrl: t.templatePdfUrl,
+          fields: t.fields,
+          docType: "tenant_rep_agreement",
+        }));
       }
-    } catch (uploadErr) {
-      console.error("PDF upload failed:", uploadErr);
-      // Continue — PDF URL will be null, can be regenerated later
+    }
+
+    // Fallback: if no templates selected, use the old hardcoded 3-doc flow
+    if (selectedTemplates.length === 0) {
+      // Generate Tenant Rep Agreement PDF from scratch
+      const pdfBytes = await generateTenantRepAgreementPdf({
+        brokerageName: org.name,
+        agentFullName,
+        agentLicense: agent.licenseNumber || "N/A",
+        clientFirstName: input.clientFirstName.trim(),
+        clientLastName: input.clientLastName.trim(),
+        commissionAmount: input.commissionPct ?? 0,
+        commissionType: "percentage",
+        termDays,
+      });
+
+      let fallbackPdfUrl: string | null = null;
+      try {
+        const fileName = `onboarding/${ctx.orgId}/${Date.now()}-tenant-rep-agreement.pdf`;
+        const { error: uploadError } = await supabase.storage
+          .from("bms-files")
+          .upload(fileName, pdfBytes, { contentType: "application/pdf", upsert: false });
+        if (!uploadError) {
+          const { data: urlData } = supabase.storage.from("bms-files").getPublicUrl(fileName);
+          fallbackPdfUrl = urlData?.publicUrl ?? null;
+        }
+      } catch (e) {
+        console.error("Fallback PDF upload failed:", e);
+      }
+
+      selectedTemplates = [
+        { id: "", name: DOC_TYPE_LABELS.tenant_rep_agreement, templatePdfUrl: fallbackPdfUrl ?? "", fields: [], docType: "tenant_rep_agreement" },
+        { id: "", name: DOC_TYPE_LABELS.nys_disclosure, templatePdfUrl: "", fields: [], docType: "nys_disclosure" },
+        { id: "", name: DOC_TYPE_LABELS.fair_housing_notice, templatePdfUrl: "", fields: [], docType: "fair_housing_notice" },
+      ];
+    }
+
+    // Pre-fill and upload PDFs for selected templates
+    const preparedDocs: Array<{ templateId: string | null; name: string; pdfUrl: string | null; docType: string; sortOrder: number }> = [];
+
+    for (let i = 0; i < selectedTemplates.length; i++) {
+      const tmpl = selectedTemplates[i];
+      let finalPdfUrl = tmpl.templatePdfUrl || null;
+
+      // If template has fields and a PDF, pre-fill it
+      const tmplFields = Array.isArray(tmpl.fields) ? tmpl.fields as import("@/lib/onboarding-types").TemplateFieldDefinition[] : [];
+      if (tmpl.templatePdfUrl && tmplFields.length > 0) {
+        try {
+          // Download template PDF
+          const pathMatch = tmpl.templatePdfUrl.match(/\/storage\/v1\/object\/public\/bms-files\/(.+)/);
+          const storagePath = pathMatch?.[1];
+          let pdfBytes: Uint8Array | null = null;
+
+          if (storagePath) {
+            const { data: fileData } = await supabase.storage.from("bms-files").download(storagePath);
+            if (fileData) pdfBytes = new Uint8Array(await fileData.arrayBuffer());
+          } else if (tmpl.templatePdfUrl.startsWith("http")) {
+            const resp = await fetch(tmpl.templatePdfUrl);
+            if (resp.ok) pdfBytes = new Uint8Array(await resp.arrayBuffer());
+          }
+
+          if (pdfBytes && pdfBytes.length > 0) {
+            const filledPdf = await prefillPdfFields(pdfBytes, tmplFields, prefillValues);
+            const filledPath = `onboarding/${ctx.orgId}/${Date.now()}-prefilled-${i}.pdf`;
+            const { error: upErr } = await supabase.storage
+              .from("bms-files")
+              .upload(filledPath, filledPdf, { contentType: "application/pdf", upsert: false });
+            if (!upErr) {
+              const { data: urlData } = supabase.storage.from("bms-files").getPublicUrl(filledPath);
+              finalPdfUrl = urlData?.publicUrl ?? finalPdfUrl;
+            }
+          }
+        } catch (prefillErr) {
+          console.error(`Prefill failed for template ${tmpl.name}:`, prefillErr);
+          // Use original template URL as fallback
+        }
+      }
+
+      preparedDocs.push({
+        templateId: tmpl.id || null,
+        name: tmpl.name,
+        pdfUrl: finalPdfUrl,
+        docType: tmpl.docType,
+        sortOrder: i,
+      });
     }
 
     // Create onboarding + documents in a transaction
@@ -271,29 +376,20 @@ export async function createOnboarding(
         },
       });
 
-      // Create 3 documents
-      const docTypes: Array<{ docType: "tenant_rep_agreement" | "nys_disclosure" | "fair_housing_notice"; sortOrder: number }> = [
-        { docType: "tenant_rep_agreement", sortOrder: 0 },
-        { docType: "nys_disclosure", sortOrder: 1 },
-        { docType: "fair_housing_notice", sortOrder: 2 },
-      ];
-
-      for (const { docType, sortOrder } of docTypes) {
+      for (const doc of preparedDocs) {
         await tx.onboardingDocument.create({
           data: {
             onboardingId: record.id,
-            docType,
-            title: DOC_TYPE_LABELS[docType],
-            sortOrder,
+            templateId: doc.templateId || null,
+            docType: doc.docType,
+            title: doc.name,
+            sortOrder: doc.sortOrder,
             status: "pending",
-            pdfUrl: docType === "tenant_rep_agreement" ? pdfUrl : null,
-            // For nys_disclosure and fair_housing_notice: static templates would be referenced here
-            // TODO: Upload/reference static template PDFs from Supabase Storage
+            pdfUrl: doc.pdfUrl,
           },
         });
       }
 
-      // Create audit log
       await tx.signingAuditLog.create({
         data: {
           onboardingId: record.id,
@@ -351,6 +447,12 @@ export async function voidOnboarding(
       return { success: false, error: `Cannot void an onboarding with status "${onboarding.status}"` };
     }
 
+    // Get document PDFs for cleanup
+    const docs = await prisma.onboardingDocument.findMany({
+      where: { onboardingId: id },
+      select: { pdfUrl: true },
+    });
+
     await prisma.$transaction(async (tx) => {
       await tx.clientOnboarding.update({
         where: { id },
@@ -368,6 +470,9 @@ export async function voidOnboarding(
         },
       });
     });
+
+    // Cleanup storage (fire-and-forget)
+    cleanupOnboardingStorage(docs.map((d) => d.pdfUrl).filter(Boolean) as string[]).catch(() => {});
 
     return { success: true };
   } catch (error: unknown) {
@@ -743,5 +848,27 @@ export async function generateInvoiceFromOnboarding(
   } catch (error: unknown) {
     console.error("generateInvoiceFromOnboarding error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to generate invoice" };
+  }
+}
+
+// ── Storage Cleanup Helper ──────────────────────────────────
+
+async function cleanupOnboardingStorage(pdfUrls: string[]): Promise<void> {
+  if (pdfUrls.length === 0) return;
+  try {
+    const supabase = await createClient();
+    const paths = pdfUrls
+      .map((url) => {
+        const match = url.match(/\/storage\/v1\/object\/public\/bms-files\/(.+)/);
+        return match?.[1];
+      })
+      .filter(Boolean) as string[];
+
+    if (paths.length > 0) {
+      await supabase.storage.from("bms-files").remove(paths);
+      console.log(`[Onboarding] Cleaned up ${paths.length} storage files`);
+    }
+  } catch (err) {
+    console.error("[Onboarding] Storage cleanup failed:", err);
   }
 }

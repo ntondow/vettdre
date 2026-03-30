@@ -469,6 +469,7 @@ model Organization {
 
   // Client Onboarding
   clientOnboardings ClientOnboarding[]
+  documentTemplates DocumentTemplate[]
 
   @@map("organizations")
 }
@@ -2584,12 +2585,13 @@ model ClientOnboarding {
 }
 
 model OnboardingDocument {
-  id           String @id @default(uuid())
-  onboardingId String @map("onboarding_id")
+  id           String  @id @default(uuid())
+  onboardingId String  @map("onboarding_id")
+  templateId   String? @map("template_id")
 
-  docType OnboardingDocType @map("doc_type")
+  docType String @default("custom") @map("doc_type") // "tenant_rep_agreement" | "nys_disclosure" | "fair_housing_notice" | custom
   title   String
-  version Int               @default(1)
+  version Int    @default(1)
 
   // Document content
   templateHtml String? @map("template_html") // rendered HTML of the doc
@@ -2609,10 +2611,12 @@ model OnboardingDocument {
 
   // Relations
   onboarding ClientOnboarding  @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  template   DocumentTemplate? @relation(fields: [templateId], references: [id])
   auditLogs  SigningAuditLog[]
 
   @@index([onboardingId])
   @@index([onboardingId, docType])
+  @@index([templateId])
   @@map("onboarding_documents")
 }
 
@@ -2641,4 +2645,30 @@ model SigningAuditLog {
   @@index([documentId])
   @@index([onboardingId, action])
   @@map("signing_audit_logs")
+}
+
+model DocumentTemplate {
+  id             String  @id @default(cuid())
+  orgId          String  @map("org_id")
+  name           String
+  description    String?
+  category       String  @default("custom") // "standard" | "custom"
+  templatePdfUrl String  @map("template_pdf_url")
+
+  // Fillable field definitions (JSON array of TemplateFieldDefinition)
+  fields Json @default("[]")
+
+  isActive  Boolean @default(true) @map("is_active")
+  isDefault Boolean @default(false) @map("is_default")
+  sortOrder Int     @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  organization Organization         @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  documents    OnboardingDocument[]
+
+  @@index([orgId])
+  @@index([orgId, category])
+  @@map("document_templates")
 }

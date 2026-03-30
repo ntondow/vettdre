@@ -4,6 +4,7 @@
 // ============================================================
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
 
 // ── Constants ────────────────────────────────────────────────
 
@@ -203,6 +204,58 @@ export async function addAuditFooter(params: {
       font,
       color: rgb(0.5, 0.5, 0.5),
     });
+  }
+
+  return doc.save();
+}
+
+// ── Embed Field Values (template-based signing) ──────────────
+
+export async function embedFieldValues(
+  pdfBytes: Uint8Array,
+  fields: TemplateFieldDefinition[],
+  values: Record<string, string>,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(pdfBytes);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const pages = doc.getPages();
+
+  for (const field of fields) {
+    const value = values[field.id];
+    if (!value) continue;
+
+    const pageIndex = Math.min(field.page, pages.length - 1);
+    if (pageIndex < 0) continue;
+    const page = pages[pageIndex];
+    const { width: pageW, height: pageH } = page.getSize();
+
+    const x = (field.x / 100) * pageW;
+    const y = pageH - ((field.y / 100) * pageH);
+    const fieldW = (field.width / 100) * pageW;
+    const fieldH = (field.height / 100) * pageH;
+
+    if (field.type === "signature" || field.type === "initials") {
+      try {
+        const base64Data = value.replace(/^data:image\/\w+;base64,/, "");
+        const imageBytes = Uint8Array.from(atob(base64Data), (c) => c.charCodeAt(0));
+        let image;
+        try { image = await doc.embedPng(imageBytes); } catch { try { image = await doc.embedJpg(imageBytes); } catch { image = null; } }
+        if (image) {
+          const ar = image.width / image.height;
+          let drawW = fieldW;
+          let drawH = drawW / ar;
+          if (drawH > fieldH) { drawH = fieldH; drawW = drawH * ar; }
+          page.drawImage(image, { x, y: y - drawH, width: drawW, height: drawH });
+        }
+      } catch { /* skip */ }
+    } else if (field.type === "checkbox") {
+      if (value && value !== "false" && value !== "0") {
+        const sz = Math.min(fieldW, fieldH, 14);
+        page.drawText("✓", { x: x + 1, y: y - sz + 2, size: sz, font, color: rgb(0.1, 0.1, 0.1) });
+      }
+    } else {
+      page.drawText(value, { x, y: y - 12, size: 11, font, color: rgb(0.1, 0.1, 0.1), maxWidth: fieldW });
+    }
   }
 
   return doc.save();

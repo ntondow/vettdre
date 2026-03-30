@@ -13,6 +13,7 @@ interface InviteEmailParams {
   signingUrl: string;
   personalNote?: string;
   orgId?: string;
+  agentUserId?: string;
 }
 
 interface CompleteNotificationParams {
@@ -139,11 +140,11 @@ export async function sendOnboardingInviteEmail(params: InviteEmailParams): Prom
     }
 
     // 2. Fall back to Gmail if agent has it connected
-    if (params.orgId) {
+    if (params.orgId || params.agentUserId) {
       const gmailAccount = await prisma.gmailAccount.findFirst({
-        where: {
-          user: { orgId: params.orgId },
-        },
+        where: params.agentUserId
+          ? { userId: params.agentUserId }
+          : { user: { orgId: params.orgId! } },
         select: { id: true, userId: true },
       });
 

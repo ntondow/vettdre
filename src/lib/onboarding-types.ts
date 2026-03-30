@@ -20,6 +20,36 @@ export type SigningStatusType = "pending" | "viewed" | "signed";
 
 export type DeliveryMethod = "email" | "sms" | "link";
 
+export type TemplateFieldType = "text" | "date" | "signature" | "initials" | "checkbox";
+
+export interface TemplateFieldDefinition {
+  id: string;
+  label: string;
+  type: TemplateFieldType;
+  page: number;       // 0-indexed page number
+  x: number;          // percentage from left (0-100)
+  y: number;          // percentage from top (0-100)
+  width: number;      // percentage width
+  height: number;     // percentage height
+  prefillKey?: string; // maps to onboarding data: "clientName", "propertyAddress", "rent", "commissionPct", "moveInDate", "agentName", "brokerageName"
+  required: boolean;
+}
+
+export interface DocumentTemplateRecord {
+  id: string;
+  orgId: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  templatePdfUrl: string;
+  fields: TemplateFieldDefinition[];
+  isActive: boolean;
+  isDefault: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Input Interfaces ──────────────────────────────────────────
 
 export interface ClientOnboardingInput {
@@ -32,10 +62,15 @@ export interface ClientOnboardingInput {
   dealType?: string;
   propertyAddress?: string;
   exclusiveType?: string;
+  unitNumber?: string;
+  moveInDate?: string;
 
   // Commission snapshot
   commissionPct?: number;
   monthlyRent?: number;
+
+  // Document selection
+  selectedTemplateIds?: string[];
 
   // Delivery
   deliveryMethod?: DeliveryMethod;

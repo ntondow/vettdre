@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { embedSignatureInPdf, addAuditFooter } from "@/lib/onboarding-signing";
+import { embedSignatureInPdf, addAuditFooter, embedFieldValues } from "@/lib/onboarding-signing";
 import { sendOnboardingCompleteNotification } from "@/lib/onboarding-notifications";
 import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 
@@ -16,18 +16,16 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { documentId, signatureImage, signerName, signerEmail } = body as {
+    const { documentId, signatureImage, signerName, signerEmail, fieldValues } = body as {
       documentId?: string;
       signatureImage?: string;
       signerName?: string;
       signerEmail?: string;
+      fieldValues?: Record<string, string>;
     };
 
     if (!documentId || !signerName || !signerEmail) {
       return NextResponse.json({ error: "Missing required fields: documentId, signerName, signerEmail" }, { status: 400 });
-    }
-    if (!signatureImage) {
-      return NextResponse.json({ error: "Signature image is required" }, { status: 400 });
     }
 
     // ── Validate token ──────────────────────────────────────
@@ -35,7 +33,7 @@ export async function POST(
     const onboarding = await prisma.clientOnboarding.findUnique({
       where: { token },
       include: {
-        documents: { orderBy: { sortOrder: "asc" } },
+        documents: { orderBy: { sortOrder: "asc" }, include: { template: { select: { fields: true } } } },
         agent: { select: { firstName: true, lastName: true } },
         organization: { select: { name: true } },
       },
@@ -124,14 +122,26 @@ export async function POST(
         }
 
         if (pdfBytes.length > 0) {
-          // Embed signature
-          let modifiedPdf = await embedSignatureInPdf({
-            pdfBytes,
-            signatureImageBase64: signatureImage,
-            signerName,
-            signDate,
-            signatureType: "tenant",
-          });
+          let modifiedPdf = pdfBytes;
+
+          // Check if this document has template fields
+          const templateFields = Array.isArray((doc as Record<string, unknown>).template?.fields)
+            ? ((doc as Record<string, unknown>).template as { fields: import("@/lib/onboarding-types").TemplateFieldDefinition[] }).fields
+            : [];
+
+          if (templateFields.length > 0 && fieldValues) {
+            // Template-based: embed all field values (text, date, checkbox, signature, initials)
+            modifiedPdf = await embedFieldValues(modifiedPdf, templateFields, fieldValues);
+          } else if (signatureImage) {
+            // Legacy: embed signature at fixed position
+            modifiedPdf = await embedSignatureInPdf({
+              pdfBytes: modifiedPdf,
+              signatureImageBase64: signatureImage,
+              signerName,
+              signDate,
+              signatureType: "tenant",
+            });
+          }
 
           // Add audit footer
           const auditText = `Signed electronically on ${signDate} at ${ip} — Signer: ${signerName} (${signerEmail}) — Document: ${doc.title} — Audit ID: ${doc.id}`;
@@ -191,6 +201,9 @@ export async function POST(
             signerEmail,
             docType: doc.docType,
             signedPdfUrl,
+            documentTitle: doc.title,
+            templateId: (doc as Record<string, unknown>).templateId ?? null,
+            fieldValues: fieldValues ? Object.fromEntries(Object.entries(fieldValues).filter(([, v]) => v && !v.startsWith("data:image"))) : null,
           },
         },
       });
