@@ -30,6 +30,7 @@ enum SubscriptionStatus {
 }
 
 enum UserRole {
+  super_admin
   owner
   admin
   manager
