@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import {
   UserPlus,
@@ -72,8 +72,21 @@ export default function OnboardingListPage() {
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [processing, setProcessing] = useState<string | null>(null);
 
+  const menuRef = useRef<HTMLDivElement>(null);
   const limit = 25;
   const totalPages = Math.ceil(total / limit);
+
+  // Close menu on click outside
+  useEffect(() => {
+    if (!actionMenu) return;
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setActionMenu(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [actionMenu]);
 
   const fetchData = useCallback(async (p: number, status: string) => {
     setLoading(true);
@@ -177,7 +190,7 @@ export default function OnboardingListPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-slate-200 overflow-visible">
           {loading && (
             <div className="h-0.5 bg-blue-100 overflow-hidden">
               <div className="h-full w-1/3 bg-blue-500 animate-pulse" />
@@ -240,6 +253,7 @@ export default function OnboardingListPage() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-right relative">
+                      <div ref={actionMenu === o.id ? menuRef : undefined} className="relative inline-block">
                       <button
                         onClick={() => setActionMenu(actionMenu === o.id ? null : o.id)}
                         className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
@@ -247,7 +261,9 @@ export default function OnboardingListPage() {
                         {processing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
                       </button>
                       {actionMenu === o.id && (
-                        <div className="absolute right-4 top-full mt-1 z-20 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                        <div className={`absolute right-0 z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1 ${
+                          onboardings.indexOf(o) >= onboardings.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
+                        }`}>
                           <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
                             <FileText className="w-4 h-4" /> View Details
                           </Link>
@@ -266,6 +282,7 @@ export default function OnboardingListPage() {
                           )}
                         </div>
                       )}
+                      </div>
                     </td>
                   </tr>
                 ))}
