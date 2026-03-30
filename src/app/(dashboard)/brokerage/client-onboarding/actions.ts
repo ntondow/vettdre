@@ -39,7 +39,7 @@ async function getAuthContext(): Promise<AuthContext | null> {
   if (!user) return null;
 
   let role: BrokerageRoleType | null = null;
-  if (user.role === "owner" || user.role === "admin") {
+  if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
     role = "brokerage_admin";
   } else {
     const firstOrgUser = await prisma.user.findFirst({

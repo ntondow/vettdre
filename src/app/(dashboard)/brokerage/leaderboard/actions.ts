@@ -34,7 +34,7 @@ async function getCurrentOrg() {
     orgId: user.orgId,
     userName: user.fullName,
     agentId: user.brokerAgent?.id,
-    role: user.brokerAgent?.brokerageRole || (user.role === "owner" || user.role === "admin" ? "brokerage_admin" : null),
+    role: user.brokerAgent?.brokerageRole || (user.role === "owner" || user.role === "admin" || user.role === "super_admin" ? "brokerage_admin" : null),
   };
 }
 

@@ -26,9 +26,9 @@ export async function getCurrentBrokerageRole(): Promise<BrokerageRoleType | nul
     }
     if (!user) return null;
 
-    // Org owner/admin always gets brokerage_admin — regardless of BrokerAgent record
+    // Org owner/admin/super_admin always gets brokerage_admin — regardless of BrokerAgent record
     // (BrokerAgent defaults to role "agent", which would incorrectly downgrade owners)
-    if (user.role === "owner" || user.role === "admin") {
+    if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
       return "brokerage_admin";
     }
 
@@ -92,8 +92,8 @@ export async function getCurrentAgentInfo(): Promise<{
     }
     if (!user) return null;
 
-    // Org owner/admin always gets brokerage_admin
-    if (user.role === "owner" || user.role === "admin") {
+    // Org owner/admin/super_admin always gets brokerage_admin
+    if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
       return {
         role: "brokerage_admin",
         agentId: user.brokerAgent?.id ?? user.id,

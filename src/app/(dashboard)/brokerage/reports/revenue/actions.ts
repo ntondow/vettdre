@@ -20,7 +20,7 @@ async function getAuthContext() {
 
   // Resolve brokerage role
   let role: BrokerageRoleType = "agent";
-  if (user.role === "owner" || user.role === "admin") {
+  if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
     role = "brokerage_admin";
   } else if (user.brokerAgent?.brokerageRole) {
     role = user.brokerAgent.brokerageRole as BrokerageRoleType;

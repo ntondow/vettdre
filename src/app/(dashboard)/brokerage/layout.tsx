@@ -133,7 +133,7 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     // Org owners/admins always get brokerage_admin — use context role directly
     // (avoids server action that may fail silently due to cookies/RPC issues)
-    if (orgRole === "owner" || orgRole === "admin") {
+    if (orgRole === "owner" || orgRole === "admin" || orgRole === "super_admin") {
       setRole("brokerage_admin");
       return;
     }
