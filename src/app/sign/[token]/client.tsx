@@ -359,6 +359,9 @@ export default function SigningClient({ token }: { token: string }) {
                 >
                   {signing ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing...</> : docIndex < totalDocs - 1 ? <>Sign &amp; Continue <ChevronRight className="w-4 h-4" /></> : <>Sign &amp; Complete <CheckCircle className="w-4 h-4" /></>}
                 </button>
+                {!canSubmit() && signatureFields.length > 0 && (
+                  <p className="text-center text-xs text-slate-400 mt-2">Please confirm your signature above first</p>
+                )}
               </div>
 
               {/* RIGHT: PDF preview with field overlays */}

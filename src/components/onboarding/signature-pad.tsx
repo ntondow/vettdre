@@ -200,10 +200,10 @@ export default function SignaturePad({
         type="button"
         onClick={handleConfirm}
         disabled={disabled || !canConfirm}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
       >
         <Check className="w-4 h-4" />
-        Confirm Signature
+        {canConfirm ? "Confirm Signature" : isTyping ? "Type your name above" : "Draw your signature above"}
       </button>
     </div>
   );
