@@ -1,9 +1,9 @@
--- Add Document Templates table + link OnboardingDocument to templates
+-- Add Document Templates table and update OnboardingDocument
+-- Supports custom document vault with fillable field definitions
 
 -- ============================================================
--- Create Table
+-- 1. Create document_templates table
 -- ============================================================
-
 CREATE TABLE "document_templates" (
     "id" TEXT NOT NULL,
     "org_id" TEXT NOT NULL,
@@ -21,23 +21,25 @@ CREATE TABLE "document_templates" (
     CONSTRAINT "document_templates_pkey" PRIMARY KEY ("id")
 );
 
--- ============================================================
 -- Indexes
--- ============================================================
-
 CREATE INDEX "document_templates_org_id_idx" ON "document_templates"("org_id");
 CREATE INDEX "document_templates_org_id_category_idx" ON "document_templates"("org_id", "category");
 
--- ============================================================
--- Foreign Keys
--- ============================================================
-
-ALTER TABLE "document_templates" ADD CONSTRAINT "document_templates_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- Foreign key
+ALTER TABLE "document_templates" ADD CONSTRAINT "document_templates_org_id_fkey"
+  FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- ============================================================
--- Add template_id to onboarding_documents
+-- 2. Update onboarding_documents: add template_id column
 -- ============================================================
-
 ALTER TABLE "onboarding_documents" ADD COLUMN "template_id" TEXT;
-CREATE INDEX "onboarding_documents_template_id_idx" ON "onboarding_documents"("template_id");
-ALTER TABLE "onboarding_documents" ADD CONSTRAINT "onboarding_documents_template_id_fkey" FOREIGN KEY ("template_id") REFERENCES "document_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- Foreign key to document_templates
+ALTER TABLE "onboarding_documents" ADD CONSTRAINT "onboarding_documents_template_id_fkey"
+  FOREIGN KEY ("template_id") REFERENCES "document_templates"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ============================================================
+-- 3. Update onboarding_documents: change doc_type from enum to text
+-- ============================================================
+ALTER TABLE "onboarding_documents" ALTER COLUMN "doc_type" TYPE TEXT USING "doc_type"::TEXT;
+ALTER TABLE "onboarding_documents" ALTER COLUMN "doc_type" SET DEFAULT 'custom';

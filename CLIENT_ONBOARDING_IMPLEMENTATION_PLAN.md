@@ -1,0 +1,492 @@
+# Client Onboarding & E-Signature Implementation Plan
+
+## Feature Overview
+
+A digital client onboarding workflow within the BMS that enables agents to invite prospective tenants, collect legally-binding e-signatures on required NYC documents, auto-create CRM contacts, and generate invoices upon deal close.
+
+**Flow:** Agent fills details → Unique public link generated → Client signs 3 documents (Tenant Rep Agreement, NY State Disclosure, Fair Housing Notice) → Contact auto-created in CRM with signed docs attached → Deal tracked in pipeline → Agent generates invoice on close.
+
+---
+
+## Architecture Decision: Custom E-Signature (signature_pad + pdf-lib)
+
+**Libraries:**
+- `signature_pad` (MIT, 12K stars) — canvas-based signature capture
+- `pdf-lib` (MIT, 8K stars) — embed signatures into PDFs, works in browser + Node.js
+- `pdf.js` (Apache 2.0) — render PDFs in the browser for review (already available via Next.js)
+
+**Legal basis:** Visual e-signatures with audit trail are legally valid under the federal ESIGN Act (2000) and New York Electronic Signatures and Records Act (NY ESRA). Sufficient for residential tenant representation agreements.
+
+---
+
+## Phase 1: Data Model
+
+### New Prisma Models
+
+```prisma
+// ── Client Onboarding ─────────────────────────────────────────
+
+enum OnboardingStatus {
+  draft           // Agent started but hasn't sent yet
+  pending         // Link sent, awaiting client signatures
+  partially_signed // Client started signing but didn't finish
+  completed       // All documents signed
+  expired         // Term elapsed without completion
+  voided          // Agent manually cancelled
+}
+
+enum OnboardingDocType {
+  tenant_rep_agreement
+  nys_disclosure
+  fair_housing_notice
+}
+
+enum SigningStatus {
+  pending
+  viewed
+  signed
+}
+
+model ClientOnboarding {
+  id                String             @id @default(uuid())
+  orgId             String             @map("org_id")
+  agentId           String             @map("agent_id")
+
+  // Unique public token for the signing URL
+  token             String             @unique @default(uuid())
+
+  // Client info (entered by agent)
+  clientFirstName   String             @map("client_first_name")
+  clientLastName    String             @map("client_last_name")
+  clientEmail       String             @map("client_email")
+  clientPhone       String?            @map("client_phone")
+
+  // Agreement terms (entered by agent)
+  commissionAmount  Decimal            @map("commission_amount") @db.Decimal(12, 2)
+  commissionType    String             @default("flat") @map("commission_type")  // "flat" | "percentage"
+  termDays          Int                @default(30) @map("term_days")
+
+  // Brokerage info (auto-populated from BrokerAgent + Org)
+  brokerageName     String             @map("brokerage_name")
+  agentFullName     String             @map("agent_full_name")
+  agentLicense      String?            @map("agent_license")
+  agentEmail        String             @map("agent_email_snapshot")
+
+  // Status tracking
+  status            OnboardingStatus   @default(draft)
+  sentAt            DateTime?          @map("sent_at")
+  completedAt       DateTime?          @map("completed_at")
+  expiresAt         DateTime?          @map("expires_at")
+  voidedAt          DateTime?          @map("voided_at")
+  voidReason        String?            @map("void_reason")
+
+  // Post-completion links
+  contactId         String?            @map("contact_id")
+  dealId            String?            @map("deal_id")
+  pipelineDealId    String?            @map("pipeline_deal_id")
+
+  // Delivery tracking
+  lastReminderAt    DateTime?          @map("last_reminder_at")
+  reminderCount     Int                @default(0) @map("reminder_count")
+  deliveryMethod    String             @default("email") @map("delivery_method")  // "email" | "sms" | "both"
+
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  organization      Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent             BrokerAgent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  contact           Contact?           @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  documents         OnboardingDocument[]
+
+  @@index([orgId, status])
+  @@index([agentId])
+  @@index([token])
+  @@index([expiresAt])
+  @@map("client_onboardings")
+}
+
+model OnboardingDocument {
+  id                String             @id @default(uuid())
+  onboardingId      String             @map("onboarding_id")
+
+  docType           OnboardingDocType  @map("doc_type")
+  docTitle          String             @map("doc_title")
+  docOrder          Int                @default(0) @map("doc_order")  // Display/signing order
+
+  // Template PDF (unsigned original generated by system)
+  templateStoragePath String?          @map("template_storage_path")
+
+  // Signed PDF (after client signs)
+  signedStoragePath   String?          @map("signed_storage_path")
+  signedPublicUrl     String?          @map("signed_public_url")
+
+  // Signing status
+  status            SigningStatus      @default(pending)
+  viewedAt          DateTime?          @map("viewed_at")
+  signedAt          DateTime?          @map("signed_at")
+
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+
+  // Relations
+  onboarding        ClientOnboarding   @relation(fields: [onboardingId], references: [id], onDelete: Cascade)
+  auditTrail        SigningAuditLog[]
+
+  @@unique([onboardingId, docType])
+  @@index([onboardingId])
+  @@map("onboarding_documents")
+}
+
+model SigningAuditLog {
+  id                String             @id @default(uuid())
+  documentId        String             @map("document_id")
+
+  // What happened
+  action            String             // "viewed" | "signed" | "declined"
+
+  // Who / where / when
+  signerName        String             @map("signer_name")
+  signerEmail       String             @map("signer_email")
+  ipAddress         String             @map("ip_address")
+  userAgent         String             @map("user_agent")
+  timestamp         DateTime           @default(now())
+
+  // Signature data (for "signed" actions)
+  signatureImagePath String?           @map("signature_image_path")
+
+  // Relations
+  document          OnboardingDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([documentId])
+  @@map("signing_audit_logs")
+}
+```
+
+### Relation Additions to Existing Models
+
+```prisma
+// Add to Organization model:
+clientOnboardings ClientOnboarding[]
+
+// Add to BrokerAgent model:
+clientOnboardings ClientOnboarding[]
+
+// Add to Contact model:
+clientOnboarding  ClientOnboarding?
+```
+
+---
+
+## Phase 2: Document Templates
+
+### Document 1: Tenant Representation Agreement
+- **Generated dynamically** per onboarding using reportlab (server-side Python) or pdf-lib (Node.js)
+- Pre-filled with: brokerage name, agent name, license #, commission amount, term days
+- Fillable/signable fields: tenant name (auto-filled from onboarding), date, tenant signature
+
+### Document 2: NY State Agency Disclosure Form
+- **Static PDF template** (standard NYS DOS-1736 form)
+- User will upload the base PDF
+- Presented for review + signature acknowledgment
+
+### Document 3: Fair Housing Notice
+- **Static PDF** (standard NYC/NYS fair housing and discrimination notice)
+- User will upload the base PDF
+- Presented for review + signature acknowledgment
+
+### Storage Strategy
+- **Unsigned templates:** Generated/stored in Supabase Storage at `onboarding/{onboardingId}/templates/`
+- **Signed documents:** Stored in Supabase Storage at `onboarding/{onboardingId}/signed/`
+- **Signature images:** Stored at `onboarding/{onboardingId}/signatures/`
+- **FileAttachment** records created post-completion linking signed docs to the Contact entity
+
+---
+
+## Phase 3: Agent-Side UI (BMS Dashboard)
+
+### Route: `/brokerage/client-onboarding`
+**List view** showing all onboarding invites for the org with status filters.
+
+| Column | Source |
+|--------|--------|
+| Client Name | clientFirstName + clientLastName |
+| Agent | agentFullName |
+| Commission | commissionAmount |
+| Status | status badge (color-coded) |
+| Sent | sentAt (relative time) |
+| Expires | expiresAt (with warning if < 5 days) |
+| Actions | View, Resend, Void, Copy Link |
+
+### Route: `/brokerage/client-onboarding/new`
+**Create form** for the agent to initiate a new client onboarding.
+
+**Auto-populated fields** (from BrokerAgent + Organization):
+- Brokerage Firm name
+- Agent full name
+- Agent license number
+- Agent email
+
+**Agent inputs:**
+- Client first name, last name, email, phone
+- Commission amount ($ or %)
+- Commission type toggle (flat / percentage)
+- Term (days, default 30)
+- Delivery method (email / SMS / both)
+- Optional: personal note to include in the invite
+
+**On submit:**
+1. Create `ClientOnboarding` record with status `draft`
+2. Generate the Tenant Rep Agreement PDF (pre-filled with all details)
+3. Create 3 `OnboardingDocument` records (tenant_rep, nys_disclosure, fair_housing)
+4. Store template PDFs in Supabase Storage
+5. Update status to `pending`, set `sentAt` and `expiresAt`
+6. Send invite via email (and/or SMS) with the public signing link
+7. Redirect agent to the onboarding detail view
+
+### Route: `/brokerage/client-onboarding/[id]`
+**Detail view** showing:
+- Client info + agreement terms
+- Document checklist with status per doc (pending → viewed → signed)
+- Signing audit trail timeline
+- Actions: Resend invite, Copy link, Void onboarding
+- Post-completion: Link to CRM contact, link to pipeline deal
+
+### Permissions
+```typescript
+// Add to BMS_PERMISSIONS:
+client_onboarding_create: ["brokerage_admin", "broker", "manager", "agent"],
+client_onboarding_view_all: ["brokerage_admin", "broker", "manager"],
+client_onboarding_view_own: ["brokerage_admin", "broker", "manager", "agent"],
+client_onboarding_void: ["brokerage_admin", "broker", "manager", "agent"],
+client_onboarding_resend: ["brokerage_admin", "broker", "manager", "agent"],
+```
+
+---
+
+## Phase 4: Public Signing Flow
+
+### Route: `/sign/[token]` (public, no auth)
+
+Multi-step wizard with progress indicator. No account creation required.
+
+#### Step 0: Welcome / Verification
+- Display: "You've been invited by [Agent Name] at [Brokerage Name] to review and sign your tenant representation documents."
+- Client confirms their name + email (pre-filled, editable for correction)
+- "Get Started" button
+- Capture initial audit log entry (IP, user agent, timestamp)
+
+#### Step 1: Tenant Representation Agreement
+- PDF rendered inline using pdf.js or an `<iframe>` / `<object>` tag
+- Client must scroll through / confirm they've read it
+- Signature pad (signature_pad library) appears at bottom
+- "Type your name" option as alternative to drawing
+- Date auto-fills to current date
+- "Sign & Continue" button
+- On sign: capture signature image, embed into PDF via pdf-lib (server-side), create audit log
+
+#### Step 2: NY State Agency Disclosure
+- Static PDF rendered for review
+- Signature pad for acknowledgment
+- "Sign & Continue"
+
+#### Step 3: Fair Housing Notice
+- Static PDF rendered for review
+- Signature pad for acknowledgment
+- "Sign & Complete"
+
+#### Step 4: Confirmation
+- "All documents signed successfully!"
+- Summary of what was signed + dates
+- "Download your copies" button (zip of all 3 signed PDFs)
+- Note: "Your agent [Name] has been notified."
+
+### Signing Logic (Server Actions)
+
+```
+POST /api/onboarding/[token]/sign
+Body: {
+  documentId: string,
+  signatureImage: string (base64 PNG),
+  signerName: string,
+  signerEmail: string
+}
+
+Server:
+1. Validate token → lookup ClientOnboarding (must be pending or partially_signed)
+2. Validate document belongs to this onboarding
+3. Check expiration (expiresAt > now)
+4. Capture IP from request headers (x-forwarded-for for Cloud Run)
+5. Capture User-Agent
+6. Load the template PDF from Supabase Storage
+7. Embed signature image + name + date into PDF using pdf-lib (Node.js)
+8. Upload signed PDF to Supabase Storage
+9. Create SigningAuditLog record
+10. Update OnboardingDocument status to "signed"
+11. If all 3 docs signed → update ClientOnboarding status to "completed"
+12. If completed → trigger post-completion workflow
+```
+
+### Post-Completion Workflow (server-side)
+
+When all 3 documents are signed:
+
+1. **Create CRM Contact:**
+   - firstName, lastName, email, phone from onboarding
+   - contactType: `renter`
+   - status: `lead`
+   - source: `"client_onboarding"`
+   - assignedTo: agent's userId
+   - tags: `["onboarded", "tenant-rep-signed"]`
+
+2. **Attach signed documents:**
+   - Create 3 `FileAttachment` records (entityType: "contact", entityId: new contact ID)
+   - Link to signed PDFs in Supabase Storage
+
+3. **Create Pipeline Deal (optional, configurable):**
+   - Auto-create a Deal in the default pipeline at "New Lead" stage
+   - dealValue: commission amount from the agreement
+
+4. **Update ClientOnboarding:**
+   - Set contactId, dealId/pipelineDealId
+   - Set completedAt
+
+5. **Notify Agent:**
+   - Email notification: "[Client Name] has signed all onboarding documents"
+   - Push notification (if configured)
+   - Activity log entry on the new Contact record
+
+6. **Fire automation trigger:**
+   - `dispatchAutomationSafe("new_lead", contact)` — hooks into existing automation engine
+
+---
+
+## Phase 5: Invoice Generation from Signed Agreement
+
+### "Generate Invoice" Button
+
+Located on:
+- Contact dossier page (if contact has a linked ClientOnboarding)
+- ClientOnboarding detail page (post-completion)
+- Transaction detail page (if linked)
+
+### Flow:
+1. Agent clicks "Generate Invoice" on the contact/onboarding
+2. Modal pre-fills from the signed Tenant Rep Agreement:
+   - Commission amount
+   - Client name + email
+   - Agent info
+   - Brokerage info
+3. Agent adds:
+   - Property address (the apartment the client is renting)
+   - Lease start/end dates
+   - Monthly rent
+   - Closing/move-in date
+4. System creates:
+   - `DealSubmission` (status: "approved", auto-approved since docs are signed)
+   - `Invoice` linked to the DealSubmission
+   - `Transaction` in "lease_signing" or "move_in" stage
+   - Signed Tenant Rep Agreement attached to the Transaction as FileAttachment
+5. Agent can then manage the invoice through the existing BMS invoice workflow (send → paid → agent_paid)
+
+---
+
+## Phase 6: Expiration & Reminders
+
+### Automated Expiration Check
+- Add to existing `/api/automations/cron` route
+- Query: `ClientOnboarding WHERE status IN ('pending', 'partially_signed') AND expiresAt < now()`
+- Update status to `expired`
+- Notify agent via email/push
+
+### Automated Reminders
+- Query: `ClientOnboarding WHERE status IN ('pending', 'partially_signed') AND expiresAt > now() AND reminderCount < 3`
+- Send reminder at: 50% of term, 80% of term, and 1 day before expiration
+- Update lastReminderAt and reminderCount
+
+---
+
+## Phase 7: BMS Navigation Integration
+
+### Sidebar Addition
+Add "Client Onboarding" link under the Brokerage section in the sidebar, between "Agents" and "Deal Submissions" (or as a top-level BMS item).
+
+### Dashboard Widget
+Add an "Active Onboardings" card to the BMS dashboard showing:
+- Count of pending invites
+- Count expiring in next 5 days
+- Quick link to create new
+
+---
+
+## NPM Dependencies to Add
+
+```bash
+npm install signature_pad pdf-lib
+# signature_pad: client-side signature capture (MIT)
+# pdf-lib: PDF manipulation in Node.js + browser (MIT)
+```
+
+No new infrastructure. No new databases. No new services.
+
+---
+
+## File Structure (New Files)
+
+```
+src/
+├── app/
+│   ├── sign/
+│   │   └── [token]/
+│   │       ├── page.tsx              # Public signing page (server component)
+│   │       └── client.tsx            # Multi-step signing wizard (client component)
+│   │
+│   ├── api/
+│   │   └── onboarding/
+│   │       ├── [token]/
+│   │       │   ├── sign/route.ts     # POST: sign a document
+│   │       │   ├── verify/route.ts   # GET: validate token + return onboarding data
+│   │       │   └── download/route.ts # GET: download signed docs (zip)
+│   │       └── remind/route.ts       # Cron: send reminders + expire stale
+│   │
+│   └── (dashboard)/
+│       └── brokerage/
+│           └── client-onboarding/
+│               ├── page.tsx          # List view
+│               ├── new/page.tsx      # Create form
+│               ├── [id]/page.tsx     # Detail view
+│               └── actions.ts        # Server actions (create, void, resend, generate-invoice)
+│
+├── components/
+│   └── onboarding/
+│       ├── onboarding-form.tsx       # Agent-side create form
+│       ├── onboarding-list.tsx       # List with filters
+│       ├── onboarding-detail.tsx     # Detail view with doc checklist
+│       ├── signing-wizard.tsx        # Public multi-step wizard
+│       ├── signature-pad.tsx         # Wrapper around signature_pad lib
+│       ├── pdf-viewer.tsx            # Inline PDF viewer component
+│       └── signing-complete.tsx      # Confirmation step
+│
+├── lib/
+│   ├── onboarding-types.ts          # Type definitions
+│   ├── onboarding-pdf.ts            # PDF generation (Tenant Rep Agreement)
+│   ├── onboarding-signing.ts        # Signature embedding logic (pdf-lib)
+│   └── onboarding-notifications.ts  # Email/SMS invite + reminder templates
+│
+└── prisma/
+    └── schema.prisma                # + 3 new models, 3 new enums, relation updates
+```
+
+---
+
+## Security Considerations
+
+1. **Token entropy:** UUIDs (v4) provide 122 bits of randomness — sufficient for URL tokens
+2. **Expiration enforcement:** All signing endpoints check `expiresAt` before processing
+3. **Rate limiting:** Sign endpoint should rate-limit by IP (prevent abuse)
+4. **CORS:** `/sign/[token]` is a Next.js page, not an external embed — standard CORS applies
+5. **IP capture:** Use `x-forwarded-for` header (Cloud Run sets this)
+6. **Signature storage:** Base64 signature images stored in Supabase Storage (private bucket)
+7. **Voiding:** Voided onboardings return a "This invitation has been cancelled" page
+8. **No re-signing:** Once a document is signed, the endpoint rejects duplicate sign attempts
+9. **Audit immutability:** SigningAuditLog records are append-only (no update/delete actions exposed)

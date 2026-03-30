@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.76.0",
+    "@opentelemetry/redis-common": "^0.38.2",
     "@prisma/client": "^5.22.0",
     "@sentry/nextjs": "^10.42.0",
     "@stripe/stripe-js": "^8.8.0",
