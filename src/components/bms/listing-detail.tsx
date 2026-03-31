@@ -55,7 +55,20 @@ export default function ListingDetail({
   const [error, setError] = useState<string | null>(null);
 
   // Edit form state
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    rentPrice?: number;
+    askingPrice?: number;
+    status: BmsListingStatusType;
+    bedrooms?: string;
+    bathrooms?: string;
+    sqft?: number;
+    description?: string;
+    availableDate?: string;
+    commissionType?: BmsCommissionTypeAlias;
+    commissionPct?: number;
+    agentId?: string;
+    notes?: string;
+  }>({
     rentPrice: listing.rentPrice,
     askingPrice: listing.askingPrice,
     status: listing.status,

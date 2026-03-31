@@ -21,6 +21,7 @@ import {
   Trophy,
   UserPlus,
   Rocket,
+  Wallet,
 } from "lucide-react";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { getCurrentBrokerageRole } from "@/lib/bms-auth";
@@ -100,6 +101,7 @@ const AGENT_NAV: NavGroup[] = [
   {
     group: "My Brokerage",
     items: [
+      { href: "/brokerage/earnings", icon: Wallet, label: "Earnings" },
       { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
       { href: "/brokerage/listings", icon: Home, label: "Listings" },
       { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
