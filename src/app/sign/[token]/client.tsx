@@ -34,9 +34,11 @@ interface OnboardingData {
   clientFirstName: string;
   clientLastName: string;
   clientEmail: string;
+  clientPhone: string | null;
   brokerageName: string | null;
   agentFullName: string | null;
   agentLicense: string | null;
+  propertyAddress: string | null;
   commissionPct: number | null;
   monthlyRent: number | null;
   termDays: number | null;
@@ -88,14 +90,38 @@ export default function SigningClient({ token }: { token: string }) {
     verify();
   }, [token]);
 
-  // Init field values when doc changes
+  // Init field values when doc changes — populate prefilled values for display
   useEffect(() => {
     if (!data) return;
     const doc = data.documents[docIndex];
     if (!doc?.fields?.length) { setFieldValues({}); return; }
-    // Pre-populate with prefilled values (read-only fields)
+
+    // Build the same prefill value map the server uses, so the left panel shows actual values
+    const prefillMap: Record<string, string> = {};
+    prefillMap.clientName = `${data.clientFirstName} ${data.clientLastName}`;
+    prefillMap.clientEmail = data.clientEmail;
+    if (data.agentFullName) prefillMap.agentName = data.agentFullName;
+    if (data.agentLicense) prefillMap.agentLicense = data.agentLicense;
+    if (data.brokerageName) prefillMap.brokerageName = data.brokerageName;
+    if (data.commissionPct != null) prefillMap.commissionPct = `${data.commissionPct}%`;
+    if (data.monthlyRent != null) {
+      prefillMap.rent = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(data.monthlyRent);
+    }
+    if (data.propertyAddress) prefillMap.propertyAddress = data.propertyAddress;
+    if (data.termDays) prefillMap.agreementTerm = `${data.termDays} days`;
+    prefillMap.date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    // Auto-checked checkboxes for tenant representation
+    prefillMap.tenantCheck = "true";
+    prefillMap.tenantsAgentCheck = "true";
+    prefillMap.tenantSignatureCheck = "true";
+
+    // Populate field values for any field that has a prefillKey
     const init: Record<string, string> = {};
-    // Don't pre-populate here — agent already pre-filled the PDF
+    for (const field of doc.fields) {
+      if (field.prefillKey && prefillMap[field.prefillKey]) {
+        init[field.id] = prefillMap[field.prefillKey];
+      }
+    }
     setFieldValues(init);
   }, [data, docIndex]);
 
@@ -280,14 +306,20 @@ export default function SigningClient({ token }: { token: string }) {
                 {prefillFields.length > 0 && (
                   <div>
                     <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Pre-filled by your agent</p>
-                    {prefillFields.map((field) => (
-                      <div key={field.id} className="mb-2">
-                        <label className="block text-xs font-medium text-slate-500 mb-0.5 flex items-center gap-1">
-                          <Lock className="w-3 h-3" /> {field.label}
-                        </label>
-                        <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-slate-600">{fieldValues[field.id] || "—"}</div>
-                      </div>
-                    ))}
+                    {prefillFields.map((field) => {
+                      const val = fieldValues[field.id];
+                      const displayVal = field.type === "checkbox"
+                        ? (val === "true" ? "✓" : "—")
+                        : (val || "—");
+                      return (
+                        <div key={field.id} className="mb-2">
+                          <label className="block text-xs font-medium text-slate-500 mb-0.5 flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> {field.label}
+                          </label>
+                          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-slate-600">{displayVal}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

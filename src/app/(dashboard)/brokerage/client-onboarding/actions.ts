@@ -7,7 +7,7 @@ import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/l
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import { generateTenantRepAgreementPdf } from "@/lib/onboarding-pdf";
 import { prefillPdfFields, buildPrefillValues, stampLogoOnPdf } from "@/lib/onboarding-prefill";
-import { sendOnboardingInviteEmail, sendOnboardingReminder } from "@/lib/onboarding-notifications";
+import { sendOnboardingInviteEmail, sendOnboardingReminder, sendOnboardingInviteSms, sendOnboardingReminderSms, getOrgTwilioNumber } from "@/lib/onboarding-notifications";
 import type { BrokerageRoleType } from "@/lib/bms-types";
 import type { ClientOnboardingInput } from "@/lib/onboarding-types";
 import { DOC_TYPE_LABELS } from "@/lib/onboarding-types";
@@ -432,19 +432,42 @@ export async function createOnboarding(
       return record;
     });
 
-    // Send invite email (fire-and-forget)
+    // Send invite (fire-and-forget) — supports email, sms, email+sms, or link (manual)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.vettdre.com";
     const signingUrl = `${appUrl}/sign/${onboarding.token}`;
+    const agentFullNameStr = `${agent.firstName} ${agent.lastName}`;
+    const sentVia = input.deliveryMethod || "email";
+    const channels = sentVia.split("+"); // e.g. ["email", "sms"] or ["email"] or ["link"]
 
-    sendOnboardingInviteEmail({
-      clientEmail: input.clientEmail.trim(),
-      clientFirstName: input.clientFirstName.trim(),
-      agentFullName: `${agent.firstName} ${agent.lastName}`,
-      brokerageName: org.name,
-      signingUrl,
-      personalNote: input.notes?.trim() || undefined,
-      orgId: ctx.orgId,
-    }).catch((err) => console.error("Invite email send failed:", err));
+    if (channels.includes("email")) {
+      sendOnboardingInviteEmail({
+        clientEmail: input.clientEmail.trim(),
+        clientFirstName: input.clientFirstName.trim(),
+        agentFullName: agentFullNameStr,
+        brokerageName: org.name,
+        signingUrl,
+        personalNote: input.notes?.trim() || undefined,
+        orgId: ctx.orgId,
+      }).catch((err) => console.error("Invite email send failed:", err));
+    }
+
+    if (channels.includes("sms") && input.clientPhone?.trim()) {
+      getOrgTwilioNumber(ctx.orgId, ctx.userId).then((fromNumber) => {
+        if (!fromNumber) {
+          console.warn("[Onboarding] No Twilio number configured — SMS not sent");
+          return;
+        }
+        return sendOnboardingInviteSms({
+          clientPhone: input.clientPhone!.trim(),
+          clientFirstName: input.clientFirstName.trim(),
+          agentFullName: agentFullNameStr,
+          brokerageName: org.name,
+          signingUrl,
+          fromNumber,
+        });
+      }).catch((err) => console.error("Invite SMS send failed:", err));
+    }
+    // "link" delivery: no automatic send — agent copies the URL manually
 
     return { success: true, data: serialize(onboarding) as unknown as Record<string, unknown> };
   } catch (error: unknown) {
@@ -565,14 +588,38 @@ export async function resendOnboarding(
       select: { name: true },
     });
 
-    sendOnboardingReminder({
-      clientEmail: onboarding.clientEmail,
-      clientFirstName: onboarding.clientFirstName,
-      agentFullName: agent ? `${agent.firstName} ${agent.lastName}` : ctx.fullName,
-      brokerageName: org?.name ?? "Your Brokerage",
-      signingUrl,
-      daysRemaining,
-    }).catch((err) => console.error("Reminder email send failed:", err));
+    const agentFullNameStr = agent ? `${agent.firstName} ${agent.lastName}` : ctx.fullName;
+    const brokerageNameStr = org?.name ?? "Your Brokerage";
+    const resendChannels = (onboarding.sentVia || "email").split("+");
+
+    if (resendChannels.includes("email")) {
+      sendOnboardingReminder({
+        clientEmail: onboarding.clientEmail,
+        clientFirstName: onboarding.clientFirstName,
+        agentFullName: agentFullNameStr,
+        brokerageName: brokerageNameStr,
+        signingUrl,
+        daysRemaining,
+      }).catch((err) => console.error("Reminder email send failed:", err));
+    }
+
+    if (resendChannels.includes("sms") && onboarding.clientPhone) {
+      getOrgTwilioNumber(ctx.orgId, ctx.userId).then((fromNumber) => {
+        if (!fromNumber) {
+          console.warn("[Onboarding] No Twilio number — reminder SMS not sent");
+          return;
+        }
+        return sendOnboardingReminderSms({
+          clientPhone: onboarding.clientPhone!,
+          clientFirstName: onboarding.clientFirstName,
+          agentFullName: agentFullNameStr,
+          brokerageName: brokerageNameStr,
+          signingUrl,
+          daysRemaining,
+          fromNumber,
+        });
+      }).catch((err) => console.error("Reminder SMS send failed:", err));
+    }
 
     return { success: true };
   } catch (error: unknown) {
@@ -877,6 +924,94 @@ export async function generateInvoiceFromOnboarding(
   } catch (error: unknown) {
     console.error("generateInvoiceFromOnboarding error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to generate invoice" };
+  }
+}
+
+// ── 8. deleteOnboarding ────────────────────────────────────
+
+export async function deleteOnboarding(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "client_onboarding_void")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const onboarding = await prisma.clientOnboarding.findFirst({
+      where: { id, orgId: ctx.orgId },
+    });
+    if (!onboarding) return { success: false, error: "Onboarding not found" };
+
+    // Get document PDFs for cleanup
+    const docs = await prisma.onboardingDocument.findMany({
+      where: { onboardingId: id },
+      select: { id: true, pdfUrl: true },
+    });
+
+    await prisma.$transaction(async (tx) => {
+      // Delete audit logs first (FK constraint)
+      await tx.signingAuditLog.deleteMany({ where: { onboardingId: id } });
+      // Delete documents
+      await tx.onboardingDocument.deleteMany({ where: { onboardingId: id } });
+      // Delete onboarding record
+      await tx.clientOnboarding.delete({ where: { id } });
+    });
+
+    // Cleanup storage (fire-and-forget)
+    cleanupOnboardingStorage(docs.map((d) => d.pdfUrl).filter(Boolean) as string[]).catch(() => {});
+
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("deleteOnboarding error:", error);
+    return { success: false, error: "Failed to delete onboarding" };
+  }
+}
+
+// ── 9. archiveOnboarding ───────────────────────────────────
+
+export async function archiveOnboarding(
+  id: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "client_onboarding_void")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const onboarding = await prisma.clientOnboarding.findFirst({
+      where: { id, orgId: ctx.orgId },
+    });
+    if (!onboarding) return { success: false, error: "Onboarding not found" };
+
+    const archivableStatuses = ["completed", "voided", "expired"];
+    if (!archivableStatuses.includes(onboarding.status)) {
+      return { success: false, error: `Only completed, voided, or expired onboardings can be archived` };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.clientOnboarding.update({
+        where: { id },
+        data: { notes: `[ARCHIVED] ${onboarding.notes || ""}`.trim() },
+      });
+
+      await tx.signingAuditLog.create({
+        data: {
+          onboardingId: id,
+          action: "archived",
+          actorType: "agent",
+          actorId: ctx.userId,
+          actorName: ctx.fullName,
+        },
+      });
+    });
+
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("archiveOnboarding error:", error);
+    return { success: false, error: "Failed to archive onboarding" };
   }
 }
 

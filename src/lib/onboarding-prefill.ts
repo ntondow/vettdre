@@ -153,5 +153,10 @@ export function buildPrefillValues(data: {
   if (data.termDays) values.agreementTerm = `${data.termDays} days`;
   values.date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
+  // Auto-check tenant representation checkboxes on government forms
+  values.tenantCheck = "true";
+  values.tenantsAgentCheck = "true";
+  values.tenantSignatureCheck = "true";
+
   return values;
 }

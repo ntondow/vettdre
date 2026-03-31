@@ -51,11 +51,13 @@ export async function GET(
       clientFirstName: onboarding.clientFirstName,
       clientLastName: onboarding.clientLastName,
       clientEmail: onboarding.clientEmail,
+      clientPhone: onboarding.clientPhone ?? null,
       brokerageName: onboarding.organization.name,
       agentFullName: onboarding.agent
         ? `${onboarding.agent.firstName} ${onboarding.agent.lastName}`
         : null,
       agentLicense: onboarding.agent?.licenseNumber ?? null,
+      propertyAddress: onboarding.propertyAddress ?? null,
       commissionPct: onboarding.commissionPct ? Number(onboarding.commissionPct) : null,
       monthlyRent: onboarding.monthlyRent ? Number(onboarding.monthlyRent) : null,
       termDays: onboarding.expiresAt
@@ -69,8 +71,8 @@ export async function GET(
         status: d.status,
         docOrder: d.sortOrder,
         pdfUrl: d.pdfUrl ?? null,
-        fields: Array.isArray((d as Record<string, unknown>).template?.fields)
-          ? ((d as Record<string, unknown>).template as { fields: unknown[] }).fields
+        fields: Array.isArray((d.template as Record<string, unknown> | null)?.fields)
+          ? (d.template as unknown as { fields: unknown[] }).fields
           : [],
       })),
     });

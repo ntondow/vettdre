@@ -18,8 +18,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Trash2,
+  Archive,
 } from "lucide-react";
-import { getOnboardings, voidOnboarding, resendOnboarding } from "./actions";
+import { getOnboardings, voidOnboarding, resendOnboarding, deleteOnboarding, archiveOnboarding } from "./actions";
 import {
   ONBOARDING_STATUS_LABELS,
   ONBOARDING_STATUS_COLORS,
@@ -137,6 +139,36 @@ export default function OnboardingListPage() {
       await fetchData(page, statusFilter);
     } else {
       setError(result.error ?? "Failed to void");
+    }
+    setProcessing(null);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to permanently delete this onboarding? This cannot be undone.")) return;
+    setProcessing(id);
+    setActionMenu(null);
+    const result = await deleteOnboarding(id);
+    if (result.success) {
+      setSuccess("Onboarding deleted");
+      await fetchData(page, statusFilter);
+    } else {
+      setError(result.error ?? "Failed to delete");
+    }
+    setProcessing(null);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  const handleArchive = async (id: string) => {
+    if (!confirm("Archive this onboarding?")) return;
+    setProcessing(id);
+    setActionMenu(null);
+    const result = await archiveOnboarding(id);
+    if (result.success) {
+      setSuccess("Onboarding archived");
+      await fetchData(page, statusFilter);
+    } else {
+      setError(result.error ?? "Failed to archive");
     }
     setProcessing(null);
     setTimeout(() => setSuccess(null), 3000);
@@ -280,6 +312,15 @@ export default function OnboardingListPage() {
                               <XCircle className="w-4 h-4" /> Void
                             </button>
                           )}
+                          {["completed", "voided", "expired"].includes(o.status) && (
+                            <button onClick={() => handleArchive(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
+                              <Archive className="w-4 h-4" /> Archive
+                            </button>
+                          )}
+                          <div className="border-t border-slate-100 my-1" />
+                          <button onClick={() => handleDelete(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+                            <Trash2 className="w-4 h-4" /> Delete
+                          </button>
                         </div>
                       )}
                       </div>
