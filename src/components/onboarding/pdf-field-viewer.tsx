@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { Lock, PenTool, Type, Calendar, CheckSquare, Hash } from "lucide-react";
 import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
 
@@ -12,7 +12,11 @@ interface Props {
   onFieldClick?: (fieldId: string) => void;
 }
 
-const PAGE_HEIGHT = 792; // US Letter height in CSS px at 72 DPI
+interface RenderedPage {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
 
 const FIELD_ICONS: Record<string, React.ReactNode> = {
   text: <Type className="w-2.5 h-2.5" />,
@@ -29,6 +33,11 @@ export default function PdfFieldViewer({
   selectedFieldId,
   onFieldClick,
 }: Props) {
+  const [pages, setPages] = useState<RenderedPage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
   // Determine total pages needed (at least 1, max from field page refs + 1)
   const totalPages = useMemo(() => {
     if (!fields.length) return 1;
@@ -46,24 +55,100 @@ export default function PdfFieldViewer({
     return grouped;
   }, [fields]);
 
+  // Render PDF pages to canvas images using pdf.js
+  const renderPdf = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      // Dynamic import to avoid SSR issues
+      const pdfjsLib = await import("pdfjs-dist");
+
+      // Use CDN worker to avoid Next.js bundling issues
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        cMapUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/",
+        cMapPacked: true,
+      });
+
+      const pdf = await loadingTask.promise;
+      const pagesToRender = Math.min(pdf.numPages, totalPages);
+      const rendered: RenderedPage[] = [];
+
+      // Get container width to determine render scale
+      const containerWidth = containerRef.current?.clientWidth ?? 612;
+
+      for (let i = 0; i < pagesToRender; i++) {
+        const page = await pdf.getPage(i + 1);
+        const defaultViewport = page.getViewport({ scale: 1 });
+
+        // Scale to fit the container width (renders crisply at 2x for retina)
+        const scale = (containerWidth / defaultViewport.width) * 2;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        rendered.push({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: viewport.width,
+          height: viewport.height,
+        });
+      }
+
+      setPages(rendered);
+    } catch (err) {
+      console.error("[PdfFieldViewer] Failed to render PDF:", err);
+      setError("Failed to load PDF preview");
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfUrl, totalPages]);
+
+  useEffect(() => {
+    renderPdf();
+  }, [renderPdf]);
+
+  if (loading) {
+    return (
+      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
+        <div className="flex items-center justify-center py-32 text-sm text-slate-400">
+          <div className="animate-pulse">Loading preview...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !pages.length) {
+    return (
+      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
+        <div className="flex items-center justify-center py-32 text-sm text-slate-400">
+          {error || "No pages to display"}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
-      {/* Render a page container per page — each with its own iframe slice + overlays */}
-      {Array.from({ length: totalPages }, (_, pageIndex) => (
-        <div key={pageIndex} className="relative" style={{ height: `${PAGE_HEIGHT}px` }}>
-          {/* PDF iframe — offset to show the correct page */}
-          <iframe
-            src={`${pdfUrl}#toolbar=0&navpanes=0&scrollbar=0&page=${pageIndex + 1}`}
-            className="w-full border-0 pointer-events-none absolute inset-0"
-            style={{
-              height: `${PAGE_HEIGHT * totalPages}px`,
-              marginTop: `-${pageIndex * PAGE_HEIGHT}px`,
-              clipPath: `inset(${pageIndex * PAGE_HEIGHT}px 0 ${(totalPages - pageIndex - 1) * PAGE_HEIGHT}px 0)`,
-            }}
-            title={`Document Page ${pageIndex + 1}`}
+    <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
+      {pages.map((page, pageIndex) => (
+        <div key={pageIndex} className="relative">
+          {/* Rendered PDF page as image — width:100% makes height auto-proportional */}
+          <img
+            src={page.dataUrl}
+            alt={`Page ${pageIndex + 1}`}
+            className="w-full block"
+            draggable={false}
           />
 
-          {/* Field overlays for this page */}
+          {/* Field overlays — percentage positions now match the image exactly */}
           {(fieldsByPage[pageIndex] || []).map((field) => {
             const value = fieldValues[field.id];
             const hasValue = !!value;
@@ -109,7 +194,7 @@ export default function PdfFieldViewer({
           })}
 
           {/* Page separator line */}
-          {pageIndex < totalPages - 1 && (
+          {pageIndex < pages.length - 1 && (
             <div className="absolute bottom-0 left-0 right-0 h-px bg-slate-200" />
           )}
         </div>

@@ -3,6 +3,8 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Exclude canvas from server bundle (pdfjs-dist optional dep for Node)
+  serverExternalPackages: ["canvas"],
   typescript: {
     // Pre-existing missing modules (team-actions, reference-data, gws-tools)
     // TODO: create these files properly, then remove this flag
