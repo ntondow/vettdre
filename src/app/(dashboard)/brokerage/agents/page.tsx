@@ -60,6 +60,17 @@ const STATUS_COLORS: Record<string, string> = {
 const INPUT = "w-full border border-slate-300 rounded-lg px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
+function licenseExpiryBadge(expiry: string | null): { text: string; color: string } | null {
+  if (!expiry) return null;
+  const d = new Date(expiry);
+  const now = new Date();
+  const daysLeft = Math.ceil((d.getTime() - now.getTime()) / 86400000);
+  if (daysLeft < 0) return { text: "Expired", color: "bg-red-100 text-red-700" };
+  if (daysLeft <= 30) return { text: `${daysLeft}d left`, color: "bg-amber-100 text-amber-700" };
+  if (daysLeft <= 90) return { text: `${daysLeft}d`, color: "bg-yellow-50 text-yellow-700" };
+  return null; // No badge if > 90 days
+}
+
 interface AgentFormData {
   firstName: string;
   lastName: string;
@@ -870,6 +881,12 @@ export default function AgentsPage() {
                     <span>Split: <span className="font-medium text-green-600">{splitPct}</span>/<span className="font-medium text-blue-600">{housePct}</span></span>
                     <span>{dealCount} deal{dealCount !== 1 ? "s" : ""}</span>
                     {agent.teamOrOffice && <span className="truncate">{agent.teamOrOffice}</span>}
+                    {(() => {
+                      const badge = licenseExpiryBadge(agent.licenseExpiry);
+                      return badge ? (
+                        <span className={`px-1.5 py-0.5 text-[10px] font-medium rounded-full ${badge.color}`}>{badge.text}</span>
+                      ) : null;
+                    })()}
                   </div>
                   {agent.phone && <p className="text-xs text-slate-500 mt-1">{agent.phone}</p>}
                 </Link>
@@ -898,7 +915,7 @@ export default function AgentsPage() {
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Agent</th>
                 <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Phone</th>
-                <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">License #</th>
+                <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">License</th>
                 <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Team</th>
                 <th className="text-center px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Default Split</th>
                 <th className="text-left px-3 py-3 text-xs font-medium text-slate-500 uppercase tracking-wider">Commission Plan</th>
@@ -936,9 +953,23 @@ export default function AgentsPage() {
                       <span className="text-sm text-slate-600">{agent.phone || "\u2014"}</span>
                     </td>
 
-                    {/* License # */}
+                    {/* License */}
                     <td className="px-3 py-3">
-                      <span className="text-sm font-mono text-slate-600">{agent.licenseNumber || "\u2014"}</span>
+                      <div>
+                        <span className="text-sm font-mono text-slate-600">{agent.licenseNumber || "\u2014"}</span>
+                        {(() => {
+                          const badge = licenseExpiryBadge(agent.licenseExpiry);
+                          if (badge) return (
+                            <span className={`ml-1.5 inline-block px-1.5 py-0.5 text-[10px] font-medium rounded-full ${badge.color}`}>
+                              {badge.text}
+                            </span>
+                          );
+                          if (agent.licenseExpiry) {
+                            return <div className="text-[10px] text-slate-400">Exp {new Date(agent.licenseExpiry).toLocaleDateString("en-US", { month: "short", year: "numeric" })}</div>;
+                          }
+                          return null;
+                        })()}
+                      </div>
                     </td>
 
                     {/* Team */}

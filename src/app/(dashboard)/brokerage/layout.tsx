@@ -20,6 +20,7 @@ import {
   Building2,
   Trophy,
   UserPlus,
+  Rocket,
 } from "lucide-react";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { getCurrentBrokerageRole } from "@/lib/bms-auth";
@@ -44,6 +45,7 @@ const ADMIN_NAV: NavGroup[] = [
   {
     group: "Overview",
     items: [
+      { href: "/brokerage/setup", icon: Rocket, label: "Setup" },
       { href: "/brokerage/dashboard", icon: BarChart3, label: "Dashboard" },
     ],
   },
@@ -102,6 +104,12 @@ const AGENT_NAV: NavGroup[] = [
       { href: "/brokerage/listings", icon: Home, label: "Listings" },
       { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
+    ],
+  },
+  {
+    group: "Admin",
+    items: [
+      { href: "/brokerage/setup", icon: Rocket, label: "Setup" },
     ],
   },
 ];

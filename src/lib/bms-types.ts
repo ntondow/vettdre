@@ -435,6 +435,12 @@ export interface BrokerageSettings {
   invoiceLineFormat: string;
   billToMappings: BillToMappings;
   paymentInstructions: PaymentInstructions;
+  // Defaults section
+  defaultAgentSplitPct?: number;
+  defaultCommissionPlanId?: string;
+  defaultDealType?: string;
+  invoiceDueDays?: number;
+  autoApproveDealSubmissions?: boolean;
 }
 
 export interface CommissionTierInput {
@@ -1451,10 +1457,16 @@ export interface ListingBulkRow {
   propertyName: string;
   address: string;
   unit?: string;
-  rentPrice?: number;
+  city?: string;
+  state?: string;
+  zip?: string;
   bedrooms?: string;
   bathrooms?: string;
   sqft?: number;
+  rentPrice?: number;
+  askingPrice?: number;
+  type?: "rental" | "sale";
+  description?: string;
   availableDate?: string;
   agentName?: string;
   notes?: string;

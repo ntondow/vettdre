@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   getInvoices,
@@ -33,6 +33,9 @@ import {
   X,
   DollarSign,
   FolderOpen,
+  AlertCircle,
+  TrendingUp,
+  Calendar,
 } from "lucide-react";
 import {
   STAGE_LABELS,
@@ -53,6 +56,12 @@ const fmtDate = (d: string) => {
 };
 
 const STATUS_TABS = ["all", "draft", "sent", "paid", "void"] as const;
+
+// Helper to determine if an invoice is unpaid
+const isUnpaid = (inv: any) => inv.status === "draft" || inv.status === "sent";
+
+// Helper to calculate paid amount from payments array
+const getPaidAmount = (inv: any) => (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
 
 // ── Component ─────────────────────────────────────────────────
 
@@ -229,6 +238,46 @@ export default function InvoicesPage() {
 
   const totalCount = Object.values(counts).reduce((s, c) => s + c, 0);
 
+  // ── Reconciliation Summary ──────────────────────────────────
+
+  const summaryStats = useMemo(() => {
+    const now = new Date();
+    const currentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const currentYear = new Date(now.getFullYear(), 0, 1);
+
+    let totalOutstanding = 0;
+    let totalCollectedThisMonth = 0;
+    let totalCollectedThisYear = 0;
+
+    invoices.forEach((inv: any) => {
+      const agentPayoutNum = Number(inv.agentPayout);
+      const paidAmount = getPaidAmount(inv);
+
+      if (isUnpaid(inv)) {
+        totalOutstanding += agentPayoutNum;
+      }
+
+      // Count collected payments
+      (inv.payments || []).forEach((p: any) => {
+        const paymentDate = new Date(p.paymentDate || p.createdAt);
+        const amount = Number(p.amount);
+        if (paymentDate >= currentMonth) {
+          totalCollectedThisMonth += amount;
+        }
+        if (paymentDate >= currentYear) {
+          totalCollectedThisYear += amount;
+        }
+      });
+    });
+
+    return {
+      totalOutstanding,
+      totalCollectedThisMonth,
+      totalCollectedThisYear,
+      totalInvoiceCount: invoices.length,
+    };
+  }, [invoices]);
+
   // ── Render ──────────────────────────────────────────────────
 
   return (
@@ -265,6 +314,55 @@ export default function InvoicesPage() {
         </div>
       </div>
 
+      {/* Reconciliation Summary Cards */}
+      {!loading && invoices.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-red-100">
+                <AlertCircle className="h-4 w-4 text-red-600" />
+              </div>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Outstanding</span>
+            </div>
+            <p className="text-2xl font-bold text-red-600">{fmt(summaryStats.totalOutstanding)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Unpaid invoices</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-green-100">
+                <DollarSign className="h-4 w-4 text-green-600" />
+              </div>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">This Month</span>
+            </div>
+            <p className="text-2xl font-bold text-green-600">{fmt(summaryStats.totalCollectedThisMonth)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Collected</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-blue-100">
+                <TrendingUp className="h-4 w-4 text-blue-600" />
+              </div>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">This Year</span>
+            </div>
+            <p className="text-2xl font-bold text-blue-600">{fmt(summaryStats.totalCollectedThisYear)}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Collected</p>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <div className="p-1.5 rounded-lg bg-purple-100">
+                <Calendar className="h-4 w-4 text-purple-600" />
+              </div>
+              <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total</span>
+            </div>
+            <p className="text-2xl font-bold text-slate-800">{summaryStats.totalInvoiceCount}</p>
+            <p className="text-xs text-slate-400 mt-0.5">Invoice{summaryStats.totalInvoiceCount !== 1 ? "s" : ""}</p>
+          </div>
+        </div>
+      )}
+
       {/* Excel upload panel */}
       {showUpload && (
         <div className="mb-6 bg-white border border-slate-200 rounded-xl p-6 relative">
@@ -279,8 +377,8 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Status tabs */}
-      <div className="flex gap-1 mb-4 overflow-x-auto no-scrollbar">
+      {/* Status tabs + Quick Filter */}
+      <div className="flex gap-1 mb-4 overflow-x-auto no-scrollbar items-center">
         {STATUS_TABS.map(tab => {
           const count = tab === "all" ? totalCount : (counts[tab] || 0);
           const active = statusFilter === tab;
@@ -297,6 +395,18 @@ export default function InvoicesPage() {
             </button>
           );
         })}
+        <div className="ml-auto flex gap-1">
+          <button
+            onClick={() => { setStatusFilter("sent"); setSelected(new Set()); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
+              statusFilter === "sent" ? "bg-amber-100 text-amber-700" : "text-slate-500 hover:bg-slate-100"
+            }`}
+            title="Show only unpaid invoices"
+          >
+            <AlertCircle className="h-4 w-4" />
+            Unpaid
+          </button>
+        </div>
       </div>
 
       {/* Search + bulk actions */}
@@ -381,12 +491,13 @@ export default function InvoicesPage() {
             <tbody className="divide-y divide-slate-100">
               {invoices.map((inv: any) => {
                 const isActing = actionLoading === inv.id;
-                const canMarkPaid = inv.status === "draft" || inv.status === "sent";
+                const canMarkPaid = isUnpaid(inv);
                 const canVoid = inv.status !== "void" && inv.status !== "paid";
-                const paidAmount = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+                const paidAmount = getPaidAmount(inv);
                 const agentPayoutNum = Number(inv.agentPayout);
                 const hasPartialPayment = paidAmount > 0 && paidAmount < agentPayoutNum * 0.995;
                 const paidPct = agentPayoutNum > 0 ? Math.min(100, Math.round((paidAmount / agentPayoutNum) * 100)) : 0;
+                const balanceRemaining = agentPayoutNum - paidAmount;
                 return (
                   <Fragment key={inv.id}>
                   <tr className="hover:bg-slate-50/50 transition-colors">
@@ -423,18 +534,25 @@ export default function InvoicesPage() {
                       </div>
                     </td>
 
-                    {/* Agent Payout */}
+                    {/* Agent Payout + Payment Status */}
                     <td className="px-3 py-3 text-right">
                       <span className="text-sm font-semibold text-green-600">
                         {fmt(agentPayoutNum)}
                       </span>
-                      {hasPartialPayment && (
+                      {hasPartialPayment ? (
                         <div className="mt-1">
                           <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                             <div className="h-full bg-green-400 rounded-full transition-all" style={{ width: `${paidPct}%` }} />
                           </div>
-                          <span className="text-[10px] text-slate-400">{fmt(paidAmount)} paid</span>
+                          <div className="flex items-center justify-between mt-0.5">
+                            <span className="text-[10px] text-slate-400">{fmt(paidAmount)} paid</span>
+                            <span className="text-[10px] font-medium text-red-600">{fmt(balanceRemaining)} due</span>
+                          </div>
                         </div>
+                      ) : inv.status === "paid" ? (
+                        <div className="text-[10px] text-green-600 font-medium mt-1">Fully Paid</div>
+                      ) : (
+                        <div className="text-[10px] text-slate-400 mt-1">Unpaid</div>
                       )}
                     </td>
 
@@ -492,23 +610,23 @@ export default function InvoicesPage() {
                           <Printer className="h-4 w-4" />
                         </button>
                         {canMarkPaid && (
-                          <button
-                            onClick={() => openPaymentForm(inv)}
-                            className="p-1.5 text-slate-400 hover:text-green-600 transition-colors"
-                            title="Record Payment"
-                          >
-                            <DollarSign className="h-4 w-4" />
-                          </button>
-                        )}
-                        {canMarkPaid && (
-                          <button
-                            onClick={() => handleMarkPaid(inv.id)}
-                            disabled={isActing}
-                            className="p-1.5 text-slate-400 hover:text-green-600 disabled:opacity-50 transition-colors"
-                            title="Mark Paid"
-                          >
-                            <CheckCircle className="h-4 w-4" />
-                          </button>
+                          <>
+                            <button
+                              onClick={() => openPaymentForm(inv)}
+                              className="p-1.5 text-slate-400 hover:text-green-600 transition-colors font-medium"
+                              title="Record Payment"
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => handleMarkPaid(inv.id)}
+                              disabled={isActing}
+                              className="p-1.5 text-slate-400 hover:text-green-600 disabled:opacity-50 transition-colors"
+                              title="Mark Fully Paid"
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </button>
+                          </>
                         )}
                         {canVoid && (
                           <button
@@ -606,11 +724,12 @@ export default function InvoicesPage() {
         <div className="space-y-3 md:hidden">
           {invoices.map((inv: any) => {
             const agentPayoutNum = Number(inv.agentPayout);
-            const paidAmount = (inv.payments || []).reduce((s: number, p: any) => s + Number(p.amount), 0);
+            const paidAmount = getPaidAmount(inv);
             const hasPartialPayment = paidAmount > 0 && paidAmount < agentPayoutNum * 0.995;
             const paidPct = agentPayoutNum > 0 ? Math.min(100, Math.round((paidAmount / agentPayoutNum) * 100)) : 0;
-            const canMarkPaid = inv.status === "draft" || inv.status === "sent";
+            const canMarkPaid = isUnpaid(inv);
             const isActing = actionLoading === inv.id;
+            const balanceRemaining = agentPayoutNum - paidAmount;
             return (
               <div key={inv.id} className="bg-white border border-slate-200 rounded-xl p-4">
                 <div className="flex items-start justify-between gap-2 mb-2">
@@ -624,24 +743,31 @@ export default function InvoicesPage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-sm mb-2">
-                  <div>
+                  <div className="flex-1">
                     <span className="text-xs text-slate-500">Agent Payout</span>
                     <p className="font-semibold text-green-600">{fmt(agentPayoutNum)}</p>
-                    {hasPartialPayment && (
-                      <div className="mt-1 w-24">
+                    {hasPartialPayment ? (
+                      <div className="mt-1 w-full">
                         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
                           <div className="h-full bg-green-400 rounded-full" style={{ width: `${paidPct}%` }} />
                         </div>
-                        <span className="text-[10px] text-slate-400">{fmt(paidAmount)} paid</span>
+                        <div className="flex justify-between mt-0.5 text-[10px]">
+                          <span className="text-slate-400">{fmt(paidAmount)} paid</span>
+                          <span className="text-red-600 font-medium">{fmt(balanceRemaining)} due</span>
+                        </div>
                       </div>
+                    ) : inv.status === "paid" ? (
+                      <div className="text-[10px] text-green-600 font-medium mt-1">Fully Paid</div>
+                    ) : (
+                      <div className="text-[10px] text-slate-400 mt-1">Unpaid</div>
                     )}
                   </div>
-                  <div className="text-right">
+                  <div className="text-right ml-2">
                     <span className="text-xs text-slate-500">House</span>
                     <p className="text-slate-600">{fmt(Number(inv.housePayout))}</p>
                   </div>
                   {inv.dueDate && (
-                    <div className="text-right">
+                    <div className="text-right ml-2">
                       <span className="text-xs text-slate-500">Due</span>
                       <p className="text-slate-500">{fmtDate(inv.dueDate)}</p>
                     </div>
@@ -664,9 +790,14 @@ export default function InvoicesPage() {
                     <Printer className="h-4 w-4" />
                   </button>
                   {canMarkPaid && (
-                    <button onClick={() => handleMarkPaid(inv.id)} disabled={isActing} className="p-2 text-slate-400 hover:text-green-600 disabled:opacity-50" title="Mark Paid">
-                      <CheckCircle className="h-4 w-4" />
-                    </button>
+                    <>
+                      <button onClick={() => openPaymentForm(inv)} className="p-2 text-slate-400 hover:text-green-600 font-medium" title="Record Payment">
+                        <DollarSign className="h-4 w-4" />
+                      </button>
+                      <button onClick={() => handleMarkPaid(inv.id)} disabled={isActing} className="p-2 text-slate-400 hover:text-green-600 disabled:opacity-50" title="Mark Fully Paid">
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                    </>
                   )}
                   <button onClick={() => handleDelete(inv.id)} disabled={isActing} className="p-2 text-slate-400 hover:text-red-500 disabled:opacity-50 ml-auto" title="Delete">
                     <Trash2 className="h-4 w-4" />

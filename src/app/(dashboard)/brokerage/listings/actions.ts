@@ -488,6 +488,48 @@ export async function assignListing(id: string, agentId: string | null): Promise
   return serialize(updated) as BmsListingRecord;
 }
 
+// ── Update Listing Status ───────────────────────────────────
+
+export async function updateListingStatus(
+  id: string,
+  newStatus: BmsListingStatusType,
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg();
+
+  const listing = await prisma.bmsListing.findFirst({
+    where: { id, orgId: ctx.orgId },
+  });
+  if (!listing) throw new Error("Listing not found");
+
+  const updateData: Record<string, unknown> = {
+    status: newStatus as BmsListingStatus,
+  };
+
+  // Set status timestamps
+  const now = new Date();
+  if (newStatus === "showing") updateData.showingStartedAt = now;
+  else if (newStatus === "application") updateData.applicationAt = now;
+  else if (newStatus === "approved") updateData.approvedAt = now;
+  else if (newStatus === "leased") updateData.leasedAt = now;
+  else if (newStatus === "off_market") updateData.offMarketAt = now;
+
+  const updated = await prisma.bmsListing.update({
+    where: { id },
+    data: updateData as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    include: {
+      agent: { select: { id: true, firstName: true, lastName: true, email: true } },
+      property: { select: { id: true, name: true, landlordName: true } },
+    },
+  });
+
+  logListingAction(ctx.orgId, actor(ctx), "status_updated", id, {
+    from: listing.status,
+    to: newStatus,
+  });
+
+  return serialize(updated) as BmsListingRecord;
+}
+
 // ── Create Transaction from Listing (lease-up) ─────────────
 
 export async function createTransactionFromListing(
@@ -663,15 +705,26 @@ export async function bulkCreateListings(
         continue;
       }
 
+      // Determine listing type and price
+      const type = (row.type || "rental") as "rental" | "sale";
+      const hasRent = row.rentPrice !== undefined && row.rentPrice > 0;
+      const hasAsking = row.askingPrice !== undefined && row.askingPrice > 0;
+
+      if (!hasRent && !hasAsking) {
+        errors.push(`Row ${(row._rowIndex ?? i) + 1}: Must have either rent price or asking price`);
+        continue;
+      }
+
       await prisma.bmsListing.create({
         data: {
           orgId: ctx.orgId,
           propertyId: row._propertyId || undefined,
           address: row.address,
           unit: row.unit,
-          type: "rental",
+          type: type,
           status: "available",
           rentPrice: row.rentPrice,
+          askingPrice: row.askingPrice,
           bedrooms: row.bedrooms,
           bathrooms: row.bathrooms,
           sqft: row.sqft,

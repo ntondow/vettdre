@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Calculator, ChevronDown } from "lucide-react";
 import type { CommissionPlanInput, CommissionPlanType, CommissionTierInput } from "@/lib/bms-types";
 import { COMMISSION_PLAN_TYPE_LABELS } from "@/lib/bms-types";
 
@@ -49,6 +49,12 @@ export default function PlanBuilder({ onSubmit, defaultValues, isEditing }: Prop
   const [tiers, setTiers] = useState<CommissionTierInput[]>(
     defaultValues?.tiers?.length ? defaultValues.tiers : [{ ...DEFAULT_TIER }],
   );
+
+  // ── Deal Simulator state ────────────────────────────────
+  const [simulatorOpen, setSimulatorOpen] = useState(false);
+  const [dealValue, setDealValue] = useState(500000);
+  const [dealsThisYear, setDealsThisYear] = useState(0);
+  const [volumeThisYear, setVolumeThisYear] = useState(0);
 
   // ── Tier helpers ──────────────────────────────────────────
 
@@ -155,6 +161,30 @@ export default function PlanBuilder({ onSubmit, defaultValues, isEditing }: Prop
 
   const isFlat = planType === "flat";
   const thresholdLabel = planType === "volume_based" ? "Deals" : "$";
+
+  // ── Simulator calculation helper ─────────────────────────
+  function getApplicableTier() {
+    if (isFlat) return tiers[0];
+
+    const isVolume = planType === "volume_based";
+    const threshold = isVolume ? dealsThisYear : volumeThisYear;
+
+    for (let i = tiers.length - 1; i >= 0; i--) {
+      const tier = tiers[i];
+      if (tier.minThreshold <= threshold) {
+        if (tier.maxThreshold === undefined || tier.maxThreshold === null || threshold < tier.maxThreshold) {
+          return tier;
+        }
+      }
+    }
+    return tiers[0];
+  }
+
+  const simulatorTier = getApplicableTier();
+  const simulatorAgentPct = simulatorTier?.agentSplitPct || 0;
+  const simulatorHousePct = 100 - simulatorAgentPct;
+  const simulatorAgentAmount = (dealValue * simulatorAgentPct) / 100;
+  const simulatorHouseAmount = (dealValue * simulatorHousePct) / 100;
 
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-8">
@@ -432,6 +462,135 @@ export default function PlanBuilder({ onSubmit, defaultValues, isEditing }: Prop
             <TieredPreview tiers={tiers} planType={planType} />
           )}
         </div>
+      </section>
+
+      {/* ── Deal Simulator ────────────────────────────────── */}
+      <section>
+        <button
+          type="button"
+          onClick={() => setSimulatorOpen(!simulatorOpen)}
+          className="flex items-center gap-2 mb-3 text-base font-semibold text-slate-800 hover:text-blue-600 transition-colors"
+        >
+          <Calculator className="h-5 w-5" />
+          <span>Deal Simulator</span>
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-300 ${simulatorOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+
+        {simulatorOpen && (
+          <div className="rounded-lg border border-slate-200 bg-white p-4 space-y-4">
+            {/* Deal Value Input */}
+            <div>
+              <label className={LABEL}>Sample Deal Value</label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                <input
+                  type="number"
+                  min={0}
+                  step="1000"
+                  value={dealValue}
+                  onChange={(e) => setDealValue(parseFloat(e.target.value) || 0)}
+                  className={INPUT + " pl-8"}
+                />
+              </div>
+            </div>
+
+            {/* Tier Selection Inputs (for tiered plans) */}
+            {!isFlat && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {planType === "volume_based" ? (
+                  <div>
+                    <label className={LABEL}>Deals This Year</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      value={dealsThisYear}
+                      onChange={(e) => setDealsThisYear(parseFloat(e.target.value) || 0)}
+                      className={INPUT}
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className={LABEL}>Volume This Year</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step="1000"
+                        value={volumeThisYear}
+                        onChange={(e) => setVolumeThisYear(parseFloat(e.target.value) || 0)}
+                        className={INPUT + " pl-8"}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Results */}
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <p className="text-sm font-medium text-slate-600">
+                On a ${formatNumber(dealValue)} deal:
+              </p>
+
+              {/* Split percentages */}
+              <div className="flex items-center gap-3 text-sm">
+                <span className="font-medium text-slate-700">Split:</span>
+                <span className="font-semibold text-green-600">{simulatorAgentPct}% Agent</span>
+                <span className="text-slate-400">/</span>
+                <span className="font-semibold text-blue-600">{simulatorHousePct}% House</span>
+              </div>
+
+              {/* Commission amounts */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                  <p className="text-xs text-green-600 font-medium">Agent Commission</p>
+                  <p className="text-lg font-bold text-green-700 mt-1">
+                    ${formatNumber(Math.round(simulatorAgentAmount))}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-blue-50 border border-blue-200">
+                  <p className="text-xs text-blue-600 font-medium">House Commission</p>
+                  <p className="text-lg font-bold text-blue-700 mt-1">
+                    ${formatNumber(Math.round(simulatorHouseAmount))}
+                  </p>
+                </div>
+              </div>
+
+              {/* Visual split bar */}
+              <div className="pt-2">
+                <div className="flex h-6 rounded-full overflow-hidden">
+                  {simulatorAgentPct > 0 && (
+                    <div
+                      className="bg-green-500 flex items-center justify-center text-[10px] font-bold text-white transition-all duration-300"
+                      style={{ width: `${simulatorAgentPct}%` }}
+                    >
+                      {simulatorAgentPct >= 15 ? `${simulatorAgentPct}%` : ""}
+                    </div>
+                  )}
+                  {simulatorHousePct > 0 && (
+                    <div
+                      className="bg-blue-500 flex items-center justify-center text-[10px] font-bold text-white transition-all duration-300"
+                      style={{ width: `${simulatorHousePct}%` }}
+                    >
+                      {simulatorHousePct >= 15 ? `${simulatorHousePct}%` : ""}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Applicable tier info (for tiered plans) */}
+              {!isFlat && simulatorTier?.label && (
+                <p className="text-xs text-slate-500 pt-1">
+                  Tier: <span className="font-medium">{simulatorTier.label}</span>
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── Submit ────────────────────────────────────────── */}

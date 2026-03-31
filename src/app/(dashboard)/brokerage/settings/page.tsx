@@ -190,7 +190,7 @@ export default function BrokerageSettingsPage() {
   // Shared state
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"roles" | "settings" | "team" | "audit">("roles");
+  const [activeTab, setActiveTab] = useState<"roles" | "settings" | "defaults" | "team" | "audit">("roles");
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   // Roles tab state
@@ -334,6 +334,11 @@ export default function BrokerageSettingsPage() {
       invoiceLineFormat: settingsForm.invoiceLineFormat,
       billToMappings: settingsForm.billToMappings,
       paymentInstructions: settingsForm.paymentInstructions,
+      defaultAgentSplitPct: settingsForm.defaultAgentSplitPct,
+      defaultCommissionPlanId: settingsForm.defaultCommissionPlanId,
+      defaultDealType: settingsForm.defaultDealType,
+      invoiceDueDays: settingsForm.invoiceDueDays,
+      autoApproveDealSubmissions: settingsForm.autoApproveDealSubmissions,
     });
     if (result.success) {
       setSettings({ ...settingsForm });
@@ -523,6 +528,17 @@ export default function BrokerageSettingsPage() {
           }`}
         >
           Brokerage Settings
+        </button>
+        <button
+          onClick={() => setActiveTab("defaults")}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === "defaults"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-slate-500 hover:text-slate-700"
+          }`}
+        >
+          <DollarSign className="w-4 h-4" />
+          Defaults
         </button>
         <button
           onClick={() => setActiveTab("team")}
@@ -1413,6 +1429,148 @@ export default function BrokerageSettingsPage() {
                 >
                   {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                   {saving ? "Saving..." : "Save Settings"}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════ */}
+      {/* DEFAULTS TAB                                            */}
+      {/* ═══════════════════════════════════════════════════════ */}
+      {activeTab === "defaults" && (
+        <div className="space-y-6">
+          {!settingsLoaded ? (
+            <div className="animate-pulse space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-32 bg-slate-100 rounded-lg" />
+              ))}
+            </div>
+          ) : settingsForm ? (
+            <>
+              {/* Agent Defaults */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+                  <Users className="w-5 h-5 text-slate-400" />
+                  <h2 className="font-semibold text-slate-900">Agent Defaults</h2>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={LABEL}>Default Agent Split (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={settingsForm.defaultAgentSplitPct ?? 70}
+                      onChange={(e) => setField("defaultAgentSplitPct", parseInt(e.target.value) || 70)}
+                      className={INPUT}
+                      placeholder="70"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Default commission split for new agents (0-100%)
+                    </p>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Default Commission Plan</label>
+                    <select
+                      value={settingsForm.defaultCommissionPlanId ?? ""}
+                      onChange={(e) => setField("defaultCommissionPlanId", e.target.value || undefined)}
+                      className={INPUT}
+                    >
+                      <option value="">None (Use org default)</option>
+                      {/* Commission plans will be loaded from API */}
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Commission plan assigned to new agents
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Deal Defaults */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+                  <Briefcase className="w-5 h-5 text-slate-400" />
+                  <h2 className="font-semibold text-slate-900">Deal Defaults</h2>
+                </div>
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={LABEL}>Default Deal Type</label>
+                    <select
+                      value={settingsForm.defaultDealType ?? "sale"}
+                      onChange={(e) => setField("defaultDealType", e.target.value)}
+                      className={INPUT}
+                    >
+                      <option value="sale">Sale</option>
+                      <option value="lease">Lease</option>
+                      <option value="rental">Rental</option>
+                    </select>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Default deal type for new submissions
+                    </p>
+                  </div>
+                  <div>
+                    <label className={LABEL}>Invoice Due Days</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={settingsForm.invoiceDueDays ?? 30}
+                      onChange={(e) => setField("invoiceDueDays", parseInt(e.target.value) || 30)}
+                      className={INPUT}
+                      placeholder="30"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">
+                      Days until invoices are due after creation
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submission Defaults */}
+              <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-slate-400" />
+                  <h2 className="font-semibold text-slate-900">Submission Defaults</h2>
+                </div>
+                <div className="p-5">
+                  <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                    <input
+                      type="checkbox"
+                      id="autoApproveDealSubmissions"
+                      checked={settingsForm.autoApproveDealSubmissions ?? false}
+                      onChange={(e) => setField("autoApproveDealSubmissions", e.target.checked)}
+                      className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex-1">
+                      <label htmlFor="autoApproveDealSubmissions" className="block text-sm font-medium text-slate-900 cursor-pointer">
+                        Auto-approve Deal Submissions
+                      </label>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Automatically approve deal submissions from linked agents
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Save Button */}
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setSettingsForm(settings)}
+                  disabled={saving}
+                  className="px-6 py-2.5 border border-slate-300 text-slate-700 text-sm font-medium rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={saving || JSON.stringify(settingsForm) === JSON.stringify(settings)}
+                  className="px-6 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+                >
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {saving ? "Saving..." : "Save Defaults"}
                 </button>
               </div>
             </>

@@ -18,6 +18,7 @@ import {
   Upload,
   Calendar,
   ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   getListings,
@@ -26,7 +27,11 @@ import {
   getAgentsForDropdown,
   createListing,
   createProperty,
+  updateListing,
+  updateListingStatus,
 } from "./actions";
+import ListingImport from "./listing-import";
+import ListingDetail from "@/components/bms/listing-detail";
 import {
   LISTING_STATUS_LABELS,
   LISTING_STATUS_COLORS,
@@ -126,6 +131,10 @@ export default function ListingsPage() {
   const [newPropertyName, setNewPropertyName] = useState("");
   const [newPropertyLandlord, setNewPropertyLandlord] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+
+  // Listing detail panel
+  const [selectedListing, setSelectedListing] = useState<BmsListingRecord | null>(null);
 
   // ── Data Loading ────────────────────────────────────────────
 
@@ -224,10 +233,10 @@ export default function ListingsPage() {
 
     // Shared card renderer
     const ListingCard = ({ l }: { l: BmsListingRecord }) => (
-      <Link
+      <button
         key={l.id}
-        href={`/brokerage/listings/${l.id}`}
-        className="block bg-white border border-slate-200 rounded-lg p-3 hover:shadow-sm hover:border-slate-300 transition-all"
+        onClick={() => setSelectedListing(l)}
+        className="w-full text-left bg-white border border-slate-200 rounded-lg p-3 hover:shadow-sm hover:border-slate-300 transition-all"
       >
         {l.property?.name && (
           <p className="text-[11px] text-slate-400 font-medium mb-0.5 truncate">
@@ -262,7 +271,7 @@ export default function ListingsPage() {
             </span>
           )}
         </div>
-      </Link>
+      </button>
     );
 
     return (
@@ -332,7 +341,7 @@ export default function ListingsPage() {
                 {listings.map((l) => (
                   <tr
                     key={l.id}
-                    onClick={() => router.push(`/brokerage/listings/${l.id}`)}
+                    onClick={() => setSelectedListing(l)}
                     className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer transition-colors"
                   >
                     <td className="px-4 py-3">
@@ -399,10 +408,10 @@ export default function ListingsPage() {
       <div className="px-6">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {listings.map((l) => (
-            <Link
+            <button
               key={l.id}
-              href={`/brokerage/listings/${l.id}`}
-              className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all"
+              onClick={() => setSelectedListing(l)}
+              className="text-left bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all"
             >
               <div className="flex items-start justify-between mb-2">
                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${LISTING_STATUS_COLORS[l.status]}`}>
@@ -437,7 +446,7 @@ export default function ListingsPage() {
                   {l.availableDate ? `Avail ${fmtDate(l.availableDate)}` : ""}
                 </span>
               </div>
-            </Link>
+            </button>
           ))}
           {listings.length === 0 && !loading && (
             <div className="col-span-full py-12 text-center text-sm text-slate-400">
@@ -460,13 +469,17 @@ export default function ListingsPage() {
           <p className="text-sm text-slate-500">Manage your brokerage inventory</p>
         </div>
         <div className="flex items-center gap-2">
-          <Link
-            href="/brokerage/listings/bulk"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
+          <button
+            onClick={() => setShowImport((prev) => !prev)}
+            className={`flex items-center gap-2 px-3 py-2 text-sm font-medium border rounded-lg transition-colors ${
+              showImport
+                ? "text-blue-700 bg-blue-50 border-blue-200"
+                : "text-slate-700 bg-white border-slate-300 hover:bg-slate-50"
+            }`}
           >
-            <Upload className="w-4 h-4" />
-            Bulk Upload
-          </Link>
+            {showImport ? <ChevronUp className="h-4 w-4" /> : <Upload className="h-4 w-4" />}
+            Import Listings
+          </button>
           <button
             onClick={() => setShowNew(true)}
             className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
@@ -476,6 +489,25 @@ export default function ListingsPage() {
           </button>
         </div>
       </div>
+
+      {/* Import panel */}
+      {showImport && (
+        <div className="mb-6 mx-6 bg-white border border-slate-200 rounded-xl p-6 relative">
+          <button
+            onClick={() => setShowImport(false)}
+            className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <h2 className="text-lg font-semibold text-slate-800 mb-4">Import Listings from Spreadsheet</h2>
+          <ListingImport
+            onComplete={() => {
+              setShowImport(false);
+              loadData();
+            }}
+          />
+        </div>
+      )}
 
       {/* Stats */}
       {stats && (
@@ -616,6 +648,23 @@ export default function ListingsPage() {
       {!loading && viewMode === "pipeline" && <PipelineView />}
       {!loading && viewMode === "table" && <TableView />}
       {!loading && viewMode === "grid" && <GridView />}
+
+      {/* Listing Detail Panel */}
+      {selectedListing && (
+        <ListingDetail
+          listing={selectedListing}
+          agents={agents}
+          onClose={() => setSelectedListing(null)}
+          onUpdate={async (id, data) => {
+            await updateListing(id, data);
+            await loadData();
+          }}
+          onStatusChange={async (id, newStatus) => {
+            await updateListingStatus(id, newStatus);
+            await loadData();
+          }}
+        />
+      )}
 
       {/* New Listing Modal */}
       {showNew && (

@@ -36,6 +36,7 @@ import {
   Trophy,
   DollarSign,
   Clock,
+  Rocket,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -473,6 +474,39 @@ export default function DashboardPage() {
         <DashboardSkeleton />
       ) : dashboard ? (
         <>
+          {/* ── Broker Setup Progress ─────────────────────────── */}
+          {dashboard.isAdmin && (
+            dashboard.overview.agentCount === 0 ||
+            dashboard.overview.activeListings === 0
+          ) && (
+            <div className="bg-slate-900 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-500/20 rounded-lg">
+                    <Rocket className="h-5 w-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-200">Complete Your Brokerage Setup</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      {dashboard.overview.agentCount === 0 && dashboard.overview.activeListings === 0
+                        ? "Add your first agent and listing to get started"
+                        : dashboard.overview.agentCount === 0
+                          ? "Add your first agent to your brokerage"
+                          : "Add your first listing"}
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/brokerage/agents"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Get Started
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </div>
+            </div>
+          )}
+
           {/* ── Alerts Banner ──────────────────────────────── */}
           {dashboard.alerts.length > 0 && (
             <div className="bg-slate-900 rounded-xl p-4">

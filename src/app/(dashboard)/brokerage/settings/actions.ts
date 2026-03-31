@@ -65,6 +65,12 @@ interface BmsSettingsJson {
   invoiceLineFormat: string;
   billToMappings: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
   paymentInstructions: PaymentInstructionsJson;
+  // Defaults section
+  defaultAgentSplitPct?: number;
+  defaultCommissionPlanId?: string;
+  defaultDealType?: string;
+  invoiceDueDays?: number;
+  autoApproveDealSubmissions?: boolean;
 }
 
 const DEFAULT_PAYMENT_INSTRUCTIONS: PaymentInstructionsJson = { enabled: true };
@@ -80,6 +86,12 @@ const BMS_DEFAULTS: BmsSettingsJson = {
   invoiceLineFormat: "rental_commission_tenant_address",
   billToMappings: {},
   paymentInstructions: DEFAULT_PAYMENT_INSTRUCTIONS,
+  // Defaults section
+  defaultAgentSplitPct: 70,
+  defaultCommissionPlanId: undefined,
+  defaultDealType: "sale",
+  invoiceDueDays: 30,
+  autoApproveDealSubmissions: false,
 };
 
 function parseBmsSettings(raw: unknown): BmsSettingsJson {
@@ -100,6 +112,12 @@ function parseBmsSettings(raw: unknown): BmsSettingsJson {
     paymentInstructions: (obj.paymentInstructions && typeof obj.paymentInstructions === "object" && !Array.isArray(obj.paymentInstructions))
       ? obj.paymentInstructions as PaymentInstructionsJson
       : DEFAULT_PAYMENT_INSTRUCTIONS,
+    // Defaults section
+    defaultAgentSplitPct: typeof obj.defaultAgentSplitPct === "number" ? obj.defaultAgentSplitPct : BMS_DEFAULTS.defaultAgentSplitPct,
+    defaultCommissionPlanId: typeof obj.defaultCommissionPlanId === "string" ? obj.defaultCommissionPlanId : BMS_DEFAULTS.defaultCommissionPlanId,
+    defaultDealType: typeof obj.defaultDealType === "string" ? obj.defaultDealType : BMS_DEFAULTS.defaultDealType,
+    invoiceDueDays: typeof obj.invoiceDueDays === "number" ? obj.invoiceDueDays : BMS_DEFAULTS.invoiceDueDays,
+    autoApproveDealSubmissions: typeof obj.autoApproveDealSubmissions === "boolean" ? obj.autoApproveDealSubmissions : BMS_DEFAULTS.autoApproveDealSubmissions,
   };
 }
 
@@ -202,6 +220,11 @@ export async function updateBrokerageSettings(input: {
   invoiceLineFormat?: string;
   billToMappings?: Record<string, { companyName: string; address?: string; phone?: string; email?: string }>;
   paymentInstructions?: PaymentInstructionsJson;
+  defaultAgentSplitPct?: number;
+  defaultCommissionPlanId?: string;
+  defaultDealType?: string;
+  invoiceDueDays?: number;
+  autoApproveDealSubmissions?: boolean;
 }): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId, orgId, role } = await getCurrentOrgAsAdmin();
@@ -229,7 +252,12 @@ export async function updateBrokerageSettings(input: {
       input.invoiceNotes !== undefined ||
       input.invoiceLineFormat !== undefined ||
       input.billToMappings !== undefined ||
-      input.paymentInstructions !== undefined;
+      input.paymentInstructions !== undefined ||
+      input.defaultAgentSplitPct !== undefined ||
+      input.defaultCommissionPlanId !== undefined ||
+      input.defaultDealType !== undefined ||
+      input.invoiceDueDays !== undefined ||
+      input.autoApproveDealSubmissions !== undefined;
 
     if (hasBmsFields) {
       const org = await prisma.organization.findUnique({
@@ -248,6 +276,11 @@ export async function updateBrokerageSettings(input: {
         invoiceLineFormat: input.invoiceLineFormat ?? current.invoiceLineFormat,
         billToMappings: input.billToMappings ?? current.billToMappings,
         paymentInstructions: input.paymentInstructions ?? current.paymentInstructions,
+        defaultAgentSplitPct: input.defaultAgentSplitPct ?? current.defaultAgentSplitPct,
+        defaultCommissionPlanId: input.defaultCommissionPlanId ?? current.defaultCommissionPlanId,
+        defaultDealType: input.defaultDealType ?? current.defaultDealType,
+        invoiceDueDays: input.invoiceDueDays ?? current.invoiceDueDays,
+        autoApproveDealSubmissions: input.autoApproveDealSubmissions ?? current.autoApproveDealSubmissions,
       };
       orgUpdate.bmsSettings = merged;
     }
