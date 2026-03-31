@@ -98,10 +98,17 @@ export async function getContacts(limit = 200, offset = 0) {
   const { data: { user: authUser } } = await supabase.auth.getUser();
   if (!authUser) return [];
 
-  const { org } = await getOrCreateUserOrg(authUser);
+  const { user, org } = await getOrCreateUserOrg(authUser);
+
+  // Agents only see their own contacts; admins/owners see all org contacts
+  const isAdmin = ["super_admin", "owner", "admin"].includes(user.role);
+  const where: Record<string, unknown> = { orgId: org.id };
+  if (!isAdmin) {
+    where.assignedTo = user.id;
+  }
 
   return prisma.contact.findMany({
-    where: { orgId: org.id },
+    where,
     orderBy: { createdAt: "desc" },
     include: { assignedAgent: { select: { fullName: true } } },
     take: Math.min(limit, 500), // Cap at 500 to prevent unbounded queries
@@ -114,10 +121,17 @@ export async function deleteContact(contactId: string) {
   const { data: { user: authUser } } = await supabase.auth.getUser();
   if (!authUser) throw new Error("Not authenticated");
 
-  const { org } = await getOrCreateUserOrg(authUser);
+  const { user, org } = await getOrCreateUserOrg(authUser);
+
+  // Agents can only delete their own contacts
+  const isAdmin = ["super_admin", "owner", "admin"].includes(user.role);
+  const where: Record<string, unknown> = { id: contactId, orgId: org.id };
+  if (!isAdmin) {
+    where.assignedTo = user.id;
+  }
 
   await prisma.contact.deleteMany({
-    where: { id: contactId, orgId: org.id },
+    where,
   });
 
   revalidatePath("/contacts");

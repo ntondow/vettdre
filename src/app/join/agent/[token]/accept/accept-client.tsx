@@ -35,7 +35,9 @@ export default function AcceptInviteClient({ token }: { token: string }) {
         }
 
         // 3. Resolve Supabase auth ID → User.id via server action
-        const resolved = await getUserIdFromAuth();
+        //    Pass the invite token so a User record can be created if needed
+        //    (fresh signups arrive on a public route where middleware auto-provisioning doesn't run)
+        const resolved = await getUserIdFromAuth(token);
         if (!resolved) {
           setErrorMsg("Could not find your user account. Please contact support.");
           setStatus("error");

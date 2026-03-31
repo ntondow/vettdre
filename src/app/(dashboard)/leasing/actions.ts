@@ -1398,18 +1398,19 @@ export async function getConversationStats(
       usageWhere.configId = { in: configs.map((c) => c.id) };
     }
 
-    const usageRows = await prisma.leasingDailyUsage.findMany({ where: usageWhere });
+    const usageRows = await prisma.leasingDailyUsage.findMany({
+      where: usageWhere,
+      select: { messagesAi: true, messagesInbound: true },
+    });
     const messagesToday = usageRows.reduce((sum, u) => sum + u.messagesAi + u.messagesInbound, 0);
 
     // Get daily limit (use first config or default)
     let dailyLimit = 25;
-    if (configId) {
-      const cfg = await prisma.leasingConfig.findUnique({ where: { id: configId }, select: { tier: true } });
-      if (cfg) dailyLimit = getDailyLimit(cfg.tier);
-    } else {
-      const firstCfg = await prisma.leasingConfig.findFirst({ where: { orgId }, select: { tier: true } });
-      if (firstCfg) dailyLimit = getDailyLimit(firstCfg.tier);
-    }
+    const tierCfg = await prisma.leasingConfig.findFirst({
+      where: configId ? { id: configId } : { orgId },
+      select: { tier: true },
+    });
+    if (tierCfg) dailyLimit = getDailyLimit(tierCfg.tier);
 
     return {
       stats: {
@@ -1656,6 +1657,7 @@ export async function getConversationFollowUps(
     const followUps = await prisma.leasingFollowUp.findMany({
       where: { conversationId, status: "pending" },
       orderBy: [{ cadencePosition: "asc" }, { scheduledFor: "asc" }],
+      select: { id: true, type: true, cadencePosition: true, scheduledFor: true, status: true },
     });
 
     return {

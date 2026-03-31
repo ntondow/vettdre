@@ -105,18 +105,24 @@ export async function getUsers(
       createdAt: true,
       lastLoginAt: true,
       orgId: true,
-      teamId: true,
       organization: { select: { name: true } },
-      team: { select: { id: true, name: true } },
     },
   });
 
   return users.map(u => ({
-    ...u,
+    id: u.id,
+    fullName: u.fullName,
+    email: u.email,
+    plan: u.plan,
+    isApproved: u.isApproved,
+    isActive: u.isActive,
+    role: u.role,
     createdAt: u.createdAt.toISOString(),
     lastLoginAt: u.lastLoginAt?.toISOString() || null,
-    orgName: u.organization.name,
-    teamName: u.team?.name ?? null,
+    orgId: u.orgId,
+    orgName: u.organization?.name ?? "—",
+    teamId: null as string | null,
+    teamName: null as string | null,
   }));
 }
 

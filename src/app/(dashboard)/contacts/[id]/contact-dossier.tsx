@@ -398,7 +398,7 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                               <p className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold mb-1.5">Company Intelligence</p>
                               <div className="flex items-start gap-2">
                                 {data.merged.companyLogo && (
-                                  <img src={data.merged.companyLogo} alt="" className="w-6 h-6 rounded object-contain border border-slate-200" />
+                                  <img src={data.merged.companyLogo} alt="" loading="lazy" width={24} height={24} className="w-6 h-6 rounded object-contain border border-slate-200" />
                                 )}
                                 <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs flex-1">
                                   <div><span className="text-slate-400">Industry:</span> <span className="text-slate-700">{data.merged.companyIndustry}</span></div>
@@ -653,7 +653,7 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                       <>
                         <div className="flex items-start gap-3">
                           {orgData.logoUrl && (
-                            <img src={orgData.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
+                            <img src={orgData.logoUrl} alt="" loading="lazy" width={40} height={40} className="w-10 h-10 rounded-lg object-contain border border-slate-200 flex-shrink-0" />
                           )}
                           <div className="flex-1 min-w-0">
                             <p className="text-base font-bold text-slate-900">{orgData.name}</p>

@@ -118,7 +118,7 @@ export default function CRMSidebar({
       <div className="p-4">
         <div className="flex items-start gap-3">
           {enrichment?.profilePhotoUrl ? (
-            <img src={enrichment.profilePhotoUrl} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow" />
+            <img src={enrichment.profilePhotoUrl} alt="" loading="lazy" width={48} height={48} className="w-12 h-12 rounded-full object-cover border-2 border-white shadow" />
           ) : (
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white text-lg font-bold shadow ${getAvatarColor(fullName)}`}>
               {initial}

@@ -33,7 +33,7 @@ interface TemplateOption {
   fields: unknown[];
 }
 
-const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
 // ── Component ────────────────────────────────────────────────
@@ -61,9 +61,10 @@ export default function NewOnboardingPage() {
   const [moveInDate, setMoveInDate] = useState("");
 
   // Agreement terms
-  const [commissionPct, setCommissionPct] = useState("8.33");
-  const [termDays, setTermDays] = useState("30");
-  const [deliveryMethod, setDeliveryMethod] = useState<"email" | "sms" | "link">("email");
+  const [feeAmount, setFeeAmount] = useState("");
+  const [effectiveThrough, setEffectiveThrough] = useState("");
+  const [deliveryChannels, setDeliveryChannels] = useState<Set<"email" | "sms">>(new Set(["email"]));
+  const [linkOnly, setLinkOnly] = useState(false);
   const [notes, setNotes] = useState("");
 
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -111,9 +112,9 @@ export default function NewOnboardingPage() {
     if (!clientLastName.trim()) e.clientLastName = "Last name is required";
     if (!clientEmail.trim()) e.clientEmail = "Email is required";
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clientEmail.trim())) e.clientEmail = "Invalid email";
-    const pct = parseFloat(commissionPct);
-    if (!pct || pct <= 0) e.commissionPct = "Commission must be > 0";
-    if (pct > 100) e.commissionPct = "Cannot exceed 100%";
+    if (deliveryChannels.has("sms") && !linkOnly && !clientPhone.trim()) e.clientPhone = "Phone number is required for SMS delivery";
+    const fee = parseFloat(feeAmount);
+    if (!fee || fee <= 0) e.feeAmount = "Fee amount is required";
     if (templates.length > 0 && selectedTemplateIds.size === 0) e.templates = "Select at least one document";
     return e;
   }
@@ -136,10 +137,10 @@ export default function NewOnboardingPage() {
         unitNumber: unitNumber.trim() || undefined,
         monthlyRent: monthlyRent ? parseFloat(monthlyRent) : undefined,
         moveInDate: moveInDate || undefined,
-        commissionPct: parseFloat(commissionPct) || 0,
-        expiresInDays: parseInt(termDays, 10) || 30,
+        commissionFlat: parseFloat(feeAmount) || 0,
+        effectiveThrough: effectiveThrough || undefined,
         selectedTemplateIds: templates.length > 0 ? Array.from(selectedTemplateIds) : undefined,
-        deliveryMethod,
+        deliveryMethod: linkOnly ? "link" : Array.from(deliveryChannels).join("+") as "email" | "sms" | "email+sms",
         notes: notes.trim() || undefined,
       });
 
@@ -210,8 +211,9 @@ export default function NewOnboardingPage() {
               {errors.clientEmail && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.clientEmail}</p>}
             </div>
             <div>
-              <label className={LABEL}>Phone</label>
-              <input type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className={INPUT} placeholder="(555) 123-4567" />
+              <label className={LABEL}>Phone {deliveryChannels.has("sms") && !linkOnly && <span className="text-red-500">*</span>}</label>
+              <input type="tel" value={clientPhone} onChange={(e) => setClientPhone(e.target.value)} className={`${INPUT} ${errors.clientPhone ? "border-red-300 ring-1 ring-red-300" : ""}`} placeholder="(555) 123-4567" />
+              {errors.clientPhone && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.clientPhone}</p>}
             </div>
           </div>
         </section>
@@ -295,47 +297,77 @@ export default function NewOnboardingPage() {
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className={LABEL}>Commission %</label>
+              <label className={LABEL}>Fee Due at Signing *</label>
               <div className="relative">
-                <input type="number" min={0} max={100} step={0.01} value={commissionPct} onChange={(e) => setCommissionPct(e.target.value)} className={INPUT + " pr-8"} />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">%</span>
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
+                <input type="text" inputMode="decimal" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value.replace(/[^0-9.]/g, ""))} className={INPUT + " pl-7"} placeholder="4,500" />
               </div>
-              {errors.commissionPct && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.commissionPct}</p>}
-              <p className="mt-1 text-xs text-slate-400">8.33% = one month rent</p>
+              {errors.feeAmount && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.feeAmount}</p>}
             </div>
             <div>
-              <label className={LABEL}>Agreement Term (days)</label>
-              <input type="number" min={1} max={365} value={termDays} onChange={(e) => setTermDays(e.target.value)} className={INPUT} />
+              <label className={LABEL}>Effective Through</label>
+              <input type="date" value={effectiveThrough} onChange={(e) => setEffectiveThrough(e.target.value)} className={INPUT} />
             </div>
           </div>
         </section>
 
         {/* Delivery Method */}
         <section className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-800 mb-4">Delivery Method</h2>
-          <div className="flex flex-wrap gap-3">
+          <h2 className="text-base font-semibold text-slate-800 mb-2">Delivery Method</h2>
+          <p className="text-xs text-slate-500 mb-4">Select one or both — the client will receive the signing link on each channel</p>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {([
-              { value: "email", label: "Email", icon: Mail, desc: "Send via email" },
-              { value: "sms", label: "SMS", icon: MessageSquare, desc: "Coming soon", disabled: true },
-              { value: "link", label: "Copy Link", icon: Link2, desc: "Share manually" },
-            ] as const).map(({ value, label, icon: Icon, desc, ...rest }) => {
-              const isDisabled = "disabled" in rest && (rest as { disabled?: boolean }).disabled;
+              { value: "email" as const, label: "Email", icon: Mail, desc: "Send via email" },
+              { value: "sms" as const, label: "SMS", icon: MessageSquare, desc: "Send via text" },
+            ]).map(({ value, label, icon: Icon, desc }) => {
+              const isActive = !linkOnly && deliveryChannels.has(value);
               return (
               <button
                 key={value}
                 type="button"
-                onClick={() => !isDisabled && setDeliveryMethod(value as "email" | "sms" | "link")}
-                disabled={isDisabled}
-                className={`flex-1 min-w-[120px] rounded-lg border-2 p-3 text-left transition-all ${
-                  isDisabled ? "border-slate-100 bg-slate-50 opacity-60 cursor-not-allowed" : deliveryMethod === value ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300"
+                onClick={() => {
+                  if (linkOnly) {
+                    setLinkOnly(false);
+                    setDeliveryChannels(new Set([value]));
+                    return;
+                  }
+                  setDeliveryChannels((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(value)) {
+                      if (next.size > 1) next.delete(value);
+                    } else {
+                      next.add(value);
+                    }
+                    return next;
+                  });
+                }}
+                className={`rounded-lg border-2 p-3 text-left transition-all ${
+                  isActive ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300 active:bg-slate-50"
                 }`}
               >
-                <Icon className={`w-4 h-4 mb-1 ${deliveryMethod === value && !isDisabled ? "text-blue-600" : "text-slate-400"}`} />
-                <div className={`text-sm font-medium ${deliveryMethod === value && !isDisabled ? "text-blue-700" : "text-slate-700"}`}>{label}</div>
-                <div className="text-xs text-slate-500">{desc}</div>
+                <Icon className={`w-4 h-4 mb-1 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
+                <div className={`text-sm font-medium ${isActive ? "text-blue-700" : "text-slate-700"}`}>{label}</div>
+                <div className="text-xs text-slate-500 hidden sm:block">{desc}</div>
               </button>);
             })}
+            <button
+              type="button"
+              onClick={() => {
+                setLinkOnly(true);
+                setDeliveryChannels(new Set());
+              }}
+              className={`rounded-lg border-2 p-3 text-left transition-all ${
+                linkOnly ? "border-blue-600 bg-blue-50" : "border-slate-200 bg-white hover:border-slate-300 active:bg-slate-50"
+              }`}
+            >
+              <Link2 className={`w-4 h-4 mb-1 ${linkOnly ? "text-blue-600" : "text-slate-400"}`} />
+              <div className={`text-sm font-medium ${linkOnly ? "text-blue-700" : "text-slate-700"}`}>Link</div>
+              <div className="text-xs text-slate-500 hidden sm:block">Share manually</div>
+            </button>
           </div>
+          {!linkOnly && deliveryChannels.size === 2 && (
+            <p className="mt-3 text-xs text-blue-600 font-medium">Client will receive both an email and a text message</p>
+          )}
         </section>
 
         {/* Notes */}
@@ -345,12 +377,17 @@ export default function NewOnboardingPage() {
         </section>
 
         {/* Actions */}
-        <div className="flex items-center justify-end gap-3 pt-2">
-          <button onClick={() => router.back()} className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-800">Cancel</button>
+        <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2 pb-safe">
+          <button
+            onClick={() => router.back()}
+            className="px-4 py-2.5 sm:py-2 text-sm font-medium text-slate-600 hover:text-slate-800 active:text-slate-900 rounded-lg sm:rounded-none"
+          >
+            Cancel
+          </button>
           <button
             onClick={handleSubmit}
             disabled={submitting}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg px-6 py-2.5 transition-colors"
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 disabled:bg-blue-400 text-white text-sm font-medium rounded-lg px-6 py-3 sm:py-2.5 transition-colors"
           >
             {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
             Send Invite

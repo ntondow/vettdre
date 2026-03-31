@@ -10,7 +10,10 @@ import { AcquisitionInputs } from "./components/inputs/acquisition-section";
 import { IncomeSection } from "./components/inputs/income-section";
 import { ExpenseSection } from "./components/inputs/expense-section";
 import { ExitSection } from "./components/inputs/exit-section";
-import { ResultsPanel } from "./components/results/results-panel";
+import dynamic from "next/dynamic";
+const ResultsPanel = dynamic(() => import("./components/results/results-panel").then(m => ({ default: m.ResultsPanel })), {
+  loading: () => <div className="animate-pulse bg-white/5 rounded-xl h-96" />,
+});
 import { T12Modal } from "./components/modals/t12-modal";
 import { LoiModal } from "./components/modals/loi-modal";
 import { MobileMetricsBar } from "./components/shared/mobile-metrics-bar";

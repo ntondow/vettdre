@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { sendTransactionalEmail, isResendConfigured } from "@/lib/resend";
+import { getTwilio } from "@/lib/twilio";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -207,4 +208,99 @@ export async function sendOnboardingReminder(params: ReminderParams): Promise<vo
   } catch (error) {
     console.error("[Onboarding] Failed to send reminder:", error);
   }
+}
+
+// ── SMS Functions ───────────────────────────────────────────
+
+interface SmsInviteParams {
+  clientPhone: string;
+  clientFirstName: string;
+  agentFullName: string;
+  brokerageName: string;
+  signingUrl: string;
+  fromNumber: string; // E.164 Twilio number
+}
+
+interface SmsReminderParams {
+  clientPhone: string;
+  clientFirstName: string;
+  agentFullName: string;
+  brokerageName: string;
+  signingUrl: string;
+  daysRemaining: number;
+  fromNumber: string;
+}
+
+export async function sendOnboardingInviteSms(params: SmsInviteParams): Promise<{ success: boolean; error?: string }> {
+  const { clientPhone, clientFirstName, agentFullName, brokerageName, signingUrl, fromNumber } = params;
+
+  const body =
+    `Hi ${clientFirstName}, ${agentFullName} at ${brokerageName} has invited you to sign your tenant representation documents.\n\n` +
+    `Review & sign here: ${signingUrl}\n\n` +
+    `This link expires in a few days. Reply STOP to opt out.`;
+
+  try {
+    const twilio = getTwilio();
+    await twilio.messages.create({
+      to: clientPhone,
+      from: fromNumber,
+      body,
+    });
+    console.log("[Onboarding] SMS invite sent to:", clientPhone);
+    return { success: true };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown SMS error";
+    console.error("[Onboarding] SMS invite failed:", msg);
+    return { success: false, error: msg };
+  }
+}
+
+export async function sendOnboardingReminderSms(params: SmsReminderParams): Promise<{ success: boolean; error?: string }> {
+  const { clientPhone, clientFirstName, agentFullName, brokerageName, signingUrl, daysRemaining, fromNumber } = params;
+
+  const urgency = daysRemaining > 0
+    ? `Your link expires in ${daysRemaining} day${daysRemaining !== 1 ? "s" : ""}.`
+    : "Your link expires soon.";
+
+  const body =
+    `Hi ${clientFirstName}, reminder from ${agentFullName} at ${brokerageName} — you have documents waiting for your signature. ${urgency}\n\n` +
+    `Sign here: ${signingUrl}\n\n` +
+    `Reply STOP to opt out.`;
+
+  try {
+    const twilio = getTwilio();
+    await twilio.messages.create({
+      to: clientPhone,
+      from: fromNumber,
+      body,
+    });
+    console.log("[Onboarding] SMS reminder sent to:", clientPhone);
+    return { success: true };
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Unknown SMS error";
+    console.error("[Onboarding] SMS reminder failed:", msg);
+    return { success: false, error: msg };
+  }
+}
+
+/**
+ * Look up the org's Twilio phone number to send from.
+ * Prefers the current user's number, falls back to any active org number.
+ */
+export async function getOrgTwilioNumber(orgId: string, userId?: string): Promise<string | null> {
+  // Try user-specific number first
+  if (userId) {
+    const userPhone = await prisma.phoneNumber.findFirst({
+      where: { userId, organizationId: orgId, status: "active" },
+      select: { number: true },
+    });
+    if (userPhone) return userPhone.number;
+  }
+
+  // Fall back to any active org number
+  const orgPhone = await prisma.phoneNumber.findFirst({
+    where: { organizationId: orgId, status: "active" },
+    select: { number: true },
+  });
+  return orgPhone?.number ?? null;
 }

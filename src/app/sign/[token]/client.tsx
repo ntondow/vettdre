@@ -11,6 +11,9 @@ import {
   CheckCircle,
   Lock,
   Eye,
+  EyeOff,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import SignaturePad from "@/components/onboarding/signature-pad";
 import PdfViewer from "@/components/onboarding/pdf-viewer";
@@ -40,8 +43,10 @@ interface OnboardingData {
   agentLicense: string | null;
   propertyAddress: string | null;
   commissionPct: number | null;
+  commissionFlat: number | null;
   monthlyRent: number | null;
   termDays: number | null;
+  effectiveThrough: string | null;
   onboardingStatus: string;
   documents: DocumentInfo[];
 }
@@ -61,6 +66,7 @@ export default function SigningClient({ token }: { token: string }) {
   const [signError, setSignError] = useState("");
   const [focusedFieldId, setFocusedFieldId] = useState<string | null>(null);
   const [showMobilePdf, setShowMobilePdf] = useState(false);
+  const [prefillCollapsed, setPrefillCollapsed] = useState(true);
 
   // ── Fetch onboarding data ─────────────────────────────────
 
@@ -96,26 +102,33 @@ export default function SigningClient({ token }: { token: string }) {
     const doc = data.documents[docIndex];
     if (!doc?.fields?.length) { setFieldValues({}); return; }
 
-    // Build the same prefill value map the server uses, so the left panel shows actual values
     const prefillMap: Record<string, string> = {};
     prefillMap.clientName = `${data.clientFirstName} ${data.clientLastName}`;
     prefillMap.clientEmail = data.clientEmail;
     if (data.agentFullName) prefillMap.agentName = data.agentFullName;
     if (data.agentLicense) prefillMap.agentLicense = data.agentLicense;
     if (data.brokerageName) prefillMap.brokerageName = data.brokerageName;
-    if (data.commissionPct != null) prefillMap.commissionPct = `${data.commissionPct}%`;
+    // Prefer flat fee; fall back to percentage for legacy records
+    if (data.commissionFlat != null) {
+      prefillMap.commissionPct = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(data.commissionFlat);
+    } else if (data.commissionPct != null) {
+      prefillMap.commissionPct = `${data.commissionPct}%`;
+    }
     if (data.monthlyRent != null) {
       prefillMap.rent = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(data.monthlyRent);
     }
     if (data.propertyAddress) prefillMap.propertyAddress = data.propertyAddress;
-    if (data.termDays) prefillMap.agreementTerm = `${data.termDays} days`;
+    // Prefer effectiveThrough date; fall back to termDays for legacy
+    if (data.effectiveThrough) {
+      prefillMap.agreementTerm = data.effectiveThrough;
+    } else if (data.termDays) {
+      prefillMap.agreementTerm = `${data.termDays} days`;
+    }
     prefillMap.date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-    // Auto-checked checkboxes for tenant representation
     prefillMap.tenantCheck = "true";
     prefillMap.tenantsAgentCheck = "true";
     prefillMap.tenantSignatureCheck = "true";
 
-    // Populate field values for any field that has a prefillKey
     const init: Record<string, string> = {};
     for (const field of doc.fields) {
       if (field.prefillKey && prefillMap[field.prefillKey]) {
@@ -139,7 +152,6 @@ export default function SigningClient({ token }: { token: string }) {
     ? currentDoc!.fields!.filter((f) => !!f.prefillKey && f.type !== "signature" && f.type !== "initials")
     : [];
 
-  // Validation
   const canSubmit = useCallback(() => {
     if (!currentDoc) return false;
     if (hasTemplateFields) {
@@ -149,7 +161,6 @@ export default function SigningClient({ token }: { token: string }) {
       }
       return true;
     }
-    // Legacy: need signature + PDF viewed
     return !!fieldValues.__legacySignature && pdfViewed;
   }, [currentDoc, hasTemplateFields, fieldValues, pdfViewed]);
 
@@ -161,7 +172,6 @@ export default function SigningClient({ token }: { token: string }) {
     setSignError("");
 
     try {
-      // For legacy docs, use the signature from __legacySignature
       const sigImage = hasTemplateFields
         ? (signatureFields.length > 0 ? fieldValues[signatureFields[0].id] : undefined)
         : fieldValues.__legacySignature;
@@ -187,6 +197,8 @@ export default function SigningClient({ token }: { token: string }) {
         setFieldValues({});
         setPdfViewed(false);
         setDocIndex((i) => i + 1);
+        setShowMobilePdf(false);
+        setPrefillCollapsed(true);
       }
     } catch {
       setSignError("Network error. Please try again.");
@@ -198,17 +210,24 @@ export default function SigningClient({ token }: { token: string }) {
   // ── Render ────────────────────────────────────────────────
 
   if (step === "loading") {
-    return <Shell><div className="flex flex-col items-center justify-center py-24"><Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-4" /><p className="text-sm text-slate-500">Loading your documents...</p></div></Shell>;
+    return (
+      <Shell>
+        <div className="flex flex-col items-center justify-center py-20 sm:py-24">
+          <Loader2 className="h-8 w-8 text-blue-600 animate-spin mb-4" />
+          <p className="text-sm text-slate-500">Loading your documents...</p>
+        </div>
+      </Shell>
+    );
   }
 
   if (step === "error") {
     return (
       <Shell>
-        <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex flex-col items-center justify-center py-16 sm:py-20 text-center px-2">
           <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-100">
             {errorMsg.includes("expired") ? <Clock className="h-7 w-7 text-red-500" /> : <XCircle className="h-7 w-7 text-red-500" />}
           </div>
-          <h2 className="mb-2 text-xl font-bold text-slate-900">Unable to Continue</h2>
+          <h2 className="mb-2 text-lg sm:text-xl font-bold text-slate-900">Unable to Continue</h2>
           <p className="mb-6 max-w-sm text-sm text-slate-500">{errorMsg}</p>
           <p className="text-xs text-slate-400">Contact your agent for a new signing link.</p>
         </div>
@@ -219,11 +238,20 @@ export default function SigningClient({ token }: { token: string }) {
   if (step === "already_complete") {
     return (
       <Shell>
-        <div className="flex flex-col items-center justify-center py-20 text-center">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100"><CheckCircle className="h-7 w-7 text-green-600" /></div>
-          <h2 className="mb-2 text-xl font-bold text-slate-900">Already Signed</h2>
+        <div className="flex flex-col items-center justify-center py-16 sm:py-20 text-center px-2">
+          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+            <CheckCircle className="h-7 w-7 text-green-600" />
+          </div>
+          <h2 className="mb-2 text-lg sm:text-xl font-bold text-slate-900">Already Signed</h2>
           <p className="mb-6 max-w-sm text-sm text-slate-500">All documents have been signed.</p>
-          <a href={`/api/onboarding/${token}/download`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-blue-700">Download Copies</a>
+          <a
+            href={`/api/onboarding/${token}/download`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
+          >
+            Download Copies
+          </a>
         </div>
       </Shell>
     );
@@ -236,39 +264,77 @@ export default function SigningClient({ token }: { token: string }) {
   if (step === "welcome") {
     return (
       <Shell>
-        <div className="py-8 animate-[fade-in_0.3s_ease-out]">
-          {data.brokerageName && <div className="mb-6 text-center"><span className="text-lg font-bold text-slate-900">{data.brokerageName}</span></div>}
-          <h1 className="mb-2 text-2xl font-bold text-slate-900 text-center">Welcome, {data.clientFirstName}</h1>
-          <p className="mb-8 text-center text-sm text-slate-500 max-w-md mx-auto">
+        <div className="py-6 sm:py-8 animate-[fade-in_0.3s_ease-out]">
+          {data.brokerageName && (
+            <div className="mb-5 sm:mb-6 text-center">
+              <span className="text-base sm:text-lg font-bold text-slate-900">{data.brokerageName}</span>
+            </div>
+          )}
+          <h1 className="mb-2 text-xl sm:text-2xl font-bold text-slate-900 text-center">
+            Welcome, {data.clientFirstName}
+          </h1>
+          <p className="mb-6 sm:mb-8 text-center text-sm text-slate-500 max-w-md mx-auto px-2">
             {data.agentFullName} at {data.brokerageName} has invited you to review and sign documents.
           </p>
-          {(data.commissionPct || data.termDays) && (
-            <div className="mb-8 mx-auto max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-4">
+
+          {(data.commissionFlat != null || data.commissionPct != null || data.effectiveThrough || data.termDays != null) && (
+            <div className="mb-6 sm:mb-8 mx-auto max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-4">
               <div className="grid grid-cols-2 gap-4 text-center">
-                {data.commissionPct != null && <div><div className="text-xs text-slate-400">Commission</div><div className="text-lg font-bold text-slate-900">{data.commissionPct}%</div></div>}
-                {data.termDays != null && <div><div className="text-xs text-slate-400">Term</div><div className="text-lg font-bold text-slate-900">{data.termDays} days</div></div>}
+                {(data.commissionFlat != null || data.commissionPct != null) && (
+                  <div>
+                    <div className="text-xs text-slate-400">Fee Due at Signing</div>
+                    <div className="text-lg font-bold text-slate-900">
+                      {data.commissionFlat != null
+                        ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(data.commissionFlat)
+                        : `${data.commissionPct}%`}
+                    </div>
+                  </div>
+                )}
+                {(data.effectiveThrough || data.termDays != null) && (
+                  <div>
+                    <div className="text-xs text-slate-400">Effective Through</div>
+                    <div className="text-lg font-bold text-slate-900">
+                      {data.effectiveThrough || `${data.termDays} days`}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
-          <div className="mb-8 mx-auto max-w-sm">
-            <p className="mb-3 text-sm font-medium text-slate-700">You&apos;ll be signing {data.documents.length} document{data.documents.length !== 1 ? "s" : ""}:</p>
+
+          <div className="mb-6 sm:mb-8 mx-auto max-w-sm">
+            <p className="mb-3 text-sm font-medium text-slate-700">
+              You&apos;ll be signing {data.documents.length} document{data.documents.length !== 1 ? "s" : ""}:
+            </p>
             <ol className="space-y-2">
               {data.documents.map((doc, i) => (
-                <li key={doc.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3">
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700">{i + 1}</span>
-                  <span className="text-sm font-medium text-slate-700 truncate flex-1">{doc.docTitle}</span>
-                  {doc.status === "signed" ? <CheckCircle className="w-4 h-4 text-green-500" /> : <FileText className="w-4 h-4 text-slate-300" />}
+                <li key={doc.id} className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 sm:px-4 py-3">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100 text-xs font-bold text-blue-700 flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <span className="text-sm font-medium text-slate-700 truncate flex-1 min-w-0">{doc.docTitle}</span>
+                  {doc.status === "signed" ? (
+                    <CheckCircle className="w-4 h-4 text-green-500 flex-shrink-0" />
+                  ) : (
+                    <FileText className="w-4 h-4 text-slate-300 flex-shrink-0" />
+                  )}
                 </li>
               ))}
             </ol>
           </div>
-          <div className="text-center">
-            <button onClick={() => setStep("signing")} className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700">
+
+          <div className="text-center px-4 sm:px-0">
+            <button
+              onClick={() => setStep("signing")}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-8 py-3.5 sm:py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800"
+            >
               Get Started <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-          <p className="mt-8 text-center text-xs text-slate-400 max-w-sm mx-auto">
-            By proceeding, you confirm your identity as <span className="font-medium">{data.clientFirstName} {data.clientLastName}</span> ({data.clientEmail}).
+
+          <p className="mt-6 sm:mt-8 text-center text-xs text-slate-400 max-w-sm mx-auto px-2">
+            By proceeding, you confirm your identity as{" "}
+            <span className="font-medium">{data.clientFirstName} {data.clientLastName}</span> ({data.clientEmail}).
           </p>
         </div>
       </Shell>
@@ -283,43 +349,60 @@ export default function SigningClient({ token }: { token: string }) {
 
     return (
       <Shell wide={hasTemplateFields}>
-        <div className="py-4 animate-[fade-in_0.3s_ease-out]" key={currentDoc.id}>
+        <div className="py-3 sm:py-4 animate-[fade-in_0.3s_ease-out]" key={currentDoc.id}>
           {/* Progress */}
-          <div className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-slate-700">Document {docIndex + 1} of {totalDocs}</span>
+          <div className="mb-3 sm:mb-4">
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+              <span className="text-xs sm:text-sm font-medium text-slate-700">
+                Document {docIndex + 1} of {totalDocs}
+              </span>
               <span className="text-xs text-slate-400">{Math.round(progressPct)}%</span>
             </div>
-            <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+            <div className="h-1.5 sm:h-2 rounded-full bg-slate-100 overflow-hidden">
               <div className="h-full rounded-full bg-blue-600 transition-all duration-500" style={{ width: `${progressPct}%` }} />
             </div>
           </div>
 
-          <h2 className="mb-4 text-lg font-bold text-slate-900">{currentDoc.docTitle}</h2>
+          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-bold text-slate-900">{currentDoc.docTitle}</h2>
 
           {hasTemplateFields ? (
             /* ── Template-based: form + PDF preview ─────────── */
-            <div className="flex flex-col md:flex-row gap-6">
-              {/* LEFT: Form fields */}
-              <div className="w-full md:w-[40%] space-y-4 order-2 md:order-1">
-                {/* Pre-filled fields (read-only) */}
+            <div className="flex flex-col md:flex-row gap-4 sm:gap-6">
+              {/* LEFT: Form fields — on mobile this comes FIRST (order-1) */}
+              <div className="w-full md:w-[40%] space-y-3 sm:space-y-4 order-1 md:order-1">
+                {/* Pre-filled fields (collapsible on mobile) */}
                 {prefillFields.length > 0 && (
                   <div>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">Pre-filled by your agent</p>
-                    {prefillFields.map((field) => {
-                      const val = fieldValues[field.id];
-                      const displayVal = field.type === "checkbox"
-                        ? (val === "true" ? "✓" : "—")
-                        : (val || "—");
-                      return (
-                        <div key={field.id} className="mb-2">
-                          <label className="block text-xs font-medium text-slate-500 mb-0.5 flex items-center gap-1">
-                            <Lock className="w-3 h-3" /> {field.label}
-                          </label>
-                          <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-slate-600">{displayVal}</div>
-                        </div>
-                      );
-                    })}
+                    <button
+                      onClick={() => setPrefillCollapsed(!prefillCollapsed)}
+                      className="w-full flex items-center justify-between"
+                    >
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                        Pre-filled by your agent
+                      </p>
+                      <span className="text-slate-400">
+                        {prefillCollapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+                      </span>
+                    </button>
+
+                    <div className={`mt-2 space-y-2 ${prefillCollapsed ? "hidden" : "block"}`}>
+                      {prefillFields.map((field) => {
+                        const val = fieldValues[field.id];
+                        const displayVal = field.type === "checkbox"
+                          ? (val === "true" ? "\u2713" : "\u2014")
+                          : (val || "\u2014");
+                        return (
+                          <div key={field.id}>
+                            <label className="flex items-center gap-1 text-xs font-medium text-slate-500 mb-0.5">
+                              <Lock className="w-3 h-3" /> {field.label}
+                            </label>
+                            <div className="rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm text-slate-600">
+                              {displayVal}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 
@@ -338,15 +421,15 @@ export default function SigningClient({ token }: { token: string }) {
                             value={fieldValues[field.id] || ""}
                             onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                             onFocus={() => setFocusedFieldId(field.id)}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         ) : field.type === "checkbox" ? (
-                          <label className="flex items-center gap-2 cursor-pointer">
+                          <label className="flex items-center gap-3 cursor-pointer py-1">
                             <input
                               type="checkbox"
                               checked={fieldValues[field.id] === "true"}
                               onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.id]: e.target.checked ? "true" : "" }))}
-                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                              className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                             />
                             <span className="text-sm text-slate-600">I agree</span>
                           </label>
@@ -357,7 +440,7 @@ export default function SigningClient({ token }: { token: string }) {
                             onChange={(e) => setFieldValues((prev) => ({ ...prev, [field.id]: e.target.value }))}
                             onFocus={() => setFocusedFieldId(field.id)}
                             placeholder={field.label}
-                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         )}
                       </div>
@@ -370,7 +453,7 @@ export default function SigningClient({ token }: { token: string }) {
                   <div key={field.id}>
                     <SignaturePad
                       label={field.label + (field.required ? " *" : "")}
-                      height={field.type === "initials" ? 100 : 180}
+                      height={field.type === "initials" ? 80 : 150}
                       onSignature={(dataUrl) => setFieldValues((prev) => ({ ...prev, [field.id]: dataUrl }))}
                       onClear={() => setFieldValues((prev) => { const n = { ...prev }; delete n[field.id]; return n; })}
                       disabled={signing}
@@ -379,40 +462,65 @@ export default function SigningClient({ token }: { token: string }) {
                 ))}
 
                 {signError && (
-                  <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 sm:px-4 py-3 text-sm text-red-700">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {signError}
                   </div>
                 )}
 
-                <button
-                  onClick={handleSign}
-                  disabled={signing || !canSubmit()}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
-                >
-                  {signing ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing...</> : docIndex < totalDocs - 1 ? <>Sign &amp; Continue <ChevronRight className="w-4 h-4" /></> : <>Sign &amp; Complete <CheckCircle className="w-4 h-4" /></>}
-                </button>
-                {!canSubmit() && signatureFields.length > 0 && (
-                  <p className="text-center text-xs text-slate-400 mt-2">Please confirm your signature above first</p>
-                )}
+                {/* Sign button — sticky on mobile */}
+                <div className="sticky bottom-0 bg-white pt-3 pb-safe -mx-4 px-4 sm:mx-0 sm:px-0 sm:relative sm:bg-transparent sm:pt-0 sm:pb-0 border-t border-slate-100 sm:border-0">
+                  <button
+                    onClick={handleSign}
+                    disabled={signing || !canSubmit()}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3.5 sm:py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  >
+                    {signing ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" /> Signing...</>
+                    ) : docIndex < totalDocs - 1 ? (
+                      <>Sign &amp; Continue <ChevronRight className="w-4 h-4" /></>
+                    ) : (
+                      <>Sign &amp; Complete <CheckCircle className="w-4 h-4" /></>
+                    )}
+                  </button>
+                  {!canSubmit() && signatureFields.length > 0 && (
+                    <p className="text-center text-xs text-slate-400 mt-2">Please confirm your signature above first</p>
+                  )}
+                </div>
               </div>
 
               {/* RIGHT: PDF preview with field overlays */}
-              <div className="w-full md:w-[60%] order-1 md:order-2">
-                {/* Mobile: collapsed */}
-                <div className="md:hidden mb-4">
-                  <button onClick={() => setShowMobilePdf(!showMobilePdf)} className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-100">
-                    <Eye className="w-4 h-4" /> {showMobilePdf ? "Hide" : "Preview"} Document
+              <div className="w-full md:w-[60%] order-2 md:order-2">
+                {/* Mobile: collapsible PDF preview */}
+                <div className="md:hidden mb-3">
+                  <button
+                    onClick={() => setShowMobilePdf(!showMobilePdf)}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-100 active:bg-slate-200"
+                  >
+                    {showMobilePdf ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    {showMobilePdf ? "Hide Document Preview" : "Preview Document"}
                   </button>
                   {showMobilePdf && currentDoc.pdfUrl && (
-                    <div className="mt-3">
-                      <PdfFieldViewer pdfUrl={currentDoc.pdfUrl} fields={currentDoc.fields || []} fieldValues={fieldValues} selectedFieldId={focusedFieldId} onFieldClick={setFocusedFieldId} />
+                    <div className="mt-3 -mx-4">
+                      <PdfFieldViewer
+                        pdfUrl={currentDoc.pdfUrl}
+                        fields={currentDoc.fields || []}
+                        fieldValues={fieldValues}
+                        selectedFieldId={focusedFieldId}
+                        onFieldClick={setFocusedFieldId}
+                      />
                     </div>
                   )}
                 </div>
-                {/* Desktop: always visible */}
+                {/* Desktop: always visible, sticky */}
                 <div className="hidden md:block sticky top-4">
                   {currentDoc.pdfUrl ? (
-                    <PdfFieldViewer pdfUrl={currentDoc.pdfUrl} fields={currentDoc.fields || []} fieldValues={fieldValues} selectedFieldId={focusedFieldId} onFieldClick={setFocusedFieldId} />
+                    <PdfFieldViewer
+                      pdfUrl={currentDoc.pdfUrl}
+                      fields={currentDoc.fields || []}
+                      fieldValues={fieldValues}
+                      selectedFieldId={focusedFieldId}
+                      onFieldClick={setFocusedFieldId}
+                    />
                   ) : (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 py-16 text-center">
                       <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
@@ -428,34 +536,50 @@ export default function SigningClient({ token }: { token: string }) {
               {currentDoc.pdfUrl ? (
                 <PdfViewer pdfUrl={currentDoc.pdfUrl} title={currentDoc.docTitle} onViewed={() => setPdfViewed(true)} />
               ) : (
-                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 py-16 text-center">
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 py-12 sm:py-16 text-center">
                   <FileText className="w-10 h-10 text-slate-300 mx-auto mb-3" />
                   <p className="text-sm text-slate-500">Preview not available</p>
-                  {!pdfViewed && <button onClick={() => setPdfViewed(true)} className="mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium">I acknowledge this document</button>}
+                  {!pdfViewed && (
+                    <button
+                      onClick={() => setPdfViewed(true)}
+                      className="mt-3 text-xs text-blue-600 hover:text-blue-700 font-medium py-2 px-4"
+                    >
+                      I acknowledge this document
+                    </button>
+                  )}
                 </div>
               )}
-              <div className="mt-6">
+              <div className="mt-4 sm:mt-6">
                 <SignaturePad
                   label={`Sign as ${data.clientFirstName} ${data.clientLastName}`}
+                  height={150}
                   onSignature={(dataUrl) => setFieldValues((prev) => ({ ...prev, __legacySignature: dataUrl }))}
                   onClear={() => setFieldValues((prev) => { const n = { ...prev }; delete n.__legacySignature; return n; })}
                   disabled={signing}
                 />
               </div>
               {signError && (
-                <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 sm:px-4 py-3 text-sm text-red-700">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {signError}
                 </div>
               )}
-              <div className="mt-6">
+              <div className="mt-4 sm:mt-6 sticky bottom-0 bg-white pt-3 pb-safe sm:relative sm:bg-transparent sm:pt-0 sm:pb-0">
                 <button
                   onClick={handleSign}
                   disabled={signing || !canSubmit()}
-                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
+                  className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3.5 sm:py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
-                  {signing ? <><Loader2 className="w-4 h-4 animate-spin" /> Signing...</> : docIndex < totalDocs - 1 ? <>Sign &amp; Continue <ChevronRight className="w-4 h-4" /></> : <>Sign &amp; Complete <CheckCircle className="w-4 h-4" /></>}
+                  {signing ? (
+                    <><Loader2 className="w-4 h-4 animate-spin" /> Signing...</>
+                  ) : docIndex < totalDocs - 1 ? (
+                    <>Sign &amp; Continue <ChevronRight className="w-4 h-4" /></>
+                  ) : (
+                    <>Sign &amp; Complete <CheckCircle className="w-4 h-4" /></>
+                  )}
                 </button>
-                {!pdfViewed && currentDoc.pdfUrl && <p className="mt-2 text-center text-xs text-slate-400">Please review the document above before signing</p>}
+                {!pdfViewed && currentDoc.pdfUrl && (
+                  <p className="mt-2 text-center text-xs text-slate-400">Please review the document above before signing</p>
+                )}
               </div>
             </>
           )}
@@ -489,17 +613,19 @@ export default function SigningClient({ token }: { token: string }) {
 
 function Shell({ children, wide }: { children: React.ReactNode; wide?: boolean }) {
   return (
-    <div className="min-h-dvh bg-white">
-      <header className="border-b border-slate-100 bg-white">
-        <div className={`mx-auto px-4 py-4 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
-          <span className="text-lg font-bold text-slate-900">VettdRE</span>
-          <span className="ml-2 text-xs text-slate-400">Secure Document Signing</span>
+    <div className="min-h-dvh bg-white flex flex-col">
+      <header className="border-b border-slate-100 bg-white flex-shrink-0">
+        <div className={`mx-auto px-4 py-3 sm:py-4 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
+          <span className="text-base sm:text-lg font-bold text-slate-900">VettdRE</span>
+          <span className="ml-2 text-[11px] sm:text-xs text-slate-400">Secure Document Signing</span>
         </div>
       </header>
-      <main className={`mx-auto px-4 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
-      <footer className="mt-12 border-t border-slate-100 bg-slate-50">
-        <div className={`mx-auto px-4 py-6 text-center ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
-          <p className="text-xs text-slate-400">Powered by VettdRE &middot; Documents are signed electronically and legally binding</p>
+      <main className={`mx-auto px-4 w-full flex-1 ${wide ? "max-w-5xl" : "max-w-2xl"}`}>{children}</main>
+      <footer className="mt-8 sm:mt-12 border-t border-slate-100 bg-slate-50 flex-shrink-0">
+        <div className={`mx-auto px-4 py-4 sm:py-6 text-center ${wide ? "max-w-5xl" : "max-w-2xl"}`}>
+          <p className="text-[11px] sm:text-xs text-slate-400">
+            Powered by VettdRE &middot; Documents are signed electronically and legally binding
+          </p>
         </div>
       </footer>
     </div>

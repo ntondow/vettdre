@@ -10,9 +10,10 @@ import { saveDealAnalysis, fetchDealPrefillData, getDealAnalysis, searchContacts
 import { fetchLL84Data, calculateLL97Risk, estimateLL84Utilities } from "@/app/(dashboard)/market-intel/building-profile-actions";
 import type { DealPrefillData } from "../actions";
 import type { CompSale, CompSummary, CompValuation } from "@/lib/comps-engine";
-import { generateDealPdf } from "@/lib/deal-pdf";
-import { generateLoiPdf } from "@/lib/loi-pdf";
-import { generateLoiDocx } from "@/lib/loi-docx";
+// PDF/DOCX generators loaded dynamically on demand to reduce bundle size
+const loadDealPdf = () => import("@/lib/deal-pdf");
+const loadLoiPdf = () => import("@/lib/loi-pdf");
+const loadLoiDocx = () => import("@/lib/loi-docx");
 import { generateLoiPlainText, getLoiCoverEmailSubject, getLoiCoverEmailHtml, LOI_DEFAULTS } from "@/lib/loi-template";
 import type { LoiData } from "@/lib/loi-template";
 import type { DealStructureType, DealInputsBase, StructuredDealInputs, DealAnalysis as StructureAnalysis } from "@/lib/deal-structure-engine";
@@ -25,7 +26,7 @@ import type { ExpenseBenchmark } from "@/lib/expense-benchmarks";
 import type { RentProjection } from "@/lib/rent-stabilization";
 import type { LL97Projection } from "@/lib/ll97-penalties";
 import type { CapRateAnalysis } from "@/lib/cap-rate-engine";
-import { generateInvestmentSummaryPdf } from "@/lib/investment-summary-pdf";
+const loadInvestmentSummaryPdf = () => import("@/lib/investment-summary-pdf");
 import { assembleInvestmentSummary, assembleInvestmentSummaryFromInputs } from "../investment-summary-actions";
 import { hasPermission, getUpgradeMessage } from "@/lib/feature-gate";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
@@ -657,6 +658,7 @@ export function DealModelerProvider({ children }: { children: React.ReactNode })
       const payload = savedId
         ? await assembleInvestmentSummary(savedId)
         : await assembleInvestmentSummaryFromInputs(inputs as Record<string, any>, outputs as Record<string, any>, bbl || undefined);
+      const { generateInvestmentSummaryPdf } = await loadInvestmentSummaryPdf();
       const blob = generateInvestmentSummaryPdf(payload);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
@@ -674,7 +676,8 @@ export function DealModelerProvider({ children }: { children: React.ReactNode })
   }, [plan, savedId, inputs, outputs, bbl, address, dealName, toast]);
 
   // Export PDF
-  const exportPdf = useCallback(() => {
+  const exportPdf = useCallback(async () => {
+    const { generateDealPdf } = await loadDealPdf();
     generateDealPdf({
       dealName: dealName || address || "Deal Analysis",
       address,

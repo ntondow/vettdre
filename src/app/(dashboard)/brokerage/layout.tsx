@@ -99,6 +99,7 @@ const AGENT_NAV: NavGroup[] = [
     group: "My Brokerage",
     items: [
       { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
+      { href: "/brokerage/listings", icon: Home, label: "Listings" },
       { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
     ],

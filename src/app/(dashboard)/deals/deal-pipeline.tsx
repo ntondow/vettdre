@@ -4,12 +4,12 @@ import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { updateDealAnalysisStatus, deleteDealAnalysis } from "./actions";
-import { generateInvestmentSummaryPdf } from "@/lib/investment-summary-pdf";
+// PDF generators loaded dynamically on demand to reduce bundle size
+const loadInvestmentSummaryPdf = () => import("@/lib/investment-summary-pdf");
 import { assembleInvestmentSummary } from "./investment-summary-actions";
 import { hasPermission, getUpgradeMessage } from "@/lib/feature-gate";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { useToast } from "@/components/ui/toast";
-import { sanitizeFilename } from "@/lib/pdf-utils";
 
 interface DealItem {
   id: string;
@@ -110,12 +110,16 @@ export default function DealPipeline({ initialDeals }: { initialDeals: DealItem[
     }
     setGeneratingSummaryId(deal.id);
     try {
-      const payload = await assembleInvestmentSummary(deal.id);
+      const [payload, { generateInvestmentSummaryPdf }] = await Promise.all([
+        assembleInvestmentSummary(deal.id),
+        loadInvestmentSummaryPdf(),
+      ]);
       const blob = generateInvestmentSummaryPdf(payload);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `Investment-Summary-${sanitizeFilename(deal.address || deal.name || "Deal")}.pdf`;
+      const safeName = (deal.address || deal.name || "Deal").replace(/[^a-zA-Z0-9\s-]/g, "").trim().replace(/\s+/g, "-").substring(0, 60);
+      a.download = `Investment-Summary-${safeName}.pdf`;
       a.click();
       URL.revokeObjectURL(url);
       toast("Investment Summary downloaded", "success");

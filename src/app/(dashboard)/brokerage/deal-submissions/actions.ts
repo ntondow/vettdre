@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/lib/bms-audit";
+import { notifyAgentOfStatusChange } from "@/lib/deal-notifications";
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import type { DealSubmissionInput, ExclusiveType, BrokerageRoleType } from "@/lib/bms-types";
 
@@ -391,6 +392,16 @@ export async function approveSubmission(
 
     logSubmissionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "approved", id, auditDetails);
 
+    // Notify the agent (fire-and-forget)
+    notifyAgentOfStatusChange({
+      submissionId: id,
+      orgId: ctx.orgId,
+      agentId: submission.agentId,
+      propertyAddress: submission.propertyAddress,
+      status: "approved",
+      reviewerName: ctx.fullName,
+    }).catch(() => {});
+
     return { success: true };
   } catch (error: unknown) {
     console.error("approveSubmission error:", error);
@@ -422,6 +433,17 @@ export async function rejectSubmission(
     });
 
     logSubmissionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "rejected", id, { reason });
+
+    // Notify the agent (fire-and-forget)
+    notifyAgentOfStatusChange({
+      submissionId: id,
+      orgId: ctx.orgId,
+      agentId: submission.agentId,
+      propertyAddress: submission.propertyAddress,
+      status: "rejected",
+      reviewerName: ctx.fullName,
+      rejectionReason: reason,
+    }).catch(() => {});
 
     return { success: true };
   } catch (error: unknown) {

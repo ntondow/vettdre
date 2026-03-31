@@ -41,6 +41,7 @@ interface OnboardingRow {
   expiresAt: string | null;
   completedAt: string | null;
   commissionPct: number | null;
+  commissionFlat: number | null;
   monthlyRent: number | null;
   createdAt: string;
   agent?: { id: string; firstName: string; lastName: string; email: string };
@@ -50,7 +51,7 @@ interface OnboardingRow {
 const STATUS_TABS: Array<{ value: string; label: string }> = [
   { value: "", label: "All" },
   { value: "pending", label: "Pending" },
-  { value: "partially_signed", label: "Partially Signed" },
+  { value: "partially_signed", label: "In Progress" },
   { value: "completed", label: "Completed" },
   { value: "expired", label: "Expired" },
   { value: "voided", label: "Voided" },
@@ -59,6 +60,11 @@ const STATUS_TABS: Array<{ value: string; label: string }> = [
 function fmtDate(iso: string | null): string {
   if (!iso) return "--";
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function fmtDateShort(iso: string | null): string {
+  if (!iso) return "--";
+  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -174,174 +180,251 @@ export default function OnboardingListPage() {
     setTimeout(() => setSuccess(null), 3000);
   };
 
+  // Action menu items for a given onboarding
+  const renderActionItems = (o: OnboardingRow) => (
+    <>
+      <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
+        <FileText className="w-4 h-4" /> View Details
+      </Link>
+      <button onClick={() => handleCopyLink(o.token)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
+        <Copy className="w-4 h-4" /> Copy Link
+      </button>
+      {["pending", "partially_signed"].includes(o.status) && (
+        <button onClick={() => handleResend(o.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
+          <RotateCw className="w-4 h-4" /> Resend
+        </button>
+      )}
+      {!["completed", "voided", "expired"].includes(o.status) && (
+        <button onClick={() => handleVoid(o.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-100">
+          <XCircle className="w-4 h-4" /> Void
+        </button>
+      )}
+      {["completed", "voided", "expired"].includes(o.status) && (
+        <button onClick={() => handleArchive(o.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
+          <Archive className="w-4 h-4" /> Archive
+        </button>
+      )}
+      <div className="border-t border-slate-100 my-1" />
+      <button onClick={() => handleDelete(o.id)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-red-600 hover:bg-red-50 active:bg-red-100">
+        <Trash2 className="w-4 h-4" /> Delete
+      </button>
+    </>
+  );
+
   return (
     <div className="min-h-dvh bg-slate-50">
       <header className="bg-white border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex items-center justify-between">
-          <h1 className="text-xl font-semibold text-slate-900">Client Onboarding</h1>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex items-center justify-between gap-3">
+          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 truncate">Client Onboarding</h1>
           <Link
             href="/brokerage/client-onboarding/new"
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+            className="inline-flex items-center gap-1.5 sm:gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-sm font-medium rounded-lg px-3 sm:px-4 py-2 transition-colors flex-shrink-0"
           >
             <UserPlus className="w-4 h-4" />
-            New Client Onboarding
+            <span className="hidden sm:inline">New Client Onboarding</span>
+            <span className="sm:hidden">New</span>
           </Link>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 space-y-3 sm:space-y-4">
         {/* Toasts */}
         {success && (
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3">
-            <CheckCircle className="w-4 h-4" /> {success}
-            <button onClick={() => setSuccess(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-3 sm:px-4 py-3">
+            <CheckCircle className="w-4 h-4 flex-shrink-0" /> <span className="flex-1">{success}</span>
+            <button onClick={() => setSuccess(null)} className="p-1"><X className="w-4 h-4" /></button>
           </div>
         )}
         {error && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-            <AlertTriangle className="w-4 h-4" /> {error}
-            <button onClick={() => setError(null)} className="ml-auto"><X className="w-4 h-4" /></button>
+          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 sm:px-4 py-3">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" /> <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="p-1"><X className="w-4 h-4" /></button>
           </div>
         )}
 
-        {/* Status tabs */}
-        <div className="flex flex-wrap gap-2">
-          {STATUS_TABS.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => { setStatusFilter(tab.value); setPage(1); }}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                statusFilter === tab.value
-                  ? "bg-blue-100 text-blue-700"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
+        {/* Status tabs — horizontally scrollable on mobile */}
+        <div className="overflow-x-auto no-scrollbar -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex gap-2">
+            {STATUS_TABS.map((tab) => (
+              <button
+                key={tab.value}
+                onClick={() => { setStatusFilter(tab.value); setPage(1); }}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${
+                  statusFilter === tab.value
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-lg border border-slate-200 overflow-visible">
-          {loading && (
-            <div className="h-0.5 bg-blue-100 overflow-hidden">
-              <div className="h-full w-1/3 bg-blue-500 animate-pulse" />
-            </div>
-          )}
-          {!loading && onboardings.length === 0 ? (
-            <div className="py-16 text-center">
-              <UserPlus className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-              <h3 className="text-sm font-medium text-slate-900 mb-1">No client onboardings yet</h3>
-              <p className="text-sm text-slate-500 mb-4">Invite your first client to get started.</p>
-              <Link
-                href="/brokerage/client-onboarding/new"
-                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-              >
-                <UserPlus className="w-4 h-4" />
-                New Client Onboarding
-              </Link>
-            </div>
-          ) : (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 text-left">
-                  <th className="px-4 py-3 font-medium text-slate-500">Client</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 hidden md:table-cell">Agent</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 hidden lg:table-cell">Commission</th>
-                  <th className="px-4 py-3 font-medium text-slate-500">Status</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 hidden sm:table-cell">Sent</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 hidden md:table-cell">Expires</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 hidden lg:table-cell">Docs</th>
-                  <th className="px-4 py-3 font-medium text-slate-500 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {onboardings.map((o) => (
-                  <tr key={o.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="px-4 py-3">
-                      <Link href={`/brokerage/client-onboarding/${o.id}`} className="font-medium text-slate-900 hover:text-blue-600">
+        {/* Loading indicator */}
+        {loading && (
+          <div className="h-1 bg-blue-100 rounded-full overflow-hidden">
+            <div className="h-full w-1/3 bg-blue-500 animate-pulse rounded-full" />
+          </div>
+        )}
+
+        {/* Content */}
+        {!loading && onboardings.length === 0 ? (
+          <div className="bg-white rounded-lg border border-slate-200 py-12 sm:py-16 text-center">
+            <UserPlus className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+            <h3 className="text-sm font-medium text-slate-900 mb-1">No client onboardings yet</h3>
+            <p className="text-sm text-slate-500 mb-4">Invite your first client to get started.</p>
+            <Link
+              href="/brokerage/client-onboarding/new"
+              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+            >
+              <UserPlus className="w-4 h-4" />
+              New Client Onboarding
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Mobile: Card layout */}
+            <div className="sm:hidden space-y-3">
+              {onboardings.map((o) => (
+                <div key={o.id} className="bg-white rounded-lg border border-slate-200 p-4">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <Link href={`/brokerage/client-onboarding/${o.id}`} className="font-medium text-slate-900 hover:text-blue-600 text-sm block truncate">
                         {o.clientFirstName} {o.clientLastName}
                       </Link>
-                      <div className="text-xs text-slate-500">{o.clientEmail}</div>
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 hidden md:table-cell">
-                      {o.agent ? `${o.agent.firstName} ${o.agent.lastName}` : "--"}
-                    </td>
-                    <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">
-                      {o.commissionPct ? `${Number(o.commissionPct)}%` : "--"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${ONBOARDING_STATUS_COLORS[o.status]}`}>
-                        {ONBOARDING_STATUS_LABELS[o.status]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-slate-500 hidden sm:table-cell whitespace-nowrap">{fmtDate(o.sentAt)}</td>
-                    <td className="px-4 py-3 text-slate-500 hidden md:table-cell whitespace-nowrap">{fmtDate(o.expiresAt)}</td>
-                    <td className="px-4 py-3 hidden lg:table-cell">
-                      {o._documentSummary && (
-                        <span className="text-xs text-slate-500">
-                          {o._documentSummary.signed}/{o._documentSummary.total} signed
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right relative">
-                      <div ref={actionMenu === o.id ? menuRef : undefined} className="relative inline-block">
+                      <div className="text-xs text-slate-500 truncate">{o.clientEmail}</div>
+                    </div>
+                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${ONBOARDING_STATUS_COLORS[o.status]}`}>
+                      {ONBOARDING_STATUS_LABELS[o.status]}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-xs text-slate-500 mb-3">
+                    {(o.commissionFlat != null || o.commissionPct != null) && (
+                      <span>{o.commissionFlat != null ? `$${Number(o.commissionFlat).toLocaleString()}` : `${Number(o.commissionPct)}%`}</span>
+                    )}
+                    {o._documentSummary && <span>{o._documentSummary.signed}/{o._documentSummary.total} docs</span>}
+                    <span>Sent {fmtDateShort(o.sentAt)}</span>
+                  </div>
+
+                  {/* Quick actions */}
+                  <div className="flex items-center gap-2">
+                    <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 active:bg-slate-300">
+                      <FileText className="w-3.5 h-3.5" /> View
+                    </Link>
+                    <button onClick={() => handleCopyLink(o.token)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 active:bg-slate-300">
+                      <Copy className="w-3.5 h-3.5" /> Copy Link
+                    </button>
+                    <div ref={actionMenu === o.id ? menuRef : undefined} className="relative">
                       <button
                         onClick={() => setActionMenu(actionMenu === o.id ? null : o.id)}
-                        className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                        className="p-2 rounded-lg bg-slate-100 text-slate-400 hover:bg-slate-200 active:bg-slate-300"
                       >
                         {processing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
                       </button>
                       {actionMenu === o.id && (
-                        <div className={`absolute right-0 z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1 ${
-                          onboardings.indexOf(o) >= onboardings.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
-                        }`}>
-                          <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <FileText className="w-4 h-4" /> View Details
-                          </Link>
-                          <button onClick={() => handleCopyLink(o.token)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                            <Copy className="w-4 h-4" /> Copy Link
-                          </button>
-                          {["pending", "partially_signed"].includes(o.status) && (
-                            <button onClick={() => handleResend(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                              <RotateCw className="w-4 h-4" /> Resend
-                            </button>
-                          )}
-                          {!["completed", "voided", "expired"].includes(o.status) && (
-                            <button onClick={() => handleVoid(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-                              <XCircle className="w-4 h-4" /> Void
-                            </button>
-                          )}
-                          {["completed", "voided", "expired"].includes(o.status) && (
-                            <button onClick={() => handleArchive(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50">
-                              <Archive className="w-4 h-4" /> Archive
-                            </button>
-                          )}
-                          <div className="border-t border-slate-100 my-1" />
-                          <button onClick={() => handleDelete(o.id)} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50">
-                            <Trash2 className="w-4 h-4" /> Delete
-                          </button>
+                        <div className="absolute right-0 bottom-full mb-1 z-50 w-48 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                          {renderActionItems(o)}
                         </div>
                       )}
-                      </div>
-                    </td>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop: Table layout */}
+            <div className="hidden sm:block bg-white rounded-lg border border-slate-200 overflow-visible">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 text-left">
+                    <th className="px-4 py-3 font-medium text-slate-500">Client</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 hidden md:table-cell">Agent</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 hidden lg:table-cell">Fee</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Status</th>
+                    <th className="px-4 py-3 font-medium text-slate-500">Sent</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 hidden md:table-cell">Expires</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 hidden lg:table-cell">Docs</th>
+                    <th className="px-4 py-3 font-medium text-slate-500 text-right">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                </thead>
+                <tbody>
+                  {onboardings.map((o) => (
+                    <tr key={o.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <Link href={`/brokerage/client-onboarding/${o.id}`} className="font-medium text-slate-900 hover:text-blue-600">
+                          {o.clientFirstName} {o.clientLastName}
+                        </Link>
+                        <div className="text-xs text-slate-500">{o.clientEmail}</div>
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 hidden md:table-cell">
+                        {o.agent ? `${o.agent.firstName} ${o.agent.lastName}` : "--"}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600 hidden lg:table-cell">
+                        {o.commissionFlat != null
+                          ? `$${Number(o.commissionFlat).toLocaleString()}`
+                          : o.commissionPct ? `${Number(o.commissionPct)}%` : "--"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-medium ${ONBOARDING_STATUS_COLORS[o.status]}`}>
+                          {ONBOARDING_STATUS_LABELS[o.status]}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-slate-500 whitespace-nowrap">{fmtDate(o.sentAt)}</td>
+                      <td className="px-4 py-3 text-slate-500 hidden md:table-cell whitespace-nowrap">{fmtDate(o.expiresAt)}</td>
+                      <td className="px-4 py-3 hidden lg:table-cell">
+                        {o._documentSummary && (
+                          <span className="text-xs text-slate-500">
+                            {o._documentSummary.signed}/{o._documentSummary.total} signed
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right relative">
+                        <div ref={actionMenu === o.id ? menuRef : undefined} className="relative inline-block">
+                          <button
+                            onClick={() => setActionMenu(actionMenu === o.id ? null : o.id)}
+                            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                          >
+                            {processing === o.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
+                          </button>
+                          {actionMenu === o.id && (
+                            <div className={`absolute right-0 z-50 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1 ${
+                              onboardings.indexOf(o) >= onboardings.length - 2 ? "bottom-full mb-1" : "top-full mt-1"
+                            }`}>
+                              {renderActionItems(o)}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-slate-500">Page {page} of {totalPages}</span>
+          <div className="flex items-center justify-between text-sm gap-3">
+            <span className="text-slate-500 text-xs sm:text-sm">
+              Page {page} of {totalPages}
+            </span>
             <div className="flex gap-2">
-              <button onClick={() => { setPage(page - 1); fetchData(page - 1, statusFilter); }} disabled={page <= 1} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-                <ChevronLeft className="w-4 h-4" /> Prev
+              <button
+                onClick={() => { setPage(page - 1); fetchData(page - 1, statusFilter); }}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 text-sm"
+              >
+                <ChevronLeft className="w-4 h-4" /> <span className="hidden sm:inline">Prev</span>
               </button>
-              <button onClick={() => { setPage(page + 1); fetchData(page + 1, statusFilter); }} disabled={page >= totalPages} className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40">
-                Next <ChevronRight className="w-4 h-4" />
+              <button
+                onClick={() => { setPage(page + 1); fetchData(page + 1, statusFilter); }}
+                disabled={page >= totalPages}
+                className="inline-flex items-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 active:bg-slate-100 disabled:opacity-40 text-sm"
+              >
+                <span className="hidden sm:inline">Next</span> <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           </div>

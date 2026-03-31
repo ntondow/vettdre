@@ -33,7 +33,8 @@ import { getVitalityScore } from "./vitality-actions";
 import type { VitalityScore } from "@/lib/vitality-engine";
 import { getStreetViewUrls, type StreetViewData } from "./street-intel-actions";
 import { assembleBovData } from "./bov-actions";
-import { generateBovPdfBlob, getBovFilename } from "@/lib/bov-pdf";
+// BOV PDF loaded dynamically on demand to reduce bundle size
+const loadBovPdf = () => import("@/lib/bov-pdf");
 // Tab shell components
 import ProfileHeader from "./components/building-profile/profile-header";
 import ProfileTabs from "./components/building-profile/profile-tabs";
@@ -662,7 +663,10 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
     const bblStr = boroCode + block.padStart(5, "0") + lot.padStart(4, "0");
     setBovGenerating(true);
     try {
-      const payload = await assembleBovData(bblStr);
+      const [payload, { generateBovPdfBlob, getBovFilename }] = await Promise.all([
+        assembleBovData(bblStr),
+        loadBovPdf(),
+      ]);
       const blob = generateBovPdfBlob(payload);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

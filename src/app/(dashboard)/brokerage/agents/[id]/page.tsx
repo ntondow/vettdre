@@ -8,7 +8,8 @@ import { getCommissionPlans } from "../../commission-plans/actions";
 import { getBrokerageConfig } from "../../invoices/actions";
 import { getAgentComplianceDocs, createComplianceDoc, deleteComplianceDoc } from "../../compliance/actions";
 import { getAgentDashboard } from "../../leaderboard/actions";
-import { generateInvoicePDF } from "@/lib/invoice-pdf";
+// PDF generator loaded dynamically on demand to reduce bundle size
+const loadInvoicePdf = () => import("@/lib/invoice-pdf");
 import { BADGE_DEFINITIONS } from "@/lib/agent-badges";
 import {
   COMMISSION_PLAN_TYPE_LABELS,
@@ -379,7 +380,8 @@ export default function AgentDetailPage({
     }
   }
 
-  function downloadInvoicePDF(inv: any) {
+  async function downloadInvoicePDF(inv: any) {
+    const { generateInvoicePDF } = await loadInvoicePdf();
     const doc = generateInvoicePDF(inv, brokerageConfig || undefined);
     doc.save(`${inv.invoiceNumber}.pdf`);
   }
@@ -693,7 +695,7 @@ export default function AgentDetailPage({
         <div className="flex flex-col md:flex-row items-start gap-6">
           {/* Avatar */}
           {agent.photoUrl ? (
-            <img src={agent.photoUrl} alt={`${agent.firstName} ${agent.lastName}`} className="w-20 h-20 rounded-full object-cover flex-shrink-0" />
+            <img src={agent.photoUrl} alt={`${agent.firstName} ${agent.lastName}`} loading="lazy" width={80} height={80} className="w-20 h-20 rounded-full object-cover flex-shrink-0" />
           ) : (
             <div className="w-20 h-20 rounded-full bg-blue-100 text-blue-600 text-2xl font-bold flex items-center justify-center flex-shrink-0">
               {initials}

@@ -231,6 +231,41 @@ export async function getMyTransactions() {
   }
 }
 
+// ── Recent Notifications ─────────────────────────────────────
+
+export async function getMyNotifications() {
+  try {
+    const { userId, orgId } = await getCurrentUserAndAgent();
+
+    // Get recent deal submission status changes from the last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const notifications = await prisma.auditLog.findMany({
+      where: {
+        orgId,
+        userId,
+        action: { startsWith: "deal_submission_" },
+        metadata: { path: ["isAgentNotification"], equals: true },
+        createdAt: { gte: sevenDaysAgo },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        action: true,
+        metadata: true,
+        createdAt: true,
+        actorName: true,
+      },
+    });
+
+    return JSON.parse(JSON.stringify(notifications));
+  } catch (error) {
+    console.error("getMyNotifications error:", error);
+    return [];
+  }
+}
+
 // ── My Stats ──────────────────────────────────────────────────
 
 export async function getMyStats() {

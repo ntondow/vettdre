@@ -71,7 +71,7 @@ function PrimaryContactCard({ contact, onNameClick, onSmsClick }: {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-3">
           {contact.photoUrl ? (
-            <img src={contact.photoUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200" />
+            <img src={contact.photoUrl} alt="" loading="lazy" width={40} height={40} className="w-10 h-10 rounded-full object-cover border border-slate-200" />
           ) : (
             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
               {contact.name.charAt(0).toUpperCase()}

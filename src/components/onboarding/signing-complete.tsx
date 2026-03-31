@@ -32,14 +32,14 @@ export default function SigningComplete({ onboardingData, downloadUrl }: Props) 
   const { clientFirstName, agentFullName, brokerageName, documents } = onboardingData;
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-12 text-center">
+    <div className="mx-auto max-w-lg px-4 py-8 sm:py-12 text-center">
       {/* Success icon */}
       <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
         <CheckCircle className="h-9 w-9 text-green-600" />
       </div>
 
       {/* Heading */}
-      <h1 className="mb-2 text-2xl font-bold text-slate-900">
+      <h1 className="mb-2 text-xl sm:text-2xl font-bold text-slate-900">
         All documents signed successfully!
       </h1>
       <p className="mb-8 text-sm text-slate-500">
@@ -75,7 +75,7 @@ export default function SigningComplete({ onboardingData, downloadUrl }: Props) 
         href={downloadUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="mb-6 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700"
+        className="mb-6 w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3.5 sm:py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 active:bg-blue-800"
       >
         <Download className="h-4 w-4" />
         Download Your Copies

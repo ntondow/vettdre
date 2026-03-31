@@ -59,9 +59,15 @@ export async function GET(
       agentLicense: onboarding.agent?.licenseNumber ?? null,
       propertyAddress: onboarding.propertyAddress ?? null,
       commissionPct: onboarding.commissionPct ? Number(onboarding.commissionPct) : null,
+      commissionFlat: (onboarding as unknown as Record<string, unknown>).commissionFlat
+        ? Number((onboarding as unknown as Record<string, unknown>).commissionFlat)
+        : null,
       monthlyRent: onboarding.monthlyRent ? Number(onboarding.monthlyRent) : null,
       termDays: onboarding.expiresAt
         ? Math.ceil((new Date(onboarding.expiresAt).getTime() - new Date(onboarding.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        : null,
+      effectiveThrough: onboarding.expiresAt
+        ? new Date(onboarding.expiresAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
         : null,
       onboardingStatus: onboarding.status,
       documents: onboarding.documents.map((d) => ({

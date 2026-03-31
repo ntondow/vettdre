@@ -723,6 +723,40 @@ Rule-based workflow automation triggered by CRM events: new leads, deal stage ch
 - **Workaround:** Public Supabase keys are hardcoded in `next.config.ts` `env` section to force edge inlining
 - This is required for the Supabase SSR middleware to function in Cloud Run
 
+### Client Onboarding Tool — Working
+**Routes:** `/brokerage/client-onboarding/*`, `/sign/[token]`
+
+Digital document signing workflow for onboarding new clients. Agents create onboarding packages with pre-filled government forms and custom agreements, clients sign via a public signing page.
+
+**Core Flow:** Agent selects client + templates → server downloads template PDFs from Supabase Storage → `prefillPdfFields()` stamps agent/client/brokerage info onto PDFs using `pdf-lib` → `stampLogoOnPdf()` adds brokerage logo to non-government forms → uploads filled PDFs → creates `ClientOnboarding` + `OnboardingDocument` records → sends invite via email and/or SMS → client opens `/sign/[token]` → reviews each document with PDF preview + field overlays → signs with signature pad → on completion, can generate invoice/transaction/deal submission.
+
+**Key Files:**
+- `lib/onboarding-prefill.ts` — `prefillPdfFields()`, `stampLogoOnPdf()`, `buildPrefillValues()` (pdf-lib based)
+- `lib/onboarding-types.ts` — `TemplateFieldDefinition`, `DeliveryMethod`, status labels/colors
+- `lib/onboarding-notifications.ts` — Email (Resend) + SMS (Twilio) invite/reminder functions
+- `lib/onboarding-pdf.ts` — Fallback hardcoded Tenant Rep Agreement PDF generator
+- `app/(dashboard)/brokerage/client-onboarding/actions.ts` — Server actions: CRUD, void, delete, archive, resend, generate invoice
+- `app/(dashboard)/brokerage/client-onboarding/page.tsx` — List page with status tabs, action menus (view/copy/resend/void/archive/delete)
+- `app/(dashboard)/brokerage/client-onboarding/new/page.tsx` — Creation form with multi-channel delivery (email, SMS, email+sms, link)
+- `app/sign/[token]/client.tsx` — Public signing page (welcome → signing → complete)
+- `app/api/onboarding/[token]/verify/route.ts` — Returns onboarding data + document fields for signing page
+- `app/api/onboarding/[token]/sign/route.ts` — Processes document signatures
+- `components/onboarding/pdf-field-viewer.tsx` — Multi-page PDF preview with percentage-based field overlays
+- `components/onboarding/signature-pad.tsx` — Canvas-based signature capture
+
+**Template System:** `DocumentTemplate` model stores field definitions as JSON. Fields use percentage-based coordinates (`x`, `y`, `width`, `height` as 0-100% of page). `page` is 0-indexed. `prefillKey` maps to values from `buildPrefillValues()`. Field types: `text`, `date`, `checkbox`, `signature`, `initials`.
+
+**Current Templates (per org, 3 default):**
+1. **DOS-1736** (NYS Agency Disclosure) — sort_order=1, 8 fields on page 1 (0-indexed). Auto-checks: "Tenant as a" (`tenantCheck`), "Tenant's Agent" (`tenantsAgentCheck`), "Tenant(s)" near signature (`tenantSignatureCheck`).
+2. **DOS-2156** (Fair Housing Notice) — sort_order=2, 5 fields on page 1 (0-indexed). Agent name, brokerage, client name, signature, date.
+3. **Tenant Representation Agreement** — sort_order=3, 12 fields across pages 0-1. Commission, term, signatures for both tenant and agent.
+
+**Delivery:** `sentVia` column supports `"email"`, `"sms"`, `"email+sms"`, or `"link"`. Channels split on `"+"` for dual delivery. SMS uses org's Twilio number via `getOrgTwilioNumber()`.
+
+**Prefill Display:** Signing page `client.tsx` builds a `prefillMap` from onboarding data and populates `fieldValues` for fields with `prefillKey`. The left panel shows prefilled values as read-only green fields; interactive fields for client to fill; then signature pads.
+
+**DB Models:** `ClientOnboarding` (main record), `OnboardingDocument` (per-document with status tracking), `DocumentTemplate` (reusable field definitions), `SigningAuditLog` (action trail).
+
 ## Pending / Incomplete Features
 | Feature | Status | Notes |
 |---------|--------|-------|
@@ -734,6 +768,7 @@ Rule-based workflow automation triggered by CRM events: new leads, deal stage ch
 | cloudbuild.yaml secrets | **Complete** | All 35 runtime secrets configured; run `scripts/create-secrets.sh` for GCP |
 | Google Workspace AI tools | **Working** | 11 gws tools wired into leasing engine + reusable agent runner; needs UI exposure for email/deal agents |
 | Team hierarchy | **Working (Phase 1)** | Schema, CRUD, admin UI, auto-provisioning done; Phase 2: team-scoped data filtering, team dashboards |
+| Client onboarding | **Working** | Template-based PDF signing, multi-channel delivery (email+SMS), delete/archive, prefill display. Field positions verified against real government PDFs. |
 
 ## Known Issues / Tech Debt
 1. **"use server" constraint** — Next.js 16 requires ALL exported functions in "use server" files to be async
@@ -744,7 +779,19 @@ Rule-based workflow automation triggered by CRM events: new leads, deal stage ch
 6. **Edge env var workaround** — NEXT_PUBLIC keys hardcoded in next.config.ts due to Turbopack edge bundling issue
 7. **docker-entrypoint.sh** — exists on disk but not referenced by Dockerfile (abandoned approach for Prisma migrations at startup)
 
-## Recent Changes (2026-03-07)
+## Recent Changes (2026-03-30)
+- **NEW:** Client Onboarding Tool — full digital signing workflow with template-based PDF prefill, logo stamping, multi-page preview overlays, signature capture
+- **NEW:** Real government PDF templates uploaded (DOS-1735-f, DOS-2156) + Tenant Rep Agreement to Supabase Storage with mapped field coordinates
+- **NEW:** Multi-channel delivery — agents can send onboarding invites via email, SMS, or both simultaneously (Twilio + Resend)
+- **NEW:** Delete and Archive actions on onboarding list page
+- **NEW:** Signing page displays actual prefilled values (agent name, brokerage, client name, etc.) instead of dashes
+- **NEW:** Auto-checked checkboxes on government forms for tenant representation (Tenant as a, Tenant's Agent, Tenant(s) signature)
+- **NEW:** Drag-and-drop logo upload in branding settings; logos stamped onto non-government PDFs during onboarding creation
+- **NEW:** Invoice generation from completed onboardings (auto-creates DealSubmission + Invoice + Transaction)
+- **FIX:** Field overlay positions corrected on DOS-1735 and DOS-2156 based on actual PDF layouts
+- **FIX:** TypeScript type casting in verify route for template fields
+
+## Previous Changes (2026-03-07)
 - **NEW:** Google Workspace AI tool layer — 11 Anthropic tool_use tools via `@googleworkspace/cli` (gws.ts, gws-tools.ts, gws-ai-agent.ts)
 - **NEW:** Leasing engine now has 9 tools (5 original + 4 gws: calendar check, email confirm, calendar create, email thread search)
 - **NEW:** Team hierarchy — Team model with self-referencing parent/sub-team, admin CRUD UI at `/settings/admin/teams`

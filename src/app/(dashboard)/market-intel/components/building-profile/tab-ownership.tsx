@@ -937,7 +937,7 @@ export default function TabOwnership({
               {/* Org Header */}
               <div className="flex items-start gap-3">
                 {org.logoUrl ? (
-                  <img src={org.logoUrl} alt="" className="w-10 h-10 rounded-lg object-contain border border-slate-200 bg-white" />
+                  <img src={org.logoUrl} alt="" loading="lazy" width={40} height={40} className="w-10 h-10 rounded-lg object-contain border border-slate-200 bg-white" />
                 ) : (
                   <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-sm">
                     {(org.name || "?")[0]}
@@ -1015,7 +1015,7 @@ export default function TabOwnership({
                       <div className="bg-white border border-indigo-200 rounded-lg p-3">
                         <div className="flex items-start gap-3">
                           {apolloPerson.photoUrl ? (
-                            <img src={apolloPerson.photoUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                            <img src={apolloPerson.photoUrl} alt="" loading="lazy" width={32} height={32} className="w-8 h-8 rounded-full object-cover" />
                           ) : (
                             <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs">
                               {(apolloPerson.firstName || "?")[0]}{(apolloPerson.lastName || "?")[0]}

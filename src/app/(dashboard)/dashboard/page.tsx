@@ -156,6 +156,9 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
   const [refreshing, setRefreshing] = useState(false);
 
+  // Welcome card (dismissed for the session)
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
     month: "long",
@@ -293,6 +296,52 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* ── Agent Welcome Card ─────────────────────────────── */}
+      {!welcomeDismissed && dashboard && !dashboard.isAdmin && (
+        dashboard.overview.activeTransactions === 0 &&
+        dashboard.overview.activeListings === 0 &&
+        dashboard.crm.totalContacts === 0
+      ) && (
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 rounded-xl p-5 sm:p-6 text-white relative overflow-hidden">
+          <button
+            onClick={() => setWelcomeDismissed(true)}
+            className="absolute top-3 right-3 text-white/60 hover:text-white transition-colors"
+            aria-label="Dismiss"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <h2 className="text-lg sm:text-xl font-bold mb-1">
+            Welcome to VettdRE{dashboard.userName ? `, ${dashboard.userName}` : ""}!
+          </h2>
+          <p className="text-blue-100 text-sm mb-5">
+            Get started by completing your first task:
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <Link
+              href="/brokerage/client-onboarding/new"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-blue-700 text-sm font-semibold rounded-lg hover:bg-blue-50 transition-colors"
+            >
+              <UserPlus className="h-4 w-4" />
+              Register a Client
+            </Link>
+            <Link
+              href="/brokerage/my-deals"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/30 text-white text-sm font-semibold rounded-lg hover:bg-blue-500/50 border border-white/20 transition-colors"
+            >
+              <FileText className="h-4 w-4" />
+              Submit a Deal
+            </Link>
+            <Link
+              href="/contacts"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-500/30 text-white text-sm font-semibold rounded-lg hover:bg-blue-500/50 border border-white/20 transition-colors"
+            >
+              <Users className="h-4 w-4" />
+              Add a Contact
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ── Section 1: Market Data Strip (Bloomberg Dark) ──── */}
       {stripLoading ? (

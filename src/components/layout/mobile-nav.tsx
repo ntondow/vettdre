@@ -8,11 +8,21 @@ import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
 import type { Feature } from "@/lib/feature-gate";
 import Paywall from "@/components/ui/paywall";
 
-const tabs = [
+/* ── Tab configs by role ───────────────────────────────────── */
+
+const ADMIN_TABS = [
   { name: "Dashboard", href: "/dashboard", icon: "🏠" },
   { name: "Research", href: "/market-intel", icon: "🔍" },
   { name: "Messages", href: "/messages", icon: "📧" },
   { name: "Brokerage", href: "/brokerage", icon: "🏢" },
+  { name: "More", href: "#more", icon: "☰" },
+];
+
+const AGENT_TABS = [
+  { name: "Dashboard", href: "/dashboard", icon: "🏠" },
+  { name: "Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
+  { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
+  { name: "Messages", href: "/messages", icon: "📧" },
   { name: "More", href: "#more", icon: "☰" },
 ];
 
@@ -29,7 +39,9 @@ interface MoreSection {
   items: MoreItem[];
 }
 
-const moreSections: MoreSection[] = [
+/* ── More sheet sections by role ───────────────────────────── */
+
+const ADMIN_MORE_SECTIONS: MoreSection[] = [
   {
     label: "Acquisitions",
     items: [
@@ -57,17 +69,40 @@ const moreSections: MoreSection[] = [
   },
 ];
 
-const allMoreItems = moreSections.flatMap(s => s.items);
+const AGENT_MORE_SECTIONS: MoreSection[] = [
+  {
+    label: "Communication",
+    items: [
+      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "Calendar", href: "/calendar", icon: "📅" },
+    ],
+  },
+  {
+    label: "Research",
+    items: [
+      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+      { name: "Market Intel", href: "/market-intel", icon: "🔍" },
+    ],
+  },
+];
+
+const allAdminMoreItems = ADMIN_MORE_SECTIONS.flatMap(s => s.items);
+const allAgentMoreItems = AGENT_MORE_SECTIONS.flatMap(s => s.items);
 
 const SETTINGS_ITEM: MoreItem = { name: "Settings", href: "/settings", icon: "⚙️" };
 
 export default function MobileNav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { plan } = useUserPlan();
+  const { plan, role } = useUserPlan();
   const [showMore, setShowMore] = useState(false);
   const [entered, setEntered] = useState(false);
   const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
+
+  const isAgent = role === "agent";
+  const tabs = isAgent ? AGENT_TABS : ADMIN_TABS;
+  const moreSections = isAgent ? AGENT_MORE_SECTIONS : ADMIN_MORE_SECTIONS;
+  const allMoreItems = isAgent ? allAgentMoreItems : allAdminMoreItems;
 
   // Close sheet on route change
   useEffect(() => {

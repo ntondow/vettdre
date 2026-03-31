@@ -399,8 +399,16 @@ export async function getSyncStats() {
 // API Keys
 // ============================================================
 
-export async function getApiKeyStatus() {
+async function requireOrgAdmin() {
   const user = await getAuthUser();
+  if (!user) throw new Error("Not authenticated");
+  const adminRoles = ["super_admin", "admin", "owner"];
+  if (!adminRoles.includes(user.role)) throw new Error("Unauthorized: admin access required");
+  return user;
+}
+
+export async function getApiKeyStatus() {
+  const user = await requireOrgAdmin().catch(() => null);
   if (!user) return null;
   const gmail = await prisma.gmailAccount.findFirst({
     where: { userId: user.id, isActive: true },
@@ -419,6 +427,7 @@ export async function getApiKeyStatus() {
 
 export async function testApiConnection(api: string): Promise<{ success: boolean; message: string }> {
   try {
+    await requireOrgAdmin();
     switch (api) {
       case "anthropic": {
         const key = process.env.ANTHROPIC_API_KEY;

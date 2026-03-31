@@ -55,6 +55,7 @@ export default function AdminUsersClient() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   // Auth management state
   const [authStatuses, setAuthStatuses] = useState<Record<string, AuthStatus>>({});
@@ -72,6 +73,7 @@ export default function AdminUsersClient() {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true);
+    setFetchError(null);
     try {
       const data = await getUsers(
         search || undefined,
@@ -79,8 +81,15 @@ export default function AdminUsersClient() {
         approvedFilter !== "all" ? approvedFilter : undefined,
       );
       setUsers(data);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error("fetchUsers error:", e);
+      const msg = e?.message || e?.digest || String(e);
+      // Don't swallow redirect errors — let them surface
+      if (msg?.includes("NEXT_REDIRECT")) {
+        window.location.href = "/settings";
+        return;
+      }
+      setFetchError(`Failed to load users: ${msg}`);
     }
     setLoading(false);
   }, [search, planFilter, approvedFilter]);
@@ -97,9 +106,11 @@ export default function AdminUsersClient() {
   const fetchTeamOptions = useCallback(async () => {
     try {
       const teams = await getTeams();
-      setTeamOptions(teams.map((t) => ({ id: t.id, name: t.name })));
+      setTeamOptions(teams.map((t: any) => ({ id: t.id, name: t.name })));
     } catch (e) {
-      console.error("Failed to fetch teams:", e);
+      // Team model may not exist yet — silently skip
+      console.warn("Teams not available:", e);
+      setTeamOptions([]);
     }
   }, []);
 
@@ -177,7 +188,7 @@ export default function AdminUsersClient() {
         showToast(`User assigned to ${teamName}`);
       }
     } catch (e: any) {
-      showToast("Error: " + e.message, "error");
+      showToast("Team assignment not available yet", "error");
     }
     setUpdating(null);
   };
@@ -435,6 +446,16 @@ export default function AdminUsersClient() {
             <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-blue-600 border-t-transparent mb-2" />
             <p className="text-sm text-slate-500">Loading users...</p>
           </div>
+        ) : fetchError ? (
+          <div className="p-8 text-center">
+            <p className="text-sm text-red-600 mb-2">{fetchError}</p>
+            <button
+              onClick={() => fetchUsers()}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Retry
+            </button>
+          </div>
         ) : users.length === 0 ? (
           <div className="p-8 text-center">
             <p className="text-sm text-slate-500">No users found.</p>
@@ -518,6 +539,7 @@ export default function AdminUsersClient() {
                           onChange={(e) => handleRoleChange(user.id, e.target.value)}
                           disabled={updating === user.id}
                           className={`text-xs font-medium px-2 py-1 rounded-lg border cursor-pointer ${
+                            user.role === "super_admin" ? "bg-red-50 border-red-200 text-red-700" :
                             user.role === "owner" ? "bg-amber-50 border-amber-200 text-amber-700" :
                             user.role === "admin" ? "bg-purple-50 border-purple-200 text-purple-700" :
                             user.role === "manager" ? "bg-blue-50 border-blue-200 text-blue-700" :
@@ -525,6 +547,7 @@ export default function AdminUsersClient() {
                             "bg-slate-50 border-slate-200 text-slate-400"
                           }`}
                         >
+                          <option value="super_admin">Super Admin</option>
                           <option value="owner">Owner</option>
                           <option value="admin">Admin</option>
                           <option value="manager">Manager</option>

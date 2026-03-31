@@ -213,9 +213,17 @@ export async function createOnboarding(
     });
     if (!org) return { success: false, error: "Organization not found" };
 
-    const termDays = input.expiresInDays ?? 7;
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + termDays);
+    // Compute expiration: prefer effectiveThrough date, fall back to expiresInDays
+    let expiresAt: Date;
+    let termDays: number;
+    if (input.effectiveThrough) {
+      expiresAt = new Date(input.effectiveThrough + "T23:59:59");
+      termDays = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    } else {
+      termDays = input.expiresInDays ?? 7;
+      expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + termDays);
+    }
 
     const agentFullName = `${agent.firstName} ${agent.lastName}`;
     const supabase = await createClient();
@@ -229,11 +237,13 @@ export async function createOnboarding(
       unitNumber: input.unitNumber?.trim(),
       monthlyRent: input.monthlyRent,
       commissionPct: input.commissionPct,
+      commissionFlat: input.commissionFlat,
       moveInDate: input.moveInDate,
       agentName: agentFullName,
       agentLicense: agent.licenseNumber || undefined,
       brokerageName: org.name,
       termDays,
+      effectiveThrough: input.effectiveThrough,
     });
 
     // Resolve which templates to use
@@ -278,8 +288,8 @@ export async function createOnboarding(
         agentLicense: agent.licenseNumber || "N/A",
         clientFirstName: input.clientFirstName.trim(),
         clientLastName: input.clientLastName.trim(),
-        commissionAmount: input.commissionPct ?? 0,
-        commissionType: "percentage",
+        commissionAmount: input.commissionFlat ?? input.commissionPct ?? 0,
+        commissionType: input.commissionFlat ? "flat" : "percentage",
         termDays,
       });
 
@@ -400,6 +410,7 @@ export async function createOnboarding(
           sentAt: new Date(),
           sentVia: input.deliveryMethod || "email",
           commissionPct: input.commissionPct ?? null,
+          commissionFlat: input.commissionFlat ?? null,
           monthlyRent: input.monthlyRent ?? null,
           notes: input.notes?.trim() || null,
         },
@@ -739,11 +750,14 @@ export async function generateInvoiceFromOnboarding(
     const bmsSettings = (org.bmsSettings as Record<string, unknown>) ?? {};
     const defaultPaymentTerms = (bmsSettings.defaultPaymentTerms as string) || "Net 30";
 
-    // Resolve commission
+    // Resolve commission — prefer flat fee, fall back to percentage calculation
+    const commissionFlat = num((onboarding as unknown as Record<string, unknown>).commissionFlat);
     const commissionPct = num(onboarding.commissionPct) || 8.33;
     const monthlyRent = additionalData.monthlyRent ?? num(onboarding.monthlyRent) ?? 0;
     const annualRent = monthlyRent * 12;
-    const totalCommission = (annualRent * commissionPct) / 100;
+    const totalCommission = commissionFlat > 0
+      ? commissionFlat
+      : (annualRent * commissionPct) / 100;
 
     // Resolve split
     const exclusiveType = onboarding.exclusiveType;
@@ -795,8 +809,8 @@ export async function generateInvoiceFromOnboarding(
           dealType: (onboarding.dealType as "lease" | "sale" | "rental") || "lease",
           transactionValue: annualRent,
           closingDate: additionalData.closingDate ? new Date(additionalData.closingDate) : null,
-          commissionType: "percentage",
-          commissionPct: commissionPct,
+          commissionType: commissionFlat > 0 ? "flat" : "percentage",
+          commissionPct: commissionFlat > 0 ? null : commissionPct,
           totalCommission,
           agentSplitPct,
           houseSplitPct,

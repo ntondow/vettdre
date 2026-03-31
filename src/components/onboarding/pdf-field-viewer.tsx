@@ -61,10 +61,7 @@ export default function PdfFieldViewer({
     setError(null);
 
     try {
-      // Dynamic import to avoid SSR issues
       const pdfjsLib = await import("pdfjs-dist");
-
-      // Use CDN worker to avoid Next.js bundling issues
       pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
 
@@ -78,14 +75,13 @@ export default function PdfFieldViewer({
       const pagesToRender = Math.min(pdf.numPages, totalPages);
       const rendered: RenderedPage[] = [];
 
-      // Get container width to determine render scale
       const containerWidth = containerRef.current?.clientWidth ?? 612;
 
       for (let i = 0; i < pagesToRender; i++) {
         const page = await pdf.getPage(i + 1);
         const defaultViewport = page.getViewport({ scale: 1 });
 
-        // Scale to fit the container width (renders crisply at 2x for retina)
+        // Scale to fit the container width (renders at 2x for retina)
         const scale = (containerWidth / defaultViewport.width) * 2;
         const viewport = page.getViewport({ scale });
 
@@ -118,8 +114,8 @@ export default function PdfFieldViewer({
 
   if (loading) {
     return (
-      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
-        <div className="flex items-center justify-center py-32 text-sm text-slate-400">
+      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden w-full max-w-[612px] md:max-w-none">
+        <div className="flex items-center justify-center py-24 sm:py-32 text-sm text-slate-400">
           <div className="animate-pulse">Loading preview...</div>
         </div>
       </div>
@@ -128,8 +124,8 @@ export default function PdfFieldViewer({
 
   if (error || !pages.length) {
     return (
-      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
-        <div className="flex items-center justify-center py-32 text-sm text-slate-400">
+      <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden w-full max-w-[612px] md:max-w-none">
+        <div className="flex items-center justify-center py-24 sm:py-32 text-sm text-slate-400">
           {error || "No pages to display"}
         </div>
       </div>
@@ -137,7 +133,7 @@ export default function PdfFieldViewer({
   }
 
   return (
-    <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden" style={{ width: "100%", maxWidth: "612px" }}>
+    <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden w-full max-w-[612px] md:max-w-none">
       {pages.map((page, pageIndex) => (
         <div key={pageIndex} className="relative">
           {/* Rendered PDF page as image — width:100% makes height auto-proportional */}
@@ -148,7 +144,7 @@ export default function PdfFieldViewer({
             draggable={false}
           />
 
-          {/* Field overlays — percentage positions now match the image exactly */}
+          {/* Field overlays — percentage positions match the image */}
           {(fieldsByPage[pageIndex] || []).map((field) => {
             const value = fieldValues[field.id];
             const hasValue = !!value;
@@ -160,9 +156,9 @@ export default function PdfFieldViewer({
               <div
                 key={field.id}
                 onClick={() => onFieldClick?.(field.id)}
-                className={`absolute rounded-sm cursor-pointer transition-all text-[9px] overflow-hidden ${
+                className={`absolute rounded-sm cursor-pointer transition-all overflow-hidden ${
                   isSelected
-                    ? "ring-2 ring-blue-600 z-20"
+                    ? "ring-2 ring-blue-600 z-20 scale-[1.02]"
                     : isPrefilled
                       ? "border border-green-400 bg-green-50/50"
                       : hasValue
@@ -176,14 +172,19 @@ export default function PdfFieldViewer({
                   top: `${field.y}%`,
                   width: `${field.width}%`,
                   height: `${field.height}%`,
+                  // Ensure minimum touch target on mobile
+                  minHeight: "16px",
+                  minWidth: "16px",
                 }}
               >
                 {isSignature && value ? (
                   <img src={value} alt="Signature" className="w-full h-full object-contain" />
                 ) : hasValue ? (
-                  <span className="px-1 text-slate-700 truncate block leading-tight" style={{ fontSize: "9px" }}>{value}</span>
+                  <span className="px-0.5 sm:px-1 text-slate-700 truncate block leading-tight" style={{ fontSize: "clamp(7px, 1.5vw, 9px)" }}>
+                    {value}
+                  </span>
                 ) : (
-                  <span className="px-1 text-slate-400 flex items-center gap-0.5 leading-tight">
+                  <span className="px-0.5 sm:px-1 text-slate-400 flex items-center gap-0.5 leading-tight" style={{ fontSize: "clamp(7px, 1.5vw, 9px)" }}>
                     {FIELD_ICONS[field.type]}
                     <span className="truncate">{field.label}</span>
                     {isPrefilled && <Lock className="w-2 h-2 ml-auto flex-shrink-0" />}

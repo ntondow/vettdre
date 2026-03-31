@@ -3,7 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const NAV = [
+interface NavItem {
+  href: string;
+  icon: string;
+  label: string;
+  adminOnly?: boolean;
+}
+
+interface NavGroup {
+  group: string;
+  items: NavItem[];
+}
+
+const NAV: NavGroup[] = [
   {
     group: "Account",
     items: [
@@ -17,22 +29,22 @@ const NAV = [
     group: "Team",
     items: [
       { href: "/settings/team", icon: "👥", label: "Members" },
-      { href: "/settings/lead-rules", icon: "🎯", label: "Lead Rules" },
+      { href: "/settings/lead-rules", icon: "🎯", label: "Lead Rules", adminOnly: true },
     ],
   },
   {
     group: "CRM",
     items: [
-      { href: "/settings/pipeline", icon: "📊", label: "Pipeline" },
-      { href: "/settings/ai", icon: "🤖", label: "AI Settings" },
-      { href: "/settings/branding", icon: "🎨", label: "Branding" },
+      { href: "/settings/pipeline", icon: "📊", label: "Pipeline", adminOnly: true },
+      { href: "/settings/ai", icon: "🤖", label: "AI Settings", adminOnly: true },
+      { href: "/settings/branding", icon: "🎨", label: "Branding", adminOnly: true },
     ],
   },
   {
     group: "Communications",
     items: [
       { href: "/settings/gmail", icon: "📬", label: "Gmail" },
-      { href: "/settings/phone", icon: "📞", label: "Phone & SMS" },
+      { href: "/settings/phone", icon: "📞", label: "Phone & SMS", adminOnly: true },
       { href: "/settings/sync", icon: "⏱️", label: "Sync" },
       { href: "/settings/templates", icon: "📝", label: "Templates" },
     ],
@@ -46,13 +58,13 @@ const NAV = [
   {
     group: "Data",
     items: [
-      { href: "/settings/api-keys", icon: "🔑", label: "API Keys" },
+      { href: "/settings/api-keys", icon: "🔑", label: "API Keys", adminOnly: true },
       { href: "/settings/export", icon: "📤", label: "Export" },
     ],
   },
 ];
 
-const ADMIN_NAV = {
+const ADMIN_NAV: NavGroup = {
   group: "Admin",
   items: [
     { href: "/settings/admin", icon: "🛡️", label: "Dashboard" },
@@ -62,11 +74,35 @@ const ADMIN_NAV = {
   ],
 };
 
+/* Pages agents are allowed to see */
+const AGENT_ALLOWED = new Set([
+  "/settings/profile",
+  "/settings/signature",
+  "/settings/notifications",
+  "/settings/hours",
+  "/settings/gmail",
+  "/settings/sync",
+]);
+
 export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: string; userRole?: string }) {
   const pathname = usePathname();
-  const isAdmin = userRole === "super_admin";
-  const nav = isAdmin ? [...NAV, ADMIN_NAV] : NAV;
-  const allItems = nav.flatMap((g) => g.items);
+  const adminRoles = ["super_admin", "admin", "owner"];
+  const isOrgAdmin = adminRoles.includes(userRole ?? "");
+  const isSuperAdmin = userRole === "super_admin";
+  const isAgent = userRole === "agent";
+
+  // Agents get a minimal settings view; admins/owners get everything
+  const filteredNav = (isSuperAdmin ? [...NAV, ADMIN_NAV] : NAV)
+    .map((g) => ({
+      ...g,
+      items: g.items.filter((item) => {
+        if (isAgent) return AGENT_ALLOWED.has(item.href);
+        return !item.adminOnly || isOrgAdmin;
+      }),
+    }))
+    .filter((g) => g.items.length > 0);
+
+  const allItems = filteredNav.flatMap((g) => g.items);
 
   return (
     <>
@@ -95,7 +131,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
 
       {/* Desktop: vertical sidebar */}
       <nav className="hidden md:block w-[220px] flex-shrink-0 bg-slate-50 border-r border-slate-200 overflow-y-auto py-4">
-        {nav.map((group) => (
+        {filteredNav.map((group) => (
           <div key={group.group} className="mb-4">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-4 py-1.5">
               {group.group}

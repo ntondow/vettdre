@@ -17,7 +17,8 @@ import {
   PAYMENT_METHOD_LABELS,
 } from "@/lib/bms-types";
 import type { BrokerageConfig } from "@/lib/bms-types";
-import { generateInvoicePDF, generateBatchInvoicePDFs } from "@/lib/invoice-pdf";
+// PDF generators loaded dynamically on demand to reduce bundle size
+const loadInvoicePdf = () => import("@/lib/invoice-pdf");
 import { recordPayment } from "../payments/actions";
 import {
   FileText,
@@ -131,12 +132,14 @@ export default function InvoicesPage() {
 
   // ── PDF Actions ─────────────────────────────────────────────
 
-  function downloadPDF(inv: any) {
+  async function downloadPDF(inv: any) {
+    const { generateInvoicePDF } = await loadInvoicePdf();
     const doc = generateInvoicePDF(inv, brokerageConfig || undefined);
     doc.save(`${inv.invoiceNumber}.pdf`);
   }
 
-  function printPDF(inv: any) {
+  async function printPDF(inv: any) {
+    const { generateInvoicePDF } = await loadInvoicePdf();
     const doc = generateInvoicePDF(inv, brokerageConfig || undefined);
     const blob = doc.output("blob");
     const url = URL.createObjectURL(blob);
@@ -146,10 +149,11 @@ export default function InvoicesPage() {
     }
   }
 
-  function downloadSelectedPDFs() {
+  async function downloadSelectedPDFs() {
     const selectedInvoices = invoices.filter((inv: any) => selected.has(inv.id));
     if (selectedInvoices.length === 0) return;
 
+    const { generateInvoicePDF, generateBatchInvoicePDFs } = await loadInvoicePdf();
     if (selectedInvoices.length === 1) {
       const doc = generateInvoicePDF(selectedInvoices[0], brokerageConfig || undefined);
       doc.save(`${selectedInvoices[0].invoiceNumber}.pdf`);

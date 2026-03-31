@@ -242,7 +242,7 @@ export default function BrandingPage() {
         <div className="border border-slate-200 rounded-lg p-6 bg-slate-50">
           <div className="flex items-center gap-4 mb-3">
             {settings.logoUrl ? (
-              <img src={settings.logoUrl} alt="Logo" className="w-10 h-10 rounded object-cover" />
+              <img src={settings.logoUrl} alt="Logo" loading="lazy" width={40} height={40} className="w-10 h-10 rounded object-cover" />
             ) : (
               <div
                 className="w-10 h-10 rounded flex items-center justify-center text-white text-sm font-bold"

@@ -128,11 +128,13 @@ export function buildPrefillValues(data: {
   unitNumber?: string;
   monthlyRent?: number;
   commissionPct?: number;
+  commissionFlat?: number;
   moveInDate?: string;
   agentName: string;
   agentLicense?: string;
   brokerageName: string;
   termDays?: number;
+  effectiveThrough?: string;
 }): Record<string, string> {
   const values: Record<string, string> = {};
 
@@ -143,14 +145,24 @@ export function buildPrefillValues(data: {
   if (data.monthlyRent) {
     values.rent = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(data.monthlyRent);
   }
-  if (data.commissionPct != null) values.commissionPct = `${data.commissionPct}%`;
+  // Prefer flat fee; fall back to percentage for legacy records
+  if (data.commissionFlat != null && data.commissionFlat > 0) {
+    values.commissionPct = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(data.commissionFlat);
+  } else if (data.commissionPct != null) {
+    values.commissionPct = `${data.commissionPct}%`;
+  }
   if (data.moveInDate) {
     values.moveInDate = new Date(data.moveInDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
   }
   values.agentName = data.agentName;
   if (data.agentLicense) values.agentLicense = data.agentLicense;
   values.brokerageName = data.brokerageName;
-  if (data.termDays) values.agreementTerm = `${data.termDays} days`;
+  // Prefer effectiveThrough date; fall back to termDays for legacy
+  if (data.effectiveThrough) {
+    values.agreementTerm = new Date(data.effectiveThrough).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+  } else if (data.termDays) {
+    values.agreementTerm = `${data.termDays} days`;
+  }
   values.date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 
   // Auto-check tenant representation checkboxes on government forms

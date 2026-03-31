@@ -56,6 +56,7 @@ interface OnboardingDetail {
   sentAt: string | null;
   completedAt: string | null;
   commissionPct: number | null;
+  commissionFlat: number | null;
   monthlyRent: number | null;
   notes: string | null;
   dealType: string | null;
@@ -215,7 +216,14 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
                 <div className="flex items-center gap-2"><User className="w-4 h-4 text-slate-400" /> {data.clientFirstName} {data.clientLastName}</div>
                 <div className="flex items-center gap-2"><Mail className="w-4 h-4 text-slate-400" /> {data.clientEmail}</div>
                 {data.clientPhone && <div className="flex items-center gap-2"><Phone className="w-4 h-4 text-slate-400" /> {data.clientPhone}</div>}
-                {data.commissionPct != null && <div className="flex items-center gap-2"><Receipt className="w-4 h-4 text-slate-400" /> {Number(data.commissionPct)}% commission</div>}
+                {(data.commissionFlat != null || data.commissionPct != null) && (
+                  <div className="flex items-center gap-2">
+                    <Receipt className="w-4 h-4 text-slate-400" />
+                    {data.commissionFlat != null
+                      ? `$${Number(data.commissionFlat).toLocaleString("en-US", { minimumFractionDigits: 2 })} fee`
+                      : `${Number(data.commissionPct)}% commission`}
+                  </div>
+                )}
               </div>
               {data.agent && (
                 <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500">

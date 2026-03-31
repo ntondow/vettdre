@@ -18,7 +18,7 @@ export type OnboardingDocTypeValue =
 
 export type SigningStatusType = "pending" | "viewed" | "signed";
 
-export type DeliveryMethod = "email" | "sms" | "link";
+export type DeliveryMethod = "email" | "sms" | "link" | "email+sms";
 
 export type TemplateFieldType = "text" | "date" | "signature" | "initials" | "checkbox";
 
@@ -65,8 +65,9 @@ export interface ClientOnboardingInput {
   unitNumber?: string;
   moveInDate?: string;
 
-  // Commission snapshot
-  commissionPct?: number;
+  // Fee snapshot
+  commissionPct?: number;    // legacy — percentage
+  commissionFlat?: number;   // flat dollar fee due at signing
   monthlyRent?: number;
 
   // Document selection
@@ -74,7 +75,8 @@ export interface ClientOnboardingInput {
 
   // Delivery
   deliveryMethod?: DeliveryMethod;
-  expiresInDays?: number; // default 7
+  expiresInDays?: number;       // legacy — days from now
+  effectiveThrough?: string;    // ISO date string for agreement expiry
 
   // Optional
   notes?: string;
@@ -114,6 +116,7 @@ export interface ClientOnboardingRecord {
   allDocsSigned: boolean;
 
   commissionPct?: number | null;
+  commissionFlat?: number | null;
   monthlyRent?: number | null;
 
   notes?: string | null;
@@ -223,4 +226,5 @@ export const DELIVERY_METHOD_LABELS: Record<DeliveryMethod, string> = {
   email: "Email",
   sms: "SMS",
   link: "Copy Link",
+  "email+sms": "Email + SMS",
 };

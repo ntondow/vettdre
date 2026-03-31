@@ -37,8 +37,34 @@ interface NavSection {
 /* Dashboard — rendered above sections (no group header) */
 const DASHBOARD_ITEM: NavItem = { name: "Dashboard", href: "/dashboard", icon: "📊" };
 
-/* Lifecycle sections */
-const NAV_SECTIONS: NavSection[] = [
+/* ── Agent-focused sidebar (simplified for agent role) ────── */
+const AGENT_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "My Work",
+    items: [
+      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
+      { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
+      { name: "Contacts", href: "/contacts", icon: "👥" },
+    ],
+  },
+  {
+    label: "Communication",
+    items: [
+      { name: "Messages", href: "/messages", icon: "📬", badge: true },
+      { name: "Calendar", href: "/calendar", icon: "📅" },
+    ],
+  },
+  {
+    label: "Research",
+    items: [
+      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+    ],
+  },
+];
+
+/* ── Admin / Owner sidebar (full platform) ────────────────── */
+const ADMIN_NAV_SECTIONS: NavSection[] = [
   {
     label: "Research",
     items: [
@@ -82,8 +108,8 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Brokerage",
     items: [
-      { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions", roles: ["owner", "admin"] },
-      { name: "My Deals", href: "/brokerage/my-deals", icon: "💼", feature: "bms_submissions", roles: ["agent"] },
+      { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions" },
+      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
     ],
   },
   {
@@ -98,7 +124,7 @@ const NAV_SECTIONS: NavSection[] = [
 const SETTINGS_ITEM: NavItem = { name: "Settings", href: "/settings", icon: "⚙️" };
 
 /* All items flattened (for paywall lookup) */
-const ALL_ITEMS = [DASHBOARD_ITEM, ...NAV_SECTIONS.flatMap(s => s.items), SETTINGS_ITEM];
+const ALL_ITEMS = [DASHBOARD_ITEM, ...ADMIN_NAV_SECTIONS.flatMap(s => s.items), ...AGENT_NAV_SECTIONS.flatMap(s => s.items), SETTINGS_ITEM];
 
 /* ------------------------------------------------------------------ */
 /*  Component                                                          */
@@ -146,9 +172,9 @@ export default function Sidebar() {
             onPaywall={setPaywallFeature} />
         </div>
 
-        {/* Lifecycle sections */}
+        {/* Lifecycle sections — agents get a focused sidebar */}
         <div className="flex-1 space-y-4">
-          {NAV_SECTIONS.map((section) => {
+          {(role === "agent" ? AGENT_NAV_SECTIONS : ADMIN_NAV_SECTIONS).map((section) => {
             const isSuperAdmin = role === "super_admin";
             const hasVisibleItems = section.items.some(item => isSuperAdmin || !item.roles || item.roles.includes(role));
             if (!hasVisibleItems) return null;

@@ -2560,9 +2560,10 @@ model ClientOnboarding {
   completedAt   DateTime? @map("completed_at")
   allDocsSigned Boolean   @default(false) @map("all_docs_signed")
 
-  // Commission snapshot (for the deal submission that may follow)
-  commissionPct Decimal? @map("commission_pct") @db.Decimal(5, 2)
-  monthlyRent   Decimal? @map("monthly_rent") @db.Decimal(12, 2)
+  // Fee / commission snapshot (for the deal submission that may follow)
+  commissionPct  Decimal? @map("commission_pct") @db.Decimal(5, 2)
+  commissionFlat Decimal? @map("commission_flat") @db.Decimal(12, 2)
+  monthlyRent    Decimal? @map("monthly_rent") @db.Decimal(12, 2)
 
   // Notes
   notes String?

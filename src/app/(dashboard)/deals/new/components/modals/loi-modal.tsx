@@ -2,8 +2,9 @@
 
 import React from "react";
 import { useDealModeler } from "../../deal-modeler-context";
-import { generateLoiPdf } from "@/lib/loi-pdf";
-import { generateLoiDocx } from "@/lib/loi-docx";
+// PDF/DOCX generators loaded dynamically on demand to reduce bundle size
+const loadLoiPdf = () => import("@/lib/loi-pdf");
+const loadLoiDocx = () => import("@/lib/loi-docx");
 import { generateLoiPlainText, getLoiCoverEmailSubject, getLoiCoverEmailHtml } from "@/lib/loi-template";
 import { sendLoiEmail } from "../../../actions";
 
@@ -166,13 +167,13 @@ export function LoiModal() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { const pdf = generateLoiPdf(loiData); pdf.download(); }}
+              onClick={async () => { const { generateLoiPdf } = await loadLoiPdf(); const pdf = generateLoiPdf(loiData); pdf.download(); }}
               className="px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg transition-colors"
             >
               Download PDF
             </button>
             <button
-              onClick={() => { generateLoiDocx(loiData); }}
+              onClick={async () => { const { generateLoiDocx } = await loadLoiDocx(); await generateLoiDocx(loiData); }}
               className="px-4 py-2 border border-white/10 hover:bg-white/5 text-slate-300 text-sm font-medium rounded-lg transition-colors"
             >
               Download DOCX
@@ -192,6 +193,7 @@ export function LoiModal() {
                 setLoiSending(true);
                 setLoiMsg(null);
                 try {
+                  const { generateLoiPdf } = await loadLoiPdf();
                   const pdf = generateLoiPdf(loiData);
                   const pdfBase64 = pdf.base64();
                   const subject = getLoiCoverEmailSubject(loiData);
