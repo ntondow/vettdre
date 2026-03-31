@@ -206,13 +206,13 @@ export async function getEarningsSummary(period: EarningsPeriod = "month"): Prom
       where: { orgId, agentId, status: "paid", updatedAt: { gte: startOfWeek } },
       _sum: { agentPayout: true },
     }),
-    // Period deals
+    // Period deals (all statuses - for counting pipeline volume/deals)
     prisma.dealSubmission.aggregate({
       where: { orgId, agentId, ...periodFilter },
       _count: { id: true },
       _sum: { transactionValue: true, totalCommission: true },
     }),
-    // Period paid
+    // Period paid (only paid deals for earnings calculation)
     prisma.dealSubmission.aggregate({
       where: { orgId, agentId, status: "paid", ...periodFilter },
       _sum: { agentPayout: true },
@@ -261,12 +261,14 @@ export async function getEarningsSummary(period: EarningsPeriod = "month"): Prom
   const { labels, starts } = getChartLabels(period);
   const earningsByPeriod = labels.map((label, i) => {
     const rangeStart = starts[i];
+    // Next range starts at starts[i+1], or end of current period
     const rangeEnd = i < starts.length - 1 ? starts[i + 1] : new Date(now.getTime() + 86400000);
 
     let earned = 0;
     let deals = 0;
     for (const deal of chartDeals) {
       const dt = new Date(deal.updatedAt);
+      // Check if deal's updatedAt falls in this range (inclusive start, exclusive end)
       if (dt >= rangeStart && dt < rangeEnd) {
         earned += Number(deal.agentPayout) || 0;
         deals++;
@@ -276,6 +278,9 @@ export async function getEarningsSummary(period: EarningsPeriod = "month"): Prom
   });
 
   // ── Period calculations ─────────────────────────────────────
+  // Note: periodDeals counts ALL deals in period (any status), but periodEarned only counts PAID deals.
+  // This is intentional: periodDeals shows pipeline activity, periodEarned shows actual payout.
+  // For averages, we use periodDeals as the denominator to show per-deal metrics.
   const periodDeals = periodDealsAgg._count.id || 0;
   const periodVolume = Number(periodDealsAgg._sum.transactionValue || 0);
   const periodTotalCommission = Number(periodDealsAgg._sum.totalCommission || 0);

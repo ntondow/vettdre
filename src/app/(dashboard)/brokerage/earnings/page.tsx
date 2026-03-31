@@ -70,10 +70,10 @@ function EarningsChart({ data, maxHeight = 140 }: { data: EarningsSummary["earni
   const hasData = data.some((d) => d.earned > 0);
 
   return (
-    <div className="flex items-end gap-1.5 sm:gap-2" style={{ height: maxHeight }}>
+    <div className="flex items-end gap-1.5 sm:gap-2" style={{ height: maxHeight }} role="img" aria-label="Earnings over time chart">
       {data.map((item, i) => {
         const pct = (item.earned / maxEarned) * 100;
-        const barHeight = Math.max(hasData ? pct : 0, 2);
+        const barHeight = hasData ? Math.max(pct, 2) : 0;
         const isLast = i === data.length - 1;
 
         return (
@@ -89,6 +89,7 @@ function EarningsChart({ data, maxHeight = 140 }: { data: EarningsSummary["earni
             {/* Bar */}
             <div className="w-full flex items-end justify-center" style={{ height: maxHeight - 20 }}>
               <div
+                aria-label={`${item.label}: ${fmt(item.earned)} from ${item.deals} deal${item.deals !== 1 ? "s" : ""}`}
                 className={`w-full max-w-[32px] rounded-t-md transition-all duration-300 ${
                   isLast ? "bg-green-500" : item.earned > 0 ? "bg-blue-500" : "bg-slate-200"
                 } group-hover:opacity-80`}
@@ -158,7 +159,13 @@ export default function AgentEarningsPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16 text-center">
         <Wallet className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-        <p className="text-slate-500 font-medium">{error}</p>
+        <p className="text-slate-500 font-medium mb-4">{error}</p>
+        <button
+          onClick={() => loadData(period)}
+          className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Try Again
+        </button>
       </div>
     );
   }
@@ -166,7 +173,7 @@ export default function AgentEarningsPage() {
   if (!data) return null;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 md:py-8 space-y-4">
+    <div className="max-w-2xl mx-auto px-4 py-6 md:py-8 space-y-4 pb-safe">
 
       {/* ── Hero: Balance Card ──────────────────────────────── */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-6 text-white relative overflow-hidden">
@@ -224,11 +231,14 @@ export default function AgentEarningsPage() {
       </div>
 
       {/* ── Period Selector (pill tabs) ────────────────────── */}
-      <div className="flex gap-1 overflow-x-auto no-scrollbar">
+      <div className="flex gap-1 overflow-x-auto no-scrollbar" role="tablist">
         {(["week", "month", "quarter", "year", "all"] as EarningsPeriod[]).map((p) => (
           <button
             key={p}
             onClick={() => handlePeriodChange(p)}
+            role="tab"
+            aria-selected={period === p}
+            aria-label={`View earnings for ${PERIOD_LABELS[p].toLowerCase()}`}
             className={`px-3.5 py-1.5 text-sm font-medium rounded-full whitespace-nowrap transition-colors ${
               period === p
                 ? "bg-slate-900 text-white"

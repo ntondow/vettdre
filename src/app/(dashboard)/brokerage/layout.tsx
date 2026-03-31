@@ -149,7 +149,12 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
       return;
     }
     // Other users: check BrokerAgent record via server action
-    getCurrentBrokerageRole().then(setRole).catch(() => setRole(null));
+    getCurrentBrokerageRole()
+      .then(setRole)
+      .catch((err) => {
+        console.error("Failed to fetch brokerage role:", err);
+        setRole(null);
+      });
   }, [orgRole]);
 
   const loading = role === undefined;
@@ -187,6 +192,7 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
                   <Link
                     key={item.href}
                     href={item.href}
+                    aria-current={active ? "page" : undefined}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
                       active
                         ? "bg-blue-600 text-white shadow-sm"
@@ -227,6 +233,7 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
                     <Link
                       key={item.href}
                       href={item.href}
+                      aria-current={active ? "page" : undefined}
                       className={`flex items-center gap-2.5 mx-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                         active
                           ? "bg-white text-blue-600 font-medium shadow-sm border border-slate-200"
