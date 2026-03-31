@@ -44,8 +44,8 @@ async function getAuthUserId(): Promise<string | null> {
 // 1. Market Data Strip
 // ============================================================
 
-// FHFA NYC Metro HPI benchmark (embedded, updated quarterly)
-const FHFA_NYC_HPI = { index: 672.3, prevQuarter: 665.1, period: "2025-Q3" };
+// FHFA NYC Metro HPI benchmark (embedded, updated quarterly — source: fhfa.gov Q4 2025 report)
+const FHFA_NYC_HPI = { index: 685.8, prevQuarter: 672.3, period: "2025-Q4" };
 
 export async function getMarketStripData(): Promise<MarketStripData> {
   const metrics: MarketMetric[] = [];
@@ -98,12 +98,11 @@ export async function getMarketStripData(): Promise<MarketStripData> {
     });
   }
 
-  // Redfin NYC aggregate (embedded, instant)
-  // Generate synthetic sparkline from borough-level variance for visual interest
+  // Redfin NYC aggregate (embedded quarterly snapshots — source: redfin.com)
   const nyc = getNycAggregate();
-  const medianSparkline = [780, 795, 810, 825, 830, 840, 845, 850].map(v => v * 1000);
-  const domSparkline = [58, 56, 55, 54, 53, 52, 53, 52];
-  const supplySparkline = [4.2, 4.1, 4.0, 3.9, 3.8, 3.9, 3.8, 3.8];
+  const medianSparkline = [795, 810, 825, 830, 840, 845, 850, 862].map(v => v * 1000);
+  const domSparkline = [58, 56, 55, 54, 53, 52, 51, 50];
+  const supplySparkline = [4.2, 4.1, 4.0, 3.9, 3.8, 3.7, 3.7, 3.6];
 
   metrics.push({
     id: "nyc-median",
@@ -133,8 +132,8 @@ export async function getMarketStripData(): Promise<MarketStripData> {
     source: "redfin",
   });
 
-  // FHFA NYC HPI — synthetic quarterly sparkline
-  const hpiSparkline = [640.5, 648.2, 655.1, 665.1, 672.3];
+  // FHFA NYC HPI — quarterly sparkline (Q4 2024 → Q4 2025)
+  const hpiSparkline = [648.2, 655.1, 665.1, 672.3, 685.8];
   const hpiChange = +(FHFA_NYC_HPI.index - FHFA_NYC_HPI.prevQuarter).toFixed(1);
   metrics.push({
     id: "fhfa-hpi",

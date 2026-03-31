@@ -471,6 +471,9 @@ model Organization {
   clientOnboardings ClientOnboarding[]
   documentTemplates DocumentTemplate[]
 
+  // Teams
+  teams             Team[]
+
   @@map("organizations")
 }
 
@@ -526,9 +529,38 @@ model User {
   phoneCalls              PhoneCall[]
   brokerAgent             BrokerAgent?
 
+  // Team assignment
+  teamId                  String?                  @map("team_id")
+  team                    Team?                    @relation(fields: [teamId], references: [id])
+
   @@unique([orgId, email])
   @@index([orgId])
+  @@index([teamId])
   @@map("users")
+}
+
+model Team {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  name          String
+  slug          String
+  type          String   @default("generic")
+  parentTeamId  String?  @map("parent_team_id")
+  description   String?
+  logoUrl       String?  @map("logo_url")
+  settings      Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  parentTeam    Team?        @relation("TeamHierarchy", fields: [parentTeamId], references: [id])
+  subTeams      Team[]       @relation("TeamHierarchy")
+  users         User[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@index([parentTeamId])
+  @@map("teams")
 }
 
 model Contact {

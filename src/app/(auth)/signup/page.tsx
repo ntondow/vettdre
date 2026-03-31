@@ -24,7 +24,13 @@ function SignUpForm() {
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
   const refCode = searchParams.get("ref");
+  const prefillEmail = searchParams.get("email");
   const supabase = createClient();
+
+  // Pre-fill email from invite link
+  useEffect(() => {
+    if (prefillEmail && !email) setEmail(prefillEmail);
+  }, [prefillEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Store referral code in cookie (30-day expiry) so it survives OAuth/magic-link flow
   useEffect(() => {

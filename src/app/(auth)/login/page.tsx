@@ -1,5 +1,5 @@
 "use client";
-import { useState, Suspense } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -22,7 +22,13 @@ function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get("redirect");
+  const prefillEmail = searchParams.get("email");
   const supabase = createClient();
+
+  // Pre-fill email from invite link
+  useEffect(() => {
+    if (prefillEmail && !email) setEmail(prefillEmail);
+  }, [prefillEmail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError(null);

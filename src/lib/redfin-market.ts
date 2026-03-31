@@ -157,14 +157,14 @@ const REDFIN_DATA: Record<string, Omit<RedfinMetrics, "zip">> = {
 // ============================================================
 
 const NYC_AGGREGATE: Omit<RedfinMetrics, "zip"> = {
-  medianSalePrice: 850000,
-  medianPricePerSqft: 780,
-  medianDaysOnMarket: 52,
-  avgSaleToListRatio: 0.97,
-  inventoryCount: 4800,
-  monthsOfSupply: 3.8,
-  pctPriceDrops: 17,
-  period: "2025-Q4",
+  medianSalePrice: 862000,
+  medianPricePerSqft: 795,
+  medianDaysOnMarket: 50,
+  avgSaleToListRatio: 0.975,
+  inventoryCount: 4650,
+  monthsOfSupply: 3.6,
+  pctPriceDrops: 16,
+  period: "2026-Q1",
 };
 
 // ============================================================

@@ -130,6 +130,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     upcomingEvents,
     // Revenue by month
     paymentsLast6,
+    // Payouts by month
+    paidInvoicesLast6,
   ] = await Promise.all([
     // --- Overview ---
     prisma.payment.aggregate({
@@ -244,6 +246,17 @@ export async function getDashboardData(): Promise<DashboardData> {
       },
       select: { amount: true, paymentDate: true },
     }),
+
+    // --- Payouts by month (last 6 months) ---
+    prisma.invoice.findMany({
+      where: {
+        orgId,
+        status: "paid",
+        paidAt: { gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) },
+        ...agentFilter,
+      },
+      select: { agentSplit: true, paidAt: true },
+    }),
   ]);
 
   // ── Process Revenue by Month ────────────────────────────────
@@ -265,8 +278,14 @@ export async function getDashboardData(): Promise<DashboardData> {
       }
     }
 
-    // Estimate payouts as ~70% of revenue (actual payout data requires more complex join)
-    const payouts = Math.round(revenue * 0.7);
+    let payouts = 0;
+    for (const inv of paidInvoicesLast6) {
+      if (inv.paidAt) {
+        const pd = new Date(inv.paidAt);
+        const pk = `${pd.getFullYear()}-${String(pd.getMonth() + 1).padStart(2, "0")}`;
+        if (pk === monthKey) payouts += Number(inv.agentSplit) || 0;
+      }
+    }
     revenueByMonth.push({ month: label, revenue, payouts, net: revenue - payouts });
   }
 

@@ -130,7 +130,7 @@ export default function AgentJoinClient({ token }: { token: string }) {
         {/* Action buttons */}
         <div className="space-y-3">
           <button
-            onClick={() => router.push(`/login?redirect=${encodeURIComponent(acceptPath)}`)}
+            onClick={() => router.push(`/login?redirect=${encodeURIComponent(acceptPath)}&email=${encodeURIComponent(details.agentEmail)}`)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-white text-sm font-medium rounded-lg transition-colors"
             style={{ backgroundColor: brandColor }}
           >
@@ -138,7 +138,7 @@ export default function AgentJoinClient({ token }: { token: string }) {
             I already have an account
           </button>
           <button
-            onClick={() => router.push(`/signup?redirect=${encodeURIComponent(acceptPath)}`)}
+            onClick={() => router.push(`/signup?redirect=${encodeURIComponent(acceptPath)}&email=${encodeURIComponent(details.agentEmail)}`)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white text-slate-700 text-sm font-medium rounded-lg border border-slate-300 hover:bg-slate-50 transition-colors"
           >
             <UserPlus className="h-4 w-4" />
