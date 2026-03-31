@@ -497,10 +497,10 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <Link
-                  href="/brokerage/agents"
+                  href="/brokerage/setup"
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
                 >
-                  Get Started
+                  Setup Guide
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </div>

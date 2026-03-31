@@ -169,9 +169,8 @@ export default function ListingImport({ onComplete }: Props) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
   const [dragOver, setDragOver] = useState(false);
-  const [result, setResult] = useState<{ created: number; skipped: number; errors: string[] }>({
+  const [result, setResult] = useState<{ created: number; errors: string[] }>({
     created: 0,
-    skipped: 0,
     errors: [],
   });
 
@@ -268,7 +267,7 @@ export default function ListingImport({ onComplete }: Props) {
       }));
 
       const res = await bulkCreateListings(bulkRows);
-      setResult({ created: res.created, skipped: 0, errors: res.errors });
+      setResult({ created: res.created, errors: res.errors });
       setStage("success");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to import listings");
@@ -284,7 +283,7 @@ export default function ListingImport({ onComplete }: Props) {
     setRows([]);
     setSelected(new Set());
     setError("");
-    setResult({ created: 0, skipped: 0, errors: [] });
+    setResult({ created: 0, errors: [] });
   }
 
   // ── Render: Upload ────────────────────────────────────────
