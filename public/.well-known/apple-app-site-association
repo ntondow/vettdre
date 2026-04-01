@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["582QXMN7H2.com.vettdre.mobile"],
+        "paths": ["*"]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["582QXMN7H2.com.vettdre.mobile"]
+  },
+  "appclips": {}
+}

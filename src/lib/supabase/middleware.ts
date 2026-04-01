@@ -39,11 +39,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/submit-deal") ||
     pathname.startsWith("/sign/") ||
     pathname.startsWith("/leasing-agent") ||
+    pathname.startsWith("/privacy") ||
+    pathname.startsWith("/support") ||
     pathname.startsWith("/api/onboarding") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/twilio") ||
     pathname.startsWith("/api/book") ||
     pathname.startsWith("/api/automations/cron") ||
+    pathname.startsWith("/api/mobile") ||
     pathname.startsWith("/api/stripe/checkout") ||
     pathname.startsWith("/api/stripe/portal") ||
     pathname === "/";
