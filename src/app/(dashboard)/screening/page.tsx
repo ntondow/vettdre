@@ -103,7 +103,7 @@ export default function ScreeningListPage() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
           {[
             { label: "Total", value: stats.total, color: "text-slate-900" },
             { label: "Pending", value: stats.pending, color: "text-amber-600" },
@@ -113,9 +113,9 @@ export default function ScreeningListPage() {
             { label: "Denied", value: stats.denied, color: "text-red-600" },
             { label: "Avg Score", value: stats.avgScore != null ? Math.round(stats.avgScore) : "—", color: "text-slate-900" },
           ].map((s) => (
-            <div key={s.label} className="bg-white rounded-lg border border-slate-200 p-3 text-center">
-              <p className={`text-lg font-bold ${s.color}`}>{s.value}</p>
-              <p className="text-[11px] text-slate-500 font-medium">{s.label}</p>
+            <div key={s.label} className="bg-white rounded-lg border border-slate-200 p-4 text-center">
+              <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-slate-500 font-medium mt-1">{s.label}</p>
             </div>
           ))}
         </div>
@@ -146,7 +146,7 @@ export default function ScreeningListPage() {
       </div>
 
       {/* Application List */}
-      <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-slate-200 overflow-visible">
         {loading ? (
           /* Skeleton Shimmer */
           <div className="divide-y divide-slate-100">
@@ -199,7 +199,7 @@ export default function ScreeningListPage() {
             </div>
 
             {/* Desktop Table */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden md:block">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50">
@@ -262,12 +262,25 @@ export default function ScreeningListPage() {
                               >
                                 View Details
                               </Link>
-                              {item.status === "draft" && (
+                              <button
+                                onClick={() => {
+                                  const url = `${window.location.origin}/screen/${item.accessToken}`;
+                                  navigator.clipboard.writeText(url).then(() => {
+                                    setSuccess("Link copied to clipboard");
+                                    setTimeout(() => setSuccess(null), 3000);
+                                  });
+                                  setActionMenu(null);
+                                }}
+                                className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                              >
+                                Copy Link
+                              </button>
+                              {["draft", "invited"].includes(item.status) && (
                                 <button
                                   onClick={() => handleSendInvite(item.id)}
                                   className="block w-full text-left px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
                                 >
-                                  Send Invite
+                                  {item.status === "draft" ? "Send Invite" : "Resend Invite"}
                                 </button>
                               )}
                               {!["approved", "denied", "withdrawn"].includes(item.status) && (

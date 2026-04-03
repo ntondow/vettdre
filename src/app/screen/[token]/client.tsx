@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
 import WizardShell from "@/components/screening/wizard/WizardShell";
 import LandingView from "@/components/screening/wizard/LandingView";
+import OtpStep from "@/components/screening/wizard/OtpStep";
 import PersonalInfoStep from "@/components/screening/wizard/PersonalInfoStep";
 import SignatureStep from "@/components/screening/wizard/SignatureStep";
 import PlaidStep from "@/components/screening/wizard/PlaidStep";
@@ -14,7 +15,7 @@ import { WIZARD_STEPS, BASE_SCREENING_FEE_CENTS } from "@/lib/screening/constant
 
 // ── Types ─────────────────────────────────────────────────────
 
-type WizardStep = "landing" | "personal_info" | "signature" | "plaid" | "documents" | "payment" | "confirmation";
+type WizardStep = "landing" | "otp" | "personal_info" | "signature" | "plaid" | "documents" | "payment" | "confirmation";
 
 interface ApplicationData {
   application: {
@@ -53,6 +54,9 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // OTP state
+  const [otpMaskedEmail, setOtpMaskedEmail] = useState<string | null>(null);
 
   // Plaid state
   const [plaidLinkToken, setPlaidLinkToken] = useState<string | null>(null);
@@ -122,8 +126,47 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
 
   // ── Step Handlers ──────────────────────────────────────────
 
-  const handleStart = () => {
+  const handleStart = async () => {
     setError(null);
+    try {
+      setSaving(true);
+      const res = await fetch(`/api/screen/${token}/otp-send`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error || "Failed to send verification code");
+        return;
+      }
+      setOtpMaskedEmail(body.maskedEmail);
+      setStep("otp");
+    } catch {
+      setError("Failed to send verification code. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleOtpResend = async () => {
+    const res = await fetch(`/api/screen/${token}/otp-send`, { method: "POST" });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || "Failed to resend code");
+    if (body.maskedEmail) setOtpMaskedEmail(body.maskedEmail);
+  };
+
+  const handleOtpVerify = async (code: string) => {
+    const res = await fetch(`/api/screen/${token}/otp-verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code }),
+    });
+    const body = await res.json();
+    return {
+      success: !!body.success,
+      error: body.error,
+      remainingAttempts: body.remainingAttempts,
+    };
+  };
+
+  const handleOtpVerified = () => {
     setStep("personal_info");
   };
 
@@ -306,17 +349,37 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
   const currentStepNum = stepIndex >= 0 ? stepIndex + 1 : 0;
   const currentStepLabel = WIZARD_STEPS.find((s) => s.key === step)?.label || "";
 
-  // Landing page — no shell
+  // Landing page — no shell, but centered with max-width
   if (step === "landing") {
     return (
-      <LandingView
-        propertyAddress={application.propertyAddress}
-        unitNumber={application.unitNumber || undefined}
-        orgName={orgName}
-        agentName={agentName || "Your Agent"}
-        tier={application.screeningTier}
-        onStart={handleStart}
-      />
+      <div className="min-h-dvh bg-white flex flex-col">
+        <main className="mx-auto px-4 w-full flex-1 max-w-lg">
+          <LandingView
+            propertyAddress={application.propertyAddress}
+            unitNumber={application.unitNumber || undefined}
+            orgName={orgName}
+            agentName={agentName || "Your Agent"}
+            tier={application.screeningTier}
+            onStart={handleStart}
+          />
+        </main>
+      </div>
+    );
+  }
+
+  // OTP verification step — no shell, centered like landing
+  if (step === "otp") {
+    return (
+      <div className="min-h-dvh bg-white flex flex-col">
+        <main className="mx-auto px-4 w-full flex-1 max-w-lg flex items-center justify-center">
+          <OtpStep
+            maskedEmail={otpMaskedEmail || "your email"}
+            onVerified={handleOtpVerified}
+            onResend={handleOtpResend}
+            onVerify={handleOtpVerify}
+          />
+        </main>
+      </div>
     );
   }
 

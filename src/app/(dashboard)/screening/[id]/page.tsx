@@ -265,6 +265,18 @@ export default function ScreeningDetailPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Copy Applicant Link */}
+            {app.accessToken && (
+              <button
+                onClick={() => {
+                  const url = `${window.location.origin}/screen/${app.accessToken}`;
+                  navigator.clipboard.writeText(url).then(() => showSuccess("Link copied to clipboard"));
+                }}
+                className="rounded-lg border border-slate-200 text-slate-600 px-3 py-1.5 text-sm font-medium hover:bg-slate-50 transition-colors"
+              >
+                Copy Link
+              </button>
+            )}
             {app.reportPdfPath && (
               <button
                 onClick={handleDownloadReport}
@@ -274,12 +286,12 @@ export default function ScreeningDetailPage() {
                 {downloading ? "Downloading…" : "Download Report"}
               </button>
             )}
-            {app.status === "draft" && (
+            {["draft", "invited"].includes(app.status) && (
               <button
                 onClick={handleSendInvite}
                 className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors"
               >
-                Send Invite
+                {app.status === "draft" ? "Send Invite" : "Resend Invite"}
               </button>
             )}
             {!["approved", "denied", "withdrawn"].includes(app.status) && (
@@ -406,7 +418,7 @@ function OverviewTab({ app, primaryApplicant, otherApplicants }: { app: any; pri
             <p className="text-slate-700">{fmtDate(app.leaseStartDate)}</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mt-4 pt-4 border-t border-slate-100">
           <div>
             <p className="text-slate-400 text-xs mb-0.5">Tier</p>
             <span className={`text-xs font-medium px-2 py-0.5 rounded ${

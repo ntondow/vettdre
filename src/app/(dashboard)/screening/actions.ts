@@ -68,6 +68,7 @@ async function getAuthContext(): Promise<AuthContext | null> {
 
 export interface ScreeningListItem {
   id: string;
+  accessToken: string;
   propertyAddress: string;
   unitNumber: string | null;
   tier: string;
@@ -118,6 +119,7 @@ export async function listApplications(
   return serialize({
     items: items.map((app: any) => ({
       id: app.id,
+      accessToken: app.accessToken,
       propertyAddress: app.propertyAddress,
       unitNumber: app.unitNumber,
       tier: app.screeningTier,
