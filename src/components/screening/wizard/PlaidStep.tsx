@@ -6,6 +6,7 @@ import { Loader2, CheckCircle, Lock, ChevronRight } from "lucide-react";
 
 interface Props {
   linkToken: string | null;
+  screeningToken?: string;
   onSuccess: (publicToken: string, metadata: { institution: { institution_id: string; name: string } }) => void;
   onSkip: () => void;
   loading: boolean;
@@ -14,11 +15,21 @@ interface Props {
 
 export default function PlaidStep({
   linkToken,
+  screeningToken,
   onSuccess,
   onSkip,
   loading,
   connected,
 }: Props) {
+  // Store link token and screening token in sessionStorage for OAuth redirect flow
+  React.useEffect(() => {
+    if (linkToken && typeof window !== "undefined") {
+      sessionStorage.setItem("plaid_link_token", linkToken);
+    }
+    if (screeningToken && typeof window !== "undefined") {
+      sessionStorage.setItem("screening_token", screeningToken);
+    }
+  }, [linkToken, screeningToken]);
   // Initialize Plaid Link hook
   const { open, ready } = usePlaidLink({
     token: linkToken || "",

@@ -435,6 +435,7 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
         {step === "plaid" && (
           <PlaidStep
             linkToken={plaidLinkToken}
+            screeningToken={token}
             onSuccess={handlePlaidSuccess}
             onSkip={handlePlaidSkip}
             loading={saving}

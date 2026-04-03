@@ -81,7 +81,7 @@ export async function POST(
     const { linkToken } = await createLinkToken({
       applicantId,
       applicantName: `${applicant.firstName} ${applicant.lastName}`,
-      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.vettdre.com"}/screen/${token}`,
+      redirectUri: `${process.env.NEXT_PUBLIC_APP_URL || "https://app.vettdre.com"}/screen/oauth`,
     });
 
     return NextResponse.json({ linkToken });
