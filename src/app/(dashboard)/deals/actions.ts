@@ -185,8 +185,9 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
   const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
   const borough = boroNames[parseInt(boro)] || "";
 
-  // Fetch PLUTO, ACRIS Sales, HPD, Rent Stab in parallel
-  const [plutoResult, salesResult, hpdResult, rentStabResult] = await Promise.allSettled([
+  // Fetch PLUTO, ACRIS Sales, HPD in parallel
+  // NOTE: Old rent stab dataset 35ss-ekc5 removed — using heuristic instead
+  const [plutoResult, salesResult, hpdResult] = await Promise.allSettled([
     // PLUTO
     fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boro}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar,condession&$limit=1`)
       .then(r => r.ok ? r.json() : []),
@@ -196,15 +197,11 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
     // HPD Registrations
     fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boro}' AND block='${block}' AND lot='${lot}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
-    // Rent Stabilization
-    fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
-      .then(r => r.ok ? r.json() : []),
   ]);
 
   const plutoData = plutoResult.status === "fulfilled" ? plutoResult.value : [];
   const salesData = salesResult.status === "fulfilled" ? salesResult.value : [];
   const hpdData = hpdResult.status === "fulfilled" ? hpdResult.value : [];
-  const rentStabData = rentStabResult.status === "fulfilled" ? rentStabResult.value : [];
 
   if (plutoData.length === 0) return null;
   const p = plutoData[0];
@@ -236,9 +233,9 @@ export async function fetchDealPrefillData(bbl: string): Promise<DealPrefillData
   const hpdUnits = hpdData.length > 0 ? parseInt(hpdData[0].unitsres || "0") : 0;
 
   // Rent stabilized units
-  const rentStabilizedUnits = Array.isArray(rentStabData) && rentStabData.length > 0
-    ? parseInt(rentStabData[0].uc2024rstab || rentStabData[0].uc2023rstab || rentStabData[0].uc2022rstab || "0")
-    : 0;
+  // Rent stabilized units — heuristic (old dataset 35ss-ekc5 is dead)
+  const yearBuilt = parseInt(p.yearbuilt || "0");
+  const rentStabilizedUnits = (yearBuilt > 0 && yearBuilt < 1974 && unitsRes >= 6) ? unitsRes : 0;
 
   // Elevator detection
   const numFloors = parseInt(p.numfloors || "0");
@@ -357,7 +354,8 @@ export async function underwriteDeal(params: {
   const borough = params.borough || boroNames[parseInt(boroCode)] || "";
 
   // Fetch all data sources in parallel (Phase 4: enhanced with HPD detail + LL84)
-  const [plutoResult, salesResult, hpdRegResult, hpdViolResult, rentStabResult, hpdViolDetailResult, hpdComplaintResult, hpdLitigationResult, dobPermitResult, ll84Result, dobViolResult] = await Promise.allSettled([
+  // NOTE: Old rent stab dataset 35ss-ekc5 removed — using heuristic instead
+  const [plutoResult, salesResult, hpdRegResult, hpdViolResult, hpdViolDetailResult, hpdComplaintResult, hpdLitigationResult, dobPermitResult, ll84Result, dobViolResult] = await Promise.allSettled([
     fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/${SALES_ID}.json?$where=borough='${boroCode}' AND block='${block}' AND lot='${lot}'&$order=sale_date DESC&$limit=5`)
@@ -365,8 +363,6 @@ export async function underwriteDeal(params: {
     fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/wvxf-dwi5.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=count(*) as cnt`)
-      .then(r => r.ok ? r.json() : []),
-    fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     // Phase 4: HPD violations by class for building condition scoring
     fetch(`${NYC_BASE}/wvxf-dwi5.json?$where=boroid='${boroCode}' AND block='${block}' AND lot='${lot}'&$select=class,count(*) as cnt&$group=class`)
@@ -392,7 +388,6 @@ export async function underwriteDeal(params: {
   const salesData = salesResult.status === "fulfilled" ? salesResult.value : [];
   const hpdRegData = hpdRegResult.status === "fulfilled" ? hpdRegResult.value : [];
   const hpdViolData = hpdViolResult.status === "fulfilled" ? hpdViolResult.value : [];
-  const rentStabData = rentStabResult.status === "fulfilled" ? rentStabResult.value : [];
 
   // Phase 4: Parse enhanced data
   const hpdViolDetail = hpdViolDetailResult.status === "fulfilled" ? hpdViolDetailResult.value : [];
@@ -413,7 +408,9 @@ export async function underwriteDeal(params: {
   const assessTotal = parseInt(p.assesstot || "0");
   const hpdUnits = hpdRegData.length > 0 ? parseInt(hpdRegData[0].unitsres || "0") : 0;
   const hpdViolationCount = hpdViolData.length > 0 ? parseInt(hpdViolData[0]?.cnt || "0") : 0;
-  const rentStabilizedUnits = rentStabData.length > 0 ? parseInt(rentStabData[0]?.uc2022rstab || rentStabData[0]?.uc2021rstab || "0") : 0;
+  // Rent stabilized units — heuristic (old dataset 35ss-ekc5 is dead)
+  const yearBuiltVal = parseInt(p.yearbuilt || "0");
+  const rentStabilizedUnits = (yearBuiltVal > 0 && yearBuiltVal < 1974 && unitsRes >= 6) ? unitsRes : 0;
 
   // Parse last sale
   let lastSalePrice = 0;

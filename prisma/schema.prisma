@@ -132,6 +132,7 @@ enum ActivityType {
   meeting
   document
   system
+  screening
 }
 
 enum ActivityDirection {
@@ -196,6 +197,7 @@ enum AutomationTrigger {
   deal_won
   deal_lost
   contact_enriched
+  screening_completed
   custom
 }
 
@@ -395,6 +397,66 @@ enum SigningStatus {
   signed
 }
 
+// ── Tenant Screening ────────────────────────────────────────
+
+enum ScreeningTier {
+  base
+  enhanced
+}
+
+enum ScreeningStatus {
+  draft
+  invited
+  in_progress
+  pending_payment
+  processing
+  complete
+  approved
+  conditional
+  denied
+  withdrawn
+}
+
+enum ScreeningApplicantRole {
+  main
+  co_applicant
+  guarantor
+  occupant
+}
+
+enum ScreeningApplicantStatus {
+  invited
+  in_progress
+  completed
+  skipped
+}
+
+enum FraudAssessment {
+  clean
+  low_risk
+  medium_risk
+  high_risk
+  fraudulent
+}
+
+enum ScreeningDocType {
+  pay_stub
+  w2
+  tax_return
+  ten99
+  bank_statement
+  employment_letter
+  landlord_reference
+  government_id
+  other
+}
+
+enum CreditBureau {
+  equifax
+  experian
+  transunion
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -474,6 +536,11 @@ model Organization {
   // Teams
   teams             Team[]
 
+  // Tenant Screening
+  stripeDefaultPaymentMethod String?                @map("stripe_default_payment_method")
+  screeningApplications      ScreeningApplication[]
+  screeningPayments          ScreeningPayment[]
+
   @@map("organizations")
 }
 
@@ -528,6 +595,10 @@ model User {
   smsMessages             SmsMessage[]
   phoneCalls              PhoneCall[]
   brokerAgent             BrokerAgent?
+
+  // Tenant Screening
+  screeningApplications   ScreeningApplication[] @relation("ScreeningAgent")
+  screeningEvents         ScreeningEvent[]       @relation("ScreeningEventAgent")
 
   // Team assignment
   teamId                  String?                  @map("team_id")
@@ -612,6 +683,9 @@ model Contact {
 
   // Client Onboarding (one-to-one)
   clientOnboarding ClientOnboarding?
+
+  // Tenant Screening
+  screeningApplications ScreeningApplication[]
 
   @@index([orgId, status])
   @@index([orgId, qualificationScore(sort: Desc)])
@@ -1004,6 +1078,22 @@ model AuditLog {
   @@index([orgId, entityType, entityId])
   @@index([orgId, action])
   @@map("audit_log")
+}
+
+// ── Webhook Idempotency ─────────────────────────────────────
+// Tracks processed webhook event IDs to prevent duplicate processing.
+// Auto-cleanup: records older than 7 days should be purged (cron or pg_cron).
+model ProcessedWebhook {
+  id          String   @id @default(uuid())
+  provider    String   // "stripe" | "plaid" | "crs"
+  eventId     String   @map("event_id")
+  eventType   String   @map("event_type")
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@unique([provider, eventId])
+  @@index([provider, eventId])
+  @@index([processedAt])
+  @@map("processed_webhooks")
 }
 
 model ProspectingList {
@@ -2704,4 +2794,445 @@ model DocumentTemplate {
   @@index([orgId])
   @@index([orgId, category])
   @@map("document_templates")
+}
+
+// ============================================================
+// TENANT SCREENING
+// ============================================================
+
+model ScreeningApplication {
+  id                  String          @id @default(uuid())
+  orgId               String          @map("org_id")
+  agentUserId         String          @map("agent_user_id")
+  contactId           String?         @map("contact_id")
+
+  // Property info
+  propertyAddress     String          @map("property_address")
+  unitNumber          String?         @map("unit_number")
+  monthlyRent         Decimal?        @map("monthly_rent") @db.Decimal(10, 2)
+
+  // Screening config
+  screeningTier       ScreeningTier   @default(base) @map("screening_tier")
+  status              ScreeningStatus @default(draft)
+
+  // Application field config (org-level override or default)
+  fieldConfig         Json            @default("{}") @map("field_config")
+
+  // Access token for public wizard (cryptographically random 32-char)
+  accessToken         String          @unique @map("access_token")
+
+  // Lifecycle timestamps
+  inviteSentAt        DateTime?       @map("invite_sent_at")
+  completedAt         DateTime?       @map("completed_at")
+  decisionAt          DateTime?       @map("decision_at")
+  decisionNotes       String?         @map("decision_notes")
+
+  // Report
+  reportPdfPath       String?         @map("report_pdf_path")
+  reportGeneratedAt   DateTime?       @map("report_generated_at")
+
+  // Risk score (computed after pipeline)
+  vettdreRiskScore    Decimal?        @map("vettdre_risk_score") @db.Decimal(5, 2)
+  riskRecommendation  String?         @map("risk_recommendation") // approve, conditional, decline
+  riskFactors         Json            @default("[]") @map("risk_factors")
+
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  organization        Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  agent               User            @relation("ScreeningAgent", fields: [agentUserId], references: [id])
+  contact             Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  applicants          ScreeningApplicant[]
+  payments            ScreeningPayment[]
+  events              ScreeningEvent[]
+  wellnessProfile     FinancialWellnessProfile?
+
+  @@index([orgId])
+  @@index([orgId, status])
+  @@index([agentUserId])
+  @@index([contactId])
+  @@index([accessToken])
+  @@map("screening_applications")
+}
+
+model ScreeningApplicant {
+  id                  String                    @id @default(uuid())
+  applicationId       String                    @map("application_id")
+  role                ScreeningApplicantRole    @default(main)
+
+  // Contact info
+  email               String
+  phone               String?
+  firstName           String?                   @map("first_name")
+  lastName            String?                   @map("last_name")
+
+  // Self-reported data (dynamic form fields stored as JSON)
+  personalInfo        Json                      @default("{}") @map("personal_info")
+
+  // SSN (encrypted via AES-256-GCM)
+  ssnEncrypted        String?                   @map("ssn_encrypted")
+
+  // Wizard progress
+  currentStep         Int                       @default(1) @map("current_step")
+  wizardCompleted     Boolean                   @default(false) @map("wizard_completed")
+  plaidSkipped        Boolean                   @default(false) @map("plaid_skipped")
+
+  // Invite tracking
+  inviteSentAt        DateTime?                 @map("invite_sent_at")
+  inviteMethod        String?                   @map("invite_method") // email, sms, both
+
+  // OTP for session resume
+  otpCode             String?                   @map("otp_code")
+  otpExpiresAt        DateTime?                 @map("otp_expires_at")
+  otpTarget           String?                   @map("otp_target") // email or phone used
+
+  status              ScreeningApplicantStatus  @default(invited)
+  createdAt           DateTime                  @default(now()) @map("created_at")
+  updatedAt           DateTime                  @updatedAt @map("updated_at")
+
+  // Relations
+  application         ScreeningApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  signatures          ScreeningSignature[]
+  plaidConnections    PlaidConnection[]
+  transactions        FinancialTransaction[]
+  creditReports       CreditReport[]
+  documents           ScreeningDocument[]
+  documentAnalyses    DocumentAnalysis[]
+  payments            ScreeningPayment[]
+  events              ScreeningEvent[]
+
+  @@index([applicationId])
+  @@index([email])
+  @@map("screening_applicants")
+}
+
+model ScreeningSignature {
+  id                  String   @id @default(uuid())
+  applicantId         String   @map("applicant_id")
+
+  // What was signed
+  documentType        String   @map("document_type") // credit_pull_consent, screening_terms, privacy_disclosure, fair_housing_notice, fcra_disclosure, general_consent
+  documentVersion     String   @map("document_version")
+  documentText        String   @map("document_text") @db.Text
+
+  // Signature data
+  signatureImagePath  String?  @map("signature_image_path") // Supabase Storage path
+  signatureHash       String   @map("signature_hash") // SHA-256(signature + document + timestamp)
+
+  // Audit info
+  ipAddress           String?  @map("ip_address")
+  userAgent           String?  @map("user_agent")
+
+  signedAt            DateTime @default(now()) @map("signed_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  // Relations
+  applicant           ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("screening_signatures")
+}
+
+model PlaidConnection {
+  id                  String   @id @default(uuid())
+  applicantId         String   @map("applicant_id")
+
+  // Plaid tokens (encrypted via AES-256-GCM)
+  accessTokenEncrypted String  @map("access_token_encrypted")
+  plaidItemId         String   @map("plaid_item_id")
+
+  // Institution info
+  institutionName     String?  @map("institution_name")
+  institutionId       String?  @map("institution_id")
+
+  // Sync status
+  status              String   @default("active") // active, error, disconnected
+  errorCode           String?  @map("error_code")
+  transactionsSynced  Boolean  @default(false) @map("transactions_synced")
+  incomeVerified      Boolean  @default(false) @map("income_verified")
+  identityVerified    Boolean  @default(false) @map("identity_verified")
+
+  // Account snapshots
+  accounts            Json     @default("[]")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  applicant           ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  transactions        FinancialTransaction[]
+
+  @@index([applicantId])
+  @@map("plaid_connections")
+}
+
+model FinancialTransaction {
+  id                  String   @id @default(uuid())
+  plaidConnectionId   String   @map("plaid_connection_id")
+  applicantId         String   @map("applicant_id")
+
+  // Plaid transaction data
+  plaidTransactionId  String?  @unique @map("plaid_transaction_id")
+  date                DateTime @db.Date
+  amount              Decimal  @db.Decimal(12, 2)
+  name                String?
+  merchantName        String?  @map("merchant_name")
+  category            String[] @default([])
+  primaryCategory     String?  @map("primary_category")
+
+  // VettdRE categorization
+  vettdreCategory     String?  @map("vettdre_category") // income_salary, rent_payment, nsf_fee, gambling, etc.
+
+  // Flags
+  isRecurring         Boolean  @default(false) @map("is_recurring")
+  isRedFlag           Boolean  @default(false) @map("is_red_flag")
+  redFlagReason       String?  @map("red_flag_reason")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  // Relations
+  plaidConnection     PlaidConnection    @relation(fields: [plaidConnectionId], references: [id], onDelete: Cascade)
+  applicant           ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([date])
+  @@index([vettdreCategory])
+  @@map("financial_transactions")
+}
+
+model CreditReport {
+  id                    String        @id @default(uuid())
+  applicantId           String        @map("applicant_id")
+
+  // Bureau info
+  bureau                CreditBureau
+  pullType              String        @map("pull_type") // soft, hard
+
+  // Score
+  creditScore           Int?          @map("credit_score")
+  scoreModel            String?       @map("score_model")
+
+  // Account summary
+  totalAccounts         Int?          @map("total_accounts")
+  openAccounts          Int?          @map("open_accounts")
+  totalBalance          Decimal?      @map("total_balance") @db.Decimal(12, 2)
+  totalMonthlyPayments  Decimal?      @map("total_monthly_payments") @db.Decimal(12, 2)
+  delinquentAccounts    Int?          @map("delinquent_accounts")
+  collectionsCount      Int?          @map("collections_count")
+  collectionsTotal      Decimal?      @map("collections_total") @db.Decimal(12, 2)
+  publicRecordsCount    Int?          @map("public_records_count")
+  inquiriesCount12m     Int?          @map("inquiries_count_12m")
+  oldestAccountMonths   Int?          @map("oldest_account_months")
+
+  // Eviction records
+  evictionRecords       Json          @default("[]") @map("eviction_records")
+  evictionCount         Int           @default(0) @map("eviction_count")
+
+  // Criminal records
+  criminalRecords       Json          @default("[]") @map("criminal_records")
+  criminalCount         Int           @default(0) @map("criminal_count")
+
+  // Bankruptcy
+  bankruptcyRecords     Json          @default("[]") @map("bankruptcy_records")
+  hasActiveBankruptcy   Boolean       @default(false) @map("has_active_bankruptcy")
+
+  // Raw data (encrypted)
+  rawReportEncrypted    String?       @map("raw_report_encrypted") @db.Text
+
+  // Status
+  status                String        @default("pending") // pending, completed, failed, expired
+  errorMessage          String?       @map("error_message")
+  pulledAt              DateTime?     @map("pulled_at")
+  expiresAt             DateTime?     @map("expires_at")
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  // Relations
+  applicant             ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("credit_reports")
+}
+
+model ScreeningDocument {
+  id                  String             @id @default(uuid())
+  applicantId         String             @map("applicant_id")
+
+  // File info
+  fileName            String             @map("file_name")
+  filePath            String             @map("file_path") // Supabase Storage path
+  fileSize            Int?               @map("file_size")
+  mimeType            String?            @map("mime_type")
+  documentType        ScreeningDocType?  @map("document_type")
+
+  // Analysis status
+  analysisStatus      String             @default("pending") @map("analysis_status") // pending, processing, completed, failed
+
+  createdAt           DateTime           @default(now()) @map("created_at")
+
+  // Relations
+  applicant           ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  analysis            DocumentAnalysis?
+
+  @@index([applicantId])
+  @@map("screening_documents")
+}
+
+model DocumentAnalysis {
+  id                  String          @id @default(uuid())
+  documentId          String          @unique @map("document_id")
+  applicantId         String          @map("applicant_id")
+
+  // Layer 1: Metadata forensics
+  metadataFlags       Json            @default("{}") @map("metadata_flags")
+  metadataRiskLevel   String?         @map("metadata_risk_level") // clean, warning, suspicious, fraudulent
+
+  // Layer 2: AI data extraction
+  extractedData       Json            @default("{}") @map("extracted_data")
+  extractionConfidence Decimal?       @map("extraction_confidence") @db.Decimal(5, 2)
+
+  // Layer 3: Cross-verification against Plaid
+  crossVerification   Json            @default("{}") @map("cross_verification")
+  incomeMatchesPlaid  Boolean?        @map("income_matches_plaid")
+  employerMatchesPlaid Boolean?       @map("employer_matches_plaid")
+  balanceMatchesPlaid Boolean?        @map("balance_matches_plaid")
+  discrepancies       Json            @default("[]")
+
+  // Fraud assessment
+  fraudScore          Decimal?        @map("fraud_score") @db.Decimal(5, 2)
+  fraudFlags          Json            @default("[]") @map("fraud_flags")
+  fraudAssessment     FraudAssessment? @map("fraud_assessment")
+
+  // AI analysis
+  aiAnalysisSummary   String?         @map("ai_analysis_summary") @db.Text
+  aiModelUsed         String?         @map("ai_model_used")
+
+  analyzedAt          DateTime        @default(now()) @map("analyzed_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+
+  // Relations
+  document            ScreeningDocument  @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  applicant           ScreeningApplicant @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([fraudAssessment])
+  @@map("document_analyses")
+}
+
+model FinancialWellnessProfile {
+  id                      String   @id @default(uuid())
+  applicantId             String   @map("applicant_id")
+  applicationId           String   @unique @map("application_id")
+
+  // Income
+  avgMonthlyIncome        Decimal? @map("avg_monthly_income") @db.Decimal(12, 2)
+  incomeSources           Json     @default("[]") @map("income_sources")
+  incomeStabilityScore    Decimal? @map("income_stability_score") @db.Decimal(5, 2)
+  incomeTrend             String?  @map("income_trend") // increasing, stable, decreasing, volatile
+
+  // Expenses
+  avgMonthlyExpenses      Decimal? @map("avg_monthly_expenses") @db.Decimal(12, 2)
+  recurringObligations    Json     @default("[]") @map("recurring_obligations")
+  estimatedMonthlyDebt    Decimal? @map("estimated_monthly_debt") @db.Decimal(12, 2)
+
+  // Ratios
+  incomeToRentRatio       Decimal? @map("income_to_rent_ratio") @db.Decimal(5, 2)
+  debtToIncomeRatio       Decimal? @map("debt_to_income_ratio") @db.Decimal(5, 2)
+  disposableIncome        Decimal? @map("disposable_income") @db.Decimal(12, 2)
+
+  // Balances
+  avgBalance30d           Decimal? @map("avg_balance_30d") @db.Decimal(12, 2)
+  avgBalance60d           Decimal? @map("avg_balance_60d") @db.Decimal(12, 2)
+  avgBalance90d           Decimal? @map("avg_balance_90d") @db.Decimal(12, 2)
+  lowestBalance90d        Decimal? @map("lowest_balance_90d") @db.Decimal(12, 2)
+
+  // Rent payment history
+  rentPaymentsFound       Int      @default(0) @map("rent_payments_found")
+  rentPaymentsOnTime      Int      @default(0) @map("rent_payments_on_time")
+  rentPaymentConsistency  String?  @map("rent_payment_consistency") // excellent, good, fair, poor, no_history
+
+  // Red flags
+  nsfCount90d             Int      @default(0) @map("nsf_count_90d")
+  overdraftCount90d       Int      @default(0) @map("overdraft_count_90d")
+  lateFeeCount90d         Int      @default(0) @map("late_fee_count_90d")
+  gamblingTransactionCount Int     @default(0) @map("gambling_transaction_count")
+  suspiciousActivityFlags Json     @default("[]") @map("suspicious_activity_flags")
+
+  // Overall score
+  financialHealthScore    Decimal? @map("financial_health_score") @db.Decimal(5, 2)
+  healthTier              String?  @map("health_tier") // excellent, good, fair, poor, critical
+
+  // Analysis period
+  analysisPeriodStart     DateTime? @map("analysis_period_start") @db.Date
+  analysisPeriodEnd       DateTime? @map("analysis_period_end") @db.Date
+
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  application             ScreeningApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@map("financial_wellness_profiles")
+}
+
+model ScreeningPayment {
+  id                      String   @id @default(uuid())
+  applicationId           String   @map("application_id")
+  applicantId             String?  @map("applicant_id")
+  organizationId          String?  @map("organization_id")
+
+  // Payment details
+  payerType               String   @map("payer_type") // applicant, organization
+  paymentType             String   @map("payment_type") // base_screening, enhanced_upgrade
+
+  // Stripe
+  stripePaymentIntentId   String?  @unique @map("stripe_payment_intent_id")
+  stripeCheckoutSessionId String?  @unique @map("stripe_checkout_session_id")
+
+  // Amount
+  amountCents             Int      @map("amount_cents")
+  currency                String   @default("usd")
+
+  // Status
+  status                  String   @default("pending") // pending, processing, succeeded, failed, refunded
+  paidAt                  DateTime? @map("paid_at")
+  refundedAt              DateTime? @map("refunded_at")
+  failureReason           String?  @map("failure_reason")
+
+  createdAt               DateTime @default(now()) @map("created_at")
+
+  // Relations
+  application             ScreeningApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicant               ScreeningApplicant?  @relation(fields: [applicantId], references: [id], onDelete: SetNull)
+  organization            Organization?        @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+  @@index([stripePaymentIntentId])
+  @@map("screening_payments")
+}
+
+model ScreeningEvent {
+  id                  String   @id @default(uuid())
+  applicationId       String   @map("application_id")
+  applicantId         String?  @map("applicant_id")
+  agentUserId         String?  @map("agent_user_id")
+
+  // Event info
+  eventType           String   @map("event_type") // created, invited, otp_sent, step_completed, payment_succeeded, processing_started, credit_pulled, plaid_synced, document_analyzed, wellness_computed, score_computed, report_generated, decision_made, enhanced_charge_failed, etc.
+  eventData           Json     @default("{}") @map("event_data")
+  ipAddress           String?  @map("ip_address")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  // Relations
+  application         ScreeningApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  applicant           ScreeningApplicant?  @relation(fields: [applicantId], references: [id], onDelete: SetNull)
+  agent               User?                @relation("ScreeningEventAgent", fields: [agentUserId], references: [id], onDelete: SetNull)
+
+  @@index([applicationId])
+  @@index([applicantId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("screening_events")
 }

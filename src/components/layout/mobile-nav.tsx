@@ -43,6 +43,12 @@ interface MoreSection {
 
 const ADMIN_MORE_SECTIONS: MoreSection[] = [
   {
+    label: "Screening",
+    items: [
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+    ],
+  },
+  {
     label: "Acquisitions",
     items: [
       { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
@@ -70,6 +76,12 @@ const ADMIN_MORE_SECTIONS: MoreSection[] = [
 ];
 
 const AGENT_MORE_SECTIONS: MoreSection[] = [
+  {
+    label: "Screening",
+    items: [
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+    ],
+  },
   {
     label: "Communication",
     items: [

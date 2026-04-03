@@ -43,6 +43,7 @@ const AGENT_NAV_SECTIONS: NavSection[] = [
     label: "My Work",
     items: [
       { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
       { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
       { name: "Contacts", href: "/contacts", icon: "👥" },
     ],
@@ -95,6 +96,12 @@ const ADMIN_NAV_SECTIONS: NavSection[] = [
     label: "Leasing",
     items: [
       { name: "Leasing", href: "/leasing", icon: "🤖", badge: true },
+    ],
+  },
+  {
+    label: "Screening",
+    items: [
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
     ],
   },
   {

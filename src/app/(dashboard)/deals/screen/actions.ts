@@ -130,15 +130,14 @@ export async function quickScreenLookup(bbl: string): Promise<QuickScreenLookupR
   const boroNames = ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"];
   const borough = boroNames[parseInt(boro)] || "";
 
-  // Parallel fetches: PLUTO, Sales, HPD, Rent Stab, Mortgage Rate
-  const [plutoRes, salesRes, hpdRes, rentStabRes, rateRes] = await Promise.allSettled([
+  // Parallel fetches: PLUTO, Sales, HPD, Mortgage Rate
+  // NOTE: Old rent stab dataset 35ss-ekc5 removed from NYC Open Data — using heuristic instead
+  const [plutoRes, salesRes, hpdRes, rateRes] = await Promise.allSettled([
     fetch(`${NYC_BASE}/${PLUTO_ID}.json?$where=borocode='${boro}' AND block='${block}' AND lot='${lot}'&$select=address,ownername,unitsres,unitstotal,yearbuilt,numfloors,assesstot,bldgarea,lotarea,zonedist1,bldgclass,builtfar,residfar&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/${SALES_ID}.json?$where=borough='${boro}' AND block='${block}' AND lot='${lot}'&$order=sale_date DESC&$limit=5`)
       .then(r => r.ok ? r.json() : []),
     fetch(`${NYC_BASE}/${HPD_REG_ID}.json?$where=boroid='${boro}' AND block='${block}' AND lot='${lot}'&$limit=1`)
-      .then(r => r.ok ? r.json() : []),
-    fetch(`${NYC_BASE}/35ss-ekc5.json?$where=ucbbl='${bbl}'&$limit=1`)
       .then(r => r.ok ? r.json() : []),
     getCurrentMortgageRate(),
   ]);
@@ -146,7 +145,6 @@ export async function quickScreenLookup(bbl: string): Promise<QuickScreenLookupR
   const plutoData = plutoRes.status === "fulfilled" ? plutoRes.value : [];
   const salesData = salesRes.status === "fulfilled" ? salesRes.value : [];
   const hpdData = hpdRes.status === "fulfilled" ? hpdRes.value : [];
-  const rentStabData = rentStabRes.status === "fulfilled" ? rentStabRes.value : [];
   const currentRate = rateRes.status === "fulfilled" && rateRes.value ? rateRes.value : 7.0;
 
   if (!Array.isArray(plutoData) || plutoData.length === 0) return null;
@@ -173,10 +171,9 @@ export async function quickScreenLookup(bbl: string): Promise<QuickScreenLookupR
     }
   }
 
-  // Rent stabilized units
-  const rentStabilizedUnits = Array.isArray(rentStabData) && rentStabData.length > 0
-    ? parseInt(rentStabData[0].uc2024rstab || rentStabData[0].uc2023rstab || rentStabData[0].uc2022rstab || "0")
-    : 0;
+  // Rent stabilized units — heuristic (old dataset 35ss-ekc5 is dead)
+  // Pre-1974 buildings with 6+ units are generally rent stabilized
+  const rentStabilizedUnits = (yearBuilt > 0 && yearBuilt < 1974 && totalUnits >= 6) ? totalUnits : 0;
 
   // Estimate purchase price from assessed value or last sale
   let estimatedPurchasePrice = 0;

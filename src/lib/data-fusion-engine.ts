@@ -408,7 +408,7 @@ const DATASETS = {
   HPD_LITIGATION: "59kj-x8nc",
   DOB_ECB: "6bgk-3dad",
   DOB_NOW: "w9ak-ipjd",
-  RENT_STAB: "35ss-ekc5",
+  RENT_STAB: "35ss-ekc5", // DEAD — dataset removed from NYC Open Data; heuristic used instead
   SPECULATION: "adax-9x2w",
   RPIE: "wvts-6tdf",
   LL84: "5zyy-y8am",

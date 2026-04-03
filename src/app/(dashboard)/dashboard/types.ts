@@ -97,3 +97,19 @@ export interface FullDashboardData {
 export interface FeedTopicConfig {
   topics: string[];
 }
+
+export interface ScreeningWidgetData {
+  inProgress: number;
+  awaitingReview: number;
+  approvedThisMonth: number;
+  avgScore: number | null;
+  recentScreenings: Array<{
+    id: string;
+    applicantName: string;
+    propertyAddress: string;
+    status: string;
+    riskScore: number | null;
+    recommendation: string | null;
+    completedAt: string | null;
+  }>;
+}

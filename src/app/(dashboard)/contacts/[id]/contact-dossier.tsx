@@ -25,6 +25,7 @@ interface Contact {
   showings: Array<{ id: string; scheduledAt: Date; status: string; feedback: string | null; interestLevel: string | null; property: { address: string; city: string; state: string } }>;
   enrichmentProfiles: Array<{ id: string; employer: string | null; jobTitle: string | null; industry: string | null; incomeRangeLow: number | null; incomeRangeHigh: number | null; linkedinUrl: string | null; aiSummary: string | null; aiInsights: any; profilePhotoUrl: string | null; dataSources?: string[]; rawData?: any }>;
   emailMessages?: Array<{ id: string; direction: string; fromEmail: string; fromName: string | null; toEmails: string[]; subject: string | null; snippet: string | null; receivedAt: string; isRead: boolean; leadSource: string | null; aiSummary: string | null; sentimentScore: number | null }>;
+  screeningApplications?: Array<{ id: string; status: string; vettdreRiskScore: any; riskRecommendation: string | null; completedAt: Date | null; propertyAddress: string; unitNumber: string | null; screeningTier: string | null; decisionAt: Date | null }>;
 }
 
 // ---- HELPERS ----
@@ -808,6 +809,36 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                   <p className="text-sm text-slate-400 text-center py-3">No deals yet</p>
                 )}
               </div>
+
+              {/* Screening History */}
+              {contact.screeningApplications && contact.screeningApplications.length > 0 && (
+                <div className="bg-white rounded-lg border border-slate-200 p-5">
+                  <h3 className="text-sm font-semibold text-slate-700 mb-3">Screening History</h3>
+                  <div className="space-y-3">
+                    {contact.screeningApplications.map((s: any) => {
+                      const score = s.vettdreRiskScore ? Number(s.vettdreRiskScore) : null;
+                      const scoreColorClass = score == null ? "text-slate-600" : score >= 70 ? "text-emerald-600" : score >= 40 ? "text-amber-600" : "text-red-600";
+                      return (
+                        <Link key={s.id} href={`/screening/${s.id}`} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 hover:border-slate-200 hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            {score != null && (
+                              <span className={`text-lg font-bold ${scoreColorClass}`}>{Math.round(score)}</span>
+                            )}
+                            <div>
+                              <p className="text-sm font-medium text-slate-700">{s.propertyAddress}{s.unitNumber ? ` #${s.unitNumber}` : ""}</p>
+                              <p className="text-xs text-slate-400">
+                                {s.riskRecommendation ? s.riskRecommendation.charAt(0).toUpperCase() + s.riskRecommendation.slice(1) : s.status}
+                                {s.completedAt ? ` · ${new Date(s.completedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="text-xs text-blue-600 font-medium">View →</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Recent Showings */}
               <div className="bg-white rounded-xl border border-slate-200 p-5">

@@ -3,6 +3,8 @@ import Stripe from "stripe";
 import { getStripe, getPlanFromPriceId, getLeasingTierFromPriceId } from "@/lib/stripe";
 import prisma from "@/lib/prisma";
 import { invalidateLeasingTierCache } from "@/lib/leasing-limits";
+import { runScreeningPipeline } from "@/lib/screening/pipeline";
+import { isWebhookProcessed, markWebhookProcessed } from "@/lib/webhook-idempotency";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,10 +29,72 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // ── Webhook Idempotency: skip already-processed events ────
+  try {
+    if (await isWebhookProcessed("stripe", event.id)) {
+      return NextResponse.json({ received: true, duplicate: true });
+    }
+    // Mark BEFORE processing to prevent duplicates on crash/retry
+    await markWebhookProcessed("stripe", event.id, event.type);
+  } catch (err) {
+    // Idempotency check/mark failure should not block processing
+    console.error("[Stripe Webhook] Idempotency error:", err);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
+
+        // ── Screening payment (one-time, no subscription) ────
+        if (session.metadata?.type === "screening" && session.payment_status === "paid") {
+          const applicationId = session.metadata?.applicationId;
+          const applicantId = session.metadata?.applicantId;
+
+          if (applicationId) {
+            // Verify payment record exists AND belongs to the correct application (org-scoped defense)
+            const paymentUpdate = await prisma.screeningPayment.updateMany({
+              where: {
+                stripeCheckoutSessionId: session.id,
+                status: "pending",
+                application: { id: applicationId },
+              },
+              data: {
+                status: "succeeded",
+                stripePaymentIntentId: (session.payment_intent as string) || null,
+                paidAt: new Date(),
+              },
+            });
+
+            if (paymentUpdate.count === 0) {
+              // Either already processed (idempotent) or no matching record
+              console.warn(`[Stripe] screening payment: no pending record for session=${session.id} (already processed or missing)`);
+              break;
+            }
+
+            // Log event
+            await prisma.screeningEvent.create({
+              data: {
+                applicationId,
+                applicantId: applicantId || null,
+                eventType: "payment_succeeded",
+                eventData: {
+                  stripeSessionId: session.id,
+                  amount: session.amount_total,
+                },
+              },
+            });
+
+            console.log(`[Stripe] screening payment: app=${applicationId} amount=${session.amount_total}`);
+
+            // Trigger the processing pipeline (fire-and-forget — don't block webhook response)
+            runScreeningPipeline(applicationId).catch((err) => {
+              console.error(`[Stripe] screening pipeline error for app=${applicationId}:`, err);
+            });
+          }
+          break;
+        }
+
         if (!session.subscription) break;
 
         // ── Leasing tier upgrade ──────────────────────────────

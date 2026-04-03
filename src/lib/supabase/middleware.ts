@@ -1,7 +1,68 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// ── Rate Limiting (Upstash Redis) ────────────────────────────
+// Inline import check to avoid breaking middleware if Upstash not configured
+let _rateLimitEnabled: boolean | null = null;
+function isRateLimitConfigured(): boolean {
+  if (_rateLimitEnabled === null) {
+    _rateLimitEnabled = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  }
+  return _rateLimitEnabled;
+}
+
+async function checkGlobalRateLimit(request: NextRequest): Promise<NextResponse | null> {
+  if (!isRateLimitConfigured()) return null;
+  if (!request.nextUrl.pathname.startsWith("/api/")) return null;
+
+  try {
+    // Dynamic import to avoid bundling issues in edge middleware
+    const { Ratelimit } = await import("@upstash/ratelimit");
+    const { Redis } = await import("@upstash/redis");
+
+    const redis = new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    });
+
+    const limiter = new Ratelimit({
+      redis,
+      limiter: Ratelimit.slidingWindow(60, "1 m"),
+      prefix: "rl:global",
+    });
+
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "unknown";
+
+    const result = await limiter.limit(ip);
+    if (!result.success) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        {
+          status: 429,
+          headers: {
+            "X-RateLimit-Limit": result.limit.toString(),
+            "X-RateLimit-Remaining": result.remaining.toString(),
+            "X-RateLimit-Reset": result.reset.toString(),
+            "Retry-After": Math.ceil(Math.max(0, (result.reset - Date.now()) / 1000)).toString(),
+          },
+        },
+      );
+    }
+  } catch (e) {
+    // Rate limit failure should not block requests — log and continue
+    console.error("[Rate Limit] Middleware error:", e);
+  }
+  return null;
+}
+
 export async function updateSession(request: NextRequest) {
+  // ── Global Rate Limit Check (API routes only) ──────────────
+  const rateLimitResponse = await checkGlobalRateLimit(request);
+  if (rateLimitResponse) return rateLimitResponse;
+
   const supabaseUrl = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim();
   const supabaseKey = (process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "").trim();
 
@@ -38,10 +99,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/join") ||
     pathname.startsWith("/submit-deal") ||
     pathname.startsWith("/sign/") ||
+    pathname.startsWith("/screen/") ||
     pathname.startsWith("/leasing-agent") ||
+    pathname.startsWith("/chat/") ||
     pathname.startsWith("/privacy") ||
     pathname.startsWith("/support") ||
     pathname.startsWith("/api/onboarding") ||
+    pathname.startsWith("/api/screen/") ||
+    pathname.startsWith("/api/screening/") ||
     pathname.startsWith("/api/webhooks") ||
     pathname.startsWith("/api/twilio") ||
     pathname.startsWith("/api/book") ||

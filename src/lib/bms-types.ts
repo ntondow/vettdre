@@ -796,6 +796,13 @@ export const BMS_PERMISSIONS = {
   client_onboarding_view_own: ["brokerage_admin", "broker", "manager", "agent"],
   client_onboarding_void: ["brokerage_admin", "broker", "manager", "agent"],
   client_onboarding_resend: ["brokerage_admin", "broker", "manager", "agent"],
+
+  // Screening
+  screening_create: ["brokerage_admin", "broker", "manager", "agent"],
+  screening_view_all: ["brokerage_admin", "broker", "manager"],
+  screening_view_own: ["brokerage_admin", "broker", "manager", "agent"],
+  screening_decide: ["brokerage_admin", "broker", "manager"],
+  screening_manage: ["brokerage_admin", "broker"],
 } as const satisfies Record<string, readonly BrokerageRoleType[]>;
 
 export type BmsPermission = keyof typeof BMS_PERMISSIONS;

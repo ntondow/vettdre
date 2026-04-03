@@ -8,7 +8,8 @@ import { projectLL97Penalty } from "@/lib/ll97-penalties";
 import type { LL97Projection } from "@/lib/ll97-penalties";
 
 const NYC_BASE = "https://data.cityofnewyork.us/resource";
-const RENT_STAB_ID = "35ss-ekc5";
+// NOTE: Old rent stab dataset 35ss-ekc5 was removed from NYC Open Data.
+// Using heuristic (pre-1974 + 6+ units) instead.
 
 // ── Fetch Expense Benchmark ─────────────────────────────────
 
@@ -31,23 +32,11 @@ export async function fetchExpenseBenchmark(params: {
       hasElevator = params.numFloors > 5 || params.bldgClass.startsWith("D");
     }
 
-    // Fetch rent stabilized count if not provided
-    if (rentStabilizedUnits == null && params.bbl && params.bbl.length >= 10) {
-      try {
-        const rsResp = await fetch(
-          `${NYC_BASE}/${RENT_STAB_ID}.json?$where=ucbbl='${params.bbl}'&$limit=1`,
-          { next: { revalidate: 86400 } },
-        );
-        if (rsResp.ok) {
-          const rsData = await rsResp.json();
-          if (Array.isArray(rsData) && rsData.length > 0) {
-            const rec = rsData[0];
-            rentStabilizedUnits = parseInt(
-              rec.uc2024rstab || rec.uc2023rstab || rec.uc2022rstab || rec.uc2021rstab || "0",
-            );
-          }
-        }
-      } catch { /* rent stab fetch is non-critical */ }
+    // Rent stabilized units — heuristic (old dataset 35ss-ekc5 is dead)
+    if (rentStabilizedUnits == null) {
+      rentStabilizedUnits = (params.yearBuilt > 0 && params.yearBuilt < 1974 && params.unitsRes >= 6)
+        ? params.unitsRes
+        : 0;
     }
 
     const benchmarkParams: ExpenseBenchmarkParams = {
@@ -79,26 +68,11 @@ export async function fetchRentProjection(params: {
   renovationBudget?: number;
 }): Promise<RentProjection | null> {
   try {
-    let stabilizedUnits = 0;
-
-    // Fetch rent stab data from NYC Open Data
-    if (params.bbl && params.bbl.length >= 10) {
-      try {
-        const rsResp = await fetch(
-          `${NYC_BASE}/${RENT_STAB_ID}.json?$where=ucbbl='${params.bbl}'&$limit=1`,
-          { next: { revalidate: 86400 } },
-        );
-        if (rsResp.ok) {
-          const rsData = await rsResp.json();
-          if (Array.isArray(rsData) && rsData.length > 0) {
-            const rec = rsData[0];
-            stabilizedUnits = parseInt(
-              rec.uc2024rstab || rec.uc2023rstab || rec.uc2022rstab || rec.uc2021rstab || "0",
-            );
-          }
-        }
-      } catch { /* non-critical */ }
-    }
+    // Rent stabilized units — heuristic (old dataset 35ss-ekc5 is dead)
+    // Pre-1974 buildings with 6+ units are generally rent stabilized in NYC
+    const stabilizedUnits = (params.totalUnits >= 6) ? params.totalUnits : 0;
+    // Note: Without BBL-level year-built data here, we conservatively estimate
+    // based on unit count alone. Callers should pass accurate data when available.
 
     if (stabilizedUnits <= 0) return null;
 

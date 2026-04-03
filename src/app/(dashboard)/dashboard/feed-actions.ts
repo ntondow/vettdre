@@ -389,3 +389,21 @@ export async function saveFeedTopics(topics: string[]): Promise<FeedTopicConfig>
     return { topics: [] };
   }
 }
+
+// ============================================================
+// 6. Screening Pipeline Widget
+// ============================================================
+
+export async function getScreeningWidget() {
+  try {
+    const userId = await getAuthUserId();
+    if (!userId) return null;
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { orgId: true } });
+    if (!user) return null;
+
+    const { getScreeningDashboardStats } = await import("@/lib/screening/integration");
+    return await getScreeningDashboardStats(user.orgId);
+  } catch {
+    return null;
+  }
+}

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pre-commit hook: scan staged files for potential secrets
+# When husky is installed, this will run automatically before every commit
+
+PATTERNS="AKIA[0-9A-Z]{16}|sk_live_|sk_test_|-----BEGIN (RSA |EC )?PRIVATE KEY|password\s*=\s*['\"][^'\"]+['\"]|[0-9]{3}-[0-9]{2}-[0-9]{4}"
+
+FILES=$(git diff --cached --name-only --diff-filter=ACM)
+if [ -z "$FILES" ]; then
+  exit 0
+fi
+
+MATCHES=$(echo "$FILES" | xargs grep -lPn "$PATTERNS" 2>/dev/null || true)
+if [ -n "$MATCHES" ]; then
+  echo "⚠️  Potential secrets detected in staged files:"
+  echo "$MATCHES"
+  echo ""
+  echo "Review these files before committing. Use 'git commit --no-verify' to bypass."
+  exit 1
+fi
+
+exit 0

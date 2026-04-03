@@ -4,12 +4,14 @@ import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { getAgentById, getAgentStats, updateAgent, deactivateAgent, reactivateAgent } from "../actions";
 import { inviteAgent, revokeInvite } from "../onboarding-actions";
+import { getAgentScreenings } from "./actions";
 import { getCommissionPlans } from "../../commission-plans/actions";
 import { getBrokerageConfig } from "../../invoices/actions";
 import { getAgentComplianceDocs, createComplianceDoc, deleteComplianceDoc } from "../../compliance/actions";
 import { getAgentDashboard } from "../../leaderboard/actions";
 // PDF generator loaded dynamically on demand to reduce bundle size
 const loadInvoicePdf = () => import("@/lib/invoice-pdf");
+import { getScreeningBmsStats } from "@/lib/screening/integration";
 import { BADGE_DEFINITIONS } from "@/lib/agent-badges";
 import {
   COMMISSION_PLAN_TYPE_LABELS,
@@ -113,9 +115,9 @@ const INVOICE_STATUS_COLORS: Record<string, string> = {
   void: "bg-red-100 text-red-700",
 };
 
-const TABS = ["overview", "deals", "invoices", "compliance", "performance", "notes"] as const;
+const TABS = ["overview", "deals", "invoices", "compliance", "performance", "screening", "notes"] as const;
 type TabId = (typeof TABS)[number];
-const TAB_LABELS: Record<TabId, string> = { overview: "Overview", deals: "Deals", invoices: "Invoices", compliance: "Compliance", performance: "Performance", notes: "Notes" };
+const TAB_LABELS: Record<TabId, string> = { overview: "Overview", deals: "Deals", invoices: "Invoices", compliance: "Compliance", performance: "Performance", screening: "Screening", notes: "Notes" };
 
 const DEAL_STATUS_TABS = ["all", "submitted", "under_review", "approved", "invoiced", "paid", "rejected"] as const;
 const INVOICE_STATUS_TABS = ["all", "draft", "sent", "paid", "void"] as const;
@@ -205,6 +207,12 @@ export default function AgentDetailPage({
   const [perfData, setPerfData] = useState<AgentDashboardData | null>(null);
   const [perfLoading, setPerfLoading] = useState(true);
 
+  // Screening data
+  const [screeningData, setScreeningData] = useState<any[]>([]);
+  const [screeningStats, setScreeningStats] = useState<any>(null);
+  const [screeningLoading, setScreeningLoading] = useState(false);
+  const [screeningPage, setScreeningPage] = useState(1);
+
   // Invite management
   const [inviteCopied, setInviteCopied] = useState(false);
   const [inviteActionLoading, setInviteActionLoading] = useState(false);
@@ -246,6 +254,24 @@ export default function AgentDetailPage({
     }
   }
 
+  async function loadScreening() {
+    if (!agent) return;
+    setScreeningLoading(true);
+    try {
+      const [data, stats] = await Promise.all([
+        getAgentScreenings(agent.userId),
+        getScreeningBmsStats(agent.orgId, agent.userId),
+      ]);
+      setScreeningData(data || []);
+      setScreeningStats(stats || null);
+    } catch {
+      setScreeningData([]);
+      setScreeningStats(null);
+    } finally {
+      setScreeningLoading(false);
+    }
+  }
+
   useEffect(() => {
     loadAgent();
     loadCompliance();
@@ -254,6 +280,14 @@ export default function AgentDetailPage({
     getCommissionPlans().then((r) => setPlans(r.plans || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Lazy load screening data when tab is activated
+  useEffect(() => {
+    if (activeTab === "screening" && agent && screeningData.length === 0 && !screeningLoading) {
+      loadScreening();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   // ── Edit form ─────────────────────────────────────────────
 
@@ -1510,6 +1544,107 @@ export default function AgentDetailPage({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* ── Tab: Screening ───────────────────────────────── */}
+      {activeTab === "screening" && (
+        <div className="space-y-6">
+          {/* Stats row */}
+          {screeningStats && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <StatCard
+                icon={<Users className="h-4 w-4 text-slate-400" />}
+                label="Total Screened"
+                value={String(screeningStats.totalScreenings)}
+                sub={`${screeningData.length} in this org`}
+              />
+              <StatCard
+                icon={<CheckCircle2 className="h-4 w-4 text-green-400" />}
+                label="Approval Rate"
+                value={screeningStats.approvalRate !== null ? `${screeningStats.approvalRate}%` : "—"}
+                sub="Of completed applications"
+              />
+              <StatCard
+                icon={<BarChart3 className="h-4 w-4 text-blue-400" />}
+                label="Avg Risk Score"
+                value={screeningStats.avgRiskScore !== null ? screeningStats.avgRiskScore.toFixed(1) : "—"}
+                sub="0 (low) to 100 (high)"
+              />
+            </div>
+          )}
+
+          {/* Table */}
+          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+            {screeningLoading ? (
+              <div className="py-12 text-center">
+                <Clock className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">Loading screening applications...</p>
+              </div>
+            ) : screeningData.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Applicant</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Property</th>
+                      <th className="text-center px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Risk Score</th>
+                      <th className="text-left px-4 py-2.5 text-xs font-medium text-slate-500 uppercase tracking-wider">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {screeningData.map((s: any) => {
+                      const applicantName = s.applicants && s.applicants.length > 0
+                        ? `${s.applicants[0].firstName || ''} ${s.applicants[0].lastName || ''}`.trim()
+                        : 'Unknown';
+                      const SCREENING_STATUS_COLORS: Record<string, string> = {
+                        draft: "bg-gray-100 text-gray-700",
+                        submitted: "bg-blue-100 text-blue-700",
+                        complete: "bg-amber-100 text-amber-700",
+                        approved: "bg-green-100 text-green-700",
+                        conditional: "bg-yellow-100 text-yellow-700",
+                        denied: "bg-red-100 text-red-700",
+                      };
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="px-4 py-3 text-sm text-slate-800">{applicantName}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 max-w-[200px] truncate">
+                            {s.propertyAddress}
+                            {s.unitNumber && ` #${s.unitNumber}`}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`px-2 py-0.5 text-[10px] font-medium rounded-full ${SCREENING_STATUS_COLORS[s.status] || "bg-slate-100 text-slate-600"}`}>
+                              {s.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-700 text-right">
+                            {s.vettdreRiskScore !== null ? (
+                              <span className={`font-medium ${
+                                Number(s.vettdreRiskScore) < 33 ? 'text-green-600' :
+                                Number(s.vettdreRiskScore) < 67 ? 'text-amber-600' :
+                                'text-red-600'
+                              }`}>
+                                {Number(s.vettdreRiskScore).toFixed(1)}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-slate-500">{fmtDate(s.createdAt)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="py-12 text-center">
+                <Shield className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-400">No screening applications yet</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

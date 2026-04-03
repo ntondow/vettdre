@@ -6,8 +6,13 @@ const TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
 
 function getEncryptionKey(): Buffer {
-  const secret = process.env.TOKEN_ENCRYPTION_KEY || process.env.ANTHROPIC_API_KEY;
-  if (!secret) throw new Error("No encryption key available");
+  const secret = process.env.TOKEN_ENCRYPTION_KEY;
+  if (!secret) {
+    throw new Error(
+      "TOKEN_ENCRYPTION_KEY environment variable is required for data encryption. " +
+      "Set a strong random secret (min 32 characters) in your environment.",
+    );
+  }
   // Derive a stable 32-byte key from the secret
   return scryptSync(secret, "vettdre-token-salt", 32);
 }

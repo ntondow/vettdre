@@ -52,6 +52,12 @@ export interface TriggerConfigContactEnriched {
   // No config needed — triggered on any enrichment completion
 }
 
+export interface TriggerConfigScreeningCompleted {
+  minRiskScore?: number;         // only trigger if risk score >= threshold
+  recommendations?: string[];    // filter by recommendation (approve, conditional, decline)
+  tierFilter?: string[];         // filter by screening tier (base, enhanced)
+}
+
 export type TriggerConfig =
   | TriggerConfigNewLead
   | TriggerConfigStageChange
@@ -63,6 +69,7 @@ export type TriggerConfig =
   | TriggerConfigDealLost
   | TriggerConfigScoreChange
   | TriggerConfigContactEnriched
+  | TriggerConfigScreeningCompleted
   | Record<string, unknown>;
 
 // ── Conditions ──────────────────────────────────────────────
@@ -247,6 +254,15 @@ export interface TriggerDataContactEnriched {
   confidenceLevel: string;
 }
 
+export interface TriggerDataScreeningCompleted {
+  applicationId: string;
+  contactId: string | null;
+  agentUserId: string;
+  riskScore: number | null;
+  recommendation: string | null;
+  propertyAddress: string;
+}
+
 export type TriggerData =
   | TriggerDataNewLead
   | TriggerDataStageChange
@@ -258,6 +274,7 @@ export type TriggerData =
   | TriggerDataDealLost
   | TriggerDataScoreChange
   | TriggerDataContactEnriched
+  | TriggerDataScreeningCompleted
   | Record<string, unknown>;
 
 // ── Execution Results ───────────────────────────────────────
@@ -316,6 +333,7 @@ export const TRIGGER_LABELS: Record<string, string> = {
   deal_won: "Deal Won",
   deal_lost: "Deal Lost",
   contact_enriched: "Contact Enriched",
+  screening_completed: "Screening Completed",
   custom: "Custom",
 };
 
@@ -330,6 +348,7 @@ export const TRIGGER_COLORS: Record<string, string> = {
   deal_won: "bg-green-500/15 text-green-400",
   deal_lost: "bg-rose-500/15 text-rose-400",
   contact_enriched: "bg-teal-500/15 text-teal-400",
+  screening_completed: "bg-violet-500/15 text-violet-400",
   custom: "bg-slate-500/15 text-slate-400",
 };
 
@@ -380,4 +399,7 @@ export const CONDITION_FIELDS = [
   // Enrichment fields
   { value: "enrichmentType", label: "Enrichment Type", type: "string" as const },
   { value: "confidenceLevel", label: "Confidence Level", type: "string" as const },
+  // Screening fields
+  { value: "riskScore", label: "Risk Score", type: "number" as const },
+  { value: "recommendation", label: "Recommendation", type: "string" as const },
 ];

@@ -113,7 +113,11 @@ export type Feature =
   | "deep_ownership"
   | "cap_rate_analysis"
   | "expense_benchmarks"
-  | "distress_scores";
+  | "distress_scores"
+  // Screening
+  | "screening_view"
+  | "screening_create"
+  | "screening_enhanced";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -209,6 +213,9 @@ const PRO_FEATURES: Feature[] = [
   "cap_rate_analysis",
   "expense_benchmarks",
   "distress_scores",
+  // Screening
+  "screening_view",
+  "screening_create",
 ];
 
 // ── Team: brokerage management ───────────────────────────────
@@ -227,6 +234,8 @@ const TEAM_FEATURES: Feature[] = [
   "bms_payments",
   "bms_audit_log",
   "bms_file_upload",
+  // Screening
+  "screening_enhanced",
 ];
 
 // Enterprise gets everything
@@ -331,6 +340,9 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   cap_rate_analysis: "Upgrade to Pro for market cap rate derivation from comparable sales",
   expense_benchmarks: "Upgrade to Pro for RGB expense benchmarks and proforma modeling",
   distress_scores: "Upgrade to Pro for distress scoring and investment opportunity signals",
+  screening_view: "Upgrade to Pro to access tenant screening",
+  screening_create: "Upgrade to Pro to create screening applications",
+  screening_enhanced: "Upgrade to Team for enhanced tri-bureau screening",
 };
 
 export function getUpgradeMessage(feature: Feature): string {

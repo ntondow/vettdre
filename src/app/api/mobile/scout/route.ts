@@ -4,14 +4,53 @@
 //   ?address=350+Park+Avenue   — search by address
 //   ?bbl=1006340001            — search by 10-digit BBL
 //   ?lat=40.7128&lng=-74.0060  — search by coordinates (reverse geocode)
+//   ?refresh=true              — bypass cache and fetch fresh data
 //
 // Returns a building profile with PLUTO data, violations, contacts, etc.
+// Uses in-memory LRU cache (10-min TTL) for instant repeat lookups.
 
 import { NextRequest, NextResponse } from "next/server";
 import { getMobileAuth, unauthorized, serialize } from "@/lib/mobile-auth";
 import { lookupPlutoByAddress, parseBBL } from "@/lib/pluto-lookup";
 
 export const dynamic = "force-dynamic";
+
+// ── In-memory LRU cache for full scout profiles ──────────────
+// Separate from the per-source cacheManager — this caches the
+// fully assembled + enriched profile for instant repeat lookups.
+const SCOUT_CACHE_TTL = 10 * 60 * 1000; // 10 minutes
+const SCOUT_CACHE_MAX = 200;
+
+const scoutCache = new Map<
+  string,
+  { data: unknown; expiresAt: number }
+>();
+
+function getFromScoutCache(bbl: string): unknown | null {
+  const entry = scoutCache.get(bbl);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    scoutCache.delete(bbl);
+    return null;
+  }
+  // Move to end (LRU)
+  scoutCache.delete(bbl);
+  scoutCache.set(bbl, entry);
+  return entry.data;
+}
+
+function setInScoutCache(bbl: string, data: unknown): void {
+  scoutCache.delete(bbl);
+  // Evict oldest while at capacity
+  while (scoutCache.size >= SCOUT_CACHE_MAX) {
+    const firstKey = scoutCache.keys().next().value;
+    if (firstKey !== undefined) scoutCache.delete(firstKey);
+    else break;
+  }
+  scoutCache.set(bbl, { data, expiresAt: Date.now() + SCOUT_CACHE_TTL });
+}
+
+// ── Route handler ────────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,6 +61,7 @@ export async function GET(req: NextRequest) {
     const bbl = req.nextUrl.searchParams.get("bbl");
     const lat = req.nextUrl.searchParams.get("lat");
     const lng = req.nextUrl.searchParams.get("lng");
+    const refresh = req.nextUrl.searchParams.get("refresh") === "true";
 
     let boroCode: string | null = null;
     let block: string | null = null;
@@ -95,14 +135,36 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // ── Build BBL key ──────────────────────────────────────
+    const bblKey = `${boroCode}${String(block).padStart(5, "0")}${String(lot).padStart(4, "0")}`;
+
+    // ── Check cache first ──────────────────────────────────
+    if (!refresh) {
+      const cached = getFromScoutCache(bblKey);
+      if (cached) {
+        console.log(`[mobile/scout] Cache HIT for ${bblKey}`);
+        return NextResponse.json(cached, {
+          headers: { "X-Cache": "HIT" },
+        });
+      }
+    }
+
+    console.log(`[mobile/scout] Cache MISS for ${bblKey} — fetching`);
+
     // ── Fetch building profile ──────────────────────────────
     const { fetchBuildingProfile } = await import(
       "@/app/(dashboard)/market-intel/building-profile-actions"
     );
 
     const profile = await fetchBuildingProfile(boroCode, block, lot);
+    const serialized = serialize(profile);
 
-    return NextResponse.json(serialize(profile));
+    // Cache the result (fire-and-forget)
+    setInScoutCache(bblKey, serialized);
+
+    return NextResponse.json(serialized, {
+      headers: { "X-Cache": "MISS" },
+    });
   } catch (error: unknown) {
     console.error("[mobile/scout] GET error:", error);
     return NextResponse.json(

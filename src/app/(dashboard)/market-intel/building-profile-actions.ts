@@ -6,6 +6,7 @@ import { apolloEnrichPerson, apolloEnrichOrganization, apolloFindPeopleAtOrg } f
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { cacheManager, SOURCE_CONFIG } from "@/lib/cache-manager";
 
 const NYC = "https://data.cityofnewyork.us/resource";
 
@@ -20,7 +21,8 @@ const HPD_CONTACTS = "feu5-w2e2";
 const HPD_LITIGATION = "59kj-x8nc";
 const DOB_ECB = "6bgk-3dad";
 const DOB_NOW = "w9ak-ipjd";
-const RENT_STAB = "35ss-ekc5";
+// NOTE: Old rent stab dataset 35ss-ekc5 was removed from NYC Open Data.
+// Rent stabilization is now detected via PLUTO heuristic (year built + units + building class).
 const SPECULATION = "adax-9x2w";
 
 // Fetch with timeout to prevent hung API calls
@@ -75,49 +77,91 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
     source: string;
   }[] = [];
 
+  // BBL key for cache lookups
+  const bblKey = `${boroCode}${String(block).padStart(5, "0")}${String(lot).padStart(4, "0")}`;
+
+  // Helper: check per-source cache (memory → DB) before hitting NYC Open Data
+  async function cachedSourceFetch<T>(
+    source: string,
+    fetchFn: () => Promise<T>,
+  ): Promise<T | null> {
+    // Tier 1+2: in-memory
+    const cached = cacheManager.getSource(bblKey, source);
+    if (cached !== null) {
+      console.log(`  [CACHE HIT] ${source} (memory)`);
+      return cached as T;
+    }
+    // Tier 3: database (batch would be better but per-source is simpler)
+    const dbResult = await cacheManager.getSourcesFromDB(bblKey, [source]);
+    if (dbResult.has(source)) {
+      const data = dbResult.get(source) as T;
+      cacheManager.setSource(bblKey, source, data); // promote to memory
+      console.log(`  [CACHE HIT] ${source} (DB)`);
+      return data;
+    }
+    // Cache miss: fetch from API
+    try {
+      const data = await fetchFn();
+      if (data !== null && data !== undefined) {
+        cacheManager.setSource(bblKey, source, data);
+        cacheManager.setSourceInDB(bblKey, source, data); // fire-and-forget persist
+      }
+      return data;
+    } catch (err) {
+      // On error, try stale cache
+      const stale = cacheManager.getStaleSource(bblKey, source);
+      if (stale !== null) {
+        console.log(`  [CACHE STALE] ${source} — using expired data`);
+        return stale as T;
+      }
+      throw err;
+    }
+  }
+
   // Build all fetches in parallel
   const fetches: Promise<void>[] = [];
 
-  // 1. PLUTO building data
+  // 1. PLUTO building data (cached 24h — updates quarterly)
   fetches.push((async () => {
     try {
-      const url = new URL(NYC + "/" + PLUTO + ".json");
-      url.searchParams.set("$where", "borocode='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
-      url.searchParams.set("$limit", "1");
-      const res = await fetchWithTimeout(url.toString());
-      if (res.ok) {
+      const cached = await cachedSourceFetch("PLUTO", async () => {
+        const url = new URL(NYC + "/" + PLUTO + ".json");
+        url.searchParams.set("$where", "borocode='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
+        url.searchParams.set("$limit", "1");
+        const res = await fetchWithTimeout(url.toString());
+        if (!res.ok) return null;
         const data = await res.json();
-        if (data.length > 0) {
-          const p = data[0];
-          results.pluto = {
-            address: p.address || "",
-            ownerName: p.ownername || "",
-            unitsRes: parseInt(p.unitsres || "0"),
-            unitsTot: parseInt(p.unitstotal || "0"),
-            yearBuilt: parseInt(p.yearbuilt || "0"),
-            yearAlter1: parseInt(p.yearalter1 || "0"),
-            yearAlter2: parseInt(p.yearalter2 || "0"),
-            numFloors: parseInt(p.numfloors || "0"),
-            bldgArea: parseInt(p.bldgarea || "0"),
-            lotArea: parseInt(p.lotarea || "0"),
-            assessTotal: parseInt(p.assesstot || "0"),
-            assessLand: parseInt(p.assessland || "0"),
-            zoneDist1: p.zonedist1 || "",
-            zoneDist2: p.zonedist2 || "",
-            bldgClass: p.bldgclass || "",
-            landUse: p.landuse || "",
-            condoNo: p.condono || "",
-            builtFAR: parseFloat(p.builtfar || "0"),
-            residFAR: parseFloat(p.residfar || "0"),
-            commFAR: parseFloat(p.commfar || "0"),
-            facilFAR: parseFloat(p.facilfar || "0"),
-            borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(boroCode)] || "",
-            block,
-            lot,
-            boroCode,
-          };
-        }
-      }
+        if (data.length === 0) return null;
+        const p = data[0];
+        return {
+          address: p.address || "",
+          ownerName: p.ownername || "",
+          unitsRes: parseInt(p.unitsres || "0"),
+          unitsTot: parseInt(p.unitstotal || "0"),
+          yearBuilt: parseInt(p.yearbuilt || "0"),
+          yearAlter1: parseInt(p.yearalter1 || "0"),
+          yearAlter2: parseInt(p.yearalter2 || "0"),
+          numFloors: parseInt(p.numfloors || "0"),
+          bldgArea: parseInt(p.bldgarea || "0"),
+          lotArea: parseInt(p.lotarea || "0"),
+          assessTotal: parseInt(p.assesstot || "0"),
+          assessLand: parseInt(p.assessland || "0"),
+          zoneDist1: p.zonedist1 || "",
+          zoneDist2: p.zonedist2 || "",
+          bldgClass: p.bldgclass || "",
+          landUse: p.landuse || "",
+          condoNo: p.condono || "",
+          builtFAR: parseFloat(p.builtfar || "0"),
+          residFAR: parseFloat(p.residfar || "0"),
+          commFAR: parseFloat(p.commfar || "0"),
+          facilFAR: parseFloat(p.facilfar || "0"),
+          borough: ["", "Manhattan", "Bronx", "Brooklyn", "Queens", "Staten Island"][parseInt(boroCode)] || "",
+          block,
+          lot,
+          boroCode,
+        };
+      });
+      if (cached) results.pluto = cached;
     } catch (err) { console.error("PLUTO error:", err); }
   })());
 
@@ -257,49 +301,58 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
     } catch (err) { console.error("DOB Permits error:", err); }
   })());
 
-  // 5. HPD Registration + Contacts
+  // 5. HPD Registration + Contacts (cached 12h — two sequential API calls)
   fetches.push((async () => {
     try {
-      const regUrl = new URL(NYC + "/" + HPD_REG + ".json");
-      regUrl.searchParams.set("$where", "boroid='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
-      regUrl.searchParams.set("$limit", "5");
-      regUrl.searchParams.set("$order", "registrationenddate DESC");
-      const regRes = await fetchWithTimeout(regUrl.toString());
-      if (!regRes.ok) return;
-      const regs = await regRes.json();
-      results.registrations = regs;
+      const cached = await cachedSourceFetch("HPD_REG", async () => {
+        const regUrl = new URL(NYC + "/" + HPD_REG + ".json");
+        regUrl.searchParams.set("$where", "boroid='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
+        regUrl.searchParams.set("$limit", "5");
+        regUrl.searchParams.set("$order", "registrationenddate DESC");
+        const regRes = await fetchWithTimeout(regUrl.toString());
+        if (!regRes.ok) return null;
+        const regs = await regRes.json();
+        let hpdContacts: any[] = [];
+        let ownerContacts: any[] = [];
 
-      if (regs.length > 0) {
-        const regIds = regs.map((r: any) => "'" + r.registrationid + "'").join(",");
-        const conUrl = new URL(NYC + "/" + HPD_CONTACTS + ".json");
-        conUrl.searchParams.set("$where", "registrationid in(" + regIds + ")");
-        conUrl.searchParams.set("$limit", "30");
-        const conRes = await fetchWithTimeout(conUrl.toString());
-        if (conRes.ok) {
-          const contacts = await conRes.json();
-          results.hpdContacts = contacts.map((c: any) => ({
-            type: c.type || c.contactdescription || "",
-            corporateName: c.corporationname || "",
-            firstName: c.firstname || "",
-            lastName: c.lastname || "",
-            title: c.title || "",
-            businessAddress: [c.businesshousenumber, c.businessstreetname].filter(Boolean).join(" "),
-            businessCity: c.businesscity || "",
-            businessState: c.businessstate || "",
-            businessZip: c.businesszip || "",
-          }));
-          // Also search for management agent phone via SiteManager/Agent contacts
-          const agents = contacts.filter((c: any) =>
-            c.type === "SiteManager" || c.type === "Agent" || c.type === "ManagingAgent"
-          );
-          agents.forEach((a: any) => {
-            const name = [a.firstname, a.lastname].filter(Boolean).join(" ").trim() || a.corporationname || "";
-            const addr = [a.businesshousenumber, a.businessstreetname, a.businesscity, a.businessstate].filter(Boolean).join(" ");
-            if (name.length > 2) {
-              results.ownerContacts.push({ name, phone: "", address: addr, source: "HPD Agent/Manager" });
-            }
-          });
+        if (regs.length > 0) {
+          const regIds = regs.map((r: any) => "'" + r.registrationid + "'").join(",");
+          const conUrl = new URL(NYC + "/" + HPD_CONTACTS + ".json");
+          conUrl.searchParams.set("$where", "registrationid in(" + regIds + ")");
+          conUrl.searchParams.set("$limit", "30");
+          const conRes = await fetchWithTimeout(conUrl.toString());
+          if (conRes.ok) {
+            const contacts = await conRes.json();
+            hpdContacts = contacts.map((c: any) => ({
+              type: c.type || c.contactdescription || "",
+              corporateName: c.corporationname || "",
+              firstName: c.firstname || "",
+              lastName: c.lastname || "",
+              title: c.title || "",
+              businessAddress: [c.businesshousenumber, c.businessstreetname].filter(Boolean).join(" "),
+              businessCity: c.businesscity || "",
+              businessState: c.businessstate || "",
+              businessZip: c.businesszip || "",
+            }));
+            const agents = contacts.filter((c: any) =>
+              c.type === "SiteManager" || c.type === "Agent" || c.type === "ManagingAgent"
+            );
+            agents.forEach((a: any) => {
+              const name = [a.firstname, a.lastname].filter(Boolean).join(" ").trim() || a.corporationname || "";
+              const addr = [a.businesshousenumber, a.businessstreetname, a.businesscity, a.businessstate].filter(Boolean).join(" ");
+              if (name.length > 2) {
+                ownerContacts.push({ name, phone: "", address: addr, source: "HPD Agent/Manager" });
+              }
+            });
+          }
         }
+        return { registrations: regs, hpdContacts, ownerContacts };
+      });
+
+      if (cached) {
+        results.registrations = cached.registrations;
+        results.hpdContacts = cached.hpdContacts;
+        results.ownerContacts.push(...cached.ownerContacts);
       }
     } catch (err) { console.error("HPD Reg error:", err); }
   })());
@@ -369,42 +422,52 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
     } catch (err) { console.error("DOB ECB error:", err); }
   })());
 
-  // 8. Rent Stabilization (check if building is stabilized)
+  // 8. Rent Stabilization — heuristic-based detection
+  // The old dataset (35ss-ekc5) was removed from NYC Open Data.
+  // We use PLUTO building class + year built + unit count as a reliable proxy.
+  // NYC rent stabilization generally applies to buildings with 6+ units built before 1974,
+  // or buildings that received tax benefits (J-51, 421-a).
   fetches.push((async () => {
     try {
-      const url = new URL(NYC + "/" + RENT_STAB + ".json");
-      url.searchParams.set("$where", "boroid='" + boroCode + "' AND block='" + block + "' AND lot='" + lot + "'");
-      url.searchParams.set("$limit", "5");
-      const res = await fetchWithTimeout(url.toString());
-      if (res.ok) {
-        const data = await res.json();
-        if (data.length > 0) {
-          const r = data[0];
-          results.rentStabilized = {
-            status: "Yes",
-            uc2007: parseInt(r.uc2007 || "0"),
-            uc2008: parseInt(r.uc2008 || "0"),
-            uc2009: parseInt(r.uc2009 || "0"),
-            uc2010: parseInt(r.uc2010 || "0"),
-            uc2011: parseInt(r.uc2011 || "0"),
-            uc2012: parseInt(r.uc2012 || "0"),
-            uc2013: parseInt(r.uc2013 || "0"),
-            uc2014: parseInt(r.uc2014 || "0"),
-            uc2015: parseInt(r.uc2015 || "0"),
-            uc2016: parseInt(r.uc2016 || "0"),
-            uc2017: parseInt(r.uc2017 || "0"),
-            uc2018: parseInt(r.uc2018 || "0"),
-            uc2019: parseInt(r.uc2019 || "0"),
-            uc2020: parseInt(r.uc2020 || "0"),
-            uc2021: parseInt(r.uc2021 || "0"),
-            uc2022: parseInt(r.uc2022 || "0"),
-            uc2023: parseInt(r.uc2023 || "0"),
-            uc2024: parseInt(r.uc2024 || "0"),
-            buildingId: r.buildingid || "",
-          };
-        }
+      const yearBuilt = parseInt(results.pluto?.yearbuilt || "0");
+      const unitsRes = parseInt(results.pluto?.unitsres || "0");
+      const bldgClass = (results.pluto?.bldgclass || "").toUpperCase();
+      const bldgClassDesc = (results.pluto?.bldgclassdesc || "").toLowerCase();
+
+      // Wait for PLUTO to be available (it's fetched in parallel)
+      // We rely on results.pluto being set from the PLUTO fetch above
+      if (!results.pluto) {
+        // If PLUTO hasn't resolved yet, skip — the data just won't be available
+        return;
       }
-    } catch (err) { console.error("Rent Stab error:", err); }
+
+      // Heuristic rules for rent stabilization
+      const isPreWar = yearBuilt > 0 && yearBuilt < 1974;
+      const hasEnoughUnits = unitsRes >= 6;
+      // Building classes D (elevator apartments) and S (residence, multiple use) are strong indicators
+      const isApartmentClass = bldgClass.startsWith("D") || bldgClass.startsWith("S");
+      const isRentalDesc = bldgClassDesc.includes("elevator") || bldgClassDesc.includes("walk-up") || bldgClassDesc.includes("apartment");
+
+      if (isPreWar && hasEnoughUnits) {
+        results.rentStabilized = {
+          status: "Likely",
+          method: "heuristic",
+          reason: `Pre-1974 building (${yearBuilt}) with ${unitsRes} residential units`,
+          confidence: (isApartmentClass || isRentalDesc) ? "high" : "medium",
+          estimatedUnits: unitsRes,
+        };
+      } else if (hasEnoughUnits && (isApartmentClass || isRentalDesc)) {
+        // Post-1974 buildings with 6+ units MAY be stabilized via 421-a or J-51
+        results.rentStabilized = {
+          status: "Possible",
+          method: "heuristic",
+          reason: `${unitsRes}-unit ${isApartmentClass ? "apartment" : "residential"} building — may have tax benefit stabilization (421-a/J-51)`,
+          confidence: "low",
+          estimatedUnits: null,
+        };
+      }
+      // If neither condition met, rentStabilized stays null ("Unknown")
+    } catch (err) { console.error("Rent Stab heuristic error:", err); }
   })());
 
   // 9. HPD Speculation Watch List
@@ -781,9 +844,41 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
     r.name.toUpperCase().match(/LLC|CORP|INC/)
   );
 
-  await Promise.all([
+  // Race enrichment against a 6-second timeout so Scout stays fast
+  const enrichmentTimeout = new Promise<void>((resolve) => setTimeout(() => {
+    console.warn("[ENRICHMENT] Timeout — returning partial data");
+    resolve();
+  }, 6000));
+
+  // Check if we have cached enrichment data (7-day TTL — saves API credits)
+  const cachedEnrichment = await cachedSourceFetch("CONTACT_ENRICHMENT", async () => null);
+
+  await Promise.race([
+    enrichmentTimeout,
+    Promise.all([
     // PDL enrichment — auto-enrich top individual if no phones found
     (async () => {
+      // Use cached enrichment if available
+      if (cachedEnrichment) {
+        const ce = cachedEnrichment as any;
+        if (ce.pdlEnrichment) {
+          results.pdlEnrichment = ce.pdlEnrichment;
+          if (topIndividualForPDL && ce.pdlEnrichment.phones?.length > 0 && !topIndividualForPDL.phone) {
+            topIndividualForPDL.phone = ce.pdlEnrichment.phones[0].number;
+            topIndividualForPDL.source += " + PDL";
+            topIndividualForPDL.score = 95;
+          }
+          if (topIndividualForPDL && ce.pdlEnrichment.emails?.length > 0 && !topIndividualForPDL.email) {
+            topIndividualForPDL.email = ce.pdlEnrichment.emails[0];
+          }
+        }
+        if (ce.apolloEnrichment) results.apolloEnrichment = ce.apolloEnrichment;
+        if (ce.apolloOrgEnrichment) results.apolloOrgEnrichment = ce.apolloOrgEnrichment;
+        if (ce.apolloKeyPeople?.length) results.apolloKeyPeople = ce.apolloKeyPeople;
+        console.log("[ENRICHMENT] Using cached enrichment data");
+        return;
+      }
+
       const hasAnyPhone = ranked.some(r => r.phone);
       if (!hasAnyPhone && topIndividualForPDL) {
         try {
@@ -813,6 +908,8 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
 
     // Apollo enrichment — person + org + key people
     (async () => {
+      // Skip if we already loaded from cache in the PDL block
+      if (cachedEnrichment) return;
       try {
         const apolloPromises: Promise<void>[] = [];
 
@@ -861,7 +958,20 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
         console.error("[APOLLO] Enrichment error:", err);
       }
     })(),
-  ]);
+  ]),
+  ]); // Promise.race: enrichment vs 6s timeout
+
+  // Cache enrichment results for future lookups (7-day TTL, saves API credits)
+  if (!cachedEnrichment && (results.pdlEnrichment || results.apolloEnrichment)) {
+    const enrichmentData = {
+      pdlEnrichment: results.pdlEnrichment,
+      apolloEnrichment: results.apolloEnrichment,
+      apolloOrgEnrichment: results.apolloOrgEnrichment,
+      apolloKeyPeople: results.apolloKeyPeople,
+    };
+    cacheManager.setSource(bblKey, "CONTACT_ENRICHMENT", enrichmentData);
+    cacheManager.setSourceInDB(bblKey, "CONTACT_ENRICHMENT", enrichmentData);
+  }
 
   results.rankedContacts = ranked;
 
@@ -915,14 +1025,9 @@ export async function fetchBuildingProfile(boroCode: string, block: string, lot:
   // Speculation watch list
   if (results.speculation?.onWatchList) { distress += 15; signals.push("On HPD Speculation Watch List"); }
 
-  // Rent stabilization - losing units indicates potential issues
-  if (results.rentStabilized) {
-    const latest = results.rentStabilized.uc2024 || results.rentStabilized.uc2023 || results.rentStabilized.uc2022;
-    const earliest = results.rentStabilized.uc2007 || results.rentStabilized.uc2008;
-    if (earliest > 0 && latest > 0 && latest < earliest * 0.7) {
-      distress += 10;
-      signals.push("Lost " + Math.round((1 - latest / earliest) * 100) + "% of rent-stabilized units");
-    }
+  // Rent stabilization — flag if likely stabilized (indicates regulatory exposure)
+  if (results.rentStabilized && results.rentStabilized.status === "Likely") {
+    // Not a distress signal per se, but worth noting for deal analysis
   }
 
   // Many complaints

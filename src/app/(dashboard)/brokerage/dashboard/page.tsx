@@ -34,6 +34,7 @@ import {
   Trophy,
   Target,
   Flame,
+  ShieldCheck,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -64,6 +65,12 @@ const INVOICE_STATUS_ORDER = ["draft", "sent", "paid", "void"];
 export default function BrokerageDashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [txStats, setTxStats] = useState<TransactionStats | null>(null);
+  const [screeningStats, setScreeningStats] = useState<{
+    totalScreenings: number;
+    approvalRate: number | null;
+    avgRiskScore: number | null;
+    pendingReview: number;
+  } | null>(null);
   const [recentTx, setRecentTx] = useState<any[]>([]);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,16 +79,21 @@ export default function BrokerageDashboardPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const [data, txs, recent, lb] = await Promise.all([
+      const [data, txs, recent, lb, screening] = await Promise.all([
         getDashboardSummary(period),
         getTransactionStats(),
         getRecentActiveTransactions(5),
         getLeaderboard("current_month").catch(() => [] as LeaderboardEntry[]),
+        (async () => {
+          const { getScreeningDashboardStats } = await import("./actions");
+          return getScreeningDashboardStats().catch(() => null);
+        })(),
       ]);
       setSummary(data);
       setTxStats(txs);
       setRecentTx(recent);
       setLeaderboard(lb);
+      setScreeningStats(screening);
     } catch {
       setSummary(null);
     } finally {
@@ -280,6 +292,50 @@ export default function BrokerageDashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* ── Screening Stats ───────────────────────────────── */}
+      {screeningStats && (
+        <div className="mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <ShieldCheck className="h-4 w-4 text-blue-500" />
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Screenings</span>
+              </div>
+              <div className="text-xl font-bold text-slate-900">{screeningStats.totalScreenings}</div>
+              <div className="text-xs text-slate-400 mt-1">This period</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Approval Rate</span>
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                {screeningStats.approvalRate !== null ? fmtPct(screeningStats.approvalRate) : "\u2014"}
+              </div>
+              <div className="text-xs text-slate-400 mt-1">Completed</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart3 className="h-4 w-4 text-amber-500" />
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Avg Risk Score</span>
+              </div>
+              <div className="text-xl font-bold text-slate-900">
+                {screeningStats.avgRiskScore !== null ? Math.round(screeningStats.avgRiskScore) : "\u2014"}
+              </div>
+              <div className="text-xs text-slate-400 mt-1">0-100 scale</div>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="h-4 w-4 text-orange-500" />
+                <span className="text-xs font-medium text-slate-500 uppercase tracking-wider">Pending Review</span>
+              </div>
+              <div className="text-xl font-bold text-slate-900">{screeningStats.pendingReview}</div>
+              <div className="text-xs text-slate-400 mt-1">Awaiting decision</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Charts Section ────────────────────────────────── */}
       <div className="grid md:grid-cols-2 gap-6 mb-8">

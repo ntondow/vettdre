@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1E40AF"/>
+      <stop offset="100%" style="stop-color:#1E3A8A"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="1024" height="1024" rx="220" fill="url(#bg)"/>
+  <!-- V letterform — bold geometric -->
+  <path d="M 310 260 L 512 764 L 714 260 L 620 260 L 512 600 L 404 260 Z" fill="white"/>
+  <!-- Accent bar (building silhouette nod) -->
+  <rect x="432" y="720" width="160" height="16" rx="8" fill="rgba(255,255,255,0.5)"/>
+</svg>

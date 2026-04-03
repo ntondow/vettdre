@@ -85,8 +85,8 @@ const COLUMN_ALIASES: Record<StandardColumnKey, string[]> = {
   billTo: ["bill to", "bill to name", "billed to", "billing entity", "landlord", "management", "management company", "owner", "payee", "bill_to", "bill_to_name", "billing_entity", "management_company"],
   tenantName: ["tenant", "tenant name", "client", "client name", "buyer", "lessee", "tenant_name", "client_name", "tenant name(s)", "tenant names"],
   amount: ["amount", "commission", "commission amount", "fee", "total", "commission_amount", "comm amount", "commission amt", "invoiced", "invoiced $", "invoiced amount"],
-  rentalPrice: ["rent", "rent price", "monthly rent", "rental price", "rental amount", "rent amount", "rent_price", "monthly_rent"],
-  moveInDate: ["move in", "move in date", "move-in date", "lease start", "lease start date", "start date", "move_in_date", "lease_start_date", "date"],
+  rentalPrice: ["rent", "rent price", "monthly rent", "rental price", "rental amount", "rent amount", "rent_price", "monthly_rent", "rental"],
+  moveInDate: ["move in", "move in date", "move-in date", "move-in", "lease start", "lease start date", "start date", "move_in_date", "lease_start_date", "date"],
   invoiceNumber: ["invoice #", "invoice number", "invoice no", "invoice_number", "invoice_no", "deal id", "deal_id", "listing id", "listing_id", "listing #", "ref", "reference", "deal code", "deal_code", "inv #", "inv no", "id"],
   notes: ["notes", "note", "memo", "comments", "remarks", "description"],
 };
@@ -145,12 +145,29 @@ function deduplicatePropertyNames(rows: MappedRow[]): string[] {
   return Array.from(seen.values()).sort();
 }
 
+/** Check if a header is an exact alias match for ANY column key */
+function isExactMatchForAnyKey(header: string): StandardColumnKey | null {
+  const norm = header.toLowerCase().trim();
+  for (const col of STANDARD_COLUMNS) {
+    if (COLUMN_ALIASES[col.key].includes(norm)) return col.key;
+  }
+  return null;
+}
+
 function autoMatchColumn(headers: string[], targetKey: StandardColumnKey): string | null {
   const aliases = COLUMN_ALIASES[targetKey];
+  // Pass 1: exact match (case-insensitive) — highest priority
   for (const header of headers) {
     const norm = header.toLowerCase().trim();
     if (aliases.includes(norm)) return header;
-    // Partial match
+  }
+  // Pass 2: partial match — but skip headers that are an exact match for a
+  // different column key. This prevents e.g. "Property Address" from also
+  // being partial-matched to propertyName via the "property" alias.
+  for (const header of headers) {
+    const norm = header.toLowerCase().trim();
+    const exactOwner = isExactMatchForAnyKey(header);
+    if (exactOwner && exactOwner !== targetKey) continue; // claimed by another key
     for (const alias of aliases) {
       if (norm.includes(alias) || alias.includes(norm)) return header;
     }
@@ -385,18 +402,19 @@ export default function BulkInvoicePage() {
     setMappedRows(mapped);
     setPropertyNames(deduplicatePropertyNames(mapped));
 
-    // Pre-populate Bill To mappings from spreadsheet values
-    if (columnMap.billTo) {
-      setBillToMappings(prev => {
-        const next = { ...prev };
-        // Build a lookup of existing saved entity names for fuzzy matching
-        const savedNames = new Map<string, string>(); // lowercase name → original normKey
-        for (const [normKey, entity] of Object.entries(prev)) {
-          if (entity?.companyName) {
-            savedNames.set(entity.companyName.toLowerCase().trim(), normKey);
-          }
+    // Pre-populate Bill To mappings: merge spreadsheet values with saved mappings
+    setBillToMappings(prev => {
+      const next = { ...prev };
+      // Build a lookup of existing saved entity names for fuzzy matching
+      const savedNames = new Map<string, string>(); // lowercase name → original normKey
+      for (const [normKey, entity] of Object.entries(prev)) {
+        if (entity?.companyName) {
+          savedNames.set(entity.companyName.toLowerCase().trim(), normKey);
         }
-        // For each property, find the first non-empty Bill To value from its rows
+      }
+
+      if (columnMap.billTo) {
+        // When a Bill To column exists, use its values to pre-populate
         const propertyBillTo = new Map<string, string>(); // normAddr → billTo value
         for (const row of mapped) {
           if (!row.billTo || !row.propertyAddress) continue;
@@ -411,16 +429,28 @@ export default function BulkInvoicePage() {
           // Check if this Bill To value matches an existing saved entity
           const matchKey = savedNames.get(billToValue.toLowerCase().trim());
           if (matchKey && next[matchKey]) {
-            // Copy the matched entity's full details to this property
             next[normAddr] = { ...next[matchKey] };
           } else {
-            // Pre-fill with just the company name for user confirmation
             next[normAddr] = { companyName: billToValue };
           }
         }
-        return next;
-      });
-    }
+      }
+
+      // Always apply saved mappings for properties that don't already have
+      // a Bill To assignment — this covers re-uploads without a Bill To column
+      for (const row of mapped) {
+        if (!row.propertyAddress) continue;
+        const normAddr = normalizePropertyName(row.propertyAddress);
+        if (!next[normAddr]?.companyName) {
+          // Check if a saved mapping exists for this normalized address
+          if (prev[normAddr]?.companyName) {
+            next[normAddr] = { ...prev[normAddr] };
+          }
+        }
+      }
+
+      return next;
+    });
 
     setStep("bill-to");
   }
@@ -541,7 +571,8 @@ export default function BulkInvoicePage() {
 
           paymentInstructions: piForPdf,
 
-          notes: defaultNotes || undefined,
+          // Per-row notes from spreadsheet take priority; fall back to global default notes
+          notes: row.notes || defaultNotes || undefined,
           year: String(year),
         });
       }
@@ -723,12 +754,16 @@ export default function BulkInvoicePage() {
                     </select>
                     <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
                   </div>
-                  {columnMap[col.key] && (
+                  {columnMap[col.key] ? (
                     <span className="text-xs text-green-600 flex items-center gap-1">
                       <CheckCircle className="h-3.5 w-3.5" />
                       Matched
                     </span>
-                  )}
+                  ) : !col.required ? (
+                    <span className="text-xs text-slate-400 flex items-center gap-1">
+                      {col.key === "invoiceNumber" ? "Auto-generated" : "Optional"}
+                    </span>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -1099,6 +1134,12 @@ export default function BulkInvoicePage() {
           {/* Default notes */}
           <div className="bg-white border border-slate-200 rounded-xl p-4">
             <h3 className="text-sm font-semibold text-slate-700 mb-2">Default Notes / Payment Instructions</h3>
+            {mappedRows.some(r => r.notes) && (
+              <p className="text-xs text-blue-600 mb-2">
+                {mappedRows.filter(r => r.notes).length} row{mappedRows.filter(r => r.notes).length > 1 ? "s" : ""} have
+                per-row notes from the spreadsheet. Those will appear on each invoice. This field is the fallback for rows without notes.
+              </p>
+            )}
             <textarea
               value={defaultNotes}
               onChange={e => setDefaultNotes(e.target.value)}

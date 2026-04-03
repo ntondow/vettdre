@@ -9,6 +9,7 @@ import {
   getFullDashboard,
   getFeedTopics,
   saveFeedTopics,
+  getScreeningWidget,
 } from "./feed-actions";
 import type {
   MarketStripData,
@@ -17,6 +18,7 @@ import type {
   BrokeragePulseData,
   FeedTopicConfig,
   FullDashboardData,
+  ScreeningWidgetData,
 } from "./types";
 import {
   ExternalLink,
@@ -37,6 +39,7 @@ import {
   DollarSign,
   Clock,
   Rocket,
+  Shield,
 } from "lucide-react";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -148,6 +151,10 @@ export default function DashboardPage() {
   const [dashboard, setDashboard] = useState<FullDashboardData | null>(null);
   const [dashLoading, setDashLoading] = useState(true);
 
+  // Screening widget
+  const [screening, setScreening] = useState<ScreeningWidgetData | null>(null);
+  const [screeningLoading, setScreeningLoading] = useState(true);
+
   // Topics
   const [topics, setTopics] = useState<FeedTopicConfig>({ topics: [] });
   const [showTopicEditor, setShowTopicEditor] = useState(false);
@@ -192,7 +199,12 @@ export default function DashboardPage() {
       .then((d) => { setDashboard(d); setDashLoading(false); })
       .catch(() => setDashLoading(false));
 
-    await Promise.allSettled([stripPromise, feedPromise, pulsePromise, dashPromise]);
+    const screeningPromise = getScreeningWidget()
+      .then(setScreening)
+      .catch(() => {})
+      .finally(() => setScreeningLoading(false));
+
+    await Promise.allSettled([stripPromise, feedPromise, pulsePromise, dashPromise, screeningPromise]);
     setLastUpdated(new Date());
     if (isRefresh) setRefreshing(false);
   }, []);
@@ -676,6 +688,72 @@ export default function DashboardPage() {
               </div>
             </div>
           )}
+
+          {/* ── Screening Pipeline ── */}
+          {screeningLoading ? (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5 animate-pulse">
+              <div className="h-5 bg-slate-700 rounded w-40 mb-4" />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="h-16 bg-slate-700/50 rounded-lg" />
+                ))}
+              </div>
+            </div>
+          ) : screening && (screening.inProgress > 0 || screening.awaitingReview > 0 || screening.approvedThisMonth > 0 || screening.recentScreenings.length > 0) ? (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-violet-400" />
+                  <h3 className="text-sm font-semibold text-slate-200">Screening Pipeline</h3>
+                </div>
+                <Link href="/screening" className="text-xs text-blue-400 hover:text-blue-300 font-medium flex items-center gap-1">
+                  View All <ArrowRight className="w-3 h-3" />
+                </Link>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                <div className="bg-slate-700/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-100">{screening.inProgress}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">In Progress</p>
+                </div>
+                <div className="bg-slate-700/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-400">{screening.awaitingReview}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Awaiting Review</p>
+                </div>
+                <div className="bg-slate-700/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-emerald-400">{screening.approvedThisMonth}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Approved This Month</p>
+                </div>
+                <div className="bg-slate-700/30 rounded-lg p-3 text-center">
+                  <p className="text-2xl font-bold text-slate-100">{screening.avgScore != null ? Math.round(screening.avgScore) : "—"}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">Avg Score</p>
+                </div>
+              </div>
+              {screening.recentScreenings.length > 0 && (
+                <div className="space-y-2">
+                  {screening.recentScreenings.map((s) => {
+                    const scoreColor = s.riskScore == null ? "text-slate-400" : s.riskScore >= 70 ? "text-emerald-400" : s.riskScore >= 40 ? "text-amber-400" : "text-red-400";
+                    return (
+                      <Link key={s.id} href={`/screening/${s.id}`} className="flex items-center justify-between p-2.5 rounded-lg bg-slate-700/20 hover:bg-slate-700/40 transition-colors">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-slate-200 truncate">{s.applicantName}</p>
+                          <p className="text-xs text-slate-400 truncate">{s.propertyAddress}</p>
+                        </div>
+                        <div className="flex items-center gap-3 ml-3">
+                          <span className={`text-sm font-semibold ${scoreColor}`}>{s.riskScore != null ? Math.round(s.riskScore) : "—"}</span>
+                          <span className="text-xs text-slate-500">{s.recommendation || s.status}</span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="mt-3 pt-3 border-t border-slate-700/50">
+                <Link href="/screening/new" className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 font-medium">
+                  <Plus className="w-3.5 h-3.5" /> New Screening
+                </Link>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="bg-slate-900 rounded-xl p-8 text-center">

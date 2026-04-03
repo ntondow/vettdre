@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
     scheduledActions: { checked: 0, executed: 0, failed: 0 },
     onboardingExpired: 0,
     onboardingReminders: 0,
+    screeningExpired: 0,
     errors: [] as string[],
   };
 
@@ -80,6 +81,14 @@ export async function GET(request: NextRequest) {
     const msg = error instanceof Error ? error.message : String(error);
     results.errors.push(`onboarding_reminders error: ${msg}`);
     console.error("[AUTOMATION CRON] onboarding_reminders top-level error:", error);
+  }
+
+  try {
+    await expireCreditReports(results);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    results.errors.push(`screening_expiry error: ${msg}`);
+    console.error("[AUTOMATION CRON] screening_expiry top-level error:", error);
   }
 
   console.log("[AUTOMATION CRON] Complete:", JSON.stringify(results));
@@ -417,4 +426,47 @@ async function sendOnboardingReminders(results: { onboardingReminders: number; e
   if (results.onboardingReminders > 0) {
     console.log(`[AUTOMATION CRON] Sent ${results.onboardingReminders} onboarding reminders`);
   }
+}
+
+// ── Screening: Expire old credit reports (FCRA compliance) ──
+
+async function expireCreditReports(results: { screeningExpired: number; errors: string[] }) {
+  // FCRA requires disposal of consumer report data after permissible purpose ends.
+  // We expire reports 30 days after pull and scrub the raw encrypted data.
+  const cutoff = new Date(Date.now() - 30 * 86_400_000); // 30 days ago
+
+  // Find completed reports that have passed the expiry window
+  const expiredReports = await prisma.creditReport.findMany({
+    where: {
+      status: "completed",
+      OR: [
+        // Reports with explicit expiresAt that has passed
+        { expiresAt: { lt: new Date() } },
+        // Reports without expiresAt but pulled more than 30 days ago
+        { expiresAt: null, pulledAt: { lt: cutoff } },
+        // Reports without pulledAt but created more than 30 days ago
+        { expiresAt: null, pulledAt: null, createdAt: { lt: cutoff } },
+      ],
+    },
+    select: { id: true },
+    take: 200,
+  });
+
+  if (expiredReports.length === 0) {
+    console.log("[AUTOMATION CRON] No expired credit reports found");
+    return;
+  }
+
+  // Batch update: mark expired and scrub raw encrypted data
+  const ids = expiredReports.map((r: { id: string }) => r.id);
+  await prisma.creditReport.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      status: "expired",
+      rawReportEncrypted: null,
+    },
+  });
+
+  results.screeningExpired = expiredReports.length;
+  console.log(`[AUTOMATION CRON] Expired ${expiredReports.length} credit reports (FCRA compliance)`);
 }

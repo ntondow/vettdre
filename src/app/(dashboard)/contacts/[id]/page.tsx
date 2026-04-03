@@ -21,6 +21,21 @@ async function getContact(id: string) {
       showings: { orderBy: { scheduledAt: "desc" }, take: 10, include: { property: { select: { address: true, city: true, state: true } } } },
       enrichmentProfiles: { orderBy: { version: "desc" }, take: 1 },
       emailMessages: { orderBy: { receivedAt: "desc" }, take: 50, select: { id: true, direction: true, fromEmail: true, fromName: true, toEmails: true, subject: true, snippet: true, receivedAt: true, isRead: true, leadSource: true, aiSummary: true, sentimentScore: true } },
+      screeningApplications: {
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          status: true,
+          vettdreRiskScore: true,
+          riskRecommendation: true,
+          completedAt: true,
+          propertyAddress: true,
+          unitNumber: true,
+          screeningTier: true,
+          decisionAt: true,
+        }
+      },
     },
   });
   return contact;
