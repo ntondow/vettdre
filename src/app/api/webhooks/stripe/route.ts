@@ -85,6 +85,14 @@ export async function POST(req: NextRequest) {
               },
             });
 
+            // Update applicant step to confirmation (step 6)
+            if (applicantId) {
+              await prisma.screeningApplicant.update({
+                where: { id: applicantId },
+                data: { currentStep: 6, wizardCompleted: true },
+              }).catch(() => {}); // Non-critical — don't block webhook
+            }
+
             console.log(`[Stripe] screening payment: app=${applicationId} amount=${session.amount_total}`);
 
             // Trigger the processing pipeline (fire-and-forget — don't block webhook response)

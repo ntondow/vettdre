@@ -195,7 +195,7 @@ export async function POST(
     // Update applicant step
     await prisma.screeningApplicant.update({
       where: { id: applicantId },
-      data: { currentStep: 6 },
+      data: { currentStep: 5 },
     });
 
     // Create ScreeningEvent

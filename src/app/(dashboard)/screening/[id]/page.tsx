@@ -162,6 +162,22 @@ export default function ScreeningDetailPage() {
     }
   };
 
+  const handleReopenForPlaid = async () => {
+    if (!confirm("Reopen this application so the applicant can complete Plaid bank connection?")) return;
+    try {
+      const { reopenForPlaid } = await import("../actions");
+      const result = await reopenForPlaid(id);
+      if (result.success) {
+        showSuccess("Application reopened for Plaid completion. Applicant can now revisit their link.");
+        loadApp();
+      } else {
+        showError(result.error || "Failed to reopen application");
+      }
+    } catch {
+      showError("Failed to reopen application");
+    }
+  };
+
   if (loading) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-6 space-y-6 animate-pulse">
@@ -292,6 +308,16 @@ export default function ScreeningDetailPage() {
                 className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors"
               >
                 {app.status === "draft" ? "Send Invite" : "Resend Invite"}
+              </button>
+            )}
+            {/* Reopen for Plaid if skipped */}
+            {app.applicants?.some((a: any) => a.plaidSkipped && !a.plaidConnections?.length) &&
+             !["withdrawn", "draft"].includes(app.status) && (
+              <button
+                onClick={handleReopenForPlaid}
+                className="rounded-lg border border-blue-200 text-blue-600 px-3 py-1.5 text-sm font-medium hover:bg-blue-50 transition-colors"
+              >
+                Reopen for Plaid
               </button>
             )}
             {!["approved", "denied", "withdrawn"].includes(app.status) && (
@@ -559,6 +585,40 @@ function ApplicantCard({ applicant }: { applicant: any }) {
         )}
       </div>
 
+      {/* Wizard Progress */}
+      {applicant.status === "in_progress" && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <p className="text-xs font-medium text-slate-500 mb-2">Application Progress</p>
+          <div className="flex items-center gap-1">
+            {[
+              { step: 1, label: "Personal Info" },
+              { step: 2, label: "E-Sign" },
+              { step: 3, label: "Bank" },
+              { step: 4, label: "Documents" },
+              { step: 5, label: "Payment" },
+              { step: 6, label: "Done" },
+            ].map((s) => {
+              const completed = (applicant.currentStep || 1) > s.step;
+              const current = (applicant.currentStep || 1) === s.step;
+              return (
+                <div key={s.step} className="flex-1">
+                  <div
+                    className={`h-1.5 rounded-full mb-1 ${
+                      completed ? "bg-green-500" : current ? "bg-blue-500" : "bg-slate-200"
+                    }`}
+                  />
+                  <p className={`text-[10px] text-center ${
+                    current ? "text-blue-600 font-semibold" : completed ? "text-green-600" : "text-slate-400"
+                  }`}>
+                    {s.label}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Plaid connections */}
       {applicant.plaidConnections?.length > 0 && (
         <div className="mt-3 pt-3 border-t border-slate-100">
@@ -573,6 +633,15 @@ function ApplicantCard({ applicant }: { applicant: any }) {
               </span>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Plaid skipped indicator */}
+      {applicant.plaidSkipped && !applicant.plaidConnections?.length && (
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          <span className="inline-flex items-center gap-1 text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded">
+            Bank connection skipped — applicant chose to upload statements instead
+          </span>
         </div>
       )}
 

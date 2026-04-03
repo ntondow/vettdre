@@ -6,7 +6,7 @@ import { Loader2, AlertTriangle, ChevronRight } from "lucide-react";
 interface Field {
   key: string;
   label: string;
-  type: "text" | "email" | "tel" | "date" | "number" | "currency" | "ssn" | "boolean" | "select";
+  type: "text" | "email" | "tel" | "date" | "number" | "currency" | "ssn" | "boolean" | "select" | "textarea" | "file";
   required?: boolean;
   encrypted?: boolean;
   showIf?: { field: string; value: boolean | string };
@@ -76,6 +76,16 @@ const US_STATES = [
   { value: "WY", label: "Wyoming" },
 ];
 
+const PET_TYPES = [
+  { value: "dog", label: "Dog" },
+  { value: "cat", label: "Cat" },
+  { value: "bird", label: "Bird" },
+  { value: "fish", label: "Fish" },
+  { value: "reptile", label: "Reptile" },
+  { value: "small_animal", label: "Small Animal (hamster, rabbit, etc.)" },
+  { value: "other", label: "Other" },
+];
+
 interface Props {
   fieldConfig: FieldConfig;
   applicantRole: string;
@@ -93,6 +103,7 @@ export default function PersonalInfoStep({
 }: Props) {
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [fileUploads, setFileUploads] = useState<Record<string, File | null>>({});
 
   // Compute which sections to show based on role
   const visibleSections = useMemo(() => {
@@ -160,9 +171,16 @@ export default function PersonalInfoStep({
 
         const value = formData[field.key];
 
-        if (field.required && (!value || String(value).trim() === "")) {
-          newErrors[field.key] = `${field.label} is required`;
-          continue;
+        if (field.required) {
+          if (field.type === "boolean") {
+            if (value !== true && value !== false) {
+              newErrors[field.key] = `${field.label} is required`;
+              continue;
+            }
+          } else if (!value || String(value).trim() === "") {
+            newErrors[field.key] = `${field.label} is required`;
+            continue;
+          }
         }
 
         if (value && String(value).trim() !== "") {
@@ -226,30 +244,89 @@ export default function PersonalInfoStep({
                             {state.label}
                           </option>
                         ))}
+                      {field.key === "petType" &&
+                        PET_TYPES.map((pt) => (
+                          <option key={pt.value} value={pt.value}>
+                            {pt.label}
+                          </option>
+                        ))}
                     </select>
                   ) : field.type === "boolean" ? (
-                    <button
-                      type="button"
-                      onClick={() => handleChange(field.key, !formData[field.key])}
-                      className={`w-full flex items-center gap-3 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
-                        formData[field.key]
-                          ? "border-blue-600 bg-blue-50 text-blue-900"
-                          : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
-                      }`}
-                    >
-                      <div
-                        className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${
-                          formData[field.key]
-                            ? "border-blue-600 bg-blue-600"
-                            : "border-slate-300 bg-white"
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleChange(field.key, true)}
+                        className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
+                          formData[field.key] === true
+                            ? "border-blue-600 bg-blue-50 text-blue-900"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
                         }`}
                       >
-                        {!!formData[field.key] && (
-                          <span className="text-white text-sm font-bold">✓</span>
-                        )}
-                      </div>
-                      {field.label}
-                    </button>
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          formData[field.key] === true ? "border-blue-600" : "border-slate-300"
+                        }`}>
+                          {formData[field.key] === true && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                          )}
+                        </div>
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleChange(field.key, false)}
+                        className={`flex-1 flex items-center justify-center gap-2 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors ${
+                          formData[field.key] === false
+                            ? "border-blue-600 bg-blue-50 text-blue-900"
+                            : "border-slate-300 bg-white text-slate-700 hover:border-slate-400"
+                        }`}
+                      >
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          formData[field.key] === false ? "border-blue-600" : "border-slate-300"
+                        }`}>
+                          {formData[field.key] === false && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />
+                          )}
+                        </div>
+                        No
+                      </button>
+                    </div>
+                  ) : field.type === "textarea" ? (
+                    <textarea
+                      value={value}
+                      onChange={(e) => handleChange(field.key, e.target.value)}
+                      placeholder={field.label}
+                      rows={3}
+                      className={`w-full rounded-lg border px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-colors resize-none ${
+                        error
+                          ? "border-red-300 bg-red-50 focus:ring-red-500"
+                          : "border-slate-300 bg-white"
+                      }`}
+                    />
+                  ) : field.type === "file" ? (
+                    <div>
+                      <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-lg cursor-pointer hover:bg-slate-50 transition-colors border-slate-300">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          {fileUploads[field.key] ? (
+                            <p className="text-sm text-green-600 font-medium">{fileUploads[field.key]!.name}</p>
+                          ) : (
+                            <>
+                              <p className="text-sm text-slate-500">Click to upload</p>
+                              <p className="text-xs text-slate-400 mt-1">JPG, PNG or HEIC</p>
+                            </>
+                          )}
+                        </div>
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null;
+                            setFileUploads((prev) => ({ ...prev, [field.key]: file }));
+                            handleChange(field.key, file ? file.name : "");
+                          }}
+                        />
+                      </label>
+                    </div>
                   ) : field.type === "currency" ? (
                     <div className="relative">
                       <span className="absolute left-4 top-2.5 sm:top-2 text-sm font-medium text-slate-400">

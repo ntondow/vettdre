@@ -710,3 +710,54 @@ export async function removeScreeningCard(): Promise<{ success: boolean; error?:
 
   return { success: true };
 }
+
+// ── Reopen for Plaid ───────────────────────────────────────
+
+export async function reopenForPlaid(applicationId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    const auth = await getAuthContext();
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    const application = await prisma.screeningApplication.findFirst({
+      where: { id: applicationId, orgId: auth.orgId },
+      include: { applicants: { select: { id: true, plaidSkipped: true } } },
+    });
+
+    if (!application) return { success: false, error: "Application not found" };
+
+    // Reset plaidSkipped on all applicants and set their step back to plaid (step 3)
+    const skippedApplicants = application.applicants.filter((a: any) => a.plaidSkipped);
+    if (skippedApplicants.length === 0) {
+      return { success: false, error: "No applicants skipped Plaid" };
+    }
+
+    await prisma.$transaction([
+      // Reset applicant plaid status
+      ...skippedApplicants.map((a: any) =>
+        prisma.screeningApplicant.update({
+          where: { id: a.id },
+          data: { plaidSkipped: false, currentStep: 3 },
+        })
+      ),
+      // Set application back to in_progress if needed
+      prisma.screeningApplication.update({
+        where: { id: applicationId },
+        data: { status: ["complete", "processing"].includes(application.status) ? "in_progress" : application.status },
+      }),
+      // Log event
+      prisma.screeningEvent.create({
+        data: {
+          applicationId,
+          agentUserId: auth.userId,
+          eventType: "reopened_for_plaid",
+          eventData: { reason: "Agent reopened application for Plaid bank connection" },
+        },
+      }),
+    ]);
+
+    return { success: true };
+  } catch (error) {
+    console.error("Reopen for Plaid error:", error);
+    return { success: false, error: "Failed to reopen application" };
+  }
+}

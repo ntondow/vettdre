@@ -238,8 +238,18 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
     }
   };
 
-  const handlePlaidSkip = () => {
-    setStep("documents");
+  const handlePlaidSkip = async () => {
+    if (!applicantId) { setError("Application data is missing. Please refresh the page."); return; }
+    try {
+      setError(null);
+      setSaving(true);
+      await apiPost("/plaid-skip", { applicantId });
+      setStep("documents");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDocumentsComplete = async (documents: Array<{ file: File; documentType: string }>) => {
