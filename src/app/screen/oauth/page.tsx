@@ -1,21 +1,10 @@
 "use client";
 
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { usePlaidLink } from "react-plaid-link";
 import { useSearchParams } from "next/navigation";
 
-/**
- * Plaid OAuth redirect page.
- *
- * After a user authenticates with their bank via OAuth, Plaid redirects them
- * to this page with an `oauth_state_id` query parameter. We use that to
- * resume the Plaid Link flow by calling `usePlaidLink` with
- * `receivedRedirectUri` set to the current URL.
- *
- * The link token was stored in sessionStorage before the OAuth redirect began
- * (in PlaidStep.tsx). We read it back here to reinitialize the Link handler.
- */
-export default function PlaidOAuthRedirect() {
+function PlaidOAuthInner() {
   const searchParams = useSearchParams();
   const oauthStateId = searchParams.get("oauth_state_id");
 
@@ -38,7 +27,6 @@ export default function PlaidOAuthRedirect() {
         return;
       }
       try {
-        // Exchange the public token
         const res = await fetch(`/api/screen/${screeningToken}/plaid-exchange`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -50,8 +38,6 @@ export default function PlaidOAuthRedirect() {
           }),
         });
         if (!res.ok) throw new Error("Exchange failed");
-
-        // Redirect back to screening wizard
         window.location.href = `/screen/${screeningToken}?plaid_success=true`;
       } catch (err) {
         console.error("Plaid exchange error:", err);
@@ -59,14 +45,12 @@ export default function PlaidOAuthRedirect() {
       }
     },
     onExit: () => {
-      // User cancelled — redirect back to screening wizard
       if (screeningToken) {
         window.location.href = `/screen/${screeningToken}?plaid_cancelled=true`;
       }
     },
   });
 
-  // Auto-open Plaid Link when ready
   useEffect(() => {
     if (ready && oauthStateId) {
       open();
@@ -100,5 +84,19 @@ export default function PlaidOAuthRedirect() {
         <p className="text-slate-400 text-sm mt-1">Please wait while we complete the verification.</p>
       </div>
     </div>
+  );
+}
+
+export default function PlaidOAuthRedirect() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-dvh flex items-center justify-center bg-white">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <PlaidOAuthInner />
+    </Suspense>
   );
 }
