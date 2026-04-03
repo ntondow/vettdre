@@ -15,7 +15,7 @@ import {
   CheckCircle2,
   Loader2,
 } from "lucide-react";
-import { submitDeal } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
+import { submitDeal, quickAddProperty } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
 import { uploadFile } from "@/lib/bms-files";
 import type {
   DealType,
@@ -232,6 +232,25 @@ export default function SubmitDealForm({
   const [buildingSearch, setBuildingSearch] = useState("");
   const [showBuildingDropdown, setShowBuildingDropdown] = useState(false);
 
+  // Quick-add building
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [quickAddSaving, setQuickAddSaving] = useState(false);
+  const [quickAddName, setQuickAddName] = useState("");
+  const [quickAddAddress, setQuickAddAddress] = useState("");
+  const [quickAddCity, setQuickAddCity] = useState("New York");
+  const [quickAddState, setQuickAddState] = useState("NY");
+  const [quickAddZip, setQuickAddZip] = useState("");
+  const [quickAddLandlord, setQuickAddLandlord] = useState("");
+  const [quickAddLandlordEmail, setQuickAddLandlordEmail] = useState("");
+  const [quickAddLandlordPhone, setQuickAddLandlordPhone] = useState("");
+  const [quickAddMgmt, setQuickAddMgmt] = useState("");
+
+  // Track mutable buildings list (starts from server data, grows with quick-adds)
+  const [buildings, setBuildings] = useState<ExclusiveBuilding[]>(exclusiveBuildings);
+
+  // Brokerage address (auto-fills from building, but editable)
+  const [brokerageAddress, setBrokerageAddress] = useState("");
+
   // Property (manual for personal)
   const [propertyAddress, setPropertyAddress] = useState("");
   const [propertyUnit, setPropertyUnit] = useState("");
@@ -262,7 +281,7 @@ export default function SubmitDealForm({
 
   // Commission
   const [commissionMode, setCommissionMode] =
-    useState<CommissionType>("percentage");
+    useState<CommissionType>("flat");
   const [commissionPct, setCommissionPct] = useState("");
   const [commissionFlat, setCommissionFlat] = useState("");
 
@@ -288,19 +307,19 @@ export default function SubmitDealForm({
 
   // ── Derived: selected building ────────────────────────────
   const selectedBuilding = useMemo(
-    () => exclusiveBuildings.find((b) => b.id === selectedBuildingId) ?? null,
-    [exclusiveBuildings, selectedBuildingId],
+    () => buildings.find((b) => b.id === selectedBuildingId) ?? null,
+    [buildings, selectedBuildingId],
   );
 
   const filteredBuildings = useMemo(() => {
     const q = buildingSearch.toLowerCase().trim();
-    if (!q) return exclusiveBuildings;
-    return exclusiveBuildings.filter(
+    if (!q) return buildings;
+    return buildings.filter(
       (b) =>
         b.name.toLowerCase().includes(q) ||
         (b.address && b.address.toLowerCase().includes(q)),
     );
-  }, [exclusiveBuildings, buildingSearch]);
+  }, [buildings, buildingSearch]);
 
   // ── Derived: is lease type ────────────────────────────────
   const isLeaseType = dealType === "lease" || dealType === "rental";
@@ -468,10 +487,10 @@ export default function SubmitDealForm({
       let city = propertyCity;
       let state = propertyState;
 
-      if (exclusiveType === "brokerage" && selectedBuilding) {
-        address = selectedBuilding.address ?? selectedBuilding.name;
-        city = selectedBuilding.city ?? "New York";
-        state = selectedBuilding.state ?? "NY";
+      if (exclusiveType === "brokerage") {
+        address = brokerageAddress || (selectedBuilding?.address ?? selectedBuilding?.name ?? "");
+        city = selectedBuilding?.city ?? "New York";
+        state = selectedBuilding?.state ?? "NY";
       }
 
       const dealTypeVal: DealType = dealType as DealType;
@@ -576,6 +595,7 @@ export default function SubmitDealForm({
     scrollToFirstError,
     exclusiveType,
     selectedBuilding,
+    brokerageAddress,
     propertyAddress,
     propertyUnit,
     propertyCity,
@@ -627,6 +647,61 @@ export default function SubmitDealForm({
     setCommissionMode("percentage");
     setCommissionPct("8.33");
   };
+
+  // ── Quick-add building handler ───────────────────────────────
+  const handleQuickAdd = useCallback(async () => {
+    if (!quickAddName.trim() || !quickAddAddress.trim()) return;
+    setQuickAddSaving(true);
+    try {
+      const result = await quickAddProperty({
+        name: quickAddName.trim(),
+        address: quickAddAddress.trim(),
+        city: quickAddCity || "New York",
+        state: quickAddState || "NY",
+        zipCode: quickAddZip || undefined,
+        landlordName: quickAddLandlord || undefined,
+        landlordEmail: quickAddLandlordEmail || undefined,
+        landlordPhone: quickAddLandlordPhone || undefined,
+        managementCo: quickAddMgmt || undefined,
+      });
+
+      if (result.success && result.data) {
+        const newBuilding = result.data as unknown as ExclusiveBuilding;
+        setBuildings((prev) => [...prev, newBuilding]);
+        setSelectedBuildingId(newBuilding.id);
+        setBrokerageAddress(newBuilding.address ?? quickAddAddress.trim());
+        setBuildingSearch("");
+        setShowBuildingDropdown(false);
+        setShowQuickAdd(false);
+        // Reset quick-add fields
+        setQuickAddName("");
+        setQuickAddAddress("");
+        setQuickAddCity("New York");
+        setQuickAddState("NY");
+        setQuickAddZip("");
+        setQuickAddLandlord("");
+        setQuickAddLandlordEmail("");
+        setQuickAddLandlordPhone("");
+        setQuickAddMgmt("");
+        // Clear building error
+        setErrors((prev) => {
+          const next = { ...prev };
+          delete next.building;
+          return next;
+        });
+      } else {
+        setErrors((prev) => ({ ...prev, building: result.error ?? "Failed to add building" }));
+      }
+    } catch (err) {
+      console.error("Quick add failed:", err);
+      setErrors((prev) => ({ ...prev, building: "Failed to add building" }));
+    } finally {
+      setQuickAddSaving(false);
+    }
+  }, [
+    quickAddName, quickAddAddress, quickAddCity, quickAddState, quickAddZip,
+    quickAddLandlord, quickAddLandlordEmail, quickAddLandlordPhone, quickAddMgmt,
+  ]);
 
   // ── Render ────────────────────────────────────────────────
 
@@ -722,6 +797,7 @@ export default function SubmitDealForm({
                   onChange={(e) => {
                     setBuildingSearch(e.target.value);
                     setSelectedBuildingId("");
+                    setBrokerageAddress("");
                     setShowBuildingDropdown(true);
                   }}
                   onFocus={() => setShowBuildingDropdown(true)}
@@ -732,7 +808,7 @@ export default function SubmitDealForm({
               </div>
               <FieldError error={errors.building} />
 
-              {showBuildingDropdown && (
+              {showBuildingDropdown && !showQuickAdd && (
                 <div className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
                   {filteredBuildings.length === 0 ? (
                     <div className="px-3 py-4 text-center text-sm text-slate-500">
@@ -745,6 +821,7 @@ export default function SubmitDealForm({
                         type="button"
                         onClick={() => {
                           setSelectedBuildingId(b.id);
+                          setBrokerageAddress(b.address ?? "");
                           setBuildingSearch("");
                           setShowBuildingDropdown(false);
                           setErrors((prev) => {
@@ -770,6 +847,88 @@ export default function SubmitDealForm({
                       </button>
                     ))
                   )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowQuickAdd(true);
+                      setShowBuildingDropdown(false);
+                    }}
+                    className="w-full border-t border-slate-100 px-3 py-2.5 text-left text-sm font-medium text-blue-600 hover:bg-blue-50"
+                  >
+                    + Add New Building
+                  </button>
+                </div>
+              )}
+
+              {showQuickAdd && (
+                <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/50 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-slate-800">Add New Building</h3>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickAdd(false)}
+                      className="text-slate-400 hover:text-slate-600"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Building Name *</label>
+                        <input type="text" value={quickAddName} onChange={(e) => setQuickAddName(e.target.value)} placeholder="e.g., Beach Haven" className={INPUT} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Address *</label>
+                        <input type="text" value={quickAddAddress} onChange={(e) => setQuickAddAddress(e.target.value)} placeholder="123 Main Street" className={INPUT} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">City</label>
+                        <input type="text" value={quickAddCity} onChange={(e) => setQuickAddCity(e.target.value)} className={INPUT} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">State</label>
+                        <input type="text" value={quickAddState} onChange={(e) => setQuickAddState(e.target.value)} className={INPUT} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Zip</label>
+                        <input type="text" value={quickAddZip} onChange={(e) => setQuickAddZip(e.target.value)} className={INPUT} />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Landlord Name</label>
+                        <input type="text" value={quickAddLandlord} onChange={(e) => setQuickAddLandlord(e.target.value)} className={INPUT} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Landlord Email</label>
+                        <input type="email" value={quickAddLandlordEmail} onChange={(e) => setQuickAddLandlordEmail(e.target.value)} className={INPUT} />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-600 mb-0.5">Landlord Phone</label>
+                        <input type="tel" value={quickAddLandlordPhone} onChange={(e) => setQuickAddLandlordPhone(e.target.value)} className={INPUT} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-600 mb-0.5">Management Co</label>
+                      <input type="text" value={quickAddMgmt} onChange={(e) => setQuickAddMgmt(e.target.value)} className={INPUT} />
+                    </div>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button type="button" onClick={() => setShowQuickAdd(false)} className="rounded-lg px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-100">
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleQuickAdd}
+                        disabled={quickAddSaving || !quickAddName.trim() || !quickAddAddress.trim()}
+                        className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {quickAddSaving ? "Saving..." : "Add Building"}
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -809,6 +968,21 @@ export default function SubmitDealForm({
                 </div>
               </div>
             )}
+
+            {/* Property address — auto-fills from building, editable */}
+            <div className="mt-3">
+              <label htmlFor="brokerageAddress" className={LABEL}>
+                Property Address
+              </label>
+              <input
+                id="brokerageAddress"
+                type="text"
+                value={brokerageAddress}
+                onChange={(e) => setBrokerageAddress(e.target.value)}
+                placeholder="Auto-fills from building, or enter manually"
+                className={INPUT}
+              />
+            </div>
 
             {/* Unit for brokerage exclusive */}
             <div className="mt-3">

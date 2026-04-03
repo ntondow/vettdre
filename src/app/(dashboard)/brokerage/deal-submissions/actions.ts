@@ -611,7 +611,50 @@ export async function getExclusiveProperties(): Promise<{ success: boolean; data
   }
 }
 
-// ── 9. getAgentSplitForDeal ─────────────────────────────────
+// ── 9. quickAddProperty ─────────────────────────────────────
+
+export async function quickAddProperty(input: {
+  name: string;
+  address: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  landlordName?: string;
+  landlordEmail?: string;
+  landlordPhone?: string;
+  managementCo?: string;
+}): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx) return { success: false, error: "Not authenticated" };
+
+    const property = await prisma.bmsProperty.create({
+      data: {
+        orgId: ctx.orgId,
+        name: input.name,
+        address: input.address,
+        city: input.city || "New York",
+        state: input.state || "NY",
+        zipCode: input.zipCode,
+        landlordName: input.landlordName,
+        landlordEmail: input.landlordEmail,
+        landlordPhone: input.landlordPhone,
+        managementCo: input.managementCo,
+        isExclusive: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: JSON.parse(JSON.stringify(property)),
+    };
+  } catch (error: unknown) {
+    console.error("quickAddProperty error:", error);
+    return { success: false, error: "Failed to add property" };
+  }
+}
+
+// ── 10. getAgentSplitForDeal ─────────────────────────────────
 
 export async function getAgentSplitForDeal(
   agentId: string,
@@ -656,7 +699,7 @@ export async function getAgentSplitForDeal(
   }
 }
 
-// ── 10. getSubmissionStats ──────────────────────────────────
+// ── 11. getSubmissionStats ──────────────────────────────────
 
 export async function getSubmissionStats(): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   try {
@@ -710,7 +753,7 @@ export async function getSubmissionStats(): Promise<{ success: boolean; data?: R
   }
 }
 
-// ── 11. getOrgAgents ────────────────────────────────────────
+// ── 12. getOrgAgents ────────────────────────────────────────
 
 export async function getOrgAgents(): Promise<{
   success: boolean;
