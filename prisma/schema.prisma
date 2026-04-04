@@ -457,6 +457,21 @@ enum CreditBureau {
   transunion
 }
 
+// ── Terminal ───────────────────────────────────────────────
+
+enum PollTier {
+  A  // 15 minutes
+  B  // 60 minutes
+  C  // 24 hours
+}
+
+enum WatchType {
+  bbl
+  block
+  owner
+  nta
+}
+
 // ============================================================
 // MODELS
 // ============================================================
@@ -541,6 +556,11 @@ model Organization {
   screeningApplications      ScreeningApplication[]
   screeningPayments          ScreeningPayment[]
 
+  // Terminal
+  terminalEvents             TerminalEvent[]
+  terminalPreferences        UserTerminalPreferences[]
+  terminalWatchlists         TerminalWatchlist[]
+
   @@map("organizations")
 }
 
@@ -599,6 +619,10 @@ model User {
   // Tenant Screening
   screeningApplications   ScreeningApplication[] @relation("ScreeningAgent")
   screeningEvents         ScreeningEvent[]       @relation("ScreeningEventAgent")
+
+  // Terminal
+  terminalPreferences     UserTerminalPreferences?
+  terminalWatchlists      TerminalWatchlist[]
 
   // Team assignment
   teamId                  String?                  @map("team_id")
@@ -2843,10 +2867,11 @@ model ScreeningApplication {
   organization        Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   agent               User            @relation("ScreeningAgent", fields: [agentUserId], references: [id])
   contact             Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  applicants          ScreeningApplicant[]
-  payments            ScreeningPayment[]
-  events              ScreeningEvent[]
-  wellnessProfile     FinancialWellnessProfile?
+  applicants              ScreeningApplicant[]
+  payments                ScreeningPayment[]
+  events                  ScreeningEvent[]
+  wellnessProfile         FinancialWellnessProfile?
+  identityVerifications   IdentityVerification[]
 
   @@index([orgId])
   @@index([orgId, status])
@@ -2892,15 +2917,16 @@ model ScreeningApplicant {
   updatedAt           DateTime                  @updatedAt @map("updated_at")
 
   // Relations
-  application         ScreeningApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  signatures          ScreeningSignature[]
-  plaidConnections    PlaidConnection[]
-  transactions        FinancialTransaction[]
-  creditReports       CreditReport[]
-  documents           ScreeningDocument[]
-  documentAnalyses    DocumentAnalysis[]
-  payments            ScreeningPayment[]
-  events              ScreeningEvent[]
+  application             ScreeningApplication      @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  signatures              ScreeningSignature[]
+  plaidConnections        PlaidConnection[]
+  transactions            FinancialTransaction[]
+  creditReports           CreditReport[]
+  documents               ScreeningDocument[]
+  documentAnalyses        DocumentAnalysis[]
+  payments                ScreeningPayment[]
+  events                  ScreeningEvent[]
+  identityVerifications   IdentityVerification[]
 
   @@index([applicationId])
   @@index([email])
@@ -3235,4 +3261,178 @@ model ScreeningEvent {
   @@index([eventType])
   @@index([createdAt])
   @@map("screening_events")
+}
+
+model IdentityVerification {
+  id                    String               @id @default(uuid())
+  applicantId           String               @map("applicant_id")
+  applicationId         String               @map("application_id")
+
+  // Provider info
+  provider              String               // "didit" or "stripe"
+  providerSessionId     String               @unique @map("provider_session_id")
+  providerWorkflowId    String?              @map("provider_workflow_id")
+
+  // Status: created, in_progress, approved, declined, in_review, abandoned, expired
+  status                String               @default("created")
+
+  // Document data (extracted by provider)
+  documentType          String?              @map("document_type")  // passport, drivers_license, id_card
+  firstName             String?              @map("first_name")
+  lastName              String?              @map("last_name")
+  dateOfBirth           DateTime?            @map("date_of_birth")
+  nationality           String?
+  issuingCountry        String?              @map("issuing_country")
+
+  // Verification scores
+  livenessScore         Float?               @map("liveness_score")
+  faceMatchScore        Float?               @map("face_match_score")
+  documentQuality       Float?               @map("document_quality")
+
+  // Warnings & flags
+  warnings              Json                 @default("[]")
+
+  // Raw response (AES-256-GCM encrypted)
+  rawResponseEncrypted  String?              @map("raw_response_encrypted") @db.Text
+
+  // Audit
+  ipAddress             String?              @map("ip_address")
+  userAgent             String?              @map("user_agent")
+  attempts              Int                  @default(1)
+
+  // Timestamps
+  startedAt             DateTime?            @map("started_at")
+  completedAt           DateTime?            @map("completed_at")
+  createdAt             DateTime             @default(now()) @map("created_at")
+
+  // Relations
+  applicant             ScreeningApplicant   @relation(fields: [applicantId], references: [id], onDelete: Cascade)
+  application           ScreeningApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicantId])
+  @@index([applicationId])
+  @@index([providerSessionId])
+  @@index([status])
+  @@map("identity_verifications")
+}
+
+// ============================================================
+// TERMINAL — Real-Time NYC Intelligence Feed
+// ============================================================
+
+model TerminalEvent {
+  id                String   @id @default(uuid())
+  orgId             String   @map("org_id")
+  eventType         String   @map("event_type")
+  bbl               String   @db.VarChar(10)
+  borough           Int
+  ntaCode           String?  @map("nta_code")
+  detectedAt        DateTime @default(now()) @map("detected_at")
+  sourceDataset     String   @map("source_dataset")
+  sourceRecordId    String   @map("source_record_id")
+  enrichmentPackage Json?    @map("enrichment_package")
+  aiBrief           String?  @map("ai_brief") @db.Text
+  tier              Int      @default(1)
+  metadata          Json?
+
+  // Relations
+  organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  alerts            TerminalWatchlistAlert[]
+
+  @@unique([sourceDataset, sourceRecordId])
+  @@index([detectedAt(sort: Desc)])
+  @@index([bbl])
+  @@index([borough, detectedAt(sort: Desc)])
+  @@index([eventType, detectedAt(sort: Desc)])
+  @@index([sourceDataset, sourceRecordId])
+  @@map("terminal_events")
+}
+
+model TerminalEventCategory {
+  id             String  @id @default(uuid())
+  eventType      String  @unique @map("event_type")
+  category       String
+  tier           Int
+  defaultEnabled Boolean @default(true) @map("default_enabled")
+  displayLabel   String  @map("display_label")
+  sortOrder      Int     @default(0) @map("sort_order")
+
+  @@map("terminal_event_categories")
+}
+
+model UserTerminalPreferences {
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  orgId              String   @map("org_id")
+  enabledCategories  String[] @map("enabled_categories")
+  enabledBoroughs    Int[]    @map("enabled_boroughs")
+  selectedNtas       String[] @map("selected_ntas")
+  preferences        Json?
+
+  // Relations
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("user_terminal_preferences")
+}
+
+model TerminalWatchlist {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  orgId       String    @map("org_id")
+  watchType   WatchType @map("watch_type")
+  watchValue  String    @map("watch_value")
+  label       String?
+  notifyTiers Int[]     @map("notify_tiers")
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization           @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  alerts      TerminalWatchlistAlert[]
+
+  @@index([userId])
+  @@index([watchType, watchValue])
+  @@map("terminal_watchlists")
+}
+
+model TerminalWatchlistAlert {
+  id          String   @id @default(uuid())
+  watchlistId String   @map("watchlist_id")
+  eventId     String   @map("event_id")
+  read        Boolean  @default(false)
+  notifiedAt  DateTime @default(now()) @map("notified_at")
+
+  // Relations
+  watchlist   TerminalWatchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  event       TerminalEvent    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([watchlistId, read])
+  @@map("terminal_watchlist_alerts")
+}
+
+model DatasetRegistry {
+  datasetId         String    @id @map("dataset_id")
+  displayName       String    @map("display_name")
+  pollTier          PollTier  @map("poll_tier")
+  pollIntervalMinutes Int     @map("poll_interval_minutes")
+  sodaEndpoint      String    @map("soda_endpoint")
+  timestampField    String?   @map("timestamp_field")
+  bblFields         Json?     @map("bbl_fields")
+  enabled           Boolean   @default(true)
+
+  @@map("dataset_registry")
+}
+
+model IngestionState {
+  datasetId           String    @id @map("dataset_id")
+  lastCheckedAt       DateTime? @map("last_checked_at")
+  lastRowsUpdatedAt   BigInt?   @map("last_rows_updated_at")
+  lastRecordTimestamp  DateTime? @map("last_record_timestamp")
+  recordCount         Int       @default(0) @map("record_count")
+  status              String    @default("idle")
+  lastError           String?   @map("last_error") @db.Text
+
+  @@map("ingestion_state")
 }
