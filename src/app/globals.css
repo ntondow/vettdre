@@ -120,3 +120,23 @@
 .animate-fade-in-fast {
   animation: fade-in-fast 150ms ease-out forwards;
 }
+
+/* ── Terminal Dark Theme ────────────────────────────────────── */
+
+@keyframes terminal-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes terminal-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.terminal-card-enter {
+  animation: terminal-fade-in 300ms ease-out forwards;
+}
+
+.terminal-shimmer {
+  animation: terminal-pulse 1.5s ease-in-out infinite;
+}
