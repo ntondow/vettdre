@@ -60,6 +60,7 @@ const AGENT_NAV_SECTIONS: NavSection[] = [
     items: [
       { name: "Prospecting", href: "/prospecting", icon: "🎯" },
       { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
     ],
   },
 ];
@@ -70,6 +71,7 @@ const ADMIN_NAV_SECTIONS: NavSection[] = [
     label: "Research",
     items: [
       { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
     ],
   },
   {

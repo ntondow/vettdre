@@ -49,6 +49,12 @@ const ADMIN_MORE_SECTIONS: MoreSection[] = [
     ],
   },
   {
+    label: "Research",
+    items: [
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
+    ],
+  },
+  {
     label: "Acquisitions",
     items: [
       { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
@@ -94,6 +100,7 @@ const AGENT_MORE_SECTIONS: MoreSection[] = [
     items: [
       { name: "Prospecting", href: "/prospecting", icon: "🎯" },
       { name: "Market Intel", href: "/market-intel", icon: "🔍" },
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
     ],
   },
 ];

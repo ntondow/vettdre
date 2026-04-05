@@ -117,7 +117,11 @@ export type Feature =
   // Screening
   | "screening_view"
   | "screening_create"
-  | "screening_enhanced";
+  | "screening_enhanced"
+  // Terminal
+  | "nav_terminal"
+  | "terminal_access"
+  | "terminal_ai_brief";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -163,6 +167,7 @@ const EXPLORER_FEATURES: Feature[] = [
   "street_intel_sales",
   "building_labels",
   "quick_screen",
+  "nav_terminal",
 ];
 
 // ── Pro: full intelligence suite ─────────────────────────────
@@ -216,6 +221,9 @@ const PRO_FEATURES: Feature[] = [
   // Screening
   "screening_view",
   "screening_create",
+  // Terminal
+  "terminal_access",
+  "terminal_ai_brief",
 ];
 
 // ── Team: brokerage management ───────────────────────────────
@@ -341,6 +349,9 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   expense_benchmarks: "Upgrade to Pro for RGB expense benchmarks and proforma modeling",
   distress_scores: "Upgrade to Pro for distress scoring and investment opportunity signals",
   screening_view: "Upgrade to Pro to access tenant screening",
+  nav_terminal: "Upgrade to Pro to access the Terminal",
+  terminal_access: "Upgrade to Pro to use real-time market intelligence",
+  terminal_ai_brief: "Upgrade to Pro for AI-generated intelligence briefs",
   screening_create: "Upgrade to Pro to create screening applications",
   screening_enhanced: "Upgrade to Team for enhanced tri-bureau screening",
 };
