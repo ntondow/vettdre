@@ -1,9 +1,12 @@
 /**
  * Terminal AI Brief Generation Cron Endpoint
  *
- * Called by Cloud Scheduler after enrichment completes.
- * Processes enriched events sequentially to avoid Anthropic rate limits.
- * Max 30 events per invocation (~90 seconds at ~3s per brief).
+ * Called by Cloud Scheduler every 5 minutes.
+ * Processes enriched events in PARALLEL BATCHES of 5 for ~5x throughput.
+ * Max 50 events per invocation (~35 seconds with parallelization).
+ *
+ * Throughput: 50 events/run × 12 runs/hour = ~600 briefs/hour
+ * (vs. prior: 30 events/run × 4 runs/hour = ~120 briefs/hour)
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -14,9 +17,94 @@ import type { EnrichmentPackage } from "@/lib/terminal-enrichment";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
-const MAX_EVENTS_PER_RUN = 30;
-const DELAY_BETWEEN_CALLS_MS = 200;
+const MAX_EVENTS_PER_RUN = 50;
+const PARALLEL_BATCH_SIZE = 5;
+const DELAY_BETWEEN_BATCHES_MS = 200;
 const MAX_BRIEF_RETRIES = 3;
+
+// ── Single event processor ──────────────────────────────────
+
+interface ProcessResult {
+  eventId: string;
+  success: boolean;
+  rateLimited?: boolean;
+  tokensUsed?: { input: number; output: number };
+  error?: string;
+}
+
+async function processEvent(event: any): Promise<ProcessResult> {
+  const enrichmentPackage = event.enrichmentPackage as unknown as EnrichmentPackage;
+  if (!enrichmentPackage) {
+    return { eventId: event.id, success: false, error: "No enrichment package" };
+  }
+
+  try {
+    const result = await generateBrief({
+      id: event.id,
+      eventType: event.eventType,
+      bbl: event.bbl,
+      tier: event.tier,
+      enrichmentPackage,
+    });
+
+    if (result) {
+      await prisma.terminalEvent.update({
+        where: { id: event.id },
+        data: {
+          aiBrief: result.brief,
+          metadata: {
+            ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
+            _colorTags: result.colorTags,
+            _headline: result.headline,
+            _briefGeneratedAt: new Date().toISOString(),
+          } as any,
+        },
+      });
+
+      return {
+        eventId: event.id,
+        success: true,
+        tokensUsed: result.tokensUsed,
+      };
+    } else {
+      const currentRetries = (event.metadata as any)?._briefRetries || 0;
+      await prisma.terminalEvent.update({
+        where: { id: event.id },
+        data: {
+          metadata: {
+            ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
+            _briefRetries: currentRetries + 1,
+            _briefError: "Generation returned null",
+          } as any,
+        },
+      }).catch(() => {});
+
+      return { eventId: event.id, success: false, error: "Generation returned null" };
+    }
+  } catch (err: any) {
+    // Detect rate limiting — bubble up so we can stop the whole run
+    const isRateLimited = err?.status === 429 || err?.rateLimited;
+    if (isRateLimited) {
+      return { eventId: event.id, success: false, rateLimited: true, error: "Rate limited" };
+    }
+
+    const currentRetries = (event.metadata as any)?._briefRetries || 0;
+    await prisma.terminalEvent.update({
+      where: { id: event.id },
+      data: {
+        metadata: {
+          ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
+          _briefRetries: currentRetries + 1,
+          _briefError: err instanceof Error ? err.message : String(err),
+        } as any,
+      },
+    }).catch(() => {});
+
+    return { eventId: event.id, success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// ── Main handler ────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
   // ── Auth ────────────────────────────────────────────────
@@ -45,7 +133,7 @@ export async function GET(request: NextRequest) {
         tier: { in: [1, 2] },
       },
       orderBy: { detectedAt: "desc" },
-      take: MAX_EVENTS_PER_RUN * 2, // Over-fetch for client-side retry filtering
+      take: MAX_EVENTS_PER_RUN * 2,
     });
 
     // Client-side filter: skip events that have exceeded brief retry limit
@@ -62,87 +150,47 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Process sequentially to respect Anthropic rate limits
-    for (const event of events) {
+    // Process in parallel batches of PARALLEL_BATCH_SIZE
+    for (let i = 0; i < events.length; i += PARALLEL_BATCH_SIZE) {
       if (rateLimited) break;
 
-      try {
-        const enrichmentPackage = event.enrichmentPackage as unknown as EnrichmentPackage;
-        if (!enrichmentPackage) {
-          errored++;
-          continue;
-        }
+      const batch = events.slice(i, i + PARALLEL_BATCH_SIZE);
+      const results = await Promise.allSettled(batch.map(processEvent));
 
-        const result = await generateBrief({
-          id: event.id,
-          eventType: event.eventType,
-          bbl: event.bbl,
-          tier: event.tier,
-          enrichmentPackage,
-        });
-
-        if (result) {
-          // Store brief text in aiBrief, colorTags + headline in metadata
-          await prisma.terminalEvent.update({
-            where: { id: event.id },
-            data: {
-              aiBrief: result.brief,
-              metadata: {
-                ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
-                _colorTags: result.colorTags,
-                _headline: result.headline,
-                _briefGeneratedAt: new Date().toISOString(),
-              } as any,
-            },
-          });
-
-          generated++;
-          totalInputTokens += result.tokensUsed.input;
-          totalOutputTokens += result.tokensUsed.output;
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const r = result.value;
+          if (r.rateLimited) {
+            console.warn("[Terminal Briefs] Rate limited by Anthropic — stopping run");
+            rateLimited = true;
+            break;
+          }
+          if (r.success) {
+            generated++;
+            if (r.tokensUsed) {
+              totalInputTokens += r.tokensUsed.input;
+              totalOutputTokens += r.tokensUsed.output;
+            }
+          } else {
+            errored++;
+          }
         } else {
-          // Generation failed — increment retry counter
-          const currentRetries = (event.metadata as any)?._briefRetries || 0;
-          await prisma.terminalEvent.update({
-            where: { id: event.id },
-            data: {
-              metadata: {
-                ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
-                _briefRetries: currentRetries + 1,
-                _briefError: "Generation returned null",
-              } as any,
-            },
-          }).catch(() => {});
+          // Promise rejected (unexpected)
           errored++;
+          console.error("[Terminal Briefs] Unexpected rejection:", result.reason);
         }
-      } catch (err: any) {
-        if (err?.rateLimited) {
-          console.warn("[Terminal Briefs] Rate limited by Anthropic — stopping batch");
-          rateLimited = true;
-          break;
-        }
-
-        // Record error on event
-        const currentRetries = (event.metadata as any)?._briefRetries || 0;
-        await prisma.terminalEvent.update({
-          where: { id: event.id },
-          data: {
-            metadata: {
-              ...(typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}),
-              _briefRetries: currentRetries + 1,
-              _briefError: err instanceof Error ? err.message : String(err),
-            } as any,
-          },
-        }).catch(() => {});
-        errored++;
       }
 
-      // Delay between calls
-      await new Promise(r => setTimeout(r, DELAY_BETWEEN_CALLS_MS));
+      // Small delay between batches to be a good API citizen
+      if (i + PARALLEL_BATCH_SIZE < events.length && !rateLimited) {
+        await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
+      }
     }
 
     console.log(
       `[Terminal Briefs] Complete: ${generated} generated, ${errored} errors, ` +
       `${totalInputTokens + totalOutputTokens} tokens used in ${Date.now() - start}ms` +
+      ` (parallel batches of ${PARALLEL_BATCH_SIZE})` +
       (rateLimited ? " (rate limited)" : ""),
     );
 
