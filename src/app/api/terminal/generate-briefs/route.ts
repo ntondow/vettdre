@@ -2,11 +2,11 @@
  * Terminal AI Brief Generation Cron Endpoint
  *
  * Called by Cloud Scheduler every 5 minutes.
- * Processes enriched events in PARALLEL BATCHES of 5 for ~5x throughput.
- * Max 50 events per invocation (~35 seconds with parallelization).
+ * Template-first: ~99% of briefs generated from deterministic templates (free).
+ * Falls back to Claude Haiku 4.5 for edge cases.
  *
- * Throughput: 50 events/run × 12 runs/hour = ~600 briefs/hour
- * (vs. prior: 30 events/run × 4 runs/hour = ~120 briefs/hour)
+ * Only processes events from the last BRIEF_WINDOW_HOURS (48h) to avoid
+ * backfilling old events. Older events keep "Brief unavailable" in the UI.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -21,6 +21,7 @@ const MAX_EVENTS_PER_RUN = 50;
 const PARALLEL_BATCH_SIZE = 5;
 const DELAY_BETWEEN_BATCHES_MS = 200;
 const MAX_BRIEF_RETRIES = 3;
+const BRIEF_WINDOW_HOURS = 48;
 
 // ── Single event processor ──────────────────────────────────
 
@@ -29,6 +30,7 @@ interface ProcessResult {
   success: boolean;
   rateLimited?: boolean;
   tokensUsed?: { input: number; output: number };
+  source?: "template" | "llm";
   error?: string;
 }
 
@@ -45,6 +47,9 @@ async function processEvent(event: any): Promise<ProcessResult> {
       bbl: event.bbl,
       tier: event.tier,
       enrichmentPackage,
+      metadata: event.metadata,
+      borough: event.borough,
+      detectedAt: event.detectedAt,
     });
 
     if (result) {
@@ -57,6 +62,7 @@ async function processEvent(event: any): Promise<ProcessResult> {
             _colorTags: result.colorTags,
             _headline: result.headline,
             _briefGeneratedAt: new Date().toISOString(),
+            _briefSource: result.source,
           } as any,
         },
       });
@@ -65,6 +71,7 @@ async function processEvent(event: any): Promise<ProcessResult> {
         eventId: event.id,
         success: true,
         tokensUsed: result.tokensUsed,
+        source: result.source,
       };
     } else {
       const currentRetries = (event.metadata as any)?._briefRetries || 0;
@@ -82,7 +89,6 @@ async function processEvent(event: any): Promise<ProcessResult> {
       return { eventId: event.id, success: false, error: "Generation returned null" };
     }
   } catch (err: any) {
-    // Detect rate limiting — bubble up so we can stop the whole run
     const isRateLimited = err?.status === 429 || err?.rateLimited;
     if (isRateLimited) {
       return { eventId: event.id, success: false, rateLimited: true, error: "Rate limited" };
@@ -107,7 +113,6 @@ async function processEvent(event: any): Promise<ProcessResult> {
 // ── Main handler ────────────────────────────────────────────
 
 export async function GET(request: NextRequest) {
-  // ── Auth ────────────────────────────────────────────────
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
@@ -120,23 +125,26 @@ export async function GET(request: NextRequest) {
   const start = Date.now();
   let generated = 0;
   let errored = 0;
+  let templateHits = 0;
+  let llmFallbacks = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let rateLimited = false;
 
   try {
-    // Find events with enrichment but no brief (Tier 1 and 2 only)
+    const windowCutoff = new Date(Date.now() - BRIEF_WINDOW_HOURS * 60 * 60 * 1000);
+
     const rawEvents = await prisma.terminalEvent.findMany({
       where: {
         enrichmentPackage: { not: { equals: null } },
         aiBrief: null,
         tier: { in: [1, 2] },
+        detectedAt: { gte: windowCutoff },
       },
       orderBy: { detectedAt: "desc" },
       take: MAX_EVENTS_PER_RUN * 2,
     });
 
-    // Client-side filter: skip events that have exceeded brief retry limit
     const events = rawEvents.filter(e => {
       const retries = (e.metadata as any)?._briefRetries || 0;
       return retries < MAX_BRIEF_RETRIES;
@@ -150,7 +158,6 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Process in parallel batches of PARALLEL_BATCH_SIZE
     for (let i = 0; i < events.length; i += PARALLEL_BATCH_SIZE) {
       if (rateLimited) break;
 
@@ -167,6 +174,8 @@ export async function GET(request: NextRequest) {
           }
           if (r.success) {
             generated++;
+            if (r.source === "template") templateHits++;
+            if (r.source === "llm") llmFallbacks++;
             if (r.tokensUsed) {
               totalInputTokens += r.tokensUsed.input;
               totalOutputTokens += r.tokensUsed.output;
@@ -175,22 +184,20 @@ export async function GET(request: NextRequest) {
             errored++;
           }
         } else {
-          // Promise rejected (unexpected)
           errored++;
           console.error("[Terminal Briefs] Unexpected rejection:", result.reason);
         }
       }
 
-      // Small delay between batches to be a good API citizen
       if (i + PARALLEL_BATCH_SIZE < events.length && !rateLimited) {
         await new Promise(r => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
       }
     }
 
     console.log(
-      `[Terminal Briefs] Complete: ${generated} generated, ${errored} errors, ` +
-      `${totalInputTokens + totalOutputTokens} tokens used in ${Date.now() - start}ms` +
-      ` (parallel batches of ${PARALLEL_BATCH_SIZE})` +
+      `[Terminal Briefs] Complete: ${generated} generated ` +
+      `(${templateHits} template, ${llmFallbacks} LLM), ${errored} errors, ` +
+      `${totalInputTokens + totalOutputTokens} tokens in ${Date.now() - start}ms` +
       (rateLimited ? " (rate limited)" : ""),
     );
 
@@ -198,6 +205,8 @@ export async function GET(request: NextRequest) {
       success: true,
       eventsFound: events.length,
       generated,
+      templateHits,
+      llmFallbacks,
       errored,
       rateLimited,
       tokensUsed: { input: totalInputTokens, output: totalOutputTokens },

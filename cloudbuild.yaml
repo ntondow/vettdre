@@ -101,8 +101,60 @@ steps:
         PLAID_SECRET=PLAID_SECRET:latest,
         CRS_API_KEY=CRS_API_KEY:latest,
         CRS_API_SECRET=CRS_API_SECRET:latest,
+        CRS_API_BASE_URL=CRS_API_BASE_URL:latest,
+        CRS_ACCOUNT_ID=CRS_ACCOUNT_ID:latest,
         UPSTASH_REDIS_REST_URL=UPSTASH_REDIS_REST_URL:latest,
-        UPSTASH_REDIS_REST_TOKEN=UPSTASH_REDIS_REST_TOKEN:latest
+        UPSTASH_REDIS_REST_TOKEN=UPSTASH_REDIS_REST_TOKEN:latest,
+        PLAID_WEBHOOK_URL=PLAID_WEBHOOK_URL:latest,
+        PLAID_ENV=PLAID_ENV:latest,
+        SCREENING_USE_MOCKS=SCREENING_USE_MOCKS:latest,
+        IDV_PROVIDER=IDV_PROVIDER:latest,
+        DIDIT_API_KEY=DIDIT_API_KEY:latest,
+        DIDIT_WEBHOOK_SECRET=DIDIT_WEBHOOK_SECRET:latest,
+        DIDIT_WORKFLOW_ID=DIDIT_WORKFLOW_ID:latest,
+        BASE_SCREENING_FEE_CENTS=BASE_SCREENING_FEE_CENTS:latest,
+        ENHANCED_SCREENING_FEE_CENTS=ENHANCED_SCREENING_FEE_CENTS:latest,
+        CREDIT_PROVIDER=CREDIT_PROVIDER:latest,
+        TRACERFY_API_KEY=TRACERFY_API_KEY:latest
+
+  # Step 4: Ensure Cloud Scheduler cron jobs exist (idempotent create-or-update)
+  # This runs AFTER deploy so the service URL is current.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        REGION="us-east1"
+        SERVICE_URL=$$(gcloud run services describe vettdre --region=$$REGION --project=$$PROJECT_ID --format="value(status.url)")
+        CRON_SECRET_VAL=$$(gcloud secrets versions access latest --secret=CRON_SECRET --project=$$PROJECT_ID)
+
+        # job_name|schedule|path|deadline_seconds
+        JOBS=(
+          "terminal-ingest|*/15 * * * *|/api/terminal/ingest|300"
+          "terminal-enrich|5,20,35,50 * * * *|/api/terminal/enrich|300"
+          "terminal-generate-briefs|*/5 * * * *|/api/terminal/generate-briefs|300"
+          "automations-cron|*/30 * * * *|/api/automations/cron|60"
+          "leasing-follow-ups|*/15 * * * *|/api/leasing/follow-ups|60"
+        )
+
+        for job_def in "$${JOBS[@]}"; do
+          IFS='|' read -r NAME SCHEDULE PATH DEADLINE <<< "$$job_def"
+          URI="$${SERVICE_URL}$${PATH}"
+          echo "Ensuring scheduler job: $$NAME → $$URI"
+          if ! gcloud scheduler jobs create http "$$NAME" \
+            --schedule="$$SCHEDULE" --uri="$$URI" --http-method=GET \
+            --headers="Authorization=Bearer $$CRON_SECRET_VAL" \
+            --time-zone="America/New_York" --attempt-deadline="$${DEADLINE}s" \
+            --location="$$REGION" --project="$$PROJECT_ID" 2>/dev/null; then
+            gcloud scheduler jobs update http "$$NAME" \
+              --schedule="$$SCHEDULE" --uri="$$URI" --http-method=GET \
+              --headers="Authorization=Bearer $$CRON_SECRET_VAL" \
+              --time-zone="America/New_York" --attempt-deadline="$${DEADLINE}s" \
+              --location="$$REGION" --project="$$PROJECT_ID"
+          fi
+        done
+        echo "Cloud Scheduler jobs verified."
 
 images:
   - 'us-east1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/vettdre:$BUILD_ID'

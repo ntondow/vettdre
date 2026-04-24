@@ -320,10 +320,11 @@ export async function enrichTerminalEvent(
       const bg = await fetchBuildingBackground(bbl);
 
       // Build deed history from metadata if ACRIS event
+      // ACRIS party types: type 1 = grantee (buyer), type 2 = grantor (seller)
       const rawMetadata = metadata || {};
       const parties = rawMetadata._parties || [];
-      const buyers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
-      const sellers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
+      const buyers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
+      const sellers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
 
       ownership_chain = {
         deedHistory: rawMetadata.document_id
@@ -373,13 +374,14 @@ function extractRawFields(eventType: string, metadata: any): Record<string, any>
   if (!metadata) return {};
   switch (eventType) {
     case "SALE_RECORDED":
+      // ACRIS party types: type 1 = grantee (buyer), type 2 = grantor (seller)
       return {
         documentId: metadata.document_id,
         docType: metadata.doc_type,
         amount: metadata.doc_amount,
         recordedDate: metadata.good_through_date || metadata.recorded_datetime,
-        buyers: (metadata._parties || []).filter((p: any) => String(p.type) === "2").map((p: any) => p.name),
-        sellers: (metadata._parties || []).filter((p: any) => String(p.type) === "1").map((p: any) => p.name),
+        buyers: (metadata._parties || []).filter((p: any) => String(p.type) === "1").map((p: any) => p.name),
+        sellers: (metadata._parties || []).filter((p: any) => String(p.type) === "2").map((p: any) => p.name),
       };
     case "LOAN_RECORDED":
       return {

@@ -12,15 +12,17 @@ export default async function TerminalPage() {
   // Feature gate: check user plan server-side
   const supabase = await createClient();
   const { data: { user: authUser } } = await supabase.auth.getUser();
+  let orgId = "";
   if (authUser) {
     const user = await prisma.user.findFirst({
       where: { OR: [{ authProviderId: authUser.id }, { email: authUser.email || "" }] },
-      select: { plan: true },
+      select: { plan: true, orgId: true },
     });
     const plan = (user?.plan || "free") as UserPlan;
     if (!hasPermission(plan, "terminal_access")) {
       return <TerminalPaywall />;
     }
+    orgId = user?.orgId || "";
   }
 
   const [prefs, categories] = await Promise.all([
@@ -37,13 +39,14 @@ export default async function TerminalPage() {
       boroughs: enabledBoroughs,
       categories: enabledCategories,
       ntas: selectedNtas,
-      limit: 50,
+      limit: 20,
     }),
     getEventCategoryCounts(enabledBoroughs),
   ]);
 
   return (
     <TerminalFeed
+      orgId={orgId}
       initialEvents={initialEvents.events}
       initialHasMore={initialEvents.hasMore}
       initialBoroughs={enabledBoroughs}
