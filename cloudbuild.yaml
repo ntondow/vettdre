@@ -144,6 +144,9 @@ steps:
           "intel-nys-corps-sync|0 13 * * 0|/api/intel/nys-corps-sync|300"
           "intel-ofac-sync|0 14 * * 1|/api/intel/ofac-sync|300"
           "intel-resolve-edges|0 2 * * *|/api/intel/resolve-edges|300"
+          "intel-mortgage-sync|0 5 * * *|/api/intel/mortgage-sync|300"
+          "intel-distress-recompute|0 6 * * 0|/api/intel/distress-recompute|300"
+          "intel-building-signals|0 7 * * *|/api/intel/building-signals-recompute|300"
         )
 
         for job_def in "$${JOBS[@]}"; do
