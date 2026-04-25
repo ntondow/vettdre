@@ -14,6 +14,16 @@
 export interface DatasetConfig {
   datasetId: string;
   displayName: string;
+  /**
+   * Discriminator for ingest routing:
+   * - 'event': writes to TerminalEvent (existing Terminal pipeline)
+   * - 'snapshot': periodic full-refresh to BuildingCache or spine tables (HPD MDR, tax liens, etc.)
+   * - 'join-driven': multi-table join before write (ACRIS Master+Legals+Parties, RPTT)
+   *
+   * Added in Phase 0 of the Building Intelligence Overhaul.
+   * Existing event datasets default to 'event'. New spine/join datasets added in Phase 2+.
+   */
+  kind: "event" | "snapshot" | "join-driven";
   pollTier: "A" | "B" | "C";
   pollIntervalMinutes: number;
   timestampField: string | null;
@@ -77,6 +87,7 @@ function extractBblDirect(record: any): string | null {
 const DOB_NOW_JOBS: DatasetConfig = {
   datasetId: "w9ak-ipjd",
   displayName: "DOB NOW Job Applications",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "filing_date",
@@ -99,6 +110,7 @@ const DOB_NOW_JOBS: DatasetConfig = {
 const DOB_JOBS_LEGACY: DatasetConfig = {
   datasetId: "ic3t-wcy2",
   displayName: "DOB Job Application Filings (Legacy)",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "pre__filing_date",
@@ -118,6 +130,7 @@ const DOB_JOBS_LEGACY: DatasetConfig = {
 const HPD_VIOLATIONS: DatasetConfig = {
   datasetId: "wvxf-dwi5",
   displayName: "HPD Violations",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "inspectiondate",
@@ -140,6 +153,7 @@ const HPD_VIOLATIONS: DatasetConfig = {
 const DOB_VIOLATIONS: DatasetConfig = {
   datasetId: "3h2n-5cm9",
   displayName: "DOB Violations",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "issue_date",
@@ -159,6 +173,7 @@ const DOB_VIOLATIONS: DatasetConfig = {
 const DOB_ECB_VIOLATIONS: DatasetConfig = {
   datasetId: "6bgk-3dad",
   displayName: "DOB ECB Violations",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "issue_date",
@@ -178,6 +193,7 @@ const DOB_ECB_VIOLATIONS: DatasetConfig = {
 const DOB_STALLED_SITES: DatasetConfig = {
   datasetId: "i296-73x5",
   displayName: "DOB Stalled Construction Sites",
+  kind: "event",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "dobrundate",
@@ -194,6 +210,7 @@ const DOB_STALLED_SITES: DatasetConfig = {
 export const ACRIS_MASTER: DatasetConfig = {
   datasetId: "bnx9-e6tj",
   displayName: "ACRIS Master (Deeds, Mortgages)",
+  kind: "join-driven",
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "good_through_date",
