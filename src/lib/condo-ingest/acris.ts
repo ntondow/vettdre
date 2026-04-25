@@ -18,6 +18,7 @@ const PAGE_SIZE = 500;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 200;
 const SAFETY_OVERLAP_DAYS = 2;
+const MAX_RECORDS_PER_RUN = 5000; // cap to stay within 300s Cloud Run timeout
 
 export interface AcrisSyncResult {
   masterRecords: number;
@@ -137,6 +138,10 @@ export async function runAcrisSync(orgId: string): Promise<AcrisSyncResult> {
 
     offset += masterRecords.length;
     if (masterRecords.length < PAGE_SIZE) break;
+    if (offset >= MAX_RECORDS_PER_RUN) {
+      console.log(`[AcrisSync] Hit per-run cap (${MAX_RECORDS_PER_RUN}), resuming next run`);
+      break;
+    }
   }
 
   // Update ingestion state

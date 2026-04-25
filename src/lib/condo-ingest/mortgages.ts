@@ -29,6 +29,7 @@ const FETCH_TIMEOUT = 10000;
 const PAGE_SIZE = 500;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 200;
+const MAX_RECORDS_PER_RUN = 5000; // cap to stay within 300s Cloud Run timeout
 
 export interface MortgageSyncResult {
   documentsProcessed: number;
@@ -156,6 +157,10 @@ export async function syncMortgages(orgId: string): Promise<MortgageSyncResult> 
 
     offset += masterDocs.length;
     if (masterDocs.length < PAGE_SIZE) break;
+    if (offset >= MAX_RECORDS_PER_RUN) {
+      console.log(`[MortgageSync] Hit per-run cap (${MAX_RECORDS_PER_RUN}), resuming next run`);
+      break;
+    }
   }
 
   // Update ingestion state
