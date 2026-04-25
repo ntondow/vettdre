@@ -63,13 +63,17 @@ These are corrections from prior research. Apply them throughout the build. Do n
 
 10. **Building-level data goes through the Terminal `DatasetConfig` pattern.** Do not invent a new ingest pattern. Each new Socrata source registers a `DatasetConfig` with `bblExtractor`, `eventTypeMapper` (or null for non-event datasets), `recordIdExtractor`, and an `IngestionState` row tracking the polling cursor.
 
+   **Phase 0 amendment:** Generalize the `DatasetConfig` interface in `src/lib/terminal-datasets.ts` with a `kind: "event" | "snapshot" | "join-driven"` discriminator. ACRIS already needs a special path (`pollAcris`); HPD MDR snapshots, RPTT, tax liens, and other non-event datasets need a `pollSpineDataset` sibling that writes to `BuildingCache` or new spine tables instead of `TerminalEvent`. Keep the cron URLs (`/api/terminal/ingest`, `/enrich`, `/generate-briefs`, `/backfill`) stable — do NOT spawn a parallel `/api/intel/ingest`. Reuses existing cron infra, IngestionState tracking, admin health UI, and backfill harness.
+
 11. **Extend, don't duplicate.** No parallel `CondoOwnership` engine. The condo lens and co-op lens are *narrower views* on the upgraded `data-fusion-engine`. New ownership data goes into `BuildingIntelligence.ownership` substructures.
 
 12. **UI disclosure language matters.** For results, use: *"Current owner per ACRIS as of [last_refresh_timestamp]. ACRIS recording-to-publication lag is typically 3-5 days. Entity-owned units reflect the recorded entity, not beneficial ownership. Not a title search."* For condop / co-op buildings, the UI must explicitly state when individual apartment shareholders are not surfaced (per CLAUDE.md handling of structure detection).
 
 13. **Coverage QA uses the free ACRIS DocumentSearch web UI** at `a836-acris.nyc.gov`, not PropertyShark. Their ToS prohibits scraping.
 
-14. **Live-site integrity is paramount.** This is an upgrade to a production system that real users depend on, not a greenfield build. Every phase ships with: (a) a feature flag around the new behavior so it can be disabled without code revert (use the existing `feature-gate.ts` / `feature-gate-server.ts` infrastructure); (b) a smoke-test pass against the existing production-equivalent surfaces (`/dashboard`, `/market-intel`, `/terminal`, `/contacts`, `/messages`, `/calendar`, `/deals`) confirming no regression and no broken renders; (c) backward-compatible API contracts — any existing field on `BuildingIntelligence` or any existing `/api/*` route stays intact. If a phase introduces a breaking change to an existing API, removes a field from an existing response, modifies an existing table column, or alters an existing UI component's props, **STOP and confirm with Nathan before proceeding**. Schema migrations are additive only; existing tables get new nullable columns and new FK references, never destructive changes.
+14. **Live-site integrity is paramount.** This is an upgrade to a production system that real users depend on, not a greenfield build. Every phase ships with: (a) a feature flag around the new behavior so it can be disabled without code revert (use the existing `feature-gate.ts` / `feature-gate-server.ts` infrastructure); (b) a smoke-test pass against the existing production-equivalent surfaces (`/dashboard`, `/market-intel`, `/terminal`, `/contacts`, `/messages`, `/calendar`, `/deals`, `/screening`, `/portfolios`, `/prospecting`, `/properties`, **plus mobile API routes `/api/mobile/buildings` and `/api/mobile/scout`**) confirming no regression and no broken renders; (c) backward-compatible API contracts — any existing field on `BuildingIntelligence` or any existing `/api/*` route stays intact. If a phase introduces a breaking change to an existing API, removes a field from an existing response, modifies an existing table column, or alters an existing UI component's props, **STOP and confirm with Nathan before proceeding**. Schema migrations are additive only; existing tables get new nullable columns and new FK references, never destructive changes.
+
+   **Note (Phase 0 finding):** `BuildingIntelligence` (in `src/lib/data-fusion-types.ts`) is a 22-substructure type, ~300 lines. New ownership/debt/operator/distress data must be added as **new optional substructures**, never appended to existing ones. Bulky raw payloads (mortgages, deed history, lis pendens substitute) go to dedicated tables, not into the existing `raw` JSON blob — the blob is already 100-200 KB per active building and headed for Postgres column limits if extended further.
 
 15. **Every new database write is gated through the canonical Building spine.** Even when the original source is per-table (HPD MDR, ACRIS mortgages, tax liens), the row resolves to a `building_id` (or `unit_id`) on insert. Orphaned rows that can't resolve to a Building get logged to `condo_ownership.unresolved_records` for manual review, never silently dropped.
 
@@ -105,7 +109,7 @@ These are corrections from prior research. Apply them throughout the build. Do n
    - Hit `https://data.cityofnewyork.us/resource/eguu-7ie3.json?$limit=5` — confirm `eguu-7ie3` is live, returns condo unit rows with `condo_base_boro`, `condo_base_block`, `unit_designation`, and unit BBL fields.
    - Hit `https://data.cityofnewyork.us/resource/usep-8jbt.json?$limit=5` and `https://data.cityofnewyork.us/resource/uzf5-f8n2.json?$limit=5`. Compare: which is current? Which has more recent `sale_date`? Which has more rows? Document the call.
    - Hit `https://geosearch.planninglabs.nyc/v2/search?text=15+Central+Park+West&size=1` — confirm response shape includes `properties.addendum.pad.bbl`.
-   - Hit `https://data.cityofnewyork.us/resource/8y4t-faws.json?$limit=5` and `https://data.cityofnewyork.us/resource/w7rz-68fs.json?$limit=5` — confirm both are live and document which is the current authoritative DOF Assessment dataset.
+   - Use `8y4t-faws` (current — covers tax years 2023-2027). **Phase 0 verified `w7rz-68fs` is stale (last data 2018/19). Do not use it.**
 
 2a. **Verify the Deep Dive #3 datasets and access paths:**
    - Hit `https://data.cityofnewyork.us/resource/8h5j-fqxa.json?doc_type=LP&$limit=5` and same for `NOP`, `PREL`, `JPDN`. Confirm lis pendens are filed in ACRIS Legals under these doc types and document the actual codes returning data (the codes vary; confirm the live set).
@@ -113,7 +117,7 @@ These are corrections from prior research. Apply them throughout the build. Do n
    - Visit `https://www.nyc.gov/site/finance/taxes/lien-sale-list.page` and document the current tax-lien-sale CSV publication URL pattern. If no clean CSV is available, flag for FOIL request as Phase 3 fallback.
    - Hit `https://www.ffiec.gov/npw/FinancialReport/CallReport` and confirm the FFIEC Call Reports public download path. Document the most recent quarterly release date.
    - Verify HPD Multiple Dwelling Registration (`tesw-yqqr`) and Contacts (`feu5-w2e2`) are live: `https://data.cityofnewyork.us/resource/tesw-yqqr.json?$limit=5`.
-   - Verify NY DOS Active Corporations (`n8mn-d6c5`) returns data: `https://data.ny.gov/resource/n8mn-d6c5.json?$limit=5`.
+   - Verify NY DOS Active Corporations (`n9v6-gdp6` (Phase 0 corrected — original `n8mn-d6c5` is dead; `n9v6-gdp6` is the live ID already used in `src/lib/ny-corporations.ts`)) returns data: `https://data.ny.gov/resource/n8mn-d6c5.json?$limit=5`.
    - Verify Property Exemption Detail (`muvi-b6kx`) for Co-op/Condo Tax Abatement and 421-a/J-51 recipient mapping.
 
 3. **Confirm or amend the codebase audit.** The audit claims:
@@ -677,7 +681,7 @@ Phase 3 layers in the auxiliary free-data sources from Deep Dive #2: HPD MDR, Co
    - Static dataset; no incremental refresh after the initial load.
    - Phase 6 Play 2 (Spousal Linkage) consumes this.
 
-5. **NYS Active Corporations Bulk** (Socrata `n8mn-d6c5` — confirm in Phase 0):
+5. **NYS Active Corporations Bulk** (Socrata `n9v6-gdp6` (Phase 0 corrected — original `n8mn-d6c5` is dead; `n9v6-gdp6` is the live ID already used in `src/lib/ny-corporations.ts`) — confirm in Phase 0):
    - Daily incremental sync (last_modified-based).
    - Upsert into `condo_ownership.nys_entities` with `dos_id`, `entity_name`, `entity_type`, `formation_date`, `status`, `process_address`, `principal_office_address`, `chairman_name` (corps only).
    - For every NYS entity, upsert into `entities` with `dos_id` populated. Use the existing `ny-corporations.ts` lookup logic for fuzzy matching at write time — link `acris_parties.entity_id` to NYS entities via `dos_id` where exact-match on canonical name.
@@ -708,21 +712,28 @@ Phase 3 layers in the auxiliary free-data sources from Deep Dive #2: HPD MDR, Co
    - Upsert into `condo_ownership.ofac_sdn` with `sdn_id`, `name`, `aliases` (jsonb), `addresses`, `country`, `program` (e.g., 'RUSSIA-EO14024'), `designation_date`.
    - Phase 6 Play 5 escalates ICIJ matches that also hit OFAC SDN.
 
-9a. **NYC Tax Lien Sales (per Deep Dive #3).**
-   - Source: NYC Department of Finance publishes monthly tax-lien-sale lists at `https://www.nyc.gov/site/finance/taxes/lien-sale-list.page` as CSV/PDF. Phase 0 confirms the current URL pattern.
-   - Build a CSV scraper that pulls the latest lien-sale list monthly. If only PDF is available, use a structured PDF parser (pdf-parse or Claude Vision) to extract rows.
-   - Schema: upsert into `condo_ownership.tax_liens` (already created in Phase 1) with `building_id` (FK resolved via BBL), `lien_type='tax'`, `amount`, `filed_date`, `status='active' | 'satisfied' | 'sold'`, `sale_year`.
-   - Backfill: pull all lien-sale lists from 2017 onward (the typical analyst horizon for distress signals).
-   - Run monthly. Document FOIL fallback path in `deploy/condo-ownership/README.md` if CSV scraping breaks.
+9a. **NYC Tax Lien Sales (per Deep Dive #3, Phase 0 corrected).**
+   - Source: **Socrata dataset `9rz4-mjek` (Tax Lien Sale Lists)** — confirmed live by Phase 0. Direct query returns rows with `month`, `cycle`, `borough`, `block`, `lot`, `tax_class_code`, `building_class`, `house_number`, `street_name`, `zip_code`, `water_debt_only`. Sibling dataset `etp2-fnbu` (Tax Sales 2010-Current) also live.
+   - **The earlier FOIL fallback path is unnecessary** — Phase 0 verified the Socrata mirror is current and queryable. Use the standard Terminal `DatasetConfig` ingest pattern, not a custom CSV scraper.
+   - Schema: upsert into `condo_ownership.tax_liens` (already created in Phase 1) with `building_id` (FK resolved via BBL — borough+block+lot fields are present), `lien_type='tax'`, `amount`, `filed_date`, `status='active' | 'satisfied' | 'sold'`, `sale_year`, `cycle` (90 Day Notice / Lien Sale / etc.).
+   - Backfill: pull all lien-sale records from 2017 onward.
+   - Run monthly via the existing `IngestionState` cadence.
    - Phase 6 Play 11 (forced-sale composite) consumes this.
 
-9b. **Lis Pendens via ACRIS Legals doc-type filter (per Deep Dive #3).**
-   - Source: lis pendens are filed in ACRIS Legals under doc_types `LP`, `NOP`, `PREL`, `JPDN` (Phase 0 confirms the exact live set; commit only what's verified). The ingest pipeline already mirrors ACRIS Legals in Phase 2 — this task derives a structured table from that mirror.
-   - Build a periodic derived-table builder (`condo_ownership/derived/lis_pendens.ts`) that joins `acris_legals` (filtered to `LIS_PENDENS_DOC_TYPES`) with `acris_master` (for `document_date`, `document_amount`) and `acris_parties` (plaintiff/defendant when available).
-   - Upsert into `condo_ownership.lis_pendens` table (add this in a Phase 1 follow-up migration if not yet present): `building_id`, `unit_id` (when bbl resolves to a unit), `document_id`, `filed_date`, `claimed_amount`, `plaintiff_name`, `defendant_name`, `status` (active/discharged), `discharge_date`.
-   - Confidence-scoring helper: `lisPendensFreshness(filedDate, status)` returns `'fresh'` (<3mo & active), `'aged'` (3-12mo & active), `'discharged'` (SAT match).
-   - Refresh hourly via the existing ACRIS Legals daily sync; the derived table rebuild is fast (just re-derives from the mirror).
-   - Phase 6 Play 11 + Phase 8 distress search filters consume this.
+9b. **Lis Pendens — STOP, DO NOT IMPLEMENT AS WRITTEN. (Phase 0 finding, redesign required.)**
+
+   ⚠️ **The original Deep Dive #3 strategy is wrong.** Phase 0 verified that ACRIS Master `bnx9-e6tj` does NOT contain doc_types `LP`, `NOP`, or `JPDN` — direct queries return empty. `PREL` exists but stands for "Partial Release of Mortgage," not "Preliminary Notice of Pendency." ACRIS Legals `8h5j-fqxa` has no `doc_type` field at all. Lis pendens are filed with NYS County Clerks (NYSCEF / Unified Court System), not in any NYC Open Data Socrata dataset.
+
+   **Before implementing this task, Claude Code MUST stop and ask Nathan which substitute approach to use.** Three options on the table (Nathan to choose):
+   - **(a) NYSCEF integration** — public NY State Court e-filing system; has unofficial API, lis pendens are searchable. Most fragile of the three; requires its own ingest pipeline and ToS review.
+   - **(b) Substitute distress proxy (recommended for v1)** — combine signals already in scope: tax liens (task 9a), mortgage-without-satisfaction past maturity (Phase 5 ACRIS mortgage parsing), HPD Class C violation density, ECB judgment debt > $10K. Captures ~70% of pre-foreclosure signal without court-system integration. Implement as a `distress_signals.preForeclosureRisk` composite in Phase 5 instead of a dedicated `lis_pendens` table.
+   - **(c) Defer to v2** — drop lis pendens from this build entirely, mark as a known gap, revisit after a NYSCEF integration plan exists.
+
+   If Nathan chooses (b), this task becomes part of Phase 5 mortgage parsing, not Phase 3. The `lis_pendens` table from migration 09 should be left empty (or removed) and the Phase 6 Play 11 forced-sale composite should source distress signal from tax liens + mortgage-maturity-without-satisfaction + HPD/ECB density instead.
+
+   If Nathan chooses (a), this task expands into a separate sub-phase covering NYSCEF integration, ToS, and rate-limit handling — out of scope for this build prompt without further design work.
+
+   **Do not attempt to scrape ACRIS document images for lis pendens. The data is not there.**
 
 9c. **FFIEC Call Reports for lender stress (per Deep Dive #3).**
    - Source: `https://www.ffiec.gov/npw/FinancialReport/CallReport`. Quarterly bulk download of bank balance sheets.

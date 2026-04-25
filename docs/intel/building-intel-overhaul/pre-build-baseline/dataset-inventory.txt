@@ -1,0 +1,60 @@
+===== DATASET ID OCCURRENCES IN CORE FILES =====
+
+--- src/lib/data-fusion-engine.ts ---
+121:  PLUTO: "64uk-42ks",
+122:  HPD_VIOLATIONS: "wvxf-dwi5",
+123:  HPD_COMPLAINTS: "uwyv-629c",
+124:  DOB_PERMITS: "83x8-shf7",
+125:  DOB_JOBS: "ic3t-wcy2",
+126:  HPD_REG: "tesw-yqqr",
+127:  HPD_CONTACTS: "feu5-w2e2",
+128:  HPD_LITIGATION: "59kj-x8nc",
+129:  DOB_ECB: "6bgk-3dad",
+130:  DOB_NOW: "w9ak-ipjd",
+131:  RENT_STAB: "35ss-ekc5", // DEAD — dataset removed from NYC Open Data; heuristic used instead
+132:  SPECULATION: "adax-9x2w",
+133:  RPIE: "wvts-6tdf",
+134:  LL84: "5zyy-y8am",
+135:  ROLLING_SALES: "usep-8jbt",
+
+--- src/lib/terminal-datasets.ts ---
+78:  datasetId: "w9ak-ipjd",
+100:  datasetId: "ic3t-wcy2",
+119:  datasetId: "wvxf-dwi5",
+141:  datasetId: "3h2n-5cm9",
+160:  datasetId: "6bgk-3dad",
+179:  datasetId: "i296-73x5",
+195:  datasetId: "bnx9-e6tj",
+212:export const ACRIS_LEGALS_ID = "8h5j-fqxa";
+213:export const ACRIS_PARTIES_ID = "636b-3b5g";
+
+--- src/lib/cache-warming.ts ---
+49:          const data = await queryNYCDirect("64uk-42ks", `borocode='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 1 });
+56:          const data = await queryNYCDirect("tesw-yqqr", `boroid='${boroCode}' AND block='${block}' AND lot='${lot}'`, { limit: 5 });
+
+--- src/lib/nyc-opendata.ts ---
+9:const ROLLING_SALES_ID = "uzf5-f8n2";
+13:const DOB_PERMITS_ID = "ipu4-2vj7";
+17:const DOB_VIOLATIONS_ID = "3h2n-5cm9";
+
+--- src/lib/ny-corporations.ts ---
+4:// Dataset: https://data.ny.gov/resource/n9v6-gdp6.json (Socrata API)
+19:const BASE_URL = "https://data.ny.gov/resource/n9v6-gdp6.json";
+
+--- src/app/(dashboard)/market-intel/building-profile-actions.ts ---
+14:const PLUTO = "64uk-42ks";
+15:const HPD_VIOLATIONS = "wvxf-dwi5";
+16:const HPD_COMPLAINTS = "uwyv-629c";
+17:const DOB_PERMITS = "83x8-shf7";
+18:const DOB_JOBS = "ic3t-wcy2";
+19:const HPD_REG = "tesw-yqqr";
+20:const HPD_CONTACTS = "feu5-w2e2";
+21:const HPD_LITIGATION = "59kj-x8nc";
+22:const DOB_ECB = "6bgk-3dad";
+23:const DOB_NOW = "w9ak-ipjd";
+26:const SPECULATION = "adax-9x2w";
+1055:  const PLUTO = "64uk-42ks";
+1056:  const HPD_REG = "tesw-yqqr";
+1057:  const HPD_CON = "feu5-w2e2";
+1338:const RPIE = "wvts-6tdf";
+1448:const LL84 = "5zyy-y8am";
