@@ -37,9 +37,13 @@ CREATE TABLE condo_ownership.acris_legals (
     property_type       TEXT,
     street_number       TEXT,
     street_name         TEXT,
-    unit                TEXT,
-    UNIQUE (document_id, borough, block, lot, COALESCE(unit, ''))
+    unit                TEXT
 );
+
+-- PostgreSQL doesn't allow expressions in inline UNIQUE table constraints.
+-- Use a separate UNIQUE INDEX with the COALESCE expression instead.
+CREATE UNIQUE INDEX idx_acris_legals_unique
+  ON condo_ownership.acris_legals (document_id, borough, block, lot, COALESCE(unit, ''));
 
 CREATE INDEX idx_acris_legals_bbl ON condo_ownership.acris_legals (bbl);
 CREATE INDEX idx_acris_legals_doc ON condo_ownership.acris_legals (document_id);
