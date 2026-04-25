@@ -143,6 +143,7 @@ steps:
           "intel-tax-liens-sync|0 12 1 * *|/api/intel/tax-liens-sync|300"
           "intel-nys-corps-sync|0 13 * * 0|/api/intel/nys-corps-sync|300"
           "intel-ofac-sync|0 14 * * 1|/api/intel/ofac-sync|300"
+          "intel-resolve-edges|0 2 * * *|/api/intel/resolve-edges|300"
         )
 
         for job_def in "$${JOBS[@]}"; do
