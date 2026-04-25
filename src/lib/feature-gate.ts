@@ -121,7 +121,9 @@ export type Feature =
   // Terminal
   | "nav_terminal"
   | "terminal_access"
-  | "terminal_ai_brief";
+  | "terminal_ai_brief"
+  // Condo Intelligence (Phase 7)
+  | "condo_intel";
 
 export type UserPlan = "free" | "explorer" | "pro" | "team" | "enterprise";
 
@@ -224,6 +226,8 @@ const PRO_FEATURES: Feature[] = [
   // Terminal
   "terminal_access",
   "terminal_ai_brief",
+  // Condo Intelligence (Phase 7)
+  "condo_intel",
 ];
 
 // ── Team: brokerage management ───────────────────────────────
@@ -352,6 +356,7 @@ const UPGRADE_MESSAGES: Partial<Record<Feature, string>> = {
   nav_terminal: "Upgrade to Pro to access the Terminal",
   terminal_access: "Upgrade to Pro to use real-time market intelligence",
   terminal_ai_brief: "Upgrade to Pro for AI-generated intelligence briefs",
+  condo_intel: "Upgrade to Pro for unit-level ownership intelligence",
   screening_create: "Upgrade to Pro to create screening applications",
   screening_enhanced: "Upgrade to Team for enhanced tri-bureau screening",
 };

@@ -62,6 +62,8 @@ export async function GET(req: NextRequest) {
     const lat = req.nextUrl.searchParams.get("lat");
     const lng = req.nextUrl.searchParams.get("lng");
     const refresh = req.nextUrl.searchParams.get("refresh") === "true";
+    // Phase 7: signal-based filter (optional)
+    const signalFilter = req.nextUrl.searchParams.get("filter"); // high_distress|forced_sale_likely|assemblage_opportunity|exemption_cliff
 
     let boroCode: string | null = null;
     let block: string | null = null;
@@ -162,7 +164,52 @@ export async function GET(req: NextRequest) {
     // Cache the result (fire-and-forget)
     setInScoutCache(bblKey, serialized);
 
-    return NextResponse.json(serialized, {
+    // Phase 7: append condo_intel signals if available
+    let enrichedResponse = serialized as any;
+    if (signalFilter || true) { // always append if data exists
+      try {
+        const prismaLib = (await import("@/lib/prisma")).default;
+        const coBuilding = await prismaLib.coBuilding.findFirst({
+          where: { bbl: bblKey },
+          select: { id: true, orgId: true },
+        });
+        if (coBuilding) {
+          const signals = await prismaLib.coBuildingSignal.findMany({
+            where: { buildingId: coBuilding.id },
+            orderBy: { score: "desc" },
+            select: { signalType: true, score: true, confidence: true },
+          });
+
+          // Apply signal filter if specified
+          const SIGNAL_FILTER_MAP: Record<string, string> = {
+            high_distress: "pre_foreclosure_risk",
+            forced_sale_likely: "forced_sale_probability",
+            assemblage_opportunity: "assemblage_opportunity",
+            exemption_cliff: "exemption_cliff",
+          };
+
+          let filtered = signals;
+          if (signalFilter && SIGNAL_FILTER_MAP[signalFilter]) {
+            const targetType = SIGNAL_FILTER_MAP[signalFilter];
+            filtered = signals.filter(s => s.signalType === targetType && Number(s.score) >= 50);
+            if (filtered.length === 0) {
+              // Signal filter active but no match — still return building, just mark it
+              enrichedResponse = { ...enrichedResponse, signalFilterMatch: false };
+            }
+          }
+
+          enrichedResponse = {
+            ...enrichedResponse,
+            condoIntel: {
+              signals: filtered.map(s => ({ type: s.signalType, score: Number(s.score), confidence: s.confidence })),
+              distressFlag: signals.some(s => s.signalType === "pre_foreclosure_risk" && Number(s.score) >= 60),
+            },
+          };
+        }
+      } catch { /* condoIntel stays absent */ }
+    }
+
+    return NextResponse.json(enrichedResponse, {
       headers: { "X-Cache": "MISS" },
     });
   } catch (error: unknown) {

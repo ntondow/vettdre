@@ -112,7 +112,18 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/book") ||
     pathname.startsWith("/api/automations/cron") ||
     pathname.startsWith("/api/terminal/") ||
-    pathname.startsWith("/api/intel/") ||
+    pathname.startsWith("/api/intel/condo-units-refresh") ||
+    pathname.startsWith("/api/intel/acris-sync") ||
+    pathname.startsWith("/api/intel/hpd-mdr-sync") ||
+    pathname.startsWith("/api/intel/exemptions-refresh") ||
+    pathname.startsWith("/api/intel/tax-liens-sync") ||
+    pathname.startsWith("/api/intel/nys-corps-sync") ||
+    pathname.startsWith("/api/intel/ofac-sync") ||
+    pathname.startsWith("/api/intel/resolve-edges") ||
+    pathname.startsWith("/api/intel/mortgage-sync") ||
+    pathname.startsWith("/api/intel/distress-recompute") ||
+    pathname.startsWith("/api/intel/building-signals-recompute") ||
+    pathname.startsWith("/api/intel/unresolved") ||
     pathname.startsWith("/api/health/") ||
     pathname.startsWith("/api/mobile") ||
     pathname.startsWith("/api/stripe/checkout") ||
