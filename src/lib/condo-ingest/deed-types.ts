@@ -1,10 +1,24 @@
 /**
  * ACRIS Document Type Whitelists — dynamically loaded from 7isb-wh4c.
  *
- * Three whitelists:
+ * Two whitelists:
  * - DEED_DOC_TYPES: deed-category codes including RPTT/RETT (co-op share transfers)
  * - MORTGAGE_DOC_TYPES: mortgage lifecycle codes
- * - LIS_PENDENS_DOC_TYPES: deferred (Phase 3 redesign — ACRIS doesn't contain LP/NOP/JPDN)
+ *
+ * ── LIS PENDENS: DECISION (Phase 3, 2026-04-25) ──
+ * NYC ACRIS does NOT contain Notice-of-Pendency filings (LP, NOP, JPDN doc types
+ * return empty from bnx9-e6tj). PREL = "Partial Release of Mortgage", not "Preliminary
+ * Notice of Pendency". Lis pendens live in NYSCEF (NY State Court e-filing system),
+ * not any NYC Open Data Socrata dataset.
+ *
+ * Decision: Option B — substitute distress proxy in Phase 5. Instead of a dedicated
+ * lis_pendens table, derive a preForeclosureRisk composite signal from:
+ *   - Tax liens (condo_ownership.tax_liens, task 9a)
+ *   - Mortgage-without-satisfaction past maturity (Phase 5 ACRIS mortgage parsing)
+ *   - HPD Class C violation density
+ *   - ECB judgment debt > $10K
+ * The condo_ownership.lis_pendens table from migration 09 is intentionally left empty.
+ * No LIS_PENDENS_DOC_TYPES whitelist is built.
  *
  * Whitelists are built dynamically from the ACRIS Document Control Codes dataset
  * and cached in memory. Call initDocTypeWhitelists() at ingest startup.

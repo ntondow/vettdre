@@ -3474,6 +3474,8 @@ model CoBuilding {
   mortgages         CoMortgage[]
   taxLiens          CoTaxLien[]
   signals           CoBuildingSignal[]
+  hpdRegistrations  CoHpdRegistration[]
+  exemptions        CoPropertyExemption[]
 
   @@unique([orgId, bbl])
   @@index([orgId, normalizedAddress])
@@ -3500,6 +3502,7 @@ model CoUnit {
   building        CoBuilding @relation(fields: [buildingId], references: [id], onDelete: Cascade)
   ownership       CoUnitOwnershipCurrent[]
   mortgages       CoMortgage[]
+  exemptions      CoPropertyExemption[]
 
   @@index([buildingId])
   @@index([orgId, unitBbl])
@@ -3778,4 +3781,123 @@ model CoUnresolvedRecord {
 
   @@index([sourceTable, createdAt(sort: Desc)])
   @@map("condo_ownership.unresolved_records")
+}
+
+// ── Phase 3: Auxiliary Free-Data Source Tables ────────────────
+
+model CoHpdRegistration {
+  id                    String    @id @default(uuid())
+  orgId                 String    @map("org_id")
+  buildingId            String?   @map("building_id")
+  registrationId        String    @map("registration_id")
+  bbl                   String?
+  borough               Int?      @db.SmallInt
+  block                 Int?
+  lot                   Int?
+  buildingName          String?   @map("building_name")
+  registeredOwnerName   String?   @map("registered_owner_name")
+  registeredOwnerType   String?   @map("registered_owner_type")
+  managingAgentName     String?   @map("managing_agent_name")
+  managingAgentAddress  String?   @map("managing_agent_address")
+  headOfficerName       String?   @map("head_officer_name")
+  headOfficerAddress    String?   @map("head_officer_address")
+  lastRegistrationDate  DateTime? @map("last_registration_date") @db.Date
+  raw                   Json?
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @default(now()) @map("updated_at")
+
+  building              CoBuilding? @relation(fields: [buildingId], references: [id])
+
+  @@unique([orgId, registrationId])
+  @@index([buildingId])
+  @@index([bbl])
+  @@map("condo_ownership.hpd_registrations")
+}
+
+model CoPropertyExemption {
+  id                String    @id @default(uuid())
+  orgId             String    @map("org_id")
+  buildingId        String?   @map("building_id")
+  unitId            String?   @map("unit_id")
+  bbl               String
+  exemptionCode     String    @map("exemption_code")
+  exemptionType     String?   @map("exemption_type")
+  taxYear           Int?      @map("tax_year")
+  ownerName         String?   @map("owner_name")
+  primaryResidence  Boolean?  @map("primary_residence")
+  effectiveDate     DateTime? @map("effective_date") @db.Date
+  expirationDate    DateTime? @map("expiration_date") @db.Date
+  raw               Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  building          CoBuilding? @relation(fields: [buildingId], references: [id])
+  unit              CoUnit?     @relation(fields: [unitId], references: [id])
+
+  @@unique([orgId, bbl, exemptionCode, taxYear])
+  @@index([buildingId])
+  @@index([bbl])
+  @@map("condo_ownership.property_exemptions")
+}
+
+model CoNysEntity {
+  id                      String    @id @default(uuid())
+  orgId                   String    @map("org_id")
+  dosId                   String    @map("dos_id")
+  entityName              String    @map("entity_name")
+  entityNameNormalized    String    @map("entity_name_normalized")
+  entityType              String?   @map("entity_type")
+  formationDate           DateTime? @map("formation_date") @db.Date
+  status                  String?
+  jurisdiction            String?
+  processAddress          String?   @map("process_address")
+  principalOfficeAddress  String?   @map("principal_office_address")
+  chairmanName            String?   @map("chairman_name")
+  ceoName                 String?   @map("ceo_name")
+  raw                     Json?
+  lastSyncedAt            DateTime? @map("last_synced_at")
+  createdAt               DateTime  @default(now()) @map("created_at")
+
+  @@unique([orgId, dosId])
+  @@index([dosId])
+  @@index([entityNameNormalized])
+  @@map("condo_ownership.nys_entities")
+}
+
+model CoIcijEntity {
+  id              String   @id @default(uuid())
+  nodeId          String   @unique @map("node_id")
+  entityName      String   @map("entity_name")
+  nameNormalized  String   @map("name_normalized")
+  entityType      String?  @map("entity_type")
+  jurisdiction    String?
+  sourceLeak      String   @map("source_leak")
+  address         String?
+  officers        Json?
+  intermediaries  Json?
+  raw             Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([nameNormalized])
+  @@index([sourceLeak])
+  @@map("condo_ownership.icij_entities")
+}
+
+model CoOfacSdn {
+  id              String    @id @default(uuid())
+  sdnId           String    @unique @map("sdn_id")
+  name            String
+  nameNormalized  String    @map("name_normalized")
+  aliases         Json?
+  addresses       Json?
+  country         String?
+  program         String?
+  designationDate DateTime? @map("designation_date") @db.Date
+  entityType      String?   @map("entity_type")
+  raw             Json?
+  lastSyncedAt    DateTime? @map("last_synced_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([nameNormalized])
+  @@index([program])
+  @@map("condo_ownership.ofac_sdn")
 }
