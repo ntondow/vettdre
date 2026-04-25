@@ -21,6 +21,11 @@ const UPSERT_BATCH = 10;
 const BATCH_DELAY_MS = 100;
 const GEOSEARCH_DELAY_MS = 50; // rate limit GeoSearch
 
+// Safety cap to prevent Cloud Run 300s timeout in cron runs.
+// Bulk spine ingest must be run via CLI with { fullRun: true } to bypass.
+// At ~250ms per building (GeoSearch dominates), 200 buildings ≈ 50s of work.
+const MAX_BUILDINGS_PER_RUN = 200;
+
 const BORO_NAMES: Record<number, string> = {
   1: "Manhattan", 2: "Bronx", 3: "Brooklyn", 4: "Queens", 5: "Staten Island",
 };
@@ -127,13 +132,29 @@ async function fetchDofData(bbl: string): Promise<DofData | null> {
 export async function refreshCondoUnits(
   orgId: string,
   boroughs: number[] = [1, 2, 3, 4, 5],
+  options: { fullRun?: boolean } = {},
 ): Promise<UnitRefreshSummary> {
   const start = Date.now();
   const results: UnitRefreshResult[] = [];
+  const fullRun = options.fullRun === true;
+
+  // Track total buildings processed across all boroughs in this run.
+  // Cron runs are capped at MAX_BUILDINGS_PER_RUN to stay under 300s timeout.
+  // CLI bulk-ingest passes fullRun=true to bypass.
+  let totalBuildingsProcessed = 0;
 
   for (const boro of boroughs) {
-    const boroResult = await refreshBorough(orgId, boro);
+    const remainingBudget = fullRun
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, MAX_BUILDINGS_PER_RUN - totalBuildingsProcessed);
+    if (remainingBudget === 0) {
+      console.log(`[CondoUnits] Building budget exhausted, skipping boro ${boro}`);
+      results.push({ borough: boro, buildingsUpserted: 0, unitsUpserted: 0, errors: 0, durationMs: 0 });
+      continue;
+    }
+    const boroResult = await refreshBorough(orgId, boro, remainingBudget);
     results.push(boroResult);
+    totalBuildingsProcessed += boroResult.buildingsUpserted;
     console.log(
       `[CondoUnits] ${BORO_NAMES[boro]}: ` +
       `${boroResult.buildingsUpserted} buildings, ${boroResult.unitsUpserted} units, ` +
@@ -150,7 +171,7 @@ export async function refreshCondoUnits(
   };
 }
 
-async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshResult> {
+async function refreshBorough(orgId: string, boro: number, buildingBudget: number = Number.POSITIVE_INFINITY): Promise<UnitRefreshResult> {
   const start = Date.now();
   let buildingsUpserted = 0;
   let unitsUpserted = 0;
@@ -174,7 +195,12 @@ async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshR
 
       for (const r of records) {
         const baseBlock = parseInt(r.condo_base_block || r.block || "0");
-        const key = `${boro}-${baseBlock}`;
+        const baseLot = parseInt(r.condo_base_lot || "0");
+        // Skip malformed records — every condo unit should have base block + base lot
+        if (!baseBlock || !baseLot) continue;
+        // Key by boro + baseBlock + baseLot so multiple buildings on the same
+        // block don't collide into a single map entry.
+        const key = `${boro}-${baseBlock}-${baseLot}`;
         if (!buildingMap.has(key)) buildingMap.set(key, []);
         buildingMap.get(key)!.push(r);
       }
@@ -188,10 +214,21 @@ async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshR
     }
   }
 
-  // Process each building group
+  // Process each building group, respecting buildingBudget for cron timeout safety
   const buildingKeys = [...buildingMap.keys()];
-  for (let i = 0; i < buildingKeys.length; i += UPSERT_BATCH) {
-    const batch = buildingKeys.slice(i, i + UPSERT_BATCH);
+  const cappedKeys = buildingBudget === Number.POSITIVE_INFINITY
+    ? buildingKeys
+    : buildingKeys.slice(0, buildingBudget);
+
+  if (cappedKeys.length < buildingKeys.length) {
+    console.log(
+      `[CondoUnits] Boro ${boro}: capping at ${cappedKeys.length} of ${buildingKeys.length} buildings ` +
+      `(MAX_BUILDINGS_PER_RUN budget). Run with fullRun=true via CLI for bulk ingest.`
+    );
+  }
+
+  for (let i = 0; i < cappedKeys.length; i += UPSERT_BATCH) {
+    const batch = cappedKeys.slice(i, i + UPSERT_BATCH);
 
     await Promise.allSettled(
       batch.map(async (key) => {
@@ -207,7 +244,7 @@ async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshR
       }),
     );
 
-    if (i + UPSERT_BATCH < buildingKeys.length) {
+    if (i + UPSERT_BATCH < cappedKeys.length) {
       await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
     }
   }

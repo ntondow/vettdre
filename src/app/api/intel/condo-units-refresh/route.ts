@@ -28,6 +28,11 @@ export async function GET(request: NextRequest) {
     ? boroughsParam.split(",").map(Number).filter((b) => b >= 1 && b <= 5)
     : [1, 2, 3, 4, 5];
 
+  // ?full=true bypasses MAX_BUILDINGS_PER_RUN cap. Intended for one-off CLI bulk
+  // ingest only — never set this on the scheduled cron, it'll exceed the 300s
+  // Cloud Run timeout. CLI invocation should run via tsx scripts/condo-ingest/refresh-spine.ts
+  const fullRun = request.nextUrl.searchParams.get("full") === "true";
+
   try {
     // Use first org (MVP single-tenant pattern — matches terminal ingest)
     const org = await prisma.organization.findFirst({
@@ -38,7 +43,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "No organization found" }, { status: 500 });
     }
 
-    const result = await refreshCondoUnits(org.id, boroughs);
+    const result = await refreshCondoUnits(org.id, boroughs, { fullRun });
 
     return NextResponse.json({
       success: true,
