@@ -136,6 +136,8 @@ steps:
           "terminal-generate-briefs|*/5 * * * *|/api/terminal/generate-briefs|300"
           "automations-cron|*/30 * * * *|/api/automations/cron|60"
           "leasing-follow-ups|*/15 * * * *|/api/leasing/follow-ups|60"
+          "intel-condo-units-refresh|0 8 * * 0|/api/intel/condo-units-refresh|300"
+          "intel-acris-sync|0 9 * * *|/api/intel/acris-sync|300"
         )
 
         for job_def in "$${JOBS[@]}"; do

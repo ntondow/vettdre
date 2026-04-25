@@ -1,0 +1,326 @@
+/**
+ * Condo Unit Spine Ingest — populates condo_ownership.buildings + units from eguu-7ie3.
+ *
+ * Queries the Digital Tax Map Condominium Units dataset, groups by billing BBL,
+ * resolves addresses via GeoSearch, and upserts buildings + units.
+ *
+ * Cross-references DOF Property Valuation (8y4t-faws) for building metadata.
+ *
+ * Schedule: weekly (Sunday 03:00 ET)
+ */
+
+import prisma from "@/lib/prisma";
+import { geoSearch, buildSearchAddress } from "./geosearch";
+
+const CONDO_UNITS_DATASET = "eguu-7ie3";
+const DOF_DATASET = "8y4t-faws";
+const NYC_BASE = "https://data.cityofnewyork.us/resource";
+const FETCH_TIMEOUT = 10000;
+const PAGE_SIZE = 2000;
+const UPSERT_BATCH = 10;
+const BATCH_DELAY_MS = 100;
+const GEOSEARCH_DELAY_MS = 50; // rate limit GeoSearch
+
+const BORO_NAMES: Record<number, string> = {
+  1: "Manhattan", 2: "Bronx", 3: "Brooklyn", 4: "Queens", 5: "Staten Island",
+};
+
+export interface UnitRefreshResult {
+  borough: number;
+  buildingsUpserted: number;
+  unitsUpserted: number;
+  errors: number;
+  durationMs: number;
+}
+
+export interface UnitRefreshSummary {
+  boroughs: UnitRefreshResult[];
+  totalBuildings: number;
+  totalUnits: number;
+  totalErrors: number;
+  durationMs: number;
+}
+
+// ── SODA Query Helper ────────────────────────────────────────
+
+async function querySoda(datasetId: string, params: Record<string, string>): Promise<any[]> {
+  const appToken = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
+  const isValid = appToken.length > 0 && !appToken.startsWith("YOUR_");
+
+  const query = new URLSearchParams(params).toString();
+  const url = `${NYC_BASE}/${datasetId}.json?${query}`;
+
+  const headers: Record<string, string> = { "Accept": "application/json" };
+  if (isValid) headers["X-App-Token"] = appToken;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+
+  const res = await fetch(url, { headers, signal: controller.signal });
+  clearTimeout(timer);
+
+  if (!res.ok) throw new Error(`SODA ${res.status}: ${await res.text().catch(() => "")}`);
+  const data = await res.json();
+  return Array.isArray(data) ? data : [];
+}
+
+// ── BBL Helpers ──────────────────────────────────────────────
+
+function padBbl(boro: number, block: number, lot: number): string {
+  return `${boro}${String(block).padStart(5, "0")}${String(lot).padStart(4, "0")}`;
+}
+
+/**
+ * Derive the condo billing BBL from a unit record.
+ * Condo billing lots are typically 7501+ (the "base lot").
+ * The dataset provides condo_base_boro + condo_base_block.
+ * The base lot is the lowest lot in the condo_lot range — we use the lot from the first unit.
+ */
+function deriveBillingBbl(
+  condoBaseBoro: number,
+  condoBaseBlock: number,
+  unitLots: number[],
+): string {
+  // Billing BBL: use the smallest lot number in the condo complex
+  const baseLot = Math.min(...unitLots);
+  return padBbl(condoBaseBoro, condoBaseBlock, baseLot);
+}
+
+// ── DOF Cross-Reference ──────────────────────────────────────
+
+interface DofData {
+  buildingClass?: string;
+  totalUnits?: number;
+  grossSqft?: number;
+  yearBuilt?: number;
+}
+
+async function fetchDofData(bbl: string): Promise<DofData | null> {
+  const boro = parseInt(bbl[0]);
+  const block = parseInt(bbl.slice(1, 6));
+  const lot = parseInt(bbl.slice(6, 10));
+
+  try {
+    const records = await querySoda(DOF_DATASET, {
+      $where: `boro='${boro}' AND block='${String(block).padStart(5, "0")}' AND lot='${String(lot).padStart(4, "0")}'`,
+      $limit: "1",
+    });
+    if (records.length === 0) return null;
+    const r = records[0];
+    return {
+      buildingClass: r.bldg_class || r.building_class || undefined,
+      totalUnits: r.units ? parseInt(r.units) : undefined,
+      grossSqft: r.gross_sqft ? parseInt(r.gross_sqft) : undefined,
+      yearBuilt: r.year_built ? parseInt(r.year_built) : undefined,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── Main Ingest Function ─────────────────────────────────────
+
+/**
+ * Refresh condo buildings + units for a specific borough (or all).
+ * Queries eguu-7ie3 in pages, groups by condo base, upserts.
+ */
+export async function refreshCondoUnits(
+  orgId: string,
+  boroughs: number[] = [1, 2, 3, 4, 5],
+): Promise<UnitRefreshSummary> {
+  const start = Date.now();
+  const results: UnitRefreshResult[] = [];
+
+  for (const boro of boroughs) {
+    const boroResult = await refreshBorough(orgId, boro);
+    results.push(boroResult);
+    console.log(
+      `[CondoUnits] ${BORO_NAMES[boro]}: ` +
+      `${boroResult.buildingsUpserted} buildings, ${boroResult.unitsUpserted} units, ` +
+      `${boroResult.errors} errors (${boroResult.durationMs}ms)`
+    );
+  }
+
+  return {
+    boroughs: results,
+    totalBuildings: results.reduce((s, r) => s + r.buildingsUpserted, 0),
+    totalUnits: results.reduce((s, r) => s + r.unitsUpserted, 0),
+    totalErrors: results.reduce((s, r) => s + r.errors, 0),
+    durationMs: Date.now() - start,
+  };
+}
+
+async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshResult> {
+  const start = Date.now();
+  let buildingsUpserted = 0;
+  let unitsUpserted = 0;
+  let errors = 0;
+  let offset = 0;
+
+  // Group records by condo_base_boro + condo_base_block (the building grouping key)
+  const buildingMap = new Map<string, Array<any>>();
+
+  // Paginate through all condo units in this borough
+  while (true) {
+    try {
+      const records = await querySoda(CONDO_UNITS_DATASET, {
+        $where: `condo_base_boro='${boro}'`,
+        $order: "condo_base_block ASC, condo_lot ASC",
+        $limit: String(PAGE_SIZE),
+        $offset: String(offset),
+      });
+
+      if (records.length === 0) break;
+
+      for (const r of records) {
+        const baseBlock = parseInt(r.condo_base_block || r.block || "0");
+        const key = `${boro}-${baseBlock}`;
+        if (!buildingMap.has(key)) buildingMap.set(key, []);
+        buildingMap.get(key)!.push(r);
+      }
+
+      offset += records.length;
+      if (records.length < PAGE_SIZE) break;
+    } catch (err) {
+      console.error(`[CondoUnits] Fetch error boro=${boro} offset=${offset}:`, err);
+      errors++;
+      break;
+    }
+  }
+
+  // Process each building group
+  const buildingKeys = [...buildingMap.keys()];
+  for (let i = 0; i < buildingKeys.length; i += UPSERT_BATCH) {
+    const batch = buildingKeys.slice(i, i + UPSERT_BATCH);
+
+    await Promise.allSettled(
+      batch.map(async (key) => {
+        try {
+          const unitRecords = buildingMap.get(key)!;
+          const result = await upsertBuildingAndUnits(orgId, boro, unitRecords);
+          buildingsUpserted += result.building ? 1 : 0;
+          unitsUpserted += result.units;
+        } catch (err) {
+          console.error(`[CondoUnits] Upsert error key=${key}:`, err);
+          errors++;
+        }
+      }),
+    );
+
+    if (i + UPSERT_BATCH < buildingKeys.length) {
+      await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
+    }
+  }
+
+  return { borough: boro, buildingsUpserted, unitsUpserted, errors, durationMs: Date.now() - start };
+}
+
+async function upsertBuildingAndUnits(
+  orgId: string,
+  boro: number,
+  unitRecords: any[],
+): Promise<{ building: boolean; units: number }> {
+  if (unitRecords.length === 0) return { building: false, units: 0 };
+
+  const first = unitRecords[0];
+  const condoBaseBlock = parseInt(first.condo_base_block || first.block || "0");
+
+  // Collect all lot numbers to derive billing BBL
+  const lots = unitRecords.map((r) => parseInt(r.condo_lot || r.lot || "0")).filter((l) => l > 0);
+  if (lots.length === 0) return { building: false, units: 0 };
+
+  const billingBbl = deriveBillingBbl(boro, condoBaseBlock, lots);
+
+  // Try to resolve address via GeoSearch
+  const streetNum = first.house_number || first.street_number || "";
+  const streetName = first.street_name || "";
+  let address = buildSearchAddress(streetNum, streetName, BORO_NAMES[boro]);
+  let normalizedAddress = address;
+
+  const geo = await geoSearch(address);
+  if (geo) {
+    normalizedAddress = geo.normalizedAddress;
+    address = geo.normalizedAddress;
+  }
+  // Small delay to rate-limit GeoSearch
+  await new Promise((r) => setTimeout(r, GEOSEARCH_DELAY_MS));
+
+  // Fetch DOF data for building metadata
+  const dof = await fetchDofData(billingBbl);
+
+  // Upsert building
+  const building = await prisma.coBuilding.upsert({
+    where: { orgId_bbl: { orgId, bbl: billingBbl } },
+    create: {
+      orgId,
+      bbl: billingBbl,
+      borough: boro,
+      block: condoBaseBlock,
+      lot: Math.min(...lots),
+      address,
+      normalizedAddress,
+      propertyType: "condo",
+      buildingClass: dof?.buildingClass || null,
+      totalUnits: unitRecords.length,
+      residentialUnits: unitRecords.length, // condos are primarily residential
+      grossSqft: dof?.grossSqft || null,
+      yearBuilt: dof?.yearBuilt || null,
+      lastSyncedAt: new Date(),
+    },
+    update: {
+      address,
+      normalizedAddress,
+      totalUnits: unitRecords.length,
+      residentialUnits: unitRecords.length,
+      buildingClass: dof?.buildingClass || undefined,
+      grossSqft: dof?.grossSqft || undefined,
+      yearBuilt: dof?.yearBuilt || undefined,
+      lastSyncedAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+
+  // Upsert individual units
+  let unitCount = 0;
+  for (const r of unitRecords) {
+    const unitLot = parseInt(r.condo_lot || r.lot || "0");
+    if (!unitLot) continue;
+
+    const unitBbl = padBbl(boro, condoBaseBlock, unitLot);
+    const unitNumber = r.unit_designation || r.apt_no || null;
+
+    try {
+      await prisma.coUnit.upsert({
+        where: { orgId_unitBbl: { orgId, unitBbl } },
+        create: {
+          orgId,
+          buildingId: building.id,
+          subjectType: "condo_bbl",
+          unitBbl,
+          unitNumber,
+          lastRefreshed: new Date(),
+        },
+        update: {
+          unitNumber: unitNumber || undefined,
+          lastRefreshed: new Date(),
+        },
+      });
+      unitCount++;
+    } catch (err) {
+      // Partial unique index may not work with Prisma — fall back to raw upsert
+      try {
+        await prisma.$executeRaw`
+          INSERT INTO condo_ownership.units (id, org_id, building_id, subject_type, unit_bbl, unit_number, last_refreshed, created_at)
+          VALUES (gen_random_uuid(), ${orgId}, ${building.id}, 'condo_bbl', ${unitBbl}, ${unitNumber}, NOW(), NOW())
+          ON CONFLICT (org_id, unit_bbl) WHERE unit_bbl IS NOT NULL
+          DO UPDATE SET unit_number = COALESCE(EXCLUDED.unit_number, condo_ownership.units.unit_number), last_refreshed = NOW()
+        `;
+        unitCount++;
+      } catch (rawErr) {
+        console.error(`[CondoUnits] Unit upsert failed bbl=${unitBbl}:`, rawErr);
+      }
+    }
+  }
+
+  return { building: true, units: unitCount };
+}

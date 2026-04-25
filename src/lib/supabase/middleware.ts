@@ -112,6 +112,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/book") ||
     pathname.startsWith("/api/automations/cron") ||
     pathname.startsWith("/api/terminal/") ||
+    pathname.startsWith("/api/intel/") ||
     pathname.startsWith("/api/health/") ||
     pathname.startsWith("/api/mobile") ||
     pathname.startsWith("/api/stripe/checkout") ||
