@@ -18,6 +18,7 @@ import UpgradePrompt from "@/components/ui/upgrade-prompt";
 import { hasPermission } from "@/lib/feature-gate";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { Users, TrendingUp } from "lucide-react";
+import IntelPanel from "./components/building-profile/intel-panel";
 import SmsComposeModal from "@/components/ui/sms-compose-modal";
 import { fetchNeighborhoodProfile } from "./neighborhood-actions";
 import type { NeighborhoodProfile } from "./neighborhood-actions";
@@ -813,6 +814,10 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
                 onDealClick={handleUnderwrite}
                 onNavigateTab={(tab) => setActiveTab(tab as ProfileTab)}
               />
+              {/* Phase 8: Condo Intelligence panel — plan-gated, graceful degradation */}
+              <div className="mt-4">
+                <IntelPanel bbl={boroCode + block.padStart(5, "0") + lot.padStart(4, "0")} plan={plan} />
+              </div>
             )}
 
             {activeTab === "ownership" && (
