@@ -1,14 +1,45 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import {
+  isRateLimitEnabled,
+  checkRateLimit,
+  rateLimitHeaders,
+  screeningApiLimiter,
+  getClientIP,
+} from "@/lib/rate-limit";
+import { validateApplicantSession } from "@/lib/screening/session";
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   try {
     const { token } = await params;
     if (!token) {
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
+    }
+
+    // Rate limiting (optional — depends on Redis config)
+    if (isRateLimitEnabled()) {
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
+      if (!rl.success) {
+        return NextResponse.json(
+          { error: "Too many requests" },
+          { status: 429, headers: rateLimitHeaders(rl) },
+        );
+      }
+    }
+
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
+      );
     }
 
     const application = await prisma.screeningApplication.findUnique({
@@ -48,8 +79,7 @@ export async function GET(
 
     return NextResponse.json({
       status: application.status,
-      vettdreRiskScore: application.vettdreRiskScore ? Number(application.vettdreRiskScore) : null,
-      riskRecommendation: application.riskRecommendation || null,
+      // Risk score and recommendation intentionally omitted from applicant-facing API (FCRA compliance)
       applicantStatuses,
     });
   } catch (error) {

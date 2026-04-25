@@ -1,0 +1,3792 @@
+[
+  {
+    "address": "4417 ROSEDALE AVE",
+    "zip": "78756",
+    "units": 1671,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Grayson Outfitters",
+    "permit_date": "2019-06-05"
+  },
+  {
+    "address": "13624 DESSAU RD",
+    "zip": "78660",
+    "units": 1535,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Blackburn Construction, Inc.",
+    "permit_date": "2021-11-29"
+  },
+  {
+    "address": "10150 E US 290 HWY SVRD WB BLDG 1",
+    "zip": "78653",
+    "units": 1356,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Select Building Systems, Inc. dba SBS Construction *MAIN*",
+    "permit_date": "2023-12-19"
+  },
+  {
+    "address": "14926 N FM 620 RD SB BLDG A",
+    "zip": "78717",
+    "units": 716,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Select Building Systems, Inc. dba SBS Construction *MAIN*",
+    "permit_date": "2024-05-22"
+  },
+  {
+    "address": "6709 N LAMAR BLVD BLDG 1",
+    "zip": "78752",
+    "units": 664,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Alliance Residential Builders, LP.",
+    "permit_date": "2021-08-23"
+  },
+  {
+    "address": "6007 N IH 35 SVRD NB",
+    "zip": "78723",
+    "units": 616,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2021-07-21"
+  },
+  {
+    "address": "98 RED RIVER ST",
+    "zip": "78701",
+    "units": 603,
+    "floors": 73,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Aqua Builders, Inc.",
+    "permit_date": "2025-02-14"
+  },
+  {
+    "address": "1010 SPRINGDALE RD",
+    "zip": "78721",
+    "units": 585,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Morgan PRL Construction LLC",
+    "permit_date": "2023-03-08"
+  },
+  {
+    "address": "701 W 24TH ST UNIT FLR29",
+    "zip": "78705",
+    "units": 552,
+    "floors": 29,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MC Aquatic Construction",
+    "permit_date": "2023-04-20"
+  },
+  {
+    "address": "900 E PARMER LN BLDG 1",
+    "zip": "78753",
+    "units": 431,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Wurzel Builders, Ltd.**MAIN**",
+    "permit_date": "2021-08-17"
+  },
+  {
+    "address": "2545 BROCKTON DR",
+    "zip": "78758",
+    "units": 429,
+    "floors": 8,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2025-09-25"
+  },
+  {
+    "address": "3500 E PARMER LN BLDG 2",
+    "zip": "78754",
+    "units": 422,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2022-03-01"
+  },
+  {
+    "address": "2300 KRAMER LN BLDG 1",
+    "zip": "78758",
+    "units": 396,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "CAP TX Construction, LLC",
+    "permit_date": "2025-04-18"
+  },
+  {
+    "address": "9100 METRIC BLVD",
+    "zip": "78758",
+    "units": 390,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Fairfield Development LP **MAIN**",
+    "permit_date": "2021-05-03"
+  },
+  {
+    "address": "3233 HARMON AVE",
+    "zip": "78705",
+    "units": 379,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Trinsic Residential Builders, LLC",
+    "permit_date": "2019-07-09"
+  },
+  {
+    "address": "10605 DELTA DR BLDG 2",
+    "zip": "78758",
+    "units": 369,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Alliance Residential Builders, LP.",
+    "permit_date": "2021-11-12"
+  },
+  {
+    "address": "8440 BURNET RD BLDG 1",
+    "zip": "78757",
+    "units": 367,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "CAP TX Construction, LLC",
+    "permit_date": "2025-03-10"
+  },
+  {
+    "address": "3706 GOODWIN AVE",
+    "zip": "78721",
+    "units": 364,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2021-08-05"
+  },
+  {
+    "address": "4400 NUCKOLS CROSSING RD",
+    "zip": "78744",
+    "units": 358,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MC Aquatic Construction",
+    "permit_date": "2021-06-24"
+  },
+  {
+    "address": "12210 TECH RIDGE BLVD BLDG 1",
+    "zip": "78753",
+    "units": 350,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provident General Contractors",
+    "permit_date": "2022-06-22"
+  },
+  {
+    "address": "11901 BURNET RD BLDG FW1",
+    "zip": "78758",
+    "units": 345,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Morgan PRL Construction LLC",
+    "permit_date": "2023-12-18"
+  },
+  {
+    "address": "1310 LBJ WAY UNIT FW3",
+    "zip": "78702",
+    "units": 344,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "EMBREY Builders, LLC",
+    "permit_date": "2024-12-10"
+  },
+  {
+    "address": "617 COLORADO ST",
+    "zip": "78701",
+    "units": 344,
+    "floors": 17,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Gilbane Building Company",
+    "permit_date": "2021-08-15"
+  },
+  {
+    "address": "1909 ALEXANDER AVE BLDG FW2A",
+    "zip": "78722",
+    "units": 344,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "DPR Construction  *MAIN**",
+    "permit_date": "2021-08-09"
+  },
+  {
+    "address": "707 W SLAUGHTER LN UNIT FW3",
+    "zip": "78748",
+    "units": 343,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2023-12-13"
+  },
+  {
+    "address": "10300 METROPOLITAN DR",
+    "zip": "78758",
+    "units": 341,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rampart Multifamily (MAIN)",
+    "permit_date": "2021-03-29"
+  },
+  {
+    "address": "5211 E 7TH ST BLDG FW2",
+    "zip": "78702",
+    "units": 338,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2023-10-17"
+  },
+  {
+    "address": "2711 W ANDERSON LN BLDG 1",
+    "zip": "78757",
+    "units": 321,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-06-25"
+  },
+  {
+    "address": "3403 HARMON AVE BLDG 2",
+    "zip": "78705",
+    "units": 321,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-01-17"
+  },
+  {
+    "address": "1100 AVENIDA MERCADO ST",
+    "zip": "78652",
+    "units": 318,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2022-03-16"
+  },
+  {
+    "address": "3525 FAR WEST BLVD UNIT FW1",
+    "zip": "78731",
+    "units": 317,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2024-09-25"
+  },
+  {
+    "address": "6801 BURNET RD",
+    "zip": "78757",
+    "units": 314,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-03-17"
+  },
+  {
+    "address": "1400 ROYAL CREST DR",
+    "zip": "78741",
+    "units": 313,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi-family TX Contractor, LLC",
+    "permit_date": "2020-01-27"
+  },
+  {
+    "address": "10525 WILDHORSE RANCH TRL",
+    "zip": "78724",
+    "units": 310,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Elmington Construction, LLC",
+    "permit_date": "2021-01-13"
+  },
+  {
+    "address": "11600 SPIRIT DR BLDG 1",
+    "zip": "78617",
+    "units": 307,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provident General Contractors",
+    "permit_date": "2022-02-14"
+  },
+  {
+    "address": "6020 S 1ST ST",
+    "zip": "78745",
+    "units": 307,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2021-01-26"
+  },
+  {
+    "address": "1101 REINLI ST",
+    "zip": "78723",
+    "units": 306,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2022-01-07"
+  },
+  {
+    "address": "5700 E RIVERSIDE DR BLDG 1",
+    "zip": "78741",
+    "units": 306,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Prestige Building Company,LLC",
+    "permit_date": "2019-10-10"
+  },
+  {
+    "address": "1301 PARKER LN",
+    "zip": "78741",
+    "units": 300,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi-family TX Contractor, LLC",
+    "permit_date": "2021-08-17"
+  },
+  {
+    "address": "1401 S LAMAR BLVD",
+    "zip": "78704",
+    "units": 300,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-06-23"
+  },
+  {
+    "address": "112 WILL DAVIS DR BLDG 2",
+    "zip": "78752",
+    "units": 299,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2021-03-16"
+  },
+  {
+    "address": "10101 METROPOLITAN DR",
+    "zip": "78758",
+    "units": 297,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Streetlights Residential",
+    "permit_date": "2021-11-16"
+  },
+  {
+    "address": "14115 N 183A HWY SVRD NB BLDG 5",
+    "zip": "78717",
+    "units": 289,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "EMBREY Builders, LLC",
+    "permit_date": "2020-05-27"
+  },
+  {
+    "address": "9225 NORTH LAKE CREEK PKWY",
+    "zip": "78717",
+    "units": 288,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2022-05-09"
+  },
+  {
+    "address": "12829 RIDGELINE BLVD",
+    "zip": "78613",
+    "units": 280,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Amicus Construction",
+    "permit_date": "2024-03-25"
+  },
+  {
+    "address": "12001 HEATHERLY DR BLDG 3",
+    "zip": "78747",
+    "units": 280,
+    "floors": 27,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2022-06-15"
+  },
+  {
+    "address": "2800 JOHN S CHASE TRL",
+    "zip": "78758",
+    "units": 272,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-05-20"
+  },
+  {
+    "address": "3901 BERKMAN DR BLDG FW1",
+    "zip": "78723",
+    "units": 272,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Ryan Companies US INC",
+    "permit_date": "2022-03-09"
+  },
+  {
+    "address": "601 CARDINAL LN BLDG FW1",
+    "zip": "78704",
+    "units": 261,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provident General Contractors",
+    "permit_date": "2022-03-11"
+  },
+  {
+    "address": "710 E 3RD ST BLDG FWA",
+    "zip": "78701",
+    "units": 259,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MPC Martines/Palmeiro Construction",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "122 SHERATON AVE BLDG 2",
+    "zip": "78745",
+    "units": 255,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Jordan Foster Construction",
+    "permit_date": "2020-10-22"
+  },
+  {
+    "address": "8176 N MOPAC EXPY SVRD SB UNIT FW2",
+    "zip": "78759",
+    "units": 249,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AvalonBay Communities, Inc.",
+    "permit_date": "2024-04-10"
+  },
+  {
+    "address": "13205 BURNET RD",
+    "zip": "78727",
+    "units": 243,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Upper Construction",
+    "permit_date": "2020-01-16"
+  },
+  {
+    "address": "9127 RESEARCH BLVD SVRD NB BLDG 1",
+    "zip": "78758",
+    "units": 242,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provident General Contractors",
+    "permit_date": "2021-04-05"
+  },
+  {
+    "address": "4512 DENALI SUMMIT DR",
+    "zip": "78731",
+    "units": 240,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction Services, LLC",
+    "permit_date": "2025-06-05"
+  },
+  {
+    "address": "11216 CAMERON RD BLDG 1",
+    "zip": "78754",
+    "units": 240,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Kittle Property Group INC (MAIN)",
+    "permit_date": "2024-05-09"
+  },
+  {
+    "address": "2223 WATERLOO CITY LN BLDG 2 UNIT REC2",
+    "zip": "78741",
+    "units": 235,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Oden Hughes LLC dba Cactus Rose Oh Delta LLC",
+    "permit_date": "2019-11-12"
+  },
+  {
+    "address": "13527 HARRISGLENN DR BLDG 3",
+    "zip": "78660",
+    "units": 232,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "KCG Companies *MAIN*",
+    "permit_date": "2019-06-19"
+  },
+  {
+    "address": "2014 ALDRICH ST BLDG FW4",
+    "zip": "78723",
+    "units": 230,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2023-03-01"
+  },
+  {
+    "address": "11001 AUSTIN LN BLDG 1",
+    "zip": "78758",
+    "units": 230,
+    "floors": 11,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": null,
+    "permit_date": "2020-02-24"
+  },
+  {
+    "address": "1124 CLAYTON LN",
+    "zip": "78723",
+    "units": 227,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2025-09-17"
+  },
+  {
+    "address": "7400 N LAMAR BLVD BLDG 1",
+    "zip": "78757",
+    "units": 226,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction Services, LLC",
+    "permit_date": "2020-05-22"
+  },
+  {
+    "address": "4411 S CONGRESS AVE BLDG 3",
+    "zip": "78745",
+    "units": 224,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Jordan Foster Construction",
+    "permit_date": "2019-08-22"
+  },
+  {
+    "address": "5100 BOLM RD",
+    "zip": "78721",
+    "units": 222,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-07-19"
+  },
+  {
+    "address": "1000 E YAGER LN",
+    "zip": "78753",
+    "units": 215,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-03-24"
+  },
+  {
+    "address": "4401 JESSIE HEIGHTS DR",
+    "zip": "78731",
+    "units": 213,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Ryan Companies US INC",
+    "permit_date": "2022-10-24"
+  },
+  {
+    "address": "4208 MEDICAL PKWY",
+    "zip": "78756",
+    "units": 210,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2025-07-16"
+  },
+  {
+    "address": "8350 W US 290 HWY UNIT FW2",
+    "zip": "78736",
+    "units": 208,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2024-07-17"
+  },
+  {
+    "address": "2910 E 17TH ST BLDG FW1",
+    "zip": "78702",
+    "units": 202,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2020-06-03"
+  },
+  {
+    "address": "1807 MONTOPOLIS DR BLDG 1",
+    "zip": "78741",
+    "units": 201,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2020-10-19"
+  },
+  {
+    "address": "2832 E MARTIN LUTHER KING JR BLVD",
+    "zip": "78702",
+    "units": 201,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "UG Crestwood, LLC",
+    "permit_date": "2020-06-17"
+  },
+  {
+    "address": "1701 SIMOND AVE",
+    "zip": "78723",
+    "units": 200,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2021-08-25"
+  },
+  {
+    "address": "900 GARDNER RD BLDG 1",
+    "zip": "78721",
+    "units": 198,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The Vecino Group",
+    "permit_date": "2023-02-24"
+  },
+  {
+    "address": "6700 ARROYO SECO",
+    "zip": "78757",
+    "units": 195,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke Genaral Contractors",
+    "permit_date": "2022-08-16"
+  },
+  {
+    "address": "1620 TERI RD BLDG 1",
+    "zip": "78744",
+    "units": 190,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "A&M Developers",
+    "permit_date": "2020-03-05"
+  },
+  {
+    "address": "10801 N MOPAC EXPY SVRD NB BLDG 4",
+    "zip": "78759",
+    "units": 185,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi-family TX Contractor, LLC",
+    "permit_date": "2019-06-13"
+  },
+  {
+    "address": "6400 E RIVERSIDE DR BLDG 5",
+    "zip": "78741",
+    "units": 180,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2020-12-14"
+  },
+  {
+    "address": "2323 S LAMAR BLVD BLDG FW2",
+    "zip": "78704",
+    "units": 179,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Summit Design Build",
+    "permit_date": "2023-03-07"
+  },
+  {
+    "address": "1011 E 5TH ST BLDG B",
+    "zip": "78702",
+    "units": 178,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Amicus Construction Ltd",
+    "permit_date": "2020-03-23"
+  },
+  {
+    "address": "211 RALPH ABLANEDO DR BLDG 1",
+    "zip": "78748",
+    "units": 176,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Fairfield Development LP **MAIN**",
+    "permit_date": "2022-09-01"
+  },
+  {
+    "address": "11704 N LAMAR BLVD BLDG 2",
+    "zip": "78753",
+    "units": 176,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "BEC Austin**DO NOT USE**",
+    "permit_date": "2020-03-06"
+  },
+  {
+    "address": "4215 S LAMAR BLVD SVRD NB",
+    "zip": "78704",
+    "units": 174,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rampart Multifamily (MAIN)",
+    "permit_date": "2025-03-21"
+  },
+  {
+    "address": "4725 MUELLER BLVD UNIT 1FW4",
+    "zip": "78723",
+    "units": 172,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2023-07-12"
+  },
+  {
+    "address": "1934 RUTLAND DR",
+    "zip": "78758",
+    "units": 171,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Vecino Construction LLC **MAIN**",
+    "permit_date": "2021-08-09"
+  },
+  {
+    "address": "4524 MATTIE ST BLDG FW2",
+    "zip": "78723",
+    "units": 169,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2022-04-21"
+  },
+  {
+    "address": "4910 E 7TH ST BLDG 1",
+    "zip": "78702",
+    "units": 168,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2019-08-22"
+  },
+  {
+    "address": "13701 LYNDHURST ST BLDG 1",
+    "zip": "78717",
+    "units": 165,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2022-05-24"
+  },
+  {
+    "address": "3515 MANOR RD",
+    "zip": "78723",
+    "units": 164,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Camden Development",
+    "permit_date": "2024-02-09"
+  },
+  {
+    "address": "1211 E 5TH ST BLDG A",
+    "zip": "78702",
+    "units": 162,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Amicus Construction Ltd",
+    "permit_date": "2020-03-23"
+  },
+  {
+    "address": "1700 WILLOW CREEK DR",
+    "zip": "78741",
+    "units": 160,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Aspen Topco II Construction, LLC",
+    "permit_date": "2020-04-28"
+  },
+  {
+    "address": "3100 SCOFIELD RIDGE PKWY",
+    "zip": "78727",
+    "units": 158,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction",
+    "permit_date": "2022-07-26"
+  },
+  {
+    "address": "5712 JACKIE ROBINSON ST BLDG 2",
+    "zip": "78721",
+    "units": 156,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2023-12-08"
+  },
+  {
+    "address": "1700 E 3RD ST BLDG 1",
+    "zip": "78702",
+    "units": 156,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Carleton Companies",
+    "permit_date": "2019-07-25"
+  },
+  {
+    "address": "10728 BURNET RD",
+    "zip": "78758",
+    "units": 154,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2025-06-04"
+  },
+  {
+    "address": "8528 BURNET RD",
+    "zip": "78757",
+    "units": 153,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Burnet Builders, LLC",
+    "permit_date": "2021-08-23"
+  },
+  {
+    "address": "7113 BURNET RD BLDG 2",
+    "zip": "78757",
+    "units": 152,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Arch-Con Corporation",
+    "permit_date": "2022-06-23"
+  },
+  {
+    "address": "6400 LOYOLA LN BLDG 1",
+    "zip": "78724",
+    "units": 152,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2020-03-04"
+  },
+  {
+    "address": "901 E 5TH ST BLDG PHB",
+    "zip": "78702",
+    "units": 152,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Amicus Construction Ltd",
+    "permit_date": "2020-02-20"
+  },
+  {
+    "address": "12100 ARCHELETA BLVD",
+    "zip": "78739",
+    "units": 151,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2019-09-04"
+  },
+  {
+    "address": "1013 MONTOPOLIS DR",
+    "zip": "78741",
+    "units": 150,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Vecino Construction LLC **MAIN**",
+    "permit_date": "2025-07-07"
+  },
+  {
+    "address": "1500 E ST JOHNS AVE",
+    "zip": "78752",
+    "units": 150,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Vecino Construction LLC **MAIN**",
+    "permit_date": "2023-07-19"
+  },
+  {
+    "address": "6306 MC NEIL DR",
+    "zip": "78729",
+    "units": 147,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Carleton Companies",
+    "permit_date": "2021-10-19"
+  },
+  {
+    "address": "3219 MANOR RD",
+    "zip": "78723",
+    "units": 146,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Jaramillo Homes",
+    "permit_date": "2021-03-03"
+  },
+  {
+    "address": "4424 JACKSON AVE BLDG FW3D",
+    "zip": "78731",
+    "units": 145,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction",
+    "permit_date": "2019-02-12"
+  },
+  {
+    "address": "827 W 12TH ST",
+    "zip": "78701",
+    "units": 144,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Martines Palmeiro Construction",
+    "permit_date": "2020-12-30"
+  },
+  {
+    "address": "2610 HUME PL",
+    "zip": "78705",
+    "units": 142,
+    "floors": 10,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AVID Developers LLC",
+    "permit_date": "2024-10-08"
+  },
+  {
+    "address": "6731 LEGADO LN",
+    "zip": "78749",
+    "units": 140,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Wurzel Builders, Ltd.**MAIN**",
+    "permit_date": "2024-06-12"
+  },
+  {
+    "address": "2730 E 7TH ST",
+    "zip": "78702",
+    "units": 137,
+    "floors": 7,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2025-10-08"
+  },
+  {
+    "address": "13649 RUTLEDGE SPUR BLDG 3",
+    "zip": "78717",
+    "units": 137,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2021-04-29"
+  },
+  {
+    "address": "720 AIRPORT BLVD BLDG FW1B",
+    "zip": "78702",
+    "units": 137,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Oden Hughes LLC dba Cactus Rose Oh Delta LLC",
+    "permit_date": "2019-03-20"
+  },
+  {
+    "address": "4700 WEIDEMAR LN UNIT FW2",
+    "zip": "78745",
+    "units": 136,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi Family Contractor LLC",
+    "permit_date": "2023-12-18"
+  },
+  {
+    "address": "7415 SOUTHWEST PKWY BLDG 8",
+    "zip": "78735",
+    "units": 135,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Arch-Con Corporation",
+    "permit_date": "2019-02-27"
+  },
+  {
+    "address": "2105 PARKER LN",
+    "zip": "78741",
+    "units": 135,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2022-06-23"
+  },
+  {
+    "address": "4510 TERRY O LN BLDG 1D",
+    "zip": "78745",
+    "units": 133,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Legacy MCS LLC",
+    "permit_date": "2022-05-23"
+  },
+  {
+    "address": "5900 WESTMINSTER DR BLDG 1",
+    "zip": "78723",
+    "units": 132,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction",
+    "permit_date": "2022-05-20"
+  },
+  {
+    "address": "12190 N MOPAC EXPY SVRD SB",
+    "zip": "78759",
+    "units": 132,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "BEC General Contractors",
+    "permit_date": "2019-03-01"
+  },
+  {
+    "address": "10001 STONELAKE BLVD",
+    "zip": "78759",
+    "units": 130,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2021-05-05"
+  },
+  {
+    "address": "2200 NUECES ST",
+    "zip": "78705",
+    "units": 129,
+    "floors": 18,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": "Millennium Pools Inc *MAIN",
+    "permit_date": "2019-03-12"
+  },
+  {
+    "address": "4341 S CONGRESS AVE",
+    "zip": "78745",
+    "units": 125,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-05-24"
+  },
+  {
+    "address": "4802 S CONGRESS AVE",
+    "zip": "78745",
+    "units": 125,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provenance Constructors (MAIN)",
+    "permit_date": "2022-12-01"
+  },
+  {
+    "address": "1311 AIRPORT COMMERCE DR",
+    "zip": "78741",
+    "units": 124,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Katerra Construction LLC",
+    "permit_date": "2020-06-17"
+  },
+  {
+    "address": "1720 LAWRENCE ST",
+    "zip": "78741",
+    "units": 123,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2025-09-10"
+  },
+  {
+    "address": "5313 VEGA AVE BLDG 4",
+    "zip": "78735",
+    "units": 122,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "NRP Group",
+    "permit_date": "2020-09-14"
+  },
+  {
+    "address": "8110 E US 290 HWY SVRD WB BLDG 1",
+    "zip": "78754",
+    "units": 122,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "BUFFALO CONSTRUCTION, INC.",
+    "permit_date": "2021-09-14"
+  },
+  {
+    "address": "1901 MARIPOSA DR BLDG 1",
+    "zip": "78741",
+    "units": 122,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Legacy MCS LLC",
+    "permit_date": "2020-02-18"
+  },
+  {
+    "address": "11603 JOLLYVILLE RD",
+    "zip": "78759",
+    "units": 121,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Lodgic Development LLC",
+    "permit_date": "2019-05-06"
+  },
+  {
+    "address": "823 TILLERY ST",
+    "zip": "78702",
+    "units": 120,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Camden Development",
+    "permit_date": "2025-10-14"
+  },
+  {
+    "address": "7163 UNION PARK LN BLDG 1",
+    "zip": "78744",
+    "units": 119,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Modern Constructors ***MAIN***",
+    "permit_date": "2023-01-27"
+  },
+  {
+    "address": "3204 CASEYBRIDGE CT",
+    "zip": "78744",
+    "units": 117,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "DD & B Construction INC",
+    "permit_date": "2023-06-22"
+  },
+  {
+    "address": "4300 BULL CREEK RD",
+    "zip": "78731",
+    "units": 117,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "White Construction***MAIN***",
+    "permit_date": "2020-06-03"
+  },
+  {
+    "address": "6101 ROSS RD BLDG 1",
+    "zip": "78617",
+    "units": 116,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2023-10-24"
+  },
+  {
+    "address": "10010 N CAPITAL OF TEXAS HWY SB BLDG 1FW1",
+    "zip": "78759",
+    "units": 116,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2022-04-21"
+  },
+  {
+    "address": "11604 STONEHOLLOW DR BLDG FW2",
+    "zip": "78758",
+    "units": 115,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MCRT Gulfcoast Southwest Construction LLC",
+    "permit_date": "2021-10-14"
+  },
+  {
+    "address": "4009 SABIO DR BLDG FW2",
+    "zip": "78749",
+    "units": 115,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi-family TX Contractor, LLC",
+    "permit_date": "2019-08-14"
+  },
+  {
+    "address": "1614 E 6TH ST",
+    "zip": "78702",
+    "units": 115,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MPC Martines/Palmeiro Construction",
+    "permit_date": "2019-04-26"
+  },
+  {
+    "address": "1601 SCOTTSDALE LN BLDG 2",
+    "zip": "78753",
+    "units": 113,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rampart Multifamily (MAIN)",
+    "permit_date": "2022-04-25"
+  },
+  {
+    "address": "1414 E 51ST ST",
+    "zip": "78723",
+    "units": 113,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-03-11"
+  },
+  {
+    "address": "1911 PHILOMENA ST BLDG FWC",
+    "zip": "78723",
+    "units": 113,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2020-02-12"
+  },
+  {
+    "address": "7301 N LAMAR BLVD UNIT FW4",
+    "zip": "78752",
+    "units": 111,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2024-07-09"
+  },
+  {
+    "address": "11630 N LAMAR BLVD BLDG 2",
+    "zip": "78758",
+    "units": 110,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2023-07-27"
+  },
+  {
+    "address": "1508 S LAMAR BLVD",
+    "zip": "78704",
+    "units": 110,
+    "floors": 7,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2021-03-24"
+  },
+  {
+    "address": "760 AIRPORT BLVD UNIT FW2",
+    "zip": "78702",
+    "units": 109,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-05-20"
+  },
+  {
+    "address": "1515 S LAMAR BLVD BLDG 3",
+    "zip": "78704",
+    "units": 109,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Fairfield Development LP **MAIN**",
+    "permit_date": "2019-12-31"
+  },
+  {
+    "address": "1320 ART DILLY DR BLDG 1",
+    "zip": "78702",
+    "units": 106,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Treymore Construction ***DO NOT USE***",
+    "permit_date": "2020-08-03"
+  },
+  {
+    "address": "6507 E RIVERSIDE DR BLDG 1",
+    "zip": "78741",
+    "units": 106,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-11-16"
+  },
+  {
+    "address": "1501 AIRPORT COMMERCE DR BLDG 1",
+    "zip": "78741",
+    "units": 105,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2024-12-04"
+  },
+  {
+    "address": "2300 ALDRICH ST BLDG FW4",
+    "zip": "78723",
+    "units": 105,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2021-12-20"
+  },
+  {
+    "address": "4323 S CONGRESS AVE BLDG 2",
+    "zip": "78745",
+    "units": 105,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maker Bros LLC",
+    "permit_date": "2020-05-18"
+  },
+  {
+    "address": "5516 HUMMING BIRD LN",
+    "zip": "78745",
+    "units": 104,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "ICON Builders, LLC",
+    "permit_date": "2026-02-17"
+  },
+  {
+    "address": "6405 BERKMAN DR",
+    "zip": "78723",
+    "units": 104,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "ICON Builders, LLC",
+    "permit_date": "2026-02-09"
+  },
+  {
+    "address": "5711 VEGA AVE BLDG FW2",
+    "zip": "78735",
+    "units": 102,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "NRP Group",
+    "permit_date": "2022-12-22"
+  },
+  {
+    "address": "3102 E SH 71 SVRD EB",
+    "zip": "78617",
+    "units": 102,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Byrd Building Services *MAIN",
+    "permit_date": "2022-08-16"
+  },
+  {
+    "address": "1418 FRONTIER VALLEY DR",
+    "zip": "78741",
+    "units": 101,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "IE2 CONSTRUCTION, INC",
+    "permit_date": "2023-04-03"
+  },
+  {
+    "address": "3435 PARKER LN",
+    "zip": "78741",
+    "units": 100,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2024-09-19"
+  },
+  {
+    "address": "1004 E 39TH ST",
+    "zip": "78751",
+    "units": 100,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-09-11"
+  },
+  {
+    "address": "2515 SAN GABRIEL ST",
+    "zip": "78705",
+    "units": 100,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Dillo Media",
+    "permit_date": "2021-10-08"
+  },
+  {
+    "address": "1900 AIRPORT COMMERCE DR BLDG 2",
+    "zip": "78741",
+    "units": 100,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Alliance Residential Builders, LP.",
+    "permit_date": "2019-05-13"
+  },
+  {
+    "address": "8700 SHOAL CREEK BLVD BLDG TNFM3",
+    "zip": "78757",
+    "units": 99,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2024-10-15"
+  },
+  {
+    "address": "8413 SOUTHWEST PKWY BLDG 6",
+    "zip": "78735",
+    "units": 98,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2025-09-22"
+  },
+  {
+    "address": "5225 JAIN LN",
+    "zip": "78721",
+    "units": 97,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greenfield Construction, LLC",
+    "permit_date": "2020-05-15"
+  },
+  {
+    "address": "10346 BLUE BLUFF RD BLDG 1",
+    "zip": "78724",
+    "units": 96,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-05-02"
+  },
+  {
+    "address": "13614 METRIC BLVD BLDG 1",
+    "zip": "78727",
+    "units": 96,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "VCON,LLC",
+    "permit_date": "2021-03-01"
+  },
+  {
+    "address": "7300 N FM 620 RD BLDG 1",
+    "zip": "78726",
+    "units": 95,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Kare Ventures LLC",
+    "permit_date": "2019-05-31"
+  },
+  {
+    "address": "12016 ARCHELETA BLVD",
+    "zip": "78739",
+    "units": 94,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cherrywood Pointe Investment LLC",
+    "permit_date": "2022-07-26"
+  },
+  {
+    "address": "413 NAVASOTA ST",
+    "zip": "78702",
+    "units": 93,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2020-04-20"
+  },
+  {
+    "address": "7817 W SH 71 BLDG 2",
+    "zip": "78736",
+    "units": 92,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Morgan PRL Construction LLC",
+    "permit_date": "2025-12-11"
+  },
+  {
+    "address": "212 W HIGHLAND MALL BLVD",
+    "zip": "78752",
+    "units": 92,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-01-21"
+  },
+  {
+    "address": "4711 E RIVERSIDE DR BLDG 2A",
+    "zip": "78741",
+    "units": 92,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2019-08-08"
+  },
+  {
+    "address": "4617 TANNEHILL LN BLDG HP2",
+    "zip": "78721",
+    "units": 90,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Din-Cal Construction Inc.",
+    "permit_date": "2022-01-03"
+  },
+  {
+    "address": "5629 N LAMAR BLVD",
+    "zip": "78751",
+    "units": 89,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Trinsic Residential Builders, LLC",
+    "permit_date": "2019-12-31"
+  },
+  {
+    "address": "10520 LAKELINE MALL DR UNIT FW4",
+    "zip": "78717",
+    "units": 88,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Streetlights Residential",
+    "permit_date": "2022-10-28"
+  },
+  {
+    "address": "10400 RESEARCH BLVD SVRD SB",
+    "zip": "78759",
+    "units": 88,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provident General Contractors",
+    "permit_date": "2022-02-25"
+  },
+  {
+    "address": "2901 MANOR RD",
+    "zip": "78722",
+    "units": 88,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2020-09-16"
+  },
+  {
+    "address": "6936 E BEN WHITE BLVD SVRD WB BLDG 1",
+    "zip": "78741",
+    "units": 88,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Xpert Design & Construction LLC",
+    "permit_date": "2019-08-19"
+  },
+  {
+    "address": "2915 E CESAR CHAVEZ ST",
+    "zip": "78702",
+    "units": 86,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "JLB Builders, LLC",
+    "permit_date": "2025-10-09"
+  },
+  {
+    "address": "304 E YAGER LN",
+    "zip": "78753",
+    "units": 86,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milano 786 LLC",
+    "permit_date": "2024-01-17"
+  },
+  {
+    "address": "1638 E 2ND ST",
+    "zip": "78702",
+    "units": 86,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Carleton Companies",
+    "permit_date": "2019-12-17"
+  },
+  {
+    "address": "12489 RESEARCH BLVD SVRD NB BLDG FWD",
+    "zip": "78727",
+    "units": 85,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-09-02"
+  },
+  {
+    "address": "3300 OAK CREEK DR BLDG 3",
+    "zip": "78727",
+    "units": 85,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Xpert Design & Construction LLC",
+    "permit_date": "2019-01-11"
+  },
+  {
+    "address": "8722 W SH 71 BLDG 6",
+    "zip": "78735",
+    "units": 84,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Quarterra Construction, LLC",
+    "permit_date": "2023-03-08"
+  },
+  {
+    "address": "15222 N FM 620 RD BLDG 5",
+    "zip": "78717",
+    "units": 84,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-09-21"
+  },
+  {
+    "address": "3700 PAYLOAD PASS",
+    "zip": "78704",
+    "units": 84,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2019-05-14"
+  },
+  {
+    "address": "4801 SPRINGDALE RD BLDG 2",
+    "zip": "78723",
+    "units": 83,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Legacy MCS LLC",
+    "permit_date": "2021-05-04"
+  },
+  {
+    "address": "7301 S IH 35 SVRD NB BLDG 1",
+    "zip": "78744",
+    "units": 82,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-09-21"
+  },
+  {
+    "address": "2511 MONTOPOLIS DR BLDG 1A",
+    "zip": "78741",
+    "units": 82,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Stillwater Capital - Stillwater GC LLC",
+    "permit_date": "2019-06-17"
+  },
+  {
+    "address": "6410 FM 969 RD",
+    "zip": "78724",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2025-12-01"
+  },
+  {
+    "address": "13023 HEMA DR BLDG 6",
+    "zip": "78717",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2024-02-01"
+  },
+  {
+    "address": "7731 MENCHACA RD BLDG Z",
+    "zip": "78745",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2020-10-21"
+  },
+  {
+    "address": "2701 GAULT LN UNIT FW2",
+    "zip": "78758",
+    "units": 80,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2023-05-03"
+  },
+  {
+    "address": "1200 W KOENIG LN",
+    "zip": "78757",
+    "units": 80,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maker Bros LLC",
+    "permit_date": "2022-12-09"
+  },
+  {
+    "address": "5400 JAIN LN BLDG 2",
+    "zip": "78721",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Alliance Residential Builders, LP",
+    "permit_date": "2021-10-21"
+  },
+  {
+    "address": "9100 BROWN LN",
+    "zip": "78754",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2021-08-13"
+  },
+  {
+    "address": "9020 BROWN LN",
+    "zip": "78754",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2021-08-13"
+  },
+  {
+    "address": "13830 N FM 620 RD SB",
+    "zip": "78717",
+    "units": 80,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "BCC",
+    "permit_date": "2019-10-08"
+  },
+  {
+    "address": "7501 PEARSON RANCH RD BLDG GAR10",
+    "zip": "78717",
+    "units": 78,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-09-08"
+  },
+  {
+    "address": "1125 SHADY LN BLDG 4",
+    "zip": "78721",
+    "units": 76,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Jordan Foster Construction",
+    "permit_date": "2023-03-16"
+  },
+  {
+    "address": "2401 SORIN ST",
+    "zip": "78723",
+    "units": 76,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Ryan Companies US INC",
+    "permit_date": "2022-03-09"
+  },
+  {
+    "address": "5901 S PLEASANT VALLEY RD",
+    "zip": "78744",
+    "units": 75,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Streamline General Contractors",
+    "permit_date": "2025-10-07"
+  },
+  {
+    "address": "1120 SHADY LN BLDG 2",
+    "zip": "78721",
+    "units": 75,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Burnet Builders, LLC",
+    "permit_date": "2019-05-21"
+  },
+  {
+    "address": "11205 N FM 620 RD",
+    "zip": "78726",
+    "units": 74,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2023-01-17"
+  },
+  {
+    "address": "2511 W BRAKER LN BLDG 1",
+    "zip": "78758",
+    "units": 74,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Oden Hughes LLC dba Cactus Rose Oh Delta LLC",
+    "permit_date": "2019-06-20"
+  },
+  {
+    "address": "7400 S CONGRESS AVE BLDG 2 UNIT FW2",
+    "zip": "78745",
+    "units": 73,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2024-09-17"
+  },
+  {
+    "address": "7009 ED BLUESTEIN BLVD SVRD NB BLDG 3",
+    "zip": "78724",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2024-11-08"
+  },
+  {
+    "address": "5700 GROVER AVE BLDG 1 UNIT FW2",
+    "zip": "78756",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-10-03"
+  },
+  {
+    "address": "6117 FM 969 RD BLDG 2",
+    "zip": "78724",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-12-17"
+  },
+  {
+    "address": "604 E HIGHLAND MALL BLVD",
+    "zip": "78752",
+    "units": 72,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cardinal Construction",
+    "permit_date": "2021-10-11"
+  },
+  {
+    "address": "4900 MUELLER BLVD",
+    "zip": "78723",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "HOAR Construction LLC",
+    "permit_date": "2021-05-10"
+  },
+  {
+    "address": "8200 S CONGRESS AVE BLDG 4",
+    "zip": "78745",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2021-03-05"
+  },
+  {
+    "address": "3200 MONTOPOLIS DR BLDG 3",
+    "zip": "78744",
+    "units": 72,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2020-12-10"
+  },
+  {
+    "address": "12413 TECH RIDGE BLVD BLDG B",
+    "zip": "78753",
+    "units": 71,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "BCC",
+    "permit_date": "2019-08-21"
+  },
+  {
+    "address": "11723 N FM 620 RD",
+    "zip": "78750",
+    "units": 70,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Waltz Construction",
+    "permit_date": "2024-07-30"
+  },
+  {
+    "address": "16601 E BRAKER LN BLDG 1",
+    "zip": "78653",
+    "units": 70,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AOG Evergreen GC, LLC",
+    "permit_date": "2024-01-03"
+  },
+  {
+    "address": "6701 N FM 620 RD BLDG 1",
+    "zip": "78730",
+    "units": 70,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Trinsic Residential Builders, LLC",
+    "permit_date": "2022-11-09"
+  },
+  {
+    "address": "13621 LYNDHURST ST",
+    "zip": "78717",
+    "units": 70,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2022-05-24"
+  },
+  {
+    "address": "6001 S CONGRESS AVE BLDG 2",
+    "zip": "78745",
+    "units": 69,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Wade Construction Group, Inc",
+    "permit_date": "2020-06-01"
+  },
+  {
+    "address": "10017 1/2 DESSAU RD",
+    "zip": "78754",
+    "units": 68,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rosch Southwest, LLC",
+    "permit_date": "2020-05-12"
+  },
+  {
+    "address": "2213 POQUITO ST",
+    "zip": "78722",
+    "units": 67,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Denali Pools LLC***Main***",
+    "permit_date": "2025-09-02"
+  },
+  {
+    "address": "2612 PERSEVERANCE DR BLDG FW1A",
+    "zip": "78731",
+    "units": 67,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction",
+    "permit_date": "2021-09-28"
+  },
+  {
+    "address": "1127 TILLERY ST",
+    "zip": "78702",
+    "units": 66,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Streamline General Contractors",
+    "permit_date": "2023-02-01"
+  },
+  {
+    "address": "7601 SPRINGDALE RD BLDG 3",
+    "zip": "78724",
+    "units": 66,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2021-02-08"
+  },
+  {
+    "address": "11119 STUDTMANN CT",
+    "zip": "78726",
+    "units": 66,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Davis Brothers Construction",
+    "permit_date": "2021-02-23"
+  },
+  {
+    "address": "2500 E WILLIAM CANNON DR BLDG 3",
+    "zip": "78744",
+    "units": 66,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2020-04-22"
+  },
+  {
+    "address": "10301 BURNET RD BLDG 1A",
+    "zip": "78758",
+    "units": 66,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Alliance Residential Builders, LP.",
+    "permit_date": "2019-03-25"
+  },
+  {
+    "address": "10820 S IH 35 SVRD SB BLDG 1FW1",
+    "zip": "78748",
+    "units": 65,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Stillwater Capital - Stillwater GC LLC",
+    "permit_date": "2022-11-29"
+  },
+  {
+    "address": "827 CAMINO VAQUERO PKWY BLDG 11",
+    "zip": "78748",
+    "units": 65,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-08-17"
+  },
+  {
+    "address": "1806 CLUBVIEW AVE",
+    "zip": "78741",
+    "units": 65,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Galaxy Builders",
+    "permit_date": "2019-08-02"
+  },
+  {
+    "address": "7121 ELROY RD BLDG 3",
+    "zip": "78617",
+    "units": 64,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bonner Carrington Construction",
+    "permit_date": "2022-08-26"
+  },
+  {
+    "address": "1101 MUSIC LN BLDG A",
+    "zip": "78704",
+    "units": 64,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MYCON General Constractors",
+    "permit_date": "2020-03-17"
+  },
+  {
+    "address": "2001 ED BLUESTEIN BLVD NB BLDG 4",
+    "zip": "78725",
+    "units": 64,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2020-02-20"
+  },
+  {
+    "address": "12600 MC CALLEN PASS BLDG 3",
+    "zip": "78753",
+    "units": 63,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-06-30"
+  },
+  {
+    "address": "1141 CHICON ST BLDG 1",
+    "zip": "78702",
+    "units": 63,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Carleton Companies",
+    "permit_date": "2022-11-07"
+  },
+  {
+    "address": "8930 VERTEX BLVD BLDG 6",
+    "zip": "78747",
+    "units": 62,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2023-10-18"
+  },
+  {
+    "address": "8007 BURNET RD",
+    "zip": "78757",
+    "units": 61,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Lott Brothers Construction CO., LTD",
+    "permit_date": "2022-10-10"
+  },
+  {
+    "address": "13460 LYNDHURST ST BLDG 6",
+    "zip": "78717",
+    "units": 61,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "SLR Presido III Construction, LLC",
+    "permit_date": "2020-06-04"
+  },
+  {
+    "address": "1325 GROVE BLVD",
+    "zip": "78741",
+    "units": 60,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2024-07-01"
+  },
+  {
+    "address": "5115 LANCASTER CT",
+    "zip": "78723",
+    "units": 60,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bailey Elliott Construction, Inc. D/B/A BEC Austin",
+    "permit_date": "2024-06-10"
+  },
+  {
+    "address": "2210 PERSHING DR",
+    "zip": "78723",
+    "units": 60,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Camden Development",
+    "permit_date": "2023-08-02"
+  },
+  {
+    "address": "1812 E 6TH ST",
+    "zip": "78702",
+    "units": 60,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2021-12-16"
+  },
+  {
+    "address": "414 E WONSLEY DR BLDG 7",
+    "zip": "78753",
+    "units": 60,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2019-11-04"
+  },
+  {
+    "address": "8103 S CONGRESS AVE BLDG 1",
+    "zip": "78745",
+    "units": 59,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2019-05-24"
+  },
+  {
+    "address": "13010 RIDGELINE BLVD BLDG 10",
+    "zip": "78613",
+    "units": 57,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "PRA Construction LP",
+    "permit_date": "2020-05-01"
+  },
+  {
+    "address": "5521 SPRINGDALE RD BLDG 2",
+    "zip": "78723",
+    "units": 57,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi-family TX Contractor, LLC",
+    "permit_date": "2020-02-06"
+  },
+  {
+    "address": "811 W LIVE OAK ST BLDG B",
+    "zip": "78704",
+    "units": 57,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "White Construction***MAIN***",
+    "permit_date": "2019-02-27"
+  },
+  {
+    "address": "4611 N IH 35 SVRD NB",
+    "zip": "78722",
+    "units": 56,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "IE2 CONSTRUCTION, INC",
+    "permit_date": "2020-06-17"
+  },
+  {
+    "address": "7501 COTA VISTA DR BLDG 1",
+    "zip": "78744",
+    "units": 54,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Integrated Construction & Development",
+    "permit_date": "2025-05-09"
+  },
+  {
+    "address": "9019 NORTH LAKE CREEK PKWY BLDG 6",
+    "zip": "78717",
+    "units": 54,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2021-03-02"
+  },
+  {
+    "address": "12217 N IH 35 SVRD NB BLDG 2",
+    "zip": "78753",
+    "units": 54,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "EMBREY Builders, LLC",
+    "permit_date": "2020-09-29"
+  },
+  {
+    "address": "600 E FM 1626 RD BLDG 8",
+    "zip": "78748",
+    "units": 54,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Stillwater Capital - Stillwater GC LLC",
+    "permit_date": "2020-01-15"
+  },
+  {
+    "address": "7013 E WILLIAM CANNON DR BLDG 3",
+    "zip": "78744",
+    "units": 52,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-06-28"
+  },
+  {
+    "address": "12601 INNOVAR CIR BLDG 1",
+    "zip": "78754",
+    "units": 52,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rampart Multifamily (MAIN)",
+    "permit_date": "2023-04-10"
+  },
+  {
+    "address": "7205 E BEN WHITE BLVD SVRD EB BLDG 3",
+    "zip": "78744",
+    "units": 52,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2021-12-10"
+  },
+  {
+    "address": "6800 JOHNNY MORRIS RD BLDG 2",
+    "zip": "78724",
+    "units": 52,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2020-03-04"
+  },
+  {
+    "address": "8100 S CONGRESS AVE BLDG 2B",
+    "zip": "78745",
+    "units": 52,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2020-01-23"
+  },
+  {
+    "address": "4811 WOODROW AVE",
+    "zip": "78756",
+    "units": 52,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cumby Construction",
+    "permit_date": "2019-01-10"
+  },
+  {
+    "address": "10300 S IH 35 SVRD SB BLDG 7",
+    "zip": "78748",
+    "units": 51,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2019-08-23"
+  },
+  {
+    "address": "9821 NORTH LAKE CREEK PKWY BLDG 5",
+    "zip": "78717",
+    "units": 51,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2019-03-08"
+  },
+  {
+    "address": "5900 CAMERON RD BLDG 6",
+    "zip": "78723",
+    "units": 50,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2020-08-17"
+  },
+  {
+    "address": "6905 E RIVERSIDE DR",
+    "zip": "78741",
+    "units": 50,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "EBCO General Contractor",
+    "permit_date": "2021-08-20"
+  },
+  {
+    "address": "1501 W HOWARD LN BLDG 3",
+    "zip": "78753",
+    "units": 49,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bonner Carrington Construction",
+    "permit_date": "2022-07-22"
+  },
+  {
+    "address": "7504 COTA VISTA DR BLDG 5",
+    "zip": "78744",
+    "units": 48,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2026-01-15"
+  },
+  {
+    "address": "6125 JOHNNY MORRIS RD BLDG 7",
+    "zip": "78724",
+    "units": 48,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2025-05-05"
+  },
+  {
+    "address": "3339 CASEYBRIDGE CT BLDG 4",
+    "zip": "78744",
+    "units": 48,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-12-01"
+  },
+  {
+    "address": "3335 CASEYBRIDGE CT BLDG 2",
+    "zip": "78744",
+    "units": 48,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-11-08"
+  },
+  {
+    "address": "11701 DIONDA LN BLDG 6",
+    "zip": "78617",
+    "units": 48,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Greystar Development & Construction, LP",
+    "permit_date": "2023-03-09"
+  },
+  {
+    "address": "3816 S LAMAR BLVD SB BLDG 21",
+    "zip": "78704",
+    "units": 48,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Smart Charge America",
+    "permit_date": "2019-05-28"
+  },
+  {
+    "address": "8101 LOYOLA LN BLDG 1",
+    "zip": "78724",
+    "units": 48,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-03-18"
+  },
+  {
+    "address": "2401 E OLTORF ST BLDG 4",
+    "zip": "78741",
+    "units": 48,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2020-07-06"
+  },
+  {
+    "address": "4704 SUNSET TRL BLDG 1",
+    "zip": "78745",
+    "units": 48,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cumby Construction",
+    "permit_date": "2021-05-20"
+  },
+  {
+    "address": "1600 E 3RD ST BLDG 1",
+    "zip": "78702",
+    "units": 47,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Carleton Companies",
+    "permit_date": "2021-05-18"
+  },
+  {
+    "address": "1120 TOWN CREEK DR UNIT FLR5",
+    "zip": "78741",
+    "units": 46,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Grayco Builders, LLC",
+    "permit_date": "2023-11-01"
+  },
+  {
+    "address": "13100 AVERY RANCH BLVD BLDG 10",
+    "zip": "78717",
+    "units": 45,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Trinsic Residential Builders, LLC",
+    "permit_date": "2020-07-30"
+  },
+  {
+    "address": "2701 NUECES ST",
+    "zip": "78705",
+    "units": 45,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Braun & Butler Construction, Inc.",
+    "permit_date": "2019-12-17"
+  },
+  {
+    "address": "5200 MC KINNEY FALLS PKWY BLDG 7",
+    "zip": "78744",
+    "units": 44,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-07-14"
+  },
+  {
+    "address": "5310 HELEN ST BLDG FW4",
+    "zip": "78751",
+    "units": 43,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Blazer Building Texas, LLC",
+    "permit_date": "2019-05-14"
+  },
+  {
+    "address": "9825 WILDHORSE RANCH TRL BLDG 5",
+    "zip": "78724",
+    "units": 42,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Elmington Construction",
+    "permit_date": "2024-01-12"
+  },
+  {
+    "address": "11900 DECKER LAKE RD BLDG 2",
+    "zip": "78724",
+    "units": 42,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2023-07-11"
+  },
+  {
+    "address": "10801 WAYNE RIDDELL LOOP BLDG 10",
+    "zip": "78748",
+    "units": 42,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-06-02"
+  },
+  {
+    "address": "13505 BURNET RD BLDG 5",
+    "zip": "78727",
+    "units": 42,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2022-03-04"
+  },
+  {
+    "address": "14199 N IH 35 SVRD NB BLDG 13",
+    "zip": "78660",
+    "units": 42,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2019-05-15"
+  },
+  {
+    "address": "2001 S 1ST ST",
+    "zip": "78704",
+    "units": 41,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Smoky Hill Properties",
+    "permit_date": "2024-06-18"
+  },
+  {
+    "address": "2215 GREENWOOD AVE",
+    "zip": "78723",
+    "units": 40,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Camden Development",
+    "permit_date": "2023-08-29"
+  },
+  {
+    "address": "5606 ROOSEVELT AVE",
+    "zip": "78756",
+    "units": 40,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Braun & Butler Construction, Inc.",
+    "permit_date": "2020-11-12"
+  },
+  {
+    "address": "12205 N LAMAR BLVD",
+    "zip": "78753",
+    "units": 40,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Larry Peel & Co. Inc.",
+    "permit_date": "2019-10-14"
+  },
+  {
+    "address": "916 NORWOOD PARK BLVD BLDG 6",
+    "zip": "78753",
+    "units": 39,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2020-06-05"
+  },
+  {
+    "address": "6401 FM 2222 RD",
+    "zip": "78730",
+    "units": 38,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "White Construction***MAIN***",
+    "permit_date": "2020-05-27"
+  },
+  {
+    "address": "1109 N IH 35 SVRD NB UNIT FLR3",
+    "zip": "78702",
+    "units": 37,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Andres Construction Services, LLC",
+    "permit_date": "2019-01-07"
+  },
+  {
+    "address": "4605 S PLEASANT VALLEY RD BLDG 9",
+    "zip": "78744",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "WD Construction LLC",
+    "permit_date": "2025-01-02"
+  },
+  {
+    "address": "2413 MAYALL TRL BLDG 2",
+    "zip": "78747",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2022-07-13"
+  },
+  {
+    "address": "8001 E WILLIAM CANNON DR BLDG 4",
+    "zip": "78744",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Brownstone Construction",
+    "permit_date": "2021-02-10"
+  },
+  {
+    "address": "7508 ROSS RD BLDG 4",
+    "zip": "78617",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Kittle Property Group INC (MAIN)",
+    "permit_date": "2022-01-23"
+  },
+  {
+    "address": "8110 BLUE GOOSE RD BLDG 2",
+    "zip": "78653",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Blue Goose Builders LLC",
+    "permit_date": "2021-12-30"
+  },
+  {
+    "address": "5301 DECKER LN BLDG 7",
+    "zip": "78724",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-08-21"
+  },
+  {
+    "address": "7000 JANES RANCH RD BLDG 1",
+    "zip": "78744",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rampart Multifamily (MAIN)",
+    "permit_date": "2019-08-07"
+  },
+  {
+    "address": "2001 E SLAUGHTER LN BLDG 2",
+    "zip": "78747",
+    "units": 36,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Nexus Goodnight Ranch, LTD",
+    "permit_date": "2019-03-27"
+  },
+  {
+    "address": "5321 BARTON CREEK BLVD BLDG 4",
+    "zip": "78735",
+    "units": 34,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2021-07-03"
+  },
+  {
+    "address": "2213 CASCADES AVE BLDG 1",
+    "zip": "78747",
+    "units": 34,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2021-11-09"
+  },
+  {
+    "address": "2126 GOODRICH AVE BLDG 1A",
+    "zip": "78704",
+    "units": 34,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Gulf Coast Community Builders LLC",
+    "permit_date": "2020-05-05"
+  },
+  {
+    "address": "5204 CHARLES MERLE DR BLDG 5",
+    "zip": "78747",
+    "units": 33,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "XPERT DESIGN & CONSTRUCTION, LLC (MAIN)",
+    "permit_date": "2020-05-05"
+  },
+  {
+    "address": "2900 OLIVARIS BLVD BLDG 12",
+    "zip": "78617",
+    "units": 32,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Maple Multi Family Contractor LLC",
+    "permit_date": "2019-08-29"
+  },
+  {
+    "address": "6525 ED BLUESTEIN BLVD NB BLDG 9",
+    "zip": "78724",
+    "units": 32,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Blackburn Construction, Inc.",
+    "permit_date": "2023-02-24"
+  },
+  {
+    "address": "13130 POND SPRINGS RD BLDG 2A",
+    "zip": "78729",
+    "units": 32,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": null,
+    "permit_date": "2020-06-04"
+  },
+  {
+    "address": "1620 E RIVERSIDE DR BLDG 7A",
+    "zip": "78741",
+    "units": 32,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "AMLI Development Company, LLC",
+    "permit_date": "2020-05-20"
+  },
+  {
+    "address": "7401 SUN CHASE PKWY BLDG 2",
+    "zip": "78617",
+    "units": 31,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2024-02-27"
+  },
+  {
+    "address": "1701 DALESIDE LN BLDG 7",
+    "zip": "78754",
+    "units": 31,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "DHI Communities Construction of Texas LLC",
+    "permit_date": "2023-05-02"
+  },
+  {
+    "address": "3005 S IH 35 SVRD NB",
+    "zip": "78741",
+    "units": 31,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Texas Village Inc",
+    "permit_date": "2023-02-23"
+  },
+  {
+    "address": "6811 OLD BEE CAVES RD BLDG A",
+    "zip": "78735",
+    "units": 31,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-03-17"
+  },
+  {
+    "address": "801 STEEL TIMBER DR BLDG 7",
+    "zip": "78652",
+    "units": 30,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2024-07-17"
+  },
+  {
+    "address": "6000 ED BLUESTEIN BLVD SB BLDG 10",
+    "zip": "78723",
+    "units": 30,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-08-24"
+  },
+  {
+    "address": "1010 W 26TH ST",
+    "zip": "78705",
+    "units": 30,
+    "floors": 6,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "1010 W 26th LLC",
+    "permit_date": "2020-07-07"
+  },
+  {
+    "address": "460 BASTROP HWY SB BLDG 14",
+    "zip": "78741",
+    "units": 30,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "OHT Construction LLC ***MAIN***",
+    "permit_date": "2020-02-05"
+  },
+  {
+    "address": "7870 W US 290 HWY BLDG 8",
+    "zip": "78736",
+    "units": 30,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Oden Hughes LLC dba Cactus Rose Oh Delta LLC",
+    "permit_date": "2019-08-05"
+  },
+  {
+    "address": "49 NAVASOTA ST",
+    "zip": "78702",
+    "units": 30,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Bartlett Cocke General Contractors (MAIN)",
+    "permit_date": "2019-06-14"
+  },
+  {
+    "address": "1915 BRIARCLIFF BLVD BLDG 2",
+    "zip": "78723",
+    "units": 30,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Braun & Butler Construction, Inc.",
+    "permit_date": "2019-02-27"
+  },
+  {
+    "address": "1108 NUECES ST",
+    "zip": "78701",
+    "units": 29,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Lott Brothers Construction CO., LTD",
+    "permit_date": "2020-05-06"
+  },
+  {
+    "address": "12201 HEATHERLY DR BLDG 6",
+    "zip": "78747",
+    "units": 28,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2024-08-28"
+  },
+  {
+    "address": "12234 HEATHERLY DR BLDG 1",
+    "zip": "78747",
+    "units": 28,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2020-07-27"
+  },
+  {
+    "address": "809 E 9TH ST",
+    "zip": "78702",
+    "units": 27,
+    "floors": 10,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Franklin Construction LTD",
+    "permit_date": "2022-10-19"
+  },
+  {
+    "address": "9911 DESSAU RD BLDG 3",
+    "zip": "78754",
+    "units": 27,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2021-08-18"
+  },
+  {
+    "address": "5333 E PARMER LN BLDG 5",
+    "zip": "78754",
+    "units": 26,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cadence McShane Construction Company",
+    "permit_date": "2022-04-13"
+  },
+  {
+    "address": "11820 PEARCE LN",
+    "zip": "78617",
+    "units": 26,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": "Rosch Southwest, LLC",
+    "permit_date": "2021-11-10"
+  },
+  {
+    "address": "2400 LEON ST",
+    "zip": "78705",
+    "units": 26,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "MDG Construction LLC",
+    "permit_date": "2020-07-22"
+  },
+  {
+    "address": "11901 DIONDA LN BLDG 3",
+    "zip": "78617",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "SHFC Pedcor Construction JV",
+    "permit_date": "2023-09-07"
+  },
+  {
+    "address": "10304 OLD SAN ANTONIO RD BLDG 1",
+    "zip": "78748",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Interwest Construction LLC",
+    "permit_date": "2025-03-03"
+  },
+  {
+    "address": "5925 E HOWARD LN BLDG 4",
+    "zip": "78653",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Stillwater Capital - Stillwater GC LLC",
+    "permit_date": "2025-02-20"
+  },
+  {
+    "address": "7900 MC KINNEY FALLS PKWY",
+    "zip": "78744",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "CONCEPT BUILDERS",
+    "permit_date": "2022-04-29"
+  },
+  {
+    "address": "4308 AUTHENTIC DR",
+    "zip": "78731",
+    "units": 24,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2021-12-29"
+  },
+  {
+    "address": "4300 AUTHENTIC DR",
+    "zip": "78731",
+    "units": 24,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2021-12-29"
+  },
+  {
+    "address": "4306 AUTHENTIC DR",
+    "zip": "78731",
+    "units": 24,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2021-12-29"
+  },
+  {
+    "address": "4304 AUTHENTIC DR",
+    "zip": "78731",
+    "units": 24,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2021-12-29"
+  },
+  {
+    "address": "4302 AUTHENTIC DR",
+    "zip": "78731",
+    "units": 24,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2021-12-29"
+  },
+  {
+    "address": "5724 E HOWARD LN BLDG 4",
+    "zip": "78653",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2021-11-19"
+  },
+  {
+    "address": "400 COMAL ST",
+    "zip": "78702",
+    "units": 24,
+    "floors": 5,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "IE2 CONSTRUCTION, INC",
+    "permit_date": "2021-06-28"
+  },
+  {
+    "address": "2333 CASCADES AVE BLDG 3",
+    "zip": "78747",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2020-07-27"
+  },
+  {
+    "address": "1625 EDGEWORTH BND BLDG 9",
+    "zip": "78754",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2020-02-28"
+  },
+  {
+    "address": "12201 DESSAU RD BLDG 14",
+    "zip": "78754",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The NRP Group LLC",
+    "permit_date": "2019-12-19"
+  },
+  {
+    "address": "1601 S HEATHERWILDE BLVD BLDG 13",
+    "zip": "78660",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2019-10-10"
+  },
+  {
+    "address": "7500 W SLAUGHTER LN BLDG 5",
+    "zip": "78749",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Skybeck Construction, LLC",
+    "permit_date": "2019-10-02"
+  },
+  {
+    "address": "13301 DESSAU RD BLDG 4",
+    "zip": "78754",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "The Marcus Organization",
+    "permit_date": "2019-04-26"
+  },
+  {
+    "address": "4408 LONG CHAMP DR",
+    "zip": "78746",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": null,
+    "permit_date": "2019-03-18"
+  },
+  {
+    "address": "5525 ROSS RD BLDG 12",
+    "zip": "78617",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2019-02-22"
+  },
+  {
+    "address": "5501 ROSS RD BLDG 6",
+    "zip": "78617",
+    "units": 24,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Journeyman Construction",
+    "permit_date": "2019-02-22"
+  },
+  {
+    "address": "2500 ROSEWOOD AVE",
+    "zip": "78702",
+    "units": 23,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Austin One Real Estate LLC",
+    "permit_date": "2025-01-22"
+  },
+  {
+    "address": "62 EAST AVE",
+    "zip": "78701",
+    "units": 22,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rhodes-Powell-Contreras DBA Arrowhead Construction",
+    "permit_date": "2021-04-07"
+  },
+  {
+    "address": "100 W MOCKINGBIRD LN BLDG 1",
+    "zip": "78745",
+    "units": 22,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Provenance Constructors (MAIN)",
+    "permit_date": "2021-03-30"
+  },
+  {
+    "address": "6000 MENCHACA RD BLDG 1",
+    "zip": "78745",
+    "units": 22,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Gold Key Builders, Inc",
+    "permit_date": "2020-12-29"
+  },
+  {
+    "address": "5515 HUMMING BIRD LN",
+    "zip": "78745",
+    "units": 21,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Blackridge Construction LLC",
+    "permit_date": "2022-01-13"
+  },
+  {
+    "address": "300 W 27TH ST",
+    "zip": "78705",
+    "units": 20,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": "Phi Gamma Delta Fraternity",
+    "permit_date": "2024-02-01"
+  },
+  {
+    "address": "2450 WICKERSHAM LN BLDG 18",
+    "zip": "78741",
+    "units": 20,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Clifton Heights Construction LLC",
+    "permit_date": "2023-03-24"
+  },
+  {
+    "address": "755 SPRINGDALE RD BLDG 6",
+    "zip": "78702",
+    "units": 20,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "PSW GC, LLC",
+    "permit_date": "2022-10-13"
+  },
+  {
+    "address": "12113 DESSAU RD",
+    "zip": "78754",
+    "units": 20,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": "CIP Construction Company",
+    "permit_date": "2022-03-07"
+  },
+  {
+    "address": "110 W ELIZABETH ST",
+    "zip": "78704",
+    "units": 20,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Green City Hospitality LLC",
+    "permit_date": "2021-08-04"
+  },
+  {
+    "address": "2100 BARTON SPRINGS RD",
+    "zip": "78746",
+    "units": 19,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": false,
+    "developer": "C3 Presents",
+    "permit_date": "2019-09-25"
+  },
+  {
+    "address": "117 W WILLIAM CANNON DR BLDG 1",
+    "zip": "78745",
+    "units": 19,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cotton Commercial USA, Inc",
+    "permit_date": "2025-09-19"
+  },
+  {
+    "address": "3820 MENCHACA RD",
+    "zip": "78704",
+    "units": 19,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Moontower 78704 LLC",
+    "permit_date": "2021-11-22"
+  },
+  {
+    "address": "1811 WEBBERVILLE RD BLDG 1",
+    "zip": "78721",
+    "units": 19,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Hoch Construction LLC.(MAIN)",
+    "permit_date": "2021-08-19"
+  },
+  {
+    "address": "2724 E 12TH ST",
+    "zip": "78702",
+    "units": 19,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "American Ventures",
+    "permit_date": "2021-08-17"
+  },
+  {
+    "address": "4500 NUCKOLS CROSSING RD",
+    "zip": "78744",
+    "units": 18,
+    "floors": 1,
+    "status": "permitted",
+    "has_co": false,
+    "developer": "Rosch Southwest, LLC",
+    "permit_date": "2025-01-21"
+  },
+  {
+    "address": "1400 ROBERT BROWNING ST",
+    "zip": "78723",
+    "units": 18,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Pyramid ATX Construction",
+    "permit_date": "2024-10-24"
+  },
+  {
+    "address": "740 MANSELL AVE BLDG 2",
+    "zip": "78702",
+    "units": 18,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "PSW GC, LLC",
+    "permit_date": "2024-06-20"
+  },
+  {
+    "address": "10350 BLUE BLUFF RD BLDG 3",
+    "zip": "78724",
+    "units": 17,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Wild Horse Ranch Builders, LLC",
+    "permit_date": "2022-04-19"
+  },
+  {
+    "address": "613 W ST JOHNS AVE",
+    "zip": "78752",
+    "units": 17,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "IE2 CONSTRUCTION, INC",
+    "permit_date": "2021-05-17"
+  },
+  {
+    "address": "2020 NUECES ST",
+    "zip": "78705",
+    "units": 17,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Rogers-O'Brien Construction Co. LTD **MAIN**",
+    "permit_date": "2019-10-24"
+  },
+  {
+    "address": "1903 KEILBAR LN",
+    "zip": "78745",
+    "units": 16,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": null,
+    "permit_date": "2023-03-09"
+  },
+  {
+    "address": "12403 MELLOW MEADOW DR BLDG 3",
+    "zip": "78750",
+    "units": 16,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": null,
+    "permit_date": "2021-12-14"
+  },
+  {
+    "address": "6855 E US 290 HWY SVRD EB BLDG 18",
+    "zip": "78723",
+    "units": 16,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "THD Partners, LLC",
+    "permit_date": "2021-12-09"
+  },
+  {
+    "address": "4806 CASWELL AVE",
+    "zip": "78751",
+    "units": 16,
+    "floors": 20,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Aquatic Ideas LLC",
+    "permit_date": "2020-09-17"
+  },
+  {
+    "address": "311 ATTAYAC ST",
+    "zip": "78702",
+    "units": 15,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Harvey-Cleary Builders ***MAIN***",
+    "permit_date": "2022-09-07"
+  },
+  {
+    "address": "1309 CHICON ST",
+    "zip": "78702",
+    "units": 13,
+    "floors": 1,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Dominion Construction, LLC",
+    "permit_date": "2023-11-27"
+  },
+  {
+    "address": "1204 POQUITO ST",
+    "zip": "78702",
+    "units": 13,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Ion Constructors",
+    "permit_date": "2020-03-03"
+  },
+  {
+    "address": "7051 MEADOW LAKE BLVD BLDG 9",
+    "zip": "78744",
+    "units": 12,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Lott Brothers Construction CO., LTD",
+    "permit_date": "2024-01-17"
+  },
+  {
+    "address": "4405 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "4401 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "4409 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "4407 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "4403 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "4411 PREVAIL LN",
+    "zip": "78731",
+    "units": 12,
+    "floors": 4,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Milestone Community Builders, LLC(MAIN)",
+    "permit_date": "2019-04-23"
+  },
+  {
+    "address": "2301 GROVE BLVD BLDG CP2",
+    "zip": "78741",
+    "units": 11,
+    "floors": 1,
+    "status": "permitted",
+    "has_co": false,
+    "developer": "Metal Construction Materials",
+    "permit_date": "2019-04-09"
+  },
+  {
+    "address": "1006 BAYLOR ST",
+    "zip": "78703",
+    "units": 10,
+    "floors": 3,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "Cumby Construction",
+    "permit_date": "2021-11-10"
+  },
+  {
+    "address": "4010 CLAWSON RD",
+    "zip": "78704",
+    "units": 10,
+    "floors": 2,
+    "status": "co_issued",
+    "has_co": true,
+    "developer": "J5 Construction, LLC",
+    "permit_date": "2020-02-24"
+  }
+]

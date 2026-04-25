@@ -17,6 +17,8 @@ export interface DatasetConfig {
   pollTier: "A" | "B" | "C";
   pollIntervalMinutes: number;
   timestampField: string | null;
+  /** Format a JS Date into the string format SODA expects for this dataset's timestampField */
+  formatSinceDate?: (d: Date) => string;
   bblExtractor: (record: any) => string | null;
   eventTypeMapper: (record: any) => string | null;
   recordIdExtractor: (record: any) => string;
@@ -33,6 +35,29 @@ function padBbl(boro: string, block: string, lot: string): string | null {
   const lt = lot?.replace(/^0+/, "") || "";
   if (!blk || !lt || blk.length > 5 || lt.length > 4) return null;
   return `${b}${blk.padStart(5, "0")}${lt.padStart(4, "0")}`;
+}
+
+// ── Date Formatters for SODA $where queries ─────────────────
+
+/** ISO floating timestamp — for calendar_date columns (default) */
+function formatISOFloating(d: Date): string {
+  return d.toISOString().slice(0, 19); // "2026-03-07T00:00:00"
+}
+
+/** YYYYMMDD text — for DOB text-date columns */
+function formatYYYYMMDD(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}${m}${day}`; // "20260307"
+}
+
+/** MM/DD/YYYY text — for legacy DOB text-date columns */
+function formatMMDDYYYY(d: Date): string {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${m}/${day}/${y}`; // "03/07/2026"
 }
 
 function extractBblDirect(record: any): string | null {
@@ -54,7 +79,8 @@ const DOB_NOW_JOBS: DatasetConfig = {
   displayName: "DOB NOW Job Applications",
   pollTier: "A",
   pollIntervalMinutes: 15,
-  timestampField: ":updated_at",
+  timestampField: "filing_date",
+  formatSinceDate: formatISOFloating,
   bblExtractor: (r) => {
     if (r.bin__) return null; // BIN-only records — need PLUTO lookup, skip for MVP
     return extractBblDirect(r);
@@ -75,7 +101,8 @@ const DOB_JOBS_LEGACY: DatasetConfig = {
   displayName: "DOB Job Application Filings (Legacy)",
   pollTier: "A",
   pollIntervalMinutes: 15,
-  timestampField: ":updated_at",
+  timestampField: "pre__filing_date",
+  formatSinceDate: formatMMDDYYYY,
   bblExtractor: extractBblDirect,
   eventTypeMapper: (r) => {
     const jobType = (r.job_type || "").toUpperCase();
@@ -94,6 +121,7 @@ const HPD_VIOLATIONS: DatasetConfig = {
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "inspectiondate",
+  formatSinceDate: formatISOFloating,
   bblExtractor: (r) => {
     const boro = r.boroid || r.borough;
     return padBbl(String(boro), String(r.block), String(r.lot));
@@ -115,6 +143,7 @@ const DOB_VIOLATIONS: DatasetConfig = {
   pollTier: "A",
   pollIntervalMinutes: 15,
   timestampField: "issue_date",
+  formatSinceDate: formatYYYYMMDD,
   bblExtractor: extractBblDirect,
   eventTypeMapper: (r) => {
     const disp = (r.disposition_comments || r.violation_type || "").toUpperCase();
@@ -132,10 +161,11 @@ const DOB_ECB_VIOLATIONS: DatasetConfig = {
   displayName: "DOB ECB Violations",
   pollTier: "A",
   pollIntervalMinutes: 15,
-  timestampField: "violation_date",
+  timestampField: "issue_date",
+  formatSinceDate: formatYYYYMMDD,
   bblExtractor: extractBblDirect,
   eventTypeMapper: (r) => {
-    const penalty = parseFloat(r.penalty_balance_due || r.amount_paid || "0");
+    const penalty = parseFloat(r.penalty_balance_due || r.penalty_applied || "0");
     // High-penalty only (>$10K)
     if (penalty > 10000) return "ECB_HIGH_PENALTY";
     return null;
@@ -150,7 +180,8 @@ const DOB_STALLED_SITES: DatasetConfig = {
   displayName: "DOB Stalled Construction Sites",
   pollTier: "A",
   pollIntervalMinutes: 15,
-  timestampField: ":updated_at",
+  timestampField: "dobrundate",
+  formatSinceDate: formatISOFloating,
   bblExtractor: extractBblDirect,
   eventTypeMapper: () => "STALLED_SITE",
   recordIdExtractor: (r) => r.job__ || r.bin__ || `stalled-${r[":id"] || "unknown"}`,

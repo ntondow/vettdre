@@ -158,6 +158,7 @@ export async function getApplication(id: string): Promise<any | null> {
         },
       },
       wellnessProfile: true,
+      identityVerifications: { orderBy: { createdAt: "asc" } },
       payments: { orderBy: { createdAt: "desc" } },
       events: { orderBy: { createdAt: "desc" }, take: 50 },
       agent: { select: { id: true, fullName: true, email: true } },
@@ -392,6 +393,35 @@ export async function updateDecision(
       `Screening decision: ${decision.toUpperCase()} by ${ctx.fullName}`,
       { screeningApplicationId: applicationId, decision, notes: notes || null },
     ).catch((err) => console.error("[Screening] Activity creation error:", err));
+  }
+
+  // FCRA: Send adverse action notice on decline (fire-and-forget, legally required)
+  if (decision === "denied") {
+    const { sendAdverseActionNotice } = await import("@/lib/screening/adverse-action");
+    sendAdverseActionNotice(applicationId).catch((err) =>
+      console.error("[Screening] Adverse action notice error:", err)
+    );
+  }
+
+  // Send approval notification to applicant (fire-and-forget)
+  if (decision === "approved") {
+    const { sendApplicantApprovalNotice } = await import("@/lib/screening/notifications");
+    const applicant = await prisma.screeningApplicant.findFirst({
+      where: { applicationId, role: "main" },
+    });
+    const org = await prisma.organization.findUnique({
+      where: { id: app.orgId },
+      select: { name: true },
+    });
+    if (applicant) {
+      sendApplicantApprovalNotice({
+        applicantEmail: applicant.email,
+        applicantFirstName: applicant.firstName || "",
+        propertyAddress: app.propertyAddress,
+        unitNumber: app.unitNumber || undefined,
+        orgName: org?.name || "Property Manager",
+      }).catch((err) => console.error("[Screening] Approval notice error:", err));
+    }
   }
 
   return { success: true };

@@ -5,6 +5,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   screeningApiLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
@@ -18,26 +19,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(screeningApiLimiter(), token);
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -51,6 +53,27 @@ export async function POST(
         { error: "Missing required fields: applicantId, formData" },
         { status: 400 },
       );
+    }
+
+    // Validate formData: reject oversized payloads and enforce expected fields
+    const formDataStr = JSON.stringify(formData);
+    if (formDataStr.length > 50_000) {
+      return NextResponse.json(
+        { error: "Form data too large (max 50KB)" },
+        { status: 400 },
+      );
+    }
+    const ALLOWED_FIELDS = new Set([
+      "firstName", "lastName", "middleName", "email", "phone", "dateOfBirth",
+      "currentAddress", "city", "state", "zip", "moveInDate", "monthlyIncome",
+      "employerName", "employerPhone", "previousAddress", "previousCity",
+      "previousState", "previousZip", "emergencyContactName", "emergencyContactPhone",
+    ]);
+    const sanitizedFormData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(formData)) {
+      if (ALLOWED_FIELDS.has(key) && (typeof value === "string" || typeof value === "number")) {
+        sanitizedFormData[key] = typeof value === "string" ? value.slice(0, 500) : value;
+      }
     }
 
     // Look up application by token
@@ -90,7 +113,7 @@ export async function POST(
     await prisma.screeningApplicant.update({
       where: { id: applicantId },
       data: {
-        personalInfo: formData,
+        personalInfo: sanitizedFormData,
         currentStep: 2,
         status: "in_progress",
       },

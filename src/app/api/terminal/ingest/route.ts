@@ -10,6 +10,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { runIngestion, seedDatasetRegistry } from "@/lib/terminal-ingestion";
+import { matchNewEventsToWatchlists } from "@/lib/terminal-alerts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // Cloud Run 5-minute timeout
@@ -56,9 +57,26 @@ export async function GET(request: NextRequest) {
       `${summary.totalEventsCreated} events created in ${summary.totalDurationMs}ms`,
     );
 
+    // Match new events against active watchlists
+    let alertResult = null;
+    if (summary.totalEventsCreated > 0) {
+      try {
+        alertResult = await matchNewEventsToWatchlists(org.id);
+        if (alertResult.alertsCreated > 0) {
+          console.log(
+            `[Terminal Ingest] Alerts: ${alertResult.alertsCreated} created ` +
+            `(${alertResult.eventsChecked} events × ${alertResult.watchlistsChecked} watchlists, ${alertResult.durationMs}ms)`,
+          );
+        }
+      } catch (err) {
+        console.error("[Terminal Ingest] Alert matching failed (non-fatal):", err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       ...summary,
+      alerts: alertResult,
     });
   } catch (error) {
     console.error("[Terminal Ingest] Fatal error:", error);

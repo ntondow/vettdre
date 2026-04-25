@@ -7,6 +7,7 @@ import LandingView from "@/components/screening/wizard/LandingView";
 import OtpStep from "@/components/screening/wizard/OtpStep";
 import PersonalInfoStep from "@/components/screening/wizard/PersonalInfoStep";
 import SignatureStep from "@/components/screening/wizard/SignatureStep";
+import IdvStep from "@/components/screening/wizard/IdvStep";
 import PlaidStep from "@/components/screening/wizard/PlaidStep";
 import DocumentUploadStep from "@/components/screening/wizard/DocumentUploadStep";
 import PaymentStep from "@/components/screening/wizard/PaymentStep";
@@ -15,7 +16,7 @@ import { WIZARD_STEPS, BASE_SCREENING_FEE_CENTS } from "@/lib/screening/constant
 
 // ── Types ─────────────────────────────────────────────────────
 
-type WizardStep = "landing" | "otp" | "personal_info" | "signature" | "plaid" | "documents" | "payment" | "confirmation";
+type WizardStep = "landing" | "otp" | "personal_info" | "signature" | "idv" | "plaid" | "documents" | "payment" | "confirmation";
 
 interface ApplicationData {
   application: {
@@ -90,10 +91,14 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
       const body = await res.json();
       setData(body);
 
-      // Resume from URL params (e.g., returning from Stripe)
+      // Resume from URL params (e.g., returning from Stripe or IDV provider)
       const urlStep = searchParamsRef.current.get("step");
+      const idvStatus = searchParamsRef.current.get("idv_status");
       if (urlStep === "confirmation") {
         setStep("confirmation");
+      } else if (idvStatus === "complete") {
+        // Returning from IDV provider redirect — show IDV step to poll result
+        setStep("idv");
       } else if (body.application.status === "processing" || body.application.status === "complete") {
         setStep("confirmation");
       }
@@ -197,14 +202,25 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         })),
       });
-      // Request Plaid Link token for next step
-      await requestPlaidLinkToken();
-      setStep("plaid");
+      // Next step: Identity Verification
+      setStep("idv");
     } catch (e: any) {
       setError(e.message);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleIdvComplete = async () => {
+    // IDV done — move to Plaid step
+    await requestPlaidLinkToken();
+    setStep("plaid");
+  };
+
+  const handleIdvSkip = async () => {
+    // IDV skipped — move to Plaid step (flagged for manual review in pipeline)
+    await requestPlaidLinkToken();
+    setStep("plaid");
   };
 
   const requestPlaidLinkToken = async () => {
@@ -438,6 +454,16 @@ export default function ScreeningWizardClient({ token }: { token: string }) {
           <SignatureStep
             legalDocs={legalDocs}
             onComplete={handleSignatureComplete}
+            saving={saving}
+          />
+        )}
+
+        {step === "idv" && applicantId && (
+          <IdvStep
+            token={token}
+            applicantId={applicantId}
+            onComplete={handleIdvComplete}
+            onSkip={handleIdvSkip}
             saving={saving}
           />
         )}

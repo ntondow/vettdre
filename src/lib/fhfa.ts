@@ -148,7 +148,7 @@ async function fetchAcrisSalesForZip(zip: string): Promise<YearlyData[]> {
     const timeout = setTimeout(() => controller.abort(), 12000);
 
     const res = await fetch(url, {
-      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
       signal: controller.signal,
     });
     clearTimeout(timeout);

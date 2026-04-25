@@ -1,0 +1,15 @@
+{
+  "run_id": "20260409_132223",
+  "market": "austin",
+  "stages": [
+    "discovery"
+  ],
+  "results": {
+    "discovery": {
+      "status": "failed",
+      "duration_seconds": 6.1,
+      "error": "Command failed with exit code 1 (exit code: 1)\nError output: Check stderr output for details"
+    }
+  },
+  "total_duration_seconds": 6.1
+}

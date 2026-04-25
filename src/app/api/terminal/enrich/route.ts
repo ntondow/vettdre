@@ -35,22 +35,35 @@ export async function GET(request: NextRequest) {
 
   try {
     // Find unenriched events (Tier 1 and 2 only, Tier 3 gets no enrichment)
-    // Fetch more than needed, then filter client-side for retry limit
+    // Use raw SQL to filter out retried-out events at the DB level
     // (Prisma doesn't support JSON path filtering in where clauses)
-    const rawEvents = await prisma.terminalEvent.findMany({
-      where: {
-        enrichmentPackage: { equals: null },
-        tier: { in: [1, 2] },
-      },
-      orderBy: { detectedAt: "desc" },
-      take: MAX_EVENTS_PER_RUN * 2, // Over-fetch to account for retried-out events
-    });
+    const rawEvents = await prisma.$queryRaw<any[]>`
+      SELECT
+        id,
+        org_id AS "orgId",
+        event_type AS "eventType",
+        bbl,
+        borough,
+        nta_code AS "ntaCode",
+        detected_at AS "detectedAt",
+        source_dataset AS "sourceDataset",
+        source_record_id AS "sourceRecordId",
+        enrichment_package AS "enrichmentPackage",
+        ai_brief AS "aiBrief",
+        tier,
+        metadata
+      FROM terminal_events
+      WHERE enrichment_package IS NULL
+        AND tier IN (1, 2)
+        AND (
+          metadata IS NULL
+          OR COALESCE((metadata->>'_enrichmentRetries')::int, 0) < ${MAX_RETRIES}
+        )
+      ORDER BY detected_at DESC
+      LIMIT ${MAX_EVENTS_PER_RUN}
+    `;
 
-    // Client-side filter: skip events that have exceeded retry limit
-    const events = rawEvents.filter(e => {
-      const retries = (e.metadata as any)?._enrichmentRetries || 0;
-      return retries < MAX_RETRIES;
-    }).slice(0, MAX_EVENTS_PER_RUN);
+    const events = rawEvents;
 
     if (events.length === 0) {
       return NextResponse.json({

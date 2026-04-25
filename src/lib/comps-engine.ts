@@ -173,7 +173,7 @@ export async function searchComps(params: CompSearchParams): Promise<{ comps: Co
 
   try {
     const response = await fetch(url, {
-      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
       next: { revalidate: 3600 },
     });
 
@@ -325,11 +325,11 @@ export async function findComparableSales(params: {
 
     const [plutoRes, salesRes] = await Promise.allSettled([
       fetch(plutoUrl, {
-        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
         signal: controller.signal,
       }).then(r => r.ok ? r.json() : []),
       fetch(salesUrl, {
-        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
         signal: controller.signal,
       }).then(r => r.ok ? r.json() : []),
     ]);

@@ -90,6 +90,8 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({ excludePublic: true });
   const [leafletLoaded, setLeafletLoaded] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const apiErrorTimerRef = useRef<any>(null);
   const [sortBy, setSortBy] = useState<"units" | "value" | "year" | "floors" | "distance" | "violations" | "311" | "distress" | "recentSale">("units");
   // Address search state removed — now handled by parent UnifiedSearchBar
   const [portfolioMarkers, setPortfolioMarkers] = useState<MapProperty[]>([]);
@@ -102,7 +104,18 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
   const fetchTimeoutRef = useRef<any>(null);
   const searchHighlightRef = useRef<any>(null);
   const loadPropertiesRef = useRef<() => void>(() => {});
+  const refreshViewportLayersRef = useRef<() => void>(() => {});
   const fetchIdRef = useRef(0); // monotonic counter — only latest fetch wins
+  // Show API error toast (debounced — multiple failures don't stack)
+  const showApiError = useCallback((msg?: string) => {
+    if (apiErrorTimerRef.current) return; // toast already showing
+    setApiError(msg || "Some data layers couldn't load. Pan or zoom to retry.");
+    apiErrorTimerRef.current = setTimeout(() => {
+      setApiError(null);
+      apiErrorTimerRef.current = null;
+    }, 8000);
+  }, []);
+
   // Bug 2+3: independently-fetched property from address search (bypasses filters)
   const [searchedProperty, setSearchedProperty] = useState<MapProperty | null>(null);
 
@@ -249,38 +262,41 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
   const [hotLeads, setHotLeads] = useState<HotLead[]>([]);
   const [hotLeadsLoading, setHotLeadsLoading] = useState(false);
   const hotLeadsMarkersRef = useRef<any>(null);
-  const hotLeadsDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // hotLeadsDebounceRef removed — unified viewportChangeTimerRef
 
   // Neighborhood Vitality heatmap overlay (Pro+ feature)
   const [vitalityScores, setVitalityScores] = useState<VitalityScore[]>([]);
   const [vitalityLoading, setVitalityLoading] = useState(false);
   const vitalityLayerRef = useRef<any>(null);
   const vitalityGeoJsonRef = useRef<any>(null); // cached boundary data
-  const vitalityDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // vitalityDebounceRef removed — unified viewportChangeTimerRef
 
   // Street Intelligence layers — zoom 16+ viewport fetching
   const [constructionData, setConstructionData] = useState<ConstructionActivity[]>([]);
   const [constructionLoading, setConstructionLoading] = useState(false);
   const constructionLayerRef = useRef<any>(null);
-  const constructionDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // constructionDebounceRef removed — unified viewportChangeTimerRef
 
   const [salesData, setSalesData] = useState<RecentSale[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
   const salesLayerRef = useRef<any>(null);
-  const salesDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // salesDebounceRef removed — unified viewportChangeTimerRef
 
   const [violationsData, setViolationsData] = useState<ViolationPoint[]>([]);
   const [violationsLoading, setViolationsLoading] = useState(false);
   const violationsLayerRef = useRef<any>(null);
-  const violationsDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // violationsDebounceRef removed — unified viewportChangeTimerRef
 
   const [complaints311Data, setComplaints311Data] = useState<Complaint311[]>([]);
   const [complaints311Loading, setComplaints311Loading] = useState(false);
   const complaints311LayerRef = useRef<any>(null);
-  const complaints311DebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // complaints311DebounceRef removed — unified viewportChangeTimerRef
 
   const bldgLabelsLayerRef = useRef<any>(null);
   const clusterLayerRef = useRef<any>(null);
+
+  // Unified viewport-change debounce for all overlay layers (replaces per-layer moveend listeners)
+  const viewportChangeTimerRef = useRef<any>(null);
 
   // Pill-sort enrichment: cached counts per property, keyed by "boroCode-block-lot"
   const [enrichmentCounts, setEnrichmentCounts] = useState<{
@@ -504,14 +520,18 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       const saved = sessionStorage.getItem("vettdre-map");
       if (saved) {
         const p = JSON.parse(saved);
-        initCenter = [p.lat, p.lng];
-        initZoom = p.zoom;
+        if (typeof p.lat === "number" && typeof p.lng === "number" && typeof p.zoom === "number" &&
+            p.lat >= 39 && p.lat <= 42 && p.lng >= -75 && p.lng <= -72 && p.zoom >= 10 && p.zoom <= 20) {
+          initCenter = [p.lat, p.lng];
+          initZoom = p.zoom;
+        }
       }
     } catch {}
     const map = L.map(mapRef.current, {
       center: initCenter,
       zoom: initZoom,
       zoomControl: false,
+      preferCanvas: true,
       maxBounds: L.latLngBounds(
         [NYC_BOUNDS.sw.lat, NYC_BOUNDS.sw.lng],
         [NYC_BOUNDS.ne.lat, NYC_BOUNDS.ne.lng],
@@ -598,7 +618,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
 
     leafletMapRef.current = map;
 
-    // Fetch on map move (debounced)
+    // Fetch on map move (debounced) — properties + all overlay layers
     map.on("moveend", () => {
       try {
         const c = map.getCenter();
@@ -611,9 +631,16 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
         searchHighlightRef.current = null;
       }
 
+      // Main property load (keeps its own fetchIdRef pattern)
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current);
       fetchTimeoutRef.current = setTimeout(() => {
         loadPropertiesRef.current();
+      }, 800);
+
+      // Unified overlay layers — single 800ms debounce for all enabled layers
+      if (viewportChangeTimerRef.current) clearTimeout(viewportChangeTimerRef.current);
+      viewportChangeTimerRef.current = setTimeout(() => {
+        refreshViewportLayersRef.current();
       }, 800);
     });
 
@@ -621,6 +648,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     setTimeout(() => loadPropertiesRef.current(), 100);
 
     return () => {
+      if (viewportChangeTimerRef.current) clearTimeout(viewportChangeTimerRef.current);
       if (leafletMapRef.current) {
         leafletMapRef.current.remove();
         leafletMapRef.current = null;
@@ -857,6 +885,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     } catch (err) {
       if (fetchIdRef.current !== myFetchId) return;
       console.error("Map load error:", err);
+      showApiError();
     }
     setLoading(false);
   }, [filters, hasActivePolygon, activePolygons]);
@@ -985,7 +1014,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
         });
         newDevMarkersRef.current.addLayer(marker);
       });
-    } catch (err) { console.error("New dev load error:", err); }
+    } catch (err) { console.error("New dev load error:", err); showApiError(); }
     setLoadingNewDevs(false);
   }, []);
 
@@ -999,16 +1028,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showNewDevs]);
 
-  // Re-load new developments on map move if toggle is on
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showNewDevs) return;
-    const handler = () => {
-      setTimeout(() => loadNewDevelopments(), 900);
-    };
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); };
-  }, [showNewDevs, loadNewDevelopments]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // Hot Leads: fetch and render motivation-scored markers
   const loadHotLeads = useCallback(async () => {
@@ -1092,6 +1112,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       });
     } catch (err) {
       console.error("Hot leads load error:", err);
+      showApiError();
     }
     setHotLeadsLoading(false);
   }, [properties]);
@@ -1106,20 +1127,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showHotLeads]);
 
-  // Reload hot leads on map move (debounced)
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showHotLeads) return;
-    const handler = () => {
-      clearTimeout(hotLeadsDebounceRef.current);
-      hotLeadsDebounceRef.current = setTimeout(() => loadHotLeads(), 1200);
-    };
-    map.on("moveend", handler);
-    return () => {
-      map.off("moveend", handler);
-      clearTimeout(hotLeadsDebounceRef.current);
-    };
-  }, [showHotLeads, loadHotLeads]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ============================================================
   // Neighborhood Vitality Heatmap Overlay
@@ -1198,6 +1206,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       vitalityLayerRef.current.addTo(map);
     } catch (err) {
       console.error("Vitality overlay error:", err);
+      showApiError();
     }
     setVitalityLoading(false);
   }, []);
@@ -1215,20 +1224,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showVitality, loadVitalityOverlay]);
 
-  // Refresh vitality overlay on map move (debounced)
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showVitality) return;
-    const handler = () => {
-      clearTimeout(vitalityDebounceRef.current);
-      vitalityDebounceRef.current = setTimeout(() => loadVitalityOverlay(), 800);
-    };
-    map.on("moveend", handler);
-    return () => {
-      map.off("moveend", handler);
-      clearTimeout(vitalityDebounceRef.current);
-    };
-  }, [showVitality, loadVitalityOverlay]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ============================================================
   // Street Intelligence Layers — zoom 16+ viewport fetching
@@ -1289,6 +1285,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       });
     } catch (err) {
       console.error("Construction load error:", err);
+      showApiError();
     }
     setConstructionLoading(false);
   }, []);
@@ -1301,16 +1298,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showConstruction, loadConstruction]);
 
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showConstruction) return;
-    const handler = () => {
-      clearTimeout(constructionDebounceRef.current);
-      constructionDebounceRef.current = setTimeout(() => loadConstruction(), 600);
-    };
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); clearTimeout(constructionDebounceRef.current); };
-  }, [showConstruction, loadConstruction]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ---- Recent Sales (R2) ----
   const loadRecentSales = useCallback(async () => {
@@ -1370,6 +1358,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       });
     } catch (err) {
       console.error("Recent sales load error:", err);
+      showApiError();
     }
     setSalesLoading(false);
   }, []);
@@ -1382,16 +1371,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showSales, loadRecentSales]);
 
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showSales) return;
-    const handler = () => {
-      clearTimeout(salesDebounceRef.current);
-      salesDebounceRef.current = setTimeout(() => loadRecentSales(), 600);
-    };
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); clearTimeout(salesDebounceRef.current); };
-  }, [showSales, loadRecentSales]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ---- Violation Density (R3) ----
   const loadViolations = useCallback(async () => {
@@ -1448,6 +1428,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       });
     } catch (err) {
       console.error("Violations load error:", err);
+      showApiError();
     }
     setViolationsLoading(false);
   }, []);
@@ -1460,16 +1441,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showViolations, loadViolations]);
 
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showViolations) return;
-    const handler = () => {
-      clearTimeout(violationsDebounceRef.current);
-      violationsDebounceRef.current = setTimeout(() => loadViolations(), 700);
-    };
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); clearTimeout(violationsDebounceRef.current); };
-  }, [showViolations, loadViolations]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ---- 311 Complaints (R4) ----
   const COMPLAINT_311_COLORS: Record<string, string> = {
@@ -1530,6 +1502,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
       });
     } catch (err) {
       console.error("311 complaints load error:", err);
+      showApiError();
     }
     setComplaints311Loading(false);
   }, []);
@@ -1542,16 +1515,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [show311, load311Complaints]);
 
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !show311) return;
-    const handler = () => {
-      clearTimeout(complaints311DebounceRef.current);
-      complaints311DebounceRef.current = setTimeout(() => load311Complaints(), 700);
-    };
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); clearTimeout(complaints311DebounceRef.current); };
-  }, [show311, load311Complaints]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
 
   // ---- Building Labels (R5) — owner name + units on footprints at z17+ ----
   const loadBuildingLabels = useCallback(async () => {
@@ -1595,13 +1559,30 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
     }
   }, [showBldgLabels, loadBuildingLabels]);
 
-  useEffect(() => {
-    const map = leafletMapRef.current;
-    if (!map || !showBldgLabels) return;
-    const handler = () => setTimeout(() => loadBuildingLabels(), 300);
-    map.on("moveend", handler);
-    return () => { map.off("moveend", handler); };
-  }, [showBldgLabels, loadBuildingLabels]);
+  // (moveend reload handled by unified viewportChangeTimerRef)
+
+  // ============================================================
+  // Unified viewport change handler — refreshes all enabled overlay layers
+  // ============================================================
+  const refreshViewportLayers = useCallback(() => {
+    const loads: Promise<void>[] = [];
+    if (showNewDevs) loads.push(loadNewDevelopments());
+    if (showHotLeads) loads.push(loadHotLeads());
+    if (showVitality) loads.push(loadVitalityOverlay());
+    if (showConstruction) loads.push(loadConstruction());
+    if (showSales) loads.push(loadRecentSales());
+    if (showViolations) loads.push(loadViolations());
+    if (show311) loads.push(load311Complaints());
+    // Building labels depend on properties data — chain after main property load
+    // (loadPropertiesRef is called separately by the existing moveend handler,
+    //  and loadBuildingLabels reads from the `properties` state, so we just call it
+    //  alongside the others — it uses whatever properties are already loaded)
+    if (showBldgLabels) loads.push(loadBuildingLabels());
+  }, [showNewDevs, showHotLeads, showVitality, showConstruction, showSales, showViolations, show311, showBldgLabels,
+      loadNewDevelopments, loadHotLeads, loadVitalityOverlay, loadConstruction, loadRecentSales, loadViolations, load311Complaints, loadBuildingLabels]);
+
+  // Keep the ref fresh so the one-time map init moveend handler always calls the latest version
+  refreshViewportLayersRef.current = refreshViewportLayers;
 
   // ── Draw mode interaction: click to add vertices, dblclick to close polygon ──
   useEffect(() => {
@@ -1753,6 +1734,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
 
       filtered.forEach((p) => {
         const pt = map.latLngToContainerPoint([p.lat, p.lng]);
+        if (!pt || pt.x === undefined) return;
         const cellKey = `${Math.floor(pt.x / CELL_PX)}_${Math.floor(pt.y / CELL_PX)}`;
         const cell = cells.get(cellKey);
         if (cell) {
@@ -1964,7 +1946,7 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
   }, [properties, drawnPolygon]);
 
   // Bug 2+3: Merge searched property at top, deduplicate from bounds results, filters don't apply to it
-  const filteredBoundsResults = [...polygonFilteredProperties]
+  const filteredBoundsResults = useMemo(() => [...polygonFilteredProperties]
     .filter(p => !isSearchedMatch(p)) // deduplicate: remove searched property from bounds results
     .sort((a, b) => {
       switch (sortBy) {
@@ -2004,7 +1986,9 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
         }
         default: return b.unitsRes - a.unitsRes;
       }
-    });
+    }),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [polygonFilteredProperties, sortBy, enrichmentCounts, searchedProperty]);
 
   // Check if searched property would have been excluded by filters
   const searchedExcludedByFilters = searchedProperty != null &&
@@ -2214,6 +2198,29 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
 
         <div ref={mapRef} className="w-full h-full" />
 
+        {/* Loading skeleton while Leaflet downloads from CDN */}
+        {!leafletLoaded && (
+          <div className="absolute inset-0 z-10 bg-slate-100 flex items-center justify-center">
+            <div className="animate-pulse text-center">
+              <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center mx-auto mb-3">
+                <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+              </div>
+              <p className="text-sm text-slate-400 font-medium">Loading map...</p>
+            </div>
+          </div>
+        )}
+
+        {/* API error toast */}
+        {apiError && (
+          <div className="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] max-w-sm">
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 shadow-lg flex items-center gap-2 text-sm text-amber-800">
+              <span className="shrink-0">⚠</span>
+              <span>{apiError}</span>
+              <button onClick={() => { setApiError(null); if (apiErrorTimerRef.current) { clearTimeout(apiErrorTimerRef.current); apiErrorTimerRef.current = null; } }} className="ml-1 text-amber-500 hover:text-amber-700 shrink-0">×</button>
+            </div>
+          </div>
+        )}
+
         {/* Map layer overlays (static GeoJSON + viewport layers) */}
         {leafletMapRef.current && (
           <MapLayersRenderer
@@ -2308,6 +2315,61 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
               ))}
             </div>
           )}
+
+          {/* Active filter summary — attached below search bar */}
+          {activeFilterCount > 0 && (
+            <div className="mt-1.5 bg-white/95 backdrop-blur-sm border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-sm flex items-center gap-1.5 text-[11px] text-slate-600 flex-wrap">
+              {filters.minUnits != null || filters.maxUnits != null ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  {filters.minUnits ?? 1}–{filters.maxUnits ?? "any"} units
+                  <button onClick={() => { setFilters(f => { const n = {...f}; delete n.minUnits; delete n.maxUnits; return n; }); }} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.minYearBuilt != null ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  After {filters.minYearBuilt}
+                  <button onClick={() => setFilters(f => { const n = {...f}; delete n.minYearBuilt; return n; })} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.maxYearBuilt != null ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  Before {filters.maxYearBuilt}
+                  <button onClick={() => setFilters(f => { const n = {...f}; delete n.maxYearBuilt; return n; })} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.minValue != null || filters.maxValue != null ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  ${(filters.minValue ?? 0).toLocaleString()}–${filters.maxValue ? filters.maxValue.toLocaleString() : "any"}
+                  <button onClick={() => { setFilters(f => { const n = {...f}; delete n.minValue; delete n.maxValue; return n; }); }} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.minFloors != null ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  {filters.minFloors}+ floors
+                  <button onClick={() => setFilters(f => { const n = {...f}; delete n.minFloors; return n; })} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.bldgClass ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  Class {filters.bldgClass}
+                  <button onClick={() => setFilters(f => { const n = {...f}; delete n.bldgClass; return n; })} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.zoneDist ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  {filters.zoneDist}
+                  <button onClick={() => setFilters(f => { const n = {...f}; delete n.zoneDist; return n; })} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              {filters.excludePublic ? (
+                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">
+                  No public housing
+                  <button onClick={() => setFilters(f => ({ ...f, excludePublic: undefined }))} className="text-blue-400 hover:text-blue-600">×</button>
+                </span>
+              ) : null}
+              <button onClick={clearFilters} className="text-blue-600 hover:text-blue-800 font-medium ml-auto text-[10px]">Clear all</button>
+            </div>
+          )}
         </div>
 
         {/* Save success toast */}
@@ -2317,11 +2379,11 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
           </div>
         )}
 
-        {/* Loading overlay */}
+        {/* Loading overlay — positioned right of Layers button on desktop */}
         {loading && (
-          <div className="absolute top-16 md:top-3 left-3 bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 z-[1000]">
+          <div className="absolute top-16 md:top-3 left-3 md:left-28 bg-white rounded-lg shadow-lg px-3 py-2 flex items-center gap-2 z-[1000]">
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-            <span className="text-xs text-slate-600">Loading properties...</span>
+            <span className="text-xs text-slate-600">Loading...</span>
           </div>
         )}
 
@@ -2340,6 +2402,56 @@ export default function MapSearch({ onBuildingSelect, onNameClick, externalHover
             <X size={12} className="text-red-500" />
             Clear polygon
           </button>
+        )}
+
+        {/* Draw mode floating controls — Finish + Cancel */}
+        {isDrawMode && (
+          <div className="absolute bottom-28 md:bottom-16 left-1/2 -translate-x-1/2 z-[1001] flex items-center gap-2">
+            <button
+              onClick={() => {
+                // Trigger finish: simulate the dblclick logic
+                const verts = drawVerticesRef.current;
+                if (verts.length >= 3) {
+                  // Clean up preview
+                  const map = leafletMapRef.current;
+                  if (drawPreviewRef.current && map) { map.removeLayer(drawPreviewRef.current); drawPreviewRef.current = null; }
+                  drawMarkersRef.current.forEach((m: any) => map?.removeLayer(m));
+                  drawMarkersRef.current = [];
+                  // Deduplicate vertices
+                  const DEDUP = 0.00001;
+                  const deduped: [number, number][] = [];
+                  for (const v of verts) {
+                    const prev = deduped[deduped.length - 1];
+                    if (!prev || Math.abs(v[0] - prev[0]) > DEDUP || Math.abs(v[1] - prev[1]) > DEDUP) deduped.push(v);
+                  }
+                  if (deduped.length >= 3 && map) {
+                    const L = (window as any).L;
+                    drawnPolygonLayerRef.current = L.polygon(deduped, { color: "#2563eb", weight: 2, dashArray: "6,4", fillColor: "#3b82f6", fillOpacity: 0.1, pane: "searchResults" }).addTo(map);
+                    setDrawnPolygon([...deduped]);
+                  }
+                }
+                setIsDrawMode(false);
+                drawVerticesRef.current = [];
+              }}
+              disabled={drawVerticesRef.current.length < 3}
+              className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+            >
+              Finish Drawing
+            </button>
+            <button
+              onClick={() => {
+                const map = leafletMapRef.current;
+                if (drawPreviewRef.current && map) { map.removeLayer(drawPreviewRef.current); drawPreviewRef.current = null; }
+                drawMarkersRef.current.forEach((m: any) => map?.removeLayer(m));
+                drawMarkersRef.current = [];
+                drawVerticesRef.current = [];
+                setIsDrawMode(false);
+              }}
+              className="bg-white text-slate-600 text-sm font-medium px-4 py-2 rounded-lg shadow-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
         )}
 
         {/* Legend — pushed up on mobile to sit above the drawer */}

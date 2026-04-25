@@ -5,8 +5,10 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   screeningApiLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
+import { encryptToken } from "@/lib/encryption";
 import {
   storeSSN,
   isValidSSN,
@@ -22,26 +24,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(screeningApiLimiter(), token);
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -100,13 +103,12 @@ export async function POST(
     // Store SSN in Redis (NOT in database) and get reference ID
     const ssnRefId = await storeSSN(ssn, applicantId);
 
-    // Store only the reference ID on the applicant record
-    // ssnEncrypted field is repurposed to hold "ref:{refId}"
-    // This is the Redis reference, NOT the actual SSN
+    // Store only the encrypted reference ID on the applicant record
+    // The reference is encrypted so a DB breach doesn't expose Redis keys
     await prisma.screeningApplicant.update({
       where: { id: applicantId },
       data: {
-        ssnEncrypted: `ref:${ssnRefId}`,
+        ssnEncrypted: encryptToken(`ref:${ssnRefId}`),
       },
     });
 

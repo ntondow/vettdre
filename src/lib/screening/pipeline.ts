@@ -16,13 +16,14 @@
 
 import prisma from "@/lib/prisma";
 import { encryptToken, decryptToken } from "@/lib/encryption";
-import { pullSingleBureau, pullTriBureau, type CreditReportResult } from "./crs";
+import type { CreditReportResult } from "./crs";
+import { getCreditProvider } from "./credit-factory";
 import { syncTransactions, getIdentity, removeItem, type PlaidTransaction } from "./plaid";
 import { analyzeDocument, type DocumentAnalysisInput, type FullAnalysisResult } from "./document-analysis";
 import { computeWellnessProfile, type TransactionRow, type WellnessResult } from "./wellness";
 import { computeRiskScore, type RiskScoreResult } from "./scoring";
 import { generateScreeningPdfBuffer } from "./pdf-report";
-import { notifyAgentScreeningComplete, notifyAgentEnhancedDowngrade, notifyAgentScreeningFailed } from "./notifications";
+import { notifyAgentScreeningComplete, notifyAgentEnhancedDowngrade, notifyAgentScreeningFailed, sendApplicantCompletionNotice } from "./notifications";
 import { SCREENING_TIERS, DOCUMENT_TYPE_LABELS } from "./constants";
 import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 import { linkOrCreateContact, createScreeningActivity } from "./integration";
@@ -140,13 +141,16 @@ export async function runScreeningPipeline(
       throw new Error("SSN not provided — cannot pull credit report");
     }
 
-    // Retrieve SSN — prefer Redis pass-through, fall back to encrypted DB for legacy
+    // Retrieve SSN — decrypt DB field first, then check for Redis ref vs legacy SSN
     let decryptedSSN: string;
     const ssnField = primaryApplicant.ssnEncrypted;
 
-    if (ssnField.startsWith("ref:")) {
-      // New flow: SSN stored ephemerally in Redis
-      const refId = ssnField.slice(4);
+    // Always decrypt the stored value first (both ref: and legacy SSN are encrypted)
+    const decryptedField = decryptToken(ssnField);
+
+    if (decryptedField.startsWith("ref:")) {
+      // Redis pass-through flow: field contains encrypted "ref:{refId}"
+      const refId = decryptedField.slice(4);
       const ssnResult = await retrieveAndDeleteSSN(refId, primaryApplicant.id);
       if (!ssnResult.success || !ssnResult.ssn) {
         throw new Error(
@@ -156,12 +160,10 @@ export async function runScreeningPipeline(
       }
       decryptedSSN = ssnResult.ssn;
       ssnLast4 = ssnResult.ssn.slice(-4);
-    } else if (ssnField) {
-      // Legacy flow: SSN encrypted in database
-      decryptedSSN = decryptToken(ssnField);
-      ssnLast4 = decryptedSSN.slice(-4);
     } else {
-      throw new Error("SSN not provided — cannot pull credit report");
+      // Legacy flow: field contained the encrypted SSN directly
+      decryptedSSN = decryptedField;
+      ssnLast4 = decryptedSSN.slice(-4);
     }
 
     // Extract personal info fields from the JSON personalInfo blob
@@ -178,10 +180,11 @@ export async function runScreeningPipeline(
       zip: personalInfo.currentZip || "",
     };
 
+    const creditProvider = getCreditProvider();
     if (isEnhanced) {
-      creditReports = await pullTriBureau(creditRequest);
+      creditReports = await creditProvider.pullTriBureau(creditRequest);
     } else {
-      const report = await pullSingleBureau(creditRequest);
+      const report = await creditProvider.pullSingleBureau(creditRequest);
       creditReports = [report];
     }
 
@@ -359,12 +362,23 @@ export async function runScreeningPipeline(
           return null;
         }
 
-        // Fetch file from storage URL with timeout
+        // Fetch file from Supabase Storage via signed URL
+        const supabaseDoc = createSupabaseAdmin(
+          (process.env.NEXT_PUBLIC_SUPABASE_URL || "").trim(),
+          (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim(),
+        );
+        const { data: signedData, error: signedError } = await supabaseDoc.storage
+          .from("screening-documents")
+          .createSignedUrl(doc.filePath!, 300); // 5-min expiry
+        if (signedError || !signedData?.signedUrl) {
+          throw new Error(`Failed to create signed URL for doc ${doc.id}: ${signedError?.message}`);
+        }
+
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), DOC_FETCH_TIMEOUT_MS);
         let response: Response;
         try {
-          response = await fetch(doc.filePath!, { signal: controller.signal });
+          response = await fetch(signedData.signedUrl, { signal: controller.signal });
         } finally {
           clearTimeout(timeout);
         }
@@ -540,6 +554,17 @@ export async function runScreeningPipeline(
   }
   timings.plaidRevoke = Date.now() - plaidRevokeStart;
 
+  // ── Look up IDV result (hoisted — needed by both scoring and PDF) ──
+  let latestIdv: Awaited<ReturnType<typeof prisma.identityVerification.findFirst>> = null;
+  try {
+    latestIdv = await prisma.identityVerification.findFirst({
+      where: { applicationId, applicantId: primaryApplicant.id },
+      orderBy: { createdAt: "desc" },
+    });
+  } catch (idvLookupErr) {
+    console.warn("[Screening Pipeline] IDV lookup failed (non-critical):", idvLookupErr);
+  }
+
   // ── Step 5: Compute Risk Score ──────────────────────────────
   let riskResult: RiskScoreResult | null = null;
   const scoreStart = Date.now();
@@ -562,6 +587,14 @@ export async function runScreeningPipeline(
     // Prisma Decimal → number conversion
     const monthlyRent = application.monthlyRent ? Number(application.monthlyRent) : 0;
 
+    const idvInput = latestIdv
+      ? {
+          status: latestIdv.status,
+          livenessScore: latestIdv.livenessScore,
+          faceMatchScore: latestIdv.faceMatchScore,
+        }
+      : null;
+
     riskResult = computeRiskScore({
       creditScore: creditScore && creditScore > 0 ? creditScore : null,
       financialHealthScore: wellnessResult?.financialHealthScore ?? null,
@@ -571,6 +604,7 @@ export async function runScreeningPipeline(
       rentPaymentConsistency: wellnessResult?.rentPaymentConsistency ?? null,
       evictionCount,
       hasActiveBankruptcy,
+      idv: idvInput,
     });
 
     // Update application with score + recommendation
@@ -651,6 +685,17 @@ export async function runScreeningPipeline(
         creditReports,
         wellness: wellnessResult,
         documentAnalyses,
+        idv: latestIdv
+          ? {
+              provider: latestIdv.provider,
+              status: latestIdv.status,
+              documentType: latestIdv.documentType || undefined,
+              livenessScore: latestIdv.livenessScore,
+              faceMatchScore: latestIdv.faceMatchScore,
+              documentQuality: latestIdv.documentQuality,
+              idvBonus: riskResult.idvBonus,
+            }
+          : null,
       });
 
       // Upload to Supabase Storage using service role (no user context in background pipeline)
@@ -728,7 +773,20 @@ export async function runScreeningPipeline(
       });
     }
 
-    // 7d. Fire automation trigger
+    // 7d. Notify applicant that screening is complete (does NOT reveal score)
+    try {
+      await sendApplicantCompletionNotice({
+        applicantEmail: primaryApplicant.email,
+        applicantFirstName: primaryApplicant.firstName || "",
+        propertyAddress: application.propertyAddress,
+        unitNumber: application.unitNumber || undefined,
+        orgName: application.organization?.name || "Property Manager",
+      });
+    } catch (notifyErr) {
+      console.error("[Screening Pipeline] Applicant completion notice error:", notifyErr);
+    }
+
+    // 7e. Fire automation trigger
     await dispatchAutomationSafe(application.orgId, "screening_completed" as never, {
       applicationId,
       contactId: contactId ?? null,

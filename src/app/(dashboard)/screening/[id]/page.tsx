@@ -476,6 +476,66 @@ function OverviewTab({ app, primaryApplicant, otherApplicants }: { app: any; pri
         </div>
       )}
 
+      {/* Identity Verification */}
+      {app.identityVerifications?.length > 0 && (
+        <div className="bg-white rounded-lg border border-slate-200 p-5">
+          <h3 className="text-sm font-semibold text-slate-700 mb-3">Identity Verification</h3>
+          {(() => {
+            const idv = app.identityVerifications[app.identityVerifications.length - 1];
+            const statusColors: Record<string, { bg: string; text: string }> = {
+              approved: { bg: "bg-green-50", text: "text-green-600" },
+              declined: { bg: "bg-red-50", text: "text-red-600" },
+              in_review: { bg: "bg-amber-50", text: "text-amber-600" },
+              created: { bg: "bg-slate-50", text: "text-slate-500" },
+              in_progress: { bg: "bg-blue-50", text: "text-blue-600" },
+            };
+            const sc = statusColors[idv.status] || statusColors.created;
+            return (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div>
+                  <p className="text-slate-400 text-xs mb-0.5">Status</p>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded ${sc.bg} ${sc.text}`}>
+                    {idv.status === "approved" ? "Verified" : idv.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-xs mb-0.5">Provider</p>
+                  <p className="text-slate-700">{idv.provider === "didit" ? "Didit" : "Stripe Identity"}</p>
+                </div>
+                {idv.documentType && (
+                  <div>
+                    <p className="text-slate-400 text-xs mb-0.5">Document</p>
+                    <p className="text-slate-700 capitalize">{idv.documentType.replace(/_/g, " ")}</p>
+                  </div>
+                )}
+                {idv.livenessScore != null && (
+                  <div>
+                    <p className="text-slate-400 text-xs mb-0.5">Liveness</p>
+                    <p className="text-slate-700">{Math.round(idv.livenessScore)}%</p>
+                  </div>
+                )}
+                {idv.faceMatchScore != null && (
+                  <div>
+                    <p className="text-slate-400 text-xs mb-0.5">Face Match</p>
+                    <p className="text-slate-700">{Math.round(idv.faceMatchScore)}%</p>
+                  </div>
+                )}
+                {idv.completedAt && (
+                  <div>
+                    <p className="text-slate-400 text-xs mb-0.5">Completed</p>
+                    <p className="text-slate-700">{fmtDateTime(idv.completedAt)}</p>
+                  </div>
+                )}
+                <div>
+                  <p className="text-slate-400 text-xs mb-0.5">Attempts</p>
+                  <p className="text-slate-700">{idv.attempts}</p>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Other Applicants */}
       {otherApplicants.length > 0 && (
         <div className="bg-white rounded-lg border border-slate-200 p-5 space-y-4">

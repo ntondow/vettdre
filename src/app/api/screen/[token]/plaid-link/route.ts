@@ -6,6 +6,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   screeningApiLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
@@ -19,26 +20,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(screeningApiLimiter(), token);
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -75,6 +77,12 @@ export async function POST(
         { error: "Applicant not found in this application" },
         { status: 404 },
       );
+    }
+
+    // Mock mode: return a fake link token instead of calling Plaid
+    if (process.env.SCREENING_USE_MOCKS === "true") {
+      const mockToken = `link-sandbox-mock-token-${applicantId.slice(0, 8)}`;
+      return NextResponse.json({ linkToken: mockToken });
     }
 
     // Create Plaid Link token

@@ -6,6 +6,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   screeningApiLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
@@ -19,26 +20,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(screeningApiLimiter(), token);
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -57,6 +59,17 @@ export async function POST(
         { error: "Missing required fields: applicantId, signatures (array)" },
         { status: 400 },
       );
+    }
+
+    // Validate signature data size (max 500KB per signature to prevent abuse)
+    const MAX_SIGNATURE_BYTES = 500 * 1024;
+    for (const sig of signatures) {
+      if (sig.signatureData && sig.signatureData.length > MAX_SIGNATURE_BYTES) {
+        return NextResponse.json(
+          { error: "Signature data too large (max 500KB)" },
+          { status: 400 },
+        );
+      }
     }
 
     // Look up application by token
@@ -109,7 +122,7 @@ export async function POST(
           documentVersion: "1.0",
           documentText: sig.documentType, // Placeholder — full legal text stored separately
           signatureHash: hash,
-          ipAddress: sig.ipAddress || "unknown",
+          ipAddress: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || req.headers.get("x-real-ip") || "unknown",
           userAgent: sig.userAgent || "unknown",
         },
       });

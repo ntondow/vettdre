@@ -344,6 +344,34 @@ export function crossVerifyWithPlaid(
 export async function analyzeDocument(
   input: DocumentAnalysisInput
 ): Promise<FullAnalysisResult> {
+  // Mock mode: return synthetic analysis without calling Anthropic API
+  if (process.env.SCREENING_USE_MOCKS === "true") {
+    return {
+      metadata: { flags: {}, riskLevel: "clean", notes: [] },
+      extraction: {
+        extractedData: {
+          documentType: input.documentType,
+          _mock: true,
+          employer: "Mock Corp Inc",
+          grossPay: 6500,
+          payPeriod: "bi-weekly",
+          payDate: "2026-03-15",
+        },
+        confidence: 92,
+      },
+      crossVerification: {
+        incomeMatchesPlaid: true,
+        employerMatchesPlaid: true,
+        balanceMatchesPlaid: null,
+        discrepancies: [],
+        fraudScore: 0,
+      },
+      fraudAssessment: "clean",
+      aiSummary: `Document type: ${input.documentType}\nMetadata: clean\nExtraction confidence: 92%\nOverall assessment: clean\n(Mock mode — no AI analysis performed)`,
+      modelUsed: "mock",
+    };
+  }
+
   const model = "claude-sonnet-4-6";
 
   // Layer 1: Metadata

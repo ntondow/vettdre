@@ -21,20 +21,25 @@ export default function PlaidStep({
   loading,
   connected,
 }: Props) {
+  // Recover link token from sessionStorage if prop is null (browser refresh)
+  const effectiveToken = linkToken || (typeof window !== "undefined" ? sessionStorage.getItem("plaid_link_token") : null);
+  const isMockToken = effectiveToken?.startsWith("link-sandbox-mock-token-") ?? false;
+  const [mockConnecting, setMockConnecting] = React.useState(false);
+
   // Store link token and screening token in sessionStorage for OAuth redirect flow
   React.useEffect(() => {
-    if (linkToken && typeof window !== "undefined") {
-      sessionStorage.setItem("plaid_link_token", linkToken);
+    if (effectiveToken && !isMockToken && typeof window !== "undefined") {
+      sessionStorage.setItem("plaid_link_token", effectiveToken);
     }
     if (screeningToken && typeof window !== "undefined") {
       sessionStorage.setItem("screening_token", screeningToken);
     }
-  }, [linkToken, screeningToken]);
-  // Initialize Plaid Link hook
+  }, [effectiveToken, screeningToken, isMockToken]);
+
+  // Initialize Plaid Link hook (skip for mock tokens — usePlaidLink would error)
   const { open, ready } = usePlaidLink({
-    token: linkToken || "",
+    token: isMockToken ? "" : (effectiveToken || ""),
     onSuccess: (public_token: string, metadata: any) => {
-      // Call parent handler with public token and institution info
       onSuccess(public_token, {
         institution: {
           institution_id: metadata.institution.institution_id,
@@ -43,12 +48,24 @@ export default function PlaidStep({
       });
     },
     onExit: (err: any, _metadata: any) => {
-      // User exited — they can retry or skip
       if (err) {
         console.error("Plaid Link exit error:", err);
       }
     },
   });
+
+  // Mock flow: simulate a brief connection delay then call onSuccess
+  const handleMockConnect = () => {
+    setMockConnecting(true);
+    setTimeout(() => {
+      onSuccess("public-sandbox-mock-token", {
+        institution: {
+          institution_id: "ins_mock_sandbox",
+          name: "Mock Bank (Sandbox)",
+        },
+      });
+    }, 1500);
+  };
 
   // Show success state if already connected
   if (connected) {
@@ -89,7 +106,7 @@ export default function PlaidStep({
   }
 
   // Show loading state if no link token yet
-  if (!linkToken || loading) {
+  if (!effectiveToken || loading) {
     return (
       <div className="space-y-6 sm:space-y-8">
         <div>
@@ -159,14 +176,14 @@ export default function PlaidStep({
 
       {/* Connect Button */}
       <button
-        onClick={() => open()}
-        disabled={!ready || loading}
+        onClick={isMockToken ? handleMockConnect : () => open()}
+        disabled={isMockToken ? mockConnecting : (!ready || loading)}
         className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-4 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 active:bg-blue-800 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
       >
-        {!ready || loading ? (
+        {mockConnecting || (!isMockToken && (!ready || loading)) ? (
           <>
             <Loader2 className="w-4 h-4 animate-spin" />
-            {loading ? "Processing..." : "Preparing..."}
+            {mockConnecting ? "Connecting..." : loading ? "Processing..." : "Preparing..."}
           </>
         ) : (
           <>

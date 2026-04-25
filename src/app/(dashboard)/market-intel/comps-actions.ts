@@ -38,7 +38,7 @@ export async function fetchCompsWithValuation(
     const plutoUrl = `${PLUTO_API}?$where=${encodeURIComponent(plutoWhere)}&$select=address,unitsres,unitstotal,yearbuilt,bldgclass,bldgarea,assesstot,latitude,longitude,zipcode&$limit=1`;
 
     const plutoRes = await fetch(plutoUrl, {
-      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
     });
 
     if (!plutoRes.ok) return emptyResult;
@@ -66,7 +66,7 @@ export async function fetchCompsWithValuation(
 
     try {
       const salesRes = await fetch(salesUrl, {
-        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+        headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
       });
       if (salesRes.ok) {
         const salesData = await salesRes.json();

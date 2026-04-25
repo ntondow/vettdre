@@ -7,6 +7,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   screeningApiLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
@@ -20,26 +21,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(screeningApiLimiter(), token);
+      const rl = await checkRateLimit(screeningApiLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -104,23 +106,46 @@ export async function POST(
       );
     }
 
-    // Exchange public token for access token
-    const plaidResult = await exchangePublicToken(publicToken);
+    // Mock mode: skip real Plaid API, create a synthetic connection
+    let resolvedInstitutionName = institutionName || null;
 
-    // Encrypt the access token
-    const encryptedAccessToken = encryptToken(plaidResult.accessToken);
+    if (process.env.SCREENING_USE_MOCKS === "true") {
+      const mockItemId = `mock-item-${applicantId.slice(0, 8)}`;
+      resolvedInstitutionName = institutionName || "Mock Bank (Sandbox)";
+      await prisma.plaidConnection.create({
+        data: {
+          applicantId,
+          accessTokenEncrypted: encryptToken("access-sandbox-mock-token"),
+          plaidItemId: mockItemId,
+          institutionId: institutionId || "ins_mock_sandbox",
+          institutionName: resolvedInstitutionName,
+          status: "active",
+          accounts: [
+            { account_id: "mock-checking", name: "Mock Checking", type: "depository", subtype: "checking", balances: { current: 4250, available: 4100 } },
+            { account_id: "mock-savings", name: "Mock Savings", type: "depository", subtype: "savings", balances: { current: 12800, available: 12800 } },
+          ],
+        },
+      });
+    } else {
+      // Exchange public token for access token
+      const plaidResult = await exchangePublicToken(publicToken);
+      resolvedInstitutionName = plaidResult.institutionName || institutionName || null;
 
-    // Create PlaidConnection record
-    await prisma.plaidConnection.create({
-      data: {
-        applicantId,
-        accessTokenEncrypted: encryptedAccessToken,
-        plaidItemId: plaidResult.itemId,
-        institutionId: plaidResult.institutionId || institutionId || null,
-        institutionName: plaidResult.institutionName || institutionName || null,
-        status: "active",
-      },
-    });
+      // Encrypt the access token
+      const encryptedAccessToken = encryptToken(plaidResult.accessToken);
+
+      // Create PlaidConnection record
+      await prisma.plaidConnection.create({
+        data: {
+          applicantId,
+          accessTokenEncrypted: encryptedAccessToken,
+          plaidItemId: plaidResult.itemId,
+          institutionId: plaidResult.institutionId || institutionId || null,
+          institutionName: resolvedInstitutionName,
+          status: "active",
+        },
+      });
+    }
 
     // Update applicant step
     await prisma.screeningApplicant.update({
@@ -136,14 +161,14 @@ export async function POST(
         eventType: "step_completed",
         eventData: {
           step: "plaid",
-          institutionName: plaidResult.institutionName || institutionName,
+          institutionName: resolvedInstitutionName,
         },
       },
     });
 
     return NextResponse.json({
       success: true,
-      institutionName: plaidResult.institutionName || institutionName,
+      institutionName: resolvedInstitutionName,
     });
   } catch (error) {
     console.error("Plaid exchange POST error:", error);

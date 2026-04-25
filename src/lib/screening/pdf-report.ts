@@ -57,6 +57,15 @@ interface ScreeningPdfInput {
     discrepancies: string[];
     aiSummary: string;
   }>;
+  idv?: {
+    provider: string;
+    status: string;
+    documentType?: string;
+    livenessScore?: number | null;
+    faceMatchScore?: number | null;
+    documentQuality?: number | null;
+    idvBonus: number;
+  } | null;
 }
 
 // ── Colors ────────────────────────────────────────────────────
@@ -253,6 +262,23 @@ export function generateScreeningPdf(input: ScreeningPdfInput): jsPDF {
   );
 
   y += 10;
+
+  // Identity Verification
+  if (input.idv) {
+    sectionTitle("Identity Verification");
+    const idvLabel = input.idv.status === "approved" ? "Verified" : input.idv.status === "declined" ? "Failed" : "Not Completed";
+    y = twoCol("Status", idvLabel, "Provider", input.idv.provider === "didit" ? "Didit" : "Stripe Identity", y);
+    if (input.idv.documentType) {
+      y = twoCol("Document Type", input.idv.documentType.replace(/_/g, " "), "Bonus/Penalty", `${input.idv.idvBonus >= 0 ? "+" : ""}${input.idv.idvBonus} points`, y);
+    }
+    if (input.idv.status === "approved") {
+      y = twoCol(
+        "Liveness Score", input.idv.livenessScore != null ? `${Math.round(input.idv.livenessScore)}%` : "N/A",
+        "Face Match", input.idv.faceMatchScore != null ? `${Math.round(input.idv.faceMatchScore)}%` : "N/A", y
+      );
+    }
+    y += 5;
+  }
 
   // Risk Factors
   if (input.riskScore.factors.length > 0) {

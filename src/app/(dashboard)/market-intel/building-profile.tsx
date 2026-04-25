@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { fetchRelatedProperties, createContactFromBuilding, fetchBuildingComps } from "./building-profile-actions";
 import type { RPIERecord, LL84Data, LL97Risk, LL84UtilityEstimate } from "./building-profile-actions";
 import { fetchBuildingIntelligence, fetchBuildingCritical, fetchBuildingStandard, fetchBuildingBackground, findOwnerPortfolio } from "@/lib/data-fusion-engine";
-import type { BuildingIntelligence } from "@/lib/data-fusion-engine";
+import type { BuildingIntelligence } from "@/lib/data-fusion-types";
 import { skipTrace } from "./tracerfy";
 import { getNeighborhoodNameByZip } from "@/lib/neighborhoods";
 import { underwriteDeal } from "@/app/(dashboard)/deals/actions";

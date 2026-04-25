@@ -1,0 +1,224 @@
+/* ================================================================
+   VettdRE Design Tokens v2.0
+   Import this file in globals.css BEFORE @import "tailwindcss"
+
+   Usage: @import "./design-tokens.css";
+
+   These tokens power the entire visual language. Reference them
+   via Tailwind utilities like bg-[var(--surface-base)] or use
+   the @theme aliases below for cleaner class names.
+   ================================================================ */
+
+/* ── CSS Custom Properties (Design Tokens) ──────────────────── */
+
+:root {
+  /* ── Brand Foundation ─────────────────────────────────────── */
+  --brand-navy: #0F172A;
+  --brand-accent: #3B5998;
+  --brand-accent-hover: #2D4A7A;
+  --brand-accent-subtle: #E8EEF7;
+  --brand-accent-muted: rgba(59, 89, 152, 0.15);
+
+  /* ── Surfaces ────────────────────────────────────────────── */
+  --surface-base: #F7F9FB;
+  --surface-raised: #FFFFFF;
+  --surface-sunken: #EFF2F5;
+  --surface-overlay: #E4E9EE;
+  --surface-nav: #0F172A;
+
+  /* ── Text ────────────────────────────────────────────────── */
+  --text-primary: #0F172A;
+  --text-secondary: #475569;
+  --text-tertiary: #94A3B8;
+  --text-inverse: #F8FAFC;
+  --text-accent: #3B5998;
+
+  /* ── Borders ─────────────────────────────────────────────── */
+  --border-default: #E2E8F0;
+  --border-subtle: #F1F5F9;
+  --border-strong: #CBD5E1;
+  --border-focus: #3B5998;
+
+  /* ── Semantic ────────────────────────────────────────────── */
+  --semantic-success: #16A34A;
+  --semantic-success-subtle: #F0FDF4;
+  --semantic-warning: #D97706;
+  --semantic-warning-subtle: #FFFBEB;
+  --semantic-error: #9F403D;
+  --semantic-error-subtle: #FEF2F2;
+  --semantic-info: #3B5998;
+  --semantic-info-subtle: #E8EEF7;
+
+  /* ── Shadows (as custom properties for reuse) ────────────── */
+  --shadow-subtle: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-medium: 0 4px 12px rgba(15, 23, 42, 0.06), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-high: 0 12px 40px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(15, 23, 42, 0.04);
+
+  /* ── Radius ──────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-default: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 9999px;
+
+  /* ── Operational: Pipeline Stages ─────────────────────────── */
+  --pipeline-new-bg: #E8EEF7;
+  --pipeline-new-text: #3B5998;
+  --pipeline-contacted-bg: #F0EDFF;
+  --pipeline-contacted-text: #6C5CE7;
+  --pipeline-showing-bg: #FFF3E0;
+  --pipeline-showing-text: #E67E22;
+  --pipeline-offer-bg: #FFF8E1;
+  --pipeline-offer-text: #F59E0B;
+  --pipeline-contract-bg: #E8F5E9;
+  --pipeline-contract-text: #2E7D32;
+  --pipeline-won-bg: #F0FDF4;
+  --pipeline-won-text: #16A34A;
+  --pipeline-lost-bg: #F1F5F9;
+  --pipeline-lost-text: #94A3B8;
+
+  /* ── Operational: Contact Status ──────────────────────────── */
+  --contact-active: #16A34A;
+  --contact-nurturing: #3B5998;
+  --contact-cold: #94A3B8;
+  --contact-unqualified: #D97706;
+  --contact-dnc: #9F403D;
+
+  /* ── Operational: Deal Health ──────────────────────────────── */
+  --deal-strong: #16A34A;
+  --deal-fair: #D97706;
+  --deal-distressed: #EA580C;
+  --deal-critical: #9F403D;
+
+  /* ── Operational: Leasing Temp ─────────────────────────────── */
+  --leasing-hot: #DC2626;
+  --leasing-hot-bg: #FEE2E2;
+  --leasing-warm: #F59E0B;
+  --leasing-warm-bg: #FEF3C7;
+  --leasing-cool: #3B5998;
+  --leasing-cool-bg: #E8EEF7;
+  --leasing-cold: #94A3B8;
+  --leasing-cold-bg: #F1F5F9;
+
+  /* ── Operational: Calendar/Showing Types ───────────────────── */
+  --cal-showing: #3B5998;
+  --cal-open-house: #16A34A;
+  --cal-inspection: #D97706;
+  --cal-closing: #0F172A;
+  --cal-meeting: #6C5CE7;
+  --cal-task: #94A3B8;
+}
+
+/* ── Tailwind 4 @theme — maps tokens to utility classes ─────── */
+/* Usage: bg-v-surface-base, text-v-primary, border-v-default    */
+/* Prefix "v-" avoids collision with default Tailwind palette     */
+
+@theme {
+  /* Brand */
+  --color-v-navy: var(--brand-navy);
+  --color-v-accent: var(--brand-accent);
+  --color-v-accent-hover: var(--brand-accent-hover);
+  --color-v-accent-subtle: var(--brand-accent-subtle);
+
+  /* Surfaces */
+  --color-v-surface-base: var(--surface-base);
+  --color-v-surface-raised: var(--surface-raised);
+  --color-v-surface-sunken: var(--surface-sunken);
+  --color-v-surface-overlay: var(--surface-overlay);
+  --color-v-surface-nav: var(--surface-nav);
+
+  /* Text */
+  --color-v-text-primary: var(--text-primary);
+  --color-v-text-secondary: var(--text-secondary);
+  --color-v-text-tertiary: var(--text-tertiary);
+  --color-v-text-inverse: var(--text-inverse);
+  --color-v-text-accent: var(--text-accent);
+
+  /* Borders */
+  --color-v-border-default: var(--border-default);
+  --color-v-border-subtle: var(--border-subtle);
+  --color-v-border-strong: var(--border-strong);
+  --color-v-border-focus: var(--border-focus);
+
+  /* Semantic */
+  --color-v-success: var(--semantic-success);
+  --color-v-success-subtle: var(--semantic-success-subtle);
+  --color-v-warning: var(--semantic-warning);
+  --color-v-warning-subtle: var(--semantic-warning-subtle);
+  --color-v-error: var(--semantic-error);
+  --color-v-error-subtle: var(--semantic-error-subtle);
+  --color-v-info: var(--semantic-info);
+  --color-v-info-subtle: var(--semantic-info-subtle);
+
+  /* Pipeline */
+  --color-v-pipeline-new-bg: var(--pipeline-new-bg);
+  --color-v-pipeline-new-text: var(--pipeline-new-text);
+  --color-v-pipeline-contacted-bg: var(--pipeline-contacted-bg);
+  --color-v-pipeline-contacted-text: var(--pipeline-contacted-text);
+  --color-v-pipeline-showing-bg: var(--pipeline-showing-bg);
+  --color-v-pipeline-showing-text: var(--pipeline-showing-text);
+  --color-v-pipeline-offer-bg: var(--pipeline-offer-bg);
+  --color-v-pipeline-offer-text: var(--pipeline-offer-text);
+  --color-v-pipeline-contract-bg: var(--pipeline-contract-bg);
+  --color-v-pipeline-contract-text: var(--pipeline-contract-text);
+  --color-v-pipeline-won-bg: var(--pipeline-won-bg);
+  --color-v-pipeline-won-text: var(--pipeline-won-text);
+  --color-v-pipeline-lost-bg: var(--pipeline-lost-bg);
+  --color-v-pipeline-lost-text: var(--pipeline-lost-text);
+
+  /* Shadows */
+  --shadow-v-subtle: var(--shadow-subtle);
+  --shadow-v-medium: var(--shadow-medium);
+  --shadow-v-high: var(--shadow-high);
+
+  /* Radius */
+  --radius-v-sm: var(--radius-sm);
+  --radius-v-default: var(--radius-default);
+  --radius-v-lg: var(--radius-lg);
+  --radius-v-xl: var(--radius-xl);
+  --radius-v-full: var(--radius-full);
+
+  /* Font */
+  --font-sans: "Manrope", ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Base Layer Resets ──────────────────────────────────────── */
+/* These apply the design system defaults to the entire app     */
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--surface-base);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Glass header utility */
+.glass-header {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Ambient shadow utilities (for direct use) */
+.shadow-ambient-subtle { box-shadow: var(--shadow-subtle); }
+.shadow-ambient-medium { box-shadow: var(--shadow-medium); }
+.shadow-ambient-high { box-shadow: var(--shadow-high); }
+
+/* Focus ring utility */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* Shimmer for new design system (uses surface tokens) */
+.v-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-sunken) 25%,
+    var(--surface-raised) 50%,
+    var(--surface-sunken) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}

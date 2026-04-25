@@ -3,7 +3,7 @@
 // Owner display card with AI-first priority + HPD fallback
 // NEVER shows "UNAVAILABLE OWNER" — always displays best available data
 
-import type { BuildingIntelligence } from "@/lib/data-fusion-engine";
+import type { BuildingIntelligence } from "@/lib/data-fusion-types";
 import type { OwnershipChain, DeepEntityResult } from "../../ownership-actions";
 import { isEntityName } from "@/lib/entity-resolver";
 import { SkeletonOwnerCard } from "./skeleton-components";

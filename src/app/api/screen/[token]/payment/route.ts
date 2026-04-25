@@ -7,6 +7,7 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   paymentLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
@@ -20,26 +21,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(paymentLimiter(), token);
+      const rl = await checkRateLimit(paymentLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const authSession = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!authSession.valid) {
+      return NextResponse.json(
+        { error: authSession.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     const body = await req.json();
@@ -101,7 +103,7 @@ export async function POST(
     const successUrl = `${appUrl}/screen/${token}?step=confirmation&session_id={CHECKOUT_SESSION_ID}`;
     const cancelUrl = `${appUrl}/screen/${token}?step=payment`;
 
-    const session = await stripe.checkout.sessions.create({
+    const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: [
         {
@@ -134,7 +136,7 @@ export async function POST(
         paymentType: "base_screening",
         amountCents: BASE_SCREENING_FEE_CENTS,
         status: "pending",
-        stripeCheckoutSessionId: session.id,
+        stripeCheckoutSessionId: checkoutSession.id,
       },
     });
 
@@ -146,12 +148,12 @@ export async function POST(
         eventType: "step_completed",
         eventData: {
           step: "payment",
-          stripeSessionId: session.id,
+          stripeSessionId: checkoutSession.id,
         },
       },
     });
 
-    return NextResponse.json({ sessionUrl: session.url });
+    return NextResponse.json({ sessionUrl: checkoutSession.url });
   } catch (error) {
     console.error("Payment POST error:", error);
     return NextResponse.json(

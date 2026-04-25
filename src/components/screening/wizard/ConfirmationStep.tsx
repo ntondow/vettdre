@@ -14,11 +14,21 @@ export default function ConfirmationStep({ status, riskScore, onRefresh }: Props
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
 
-  // Auto-refresh every 5 seconds while processing
+  // Auto-refresh every 5 seconds while processing (max 10 minutes)
+  const pollCountRef = useRef(0);
+  const [pollTimedOut, setPollTimedOut] = React.useState(false);
+
   useEffect(() => {
     if (status !== "processing") return;
+    pollCountRef.current = 0;
 
     const interval = setInterval(() => {
+      pollCountRef.current++;
+      if (pollCountRef.current > 120) { // 120 * 5s = 10 minutes
+        clearInterval(interval);
+        setPollTimedOut(true);
+        return;
+      }
       onRefreshRef.current();
     }, 5000);
 
@@ -38,7 +48,9 @@ export default function ConfirmationStep({ status, riskScore, onRefresh }: Props
               Application Submitted
             </h2>
             <p className="text-sm text-slate-600">
-              We're reviewing your application. This usually takes 2-5 minutes.
+              {pollTimedOut
+                ? "Processing is taking longer than usual. You can close this page — the property manager will contact you when results are ready."
+                : "We're reviewing your application. This usually takes 2-5 minutes."}
             </p>
           </div>
 
@@ -124,17 +136,7 @@ export default function ConfirmationStep({ status, riskScore, onRefresh }: Props
                 </div>
                 <div className="text-sm font-medium text-green-900">Screening Complete</div>
               </div>
-              {riskScore !== null && riskScore !== undefined && (
-                <div className="pt-3 border-t border-green-200">
-                  <div className="text-xs font-semibold text-green-600 uppercase tracking-wide mb-1">
-                    Risk Score
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="text-2xl font-bold text-green-900">{riskScore}</div>
-                    <div className="text-xs text-green-700">/100</div>
-                  </div>
-                </div>
-              )}
+              {/* Risk score intentionally hidden from applicants (FCRA compliance) */}
             </div>
           </div>
 

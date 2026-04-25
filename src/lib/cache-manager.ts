@@ -4,7 +4,7 @@
 // Tier 3: Supabase BuildingCache table (persistent, cross-container)
 
 import prisma from "./prisma";
-import type { BuildingIntelligence } from "./data-fusion-engine";
+import type { BuildingIntelligence } from "./data-fusion-types";
 
 // ============================================================
 // SOURCE CONFIGURATION REGISTRY — single source of truth for TTLs

@@ -97,6 +97,7 @@ export async function createApplicantSession(
 export async function validateApplicantSession(
   token: string,
   cookieHeader: string | null,
+  requestIp?: string,
 ): Promise<SessionValidationResult> {
   if (!cookieHeader) {
     return {
@@ -129,6 +130,13 @@ export async function validateApplicantSession(
   // Verify the session belongs to this token
   if (data.token !== token) {
     return { valid: false, error: "Invalid session for this application." };
+  }
+
+  // Soft IP validation — warn on mismatch but don't block (mobile users change IPs)
+  if (requestIp && data.ip && requestIp !== data.ip) {
+    console.warn(
+      `[Session] IP mismatch for session=${sessionId}: created=${data.ip}, current=${requestIp}`,
+    );
   }
 
   return {

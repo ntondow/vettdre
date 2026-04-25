@@ -247,3 +247,99 @@ export async function notifyAgentScreeningFailed(params: {
     tag: "screening_failed",
   }).catch(err => console.error("Screening failure push error:", err));
 }
+
+// ── Applicant Completion Notice ──────────────────────────────
+
+/**
+ * Sent to the applicant after the screening pipeline completes,
+ * regardless of outcome. Does NOT reveal score or recommendation.
+ */
+export async function sendApplicantCompletionNotice(params: {
+  applicantEmail: string;
+  applicantFirstName: string;
+  propertyAddress: string;
+  unitNumber?: string;
+  orgName: string;
+}): Promise<void> {
+  const property = params.unitNumber
+    ? `${params.propertyAddress} #${params.unitNumber}`
+    : params.propertyAddress;
+
+  const html = `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 16px;">
+  <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px;">
+    <h1 style="color: #1e293b; font-size: 18px; margin: 0 0 16px;">Application Submitted</h1>
+    <p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 12px;">
+      Hi ${params.applicantFirstName || "there"},
+    </p>
+    <p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 12px;">
+      Your rental application for <strong>${property}</strong> has been submitted
+      and processed. The property manager at <strong>${params.orgName}</strong> will
+      review your application and be in touch with next steps.
+    </p>
+    <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin: 0;">
+      No further action is needed from you at this time. If you have questions,
+      please contact your property manager directly.
+    </p>
+  </div>
+  <p style="text-align: center; color: #94a3b8; font-size: 11px; margin-top: 16px;">
+    Sent by VettdRE on behalf of ${params.orgName}
+  </p>
+</div>`;
+
+  await sendTransactionalEmail({
+    to: params.applicantEmail,
+    subject: `Application Submitted — ${property}`,
+    html,
+  }).catch(err => console.error("[Screening] Applicant completion email error:", err));
+}
+
+// ── Applicant Approval Notice ────────────────────────────────
+
+/**
+ * Sent to the applicant when the agent approves their application.
+ * Does NOT reveal score or recommendation details.
+ */
+export async function sendApplicantApprovalNotice(params: {
+  applicantEmail: string;
+  applicantFirstName: string;
+  propertyAddress: string;
+  unitNumber?: string;
+  orgName: string;
+}): Promise<void> {
+  const property = params.unitNumber
+    ? `${params.propertyAddress} #${params.unitNumber}`
+    : params.propertyAddress;
+
+  const html = `
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px 16px;">
+  <div style="background: white; border-radius: 12px; border: 1px solid #e2e8f0; padding: 32px;">
+    <div style="text-align: center; margin-bottom: 20px;">
+      <div style="display: inline-block; background: #dcfce7; border-radius: 50%; width: 48px; height: 48px; line-height: 48px; text-align: center; font-size: 24px;">
+        ✓
+      </div>
+    </div>
+    <h1 style="color: #1e293b; font-size: 18px; margin: 0 0 16px; text-align: center;">Great News!</h1>
+    <p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 12px;">
+      Hi ${params.applicantFirstName || "there"},
+    </p>
+    <p style="color: #334155; font-size: 14px; line-height: 1.6; margin: 0 0 12px;">
+      Your application for <strong>${property}</strong> has been approved!
+      The property manager at <strong>${params.orgName}</strong> will contact you
+      with next steps regarding your lease.
+    </p>
+    <p style="color: #64748b; font-size: 13px; line-height: 1.6; margin: 0;">
+      Congratulations, and welcome to your new home!
+    </p>
+  </div>
+  <p style="text-align: center; color: #94a3b8; font-size: 11px; margin-top: 16px;">
+    Sent by VettdRE on behalf of ${params.orgName}
+  </p>
+</div>`;
+
+  await sendTransactionalEmail({
+    to: params.applicantEmail,
+    subject: `Application Approved — ${property}`,
+    html,
+  }).catch(err => console.error("[Screening] Applicant approval email error:", err));
+}

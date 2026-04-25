@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VettdRE Design System v2.0 — Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --brand-navy: #0F172A;
+    --brand-accent: #3B5998;
+    --brand-accent-hover: #2D4A7A;
+    --brand-accent-subtle: #E8EEF7;
+    --surface-base: #F7F9FB;
+    --surface-raised: #FFFFFF;
+    --surface-sunken: #EFF2F5;
+    --surface-overlay: #E4E9EE;
+    --surface-nav: #0F172A;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-tertiary: #94A3B8;
+    --text-inverse: #F8FAFC;
+    --text-accent: #3B5998;
+    --border-default: #E2E8F0;
+    --border-subtle: #F1F5F9;
+    --border-strong: #CBD5E1;
+    --border-focus: #3B5998;
+    --semantic-success: #16A34A;
+    --semantic-success-subtle: #F0FDF4;
+    --semantic-warning: #D97706;
+    --semantic-warning-subtle: #FFFBEB;
+    --semantic-error: #9F403D;
+    --semantic-error-subtle: #FEF2F2;
+    --shadow-subtle: 0 1px 3px rgba(15,23,42,0.04), 0 1px 2px rgba(15,23,42,0.06);
+    --shadow-medium: 0 4px 12px rgba(15,23,42,0.06), 0 2px 4px rgba(15,23,42,0.04);
+    --shadow-high: 0 12px 40px rgba(15,23,42,0.08), 0 4px 12px rgba(15,23,42,0.04);
+    --radius-sm: 4px;
+    --radius-default: 8px;
+    --radius-lg: 12px;
+    --radius-full: 9999px;
+  }
+
+  body {
+    font-family: 'Manrope', system-ui, sans-serif;
+    background: var(--surface-base);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ─────────────────────────────────── */
+  .sidebar {
+    width: 240px;
+    background: var(--surface-nav);
+    color: var(--text-inverse);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 50;
+  }
+  .sidebar-logo {
+    padding: 16px 20px;
+    font-size: 20px;
+    font-weight: 700;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .sidebar-logo span { color: var(--brand-accent); }
+  .sidebar-nav { flex: 1; padding: 16px 8px; overflow-y: auto; }
+  .sidebar-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(248,250,252,0.4);
+    padding: 8px 12px 6px;
+    margin-top: 12px;
+  }
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--radius-default);
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(248,250,252,0.6);
+    cursor: pointer;
+    transition: all 150ms;
+    text-decoration: none;
+  }
+  .sidebar-item:hover {
+    background: rgba(255,255,255,0.06);
+    color: rgba(248,250,252,0.9);
+  }
+  .sidebar-item.active {
+    background: rgba(59,89,152,0.15);
+    color: #FFFFFF;
+    box-shadow: inset 3px 0 0 var(--brand-accent);
+  }
+  .sidebar-item svg { width: 18px; height: 18px; opacity: 0.7; flex-shrink: 0; }
+  .sidebar-item.active svg { opacity: 1; }
+  .sidebar-badge {
+    margin-left: auto;
+    background: var(--brand-accent);
+    color: white;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: var(--radius-full);
+  }
+
+  /* ── Main Content ────────────────────────────── */
+  .main { margin-left: 240px; flex: 1; min-height: 100vh; }
+
+  /* ── Glass Header ────────────────────────────── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(255,255,255,0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 12px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .header h1 { font-size: 18px; font-weight: 700; }
+  .header-actions { display: flex; gap: 8px; }
+
+  /* ── Page Content ────────────────────────────── */
+  .page-content { padding: 32px; max-width: 1200px; }
+
+  /* ── Section Label ───────────────────────────── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+    margin-bottom: 16px;
+    margin-top: 40px;
+  }
+  .section-label:first-child { margin-top: 0; }
+
+  /* ── Stats Row ───────────────────────────────── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-default);
+    padding: 20px 24px;
+    box-shadow: var(--shadow-subtle);
+  }
+  .stat-card .stat-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 8px;
+  }
+  .stat-card .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
+  }
+  .stat-card .stat-change {
+    font-size: 12px;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .stat-change.up { color: var(--semantic-success); }
+  .stat-change.down { color: var(--semantic-error); }
+
+  /* ── Buttons ─────────────────────────────────── */
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: var(--radius-default);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 150ms;
+    border: none;
+    font-family: inherit;
+  }
+  .btn:active { transform: scale(0.98); }
+  .btn-primary { background: var(--brand-accent); color: white; }
+  .btn-primary:hover { background: var(--brand-accent-hover); }
+  .btn-secondary { background: transparent; color: var(--brand-accent); border: 1px solid rgba(59,89,152,0.3); }
+  .btn-secondary:hover { background: var(--brand-accent-subtle); }
+  .btn-ghost { background: transparent; color: var(--text-secondary); }
+  .btn-ghost:hover { background: var(--surface-sunken); }
+  .btn-danger { background: var(--semantic-error); color: white; }
+  .btn-danger:hover { opacity: 0.9; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+  /* ── Badges ──────────────────────────────────── */
+  .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Table ───────────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-default);
+    overflow: hidden;
+    box-shadow: var(--shadow-subtle);
+    font-size: 13px;
+  }
+  .data-table thead { background: var(--surface-sunken); }
+  .data-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .data-table td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: var(--surface-overlay); }
+  .data-table .cell-primary { color: var(--text-primary); font-weight: 500; }
+  .data-table .cell-accent { color: var(--text-accent); font-weight: 500; }
+
+  /* ── Card Grid ───────────────────────────────── */
+  .card-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-default);
+    padding: 20px;
+    box-shadow: var(--shadow-subtle);
+  }
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+  }
+  .card-title { font-size: 14px; font-weight: 600; }
+  .card-meta { font-size: 12px; color: var(--text-tertiary); margin-top: 4px; }
+  .card-body { font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+
+  /* ── Input Preview ───────────────────────────── */
+  .form-group { display: flex; flex-direction: column; gap: 4px; max-width: 360px; }
+  .form-label { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+  .form-input {
+    padding: 8px 12px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-default);
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--surface-raised);
+    color: var(--text-primary);
+    transition: border-color 150ms, box-shadow 150ms;
+    outline: none;
+  }
+  .form-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px rgba(59,89,152,0.12);
+  }
+  .form-input::placeholder { color: var(--text-tertiary); }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  /* ── Color Swatches ──────────────────────────── */
+  .swatch-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+  .swatch {
+    border-radius: var(--radius-default);
+    overflow: hidden;
+    border: 1px solid var(--border-default);
+  }
+  .swatch-color { height: 64px; }
+  .swatch-info { padding: 8px 10px; background: var(--surface-raised); }
+  .swatch-name { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+  .swatch-hex { font-size: 10px; color: var(--text-tertiary); font-family: monospace; }
+
+  /* ── Typography Preview ──────────────────────── */
+  .type-row {
+    display: flex;
+    align-items: baseline;
+    gap: 32px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .type-label {
+    width: 100px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-tertiary);
+  }
+  .type-sample { flex: 1; }
+  .type-spec { font-size: 12px; color: var(--text-tertiary); font-family: monospace; flex-shrink: 0; }
+
+  /* ── Kanban Preview ──────────────────────────── */
+  .kanban { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kanban-col { background: var(--surface-sunken); border-radius: var(--radius-default); padding: 12px; }
+  .kanban-col-header {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .kanban-card {
+    background: var(--surface-raised);
+    border-radius: var(--radius-default);
+    padding: 12px;
+    margin-bottom: 8px;
+    box-shadow: var(--shadow-subtle);
+    border-left: 3px solid;
+    font-size: 13px;
+  }
+  .kanban-card .kc-name { font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
+  .kanban-card .kc-address { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .kanban-card .kc-value { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+
+  .divider { height: 1px; background: var(--border-default); margin: 40px 0; }
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">Vettd<span>RE</span></div>
+  <div class="sidebar-nav">
+    <div class="sidebar-item active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      Dashboard
+    </div>
+
+    <div class="sidebar-section-label">Research</div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      Market Intel
+    </div>
+
+    <div class="sidebar-section-label">Portfolio</div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/></svg>
+      Properties
+    </div>
+
+    <div class="sidebar-section-label">Closing</div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Contacts
+    </div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2Z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Messages
+      <span class="sidebar-badge">4</span>
+    </div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+      Calendar
+    </div>
+
+    <div class="sidebar-section-label">Brokerage</div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      Brokerage
+    </div>
+    <div class="sidebar-item">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Client Onboarding
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main ─────────────────────────────────────── -->
+<div class="main">
+  <header class="header">
+    <h1>Dashboard</h1>
+    <div class="header-actions">
+      <button class="btn btn-ghost btn-sm">Export</button>
+      <button class="btn btn-primary btn-sm">+ New Contact</button>
+    </div>
+  </header>
+
+  <div class="page-content">
+
+    <!-- Stats -->
+    <div class="section-label">Overview</div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Active Deals</div>
+        <div class="stat-value">24</div>
+        <div class="stat-change up">+3 this week</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Pipeline Value</div>
+        <div class="stat-value">$4.2M</div>
+        <div class="stat-change up">+12.4% vs last month</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Contacts</div>
+        <div class="stat-value">847</div>
+        <div class="stat-change up">+28 this month</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Closings This Month</div>
+        <div class="stat-value">6</div>
+        <div class="stat-change down">-2 vs last month</div>
+      </div>
+    </div>
+
+    <!-- Kanban Preview -->
+    <div class="section-label">Pipeline Board</div>
+    <div class="kanban">
+      <div class="kanban-col">
+        <div class="kanban-col-header"><span>New Lead</span><span>3</span></div>
+        <div class="kanban-card" style="border-left-color: #3B5998;">
+          <div class="kc-name">Sarah Chen</div>
+          <div class="kc-address">242 W 72nd St, Apt 4B</div>
+          <div class="kc-value">$4,200/mo</div>
+        </div>
+        <div class="kanban-card" style="border-left-color: #3B5998;">
+          <div class="kc-name">Michael Torres</div>
+          <div class="kc-address">88 Greenwich St</div>
+          <div class="kc-value">$3,800/mo</div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header"><span>Showing</span><span>2</span></div>
+        <div class="kanban-card" style="border-left-color: #E67E22;">
+          <div class="kc-name">James Kwan</div>
+          <div class="kc-address">156 E 2nd St, Unit 3</div>
+          <div class="kc-value">$2,900/mo</div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header"><span>Under Contract</span><span>1</span></div>
+        <div class="kanban-card" style="border-left-color: #2E7D32;">
+          <div class="kc-name">Elena Voronova</div>
+          <div class="kc-address">401 E 34th St, PH-A</div>
+          <div class="kc-value">$7,500/mo</div>
+        </div>
+      </div>
+      <div class="kanban-col">
+        <div class="kanban-col-header"><span>Closed Won</span><span>2</span></div>
+        <div class="kanban-card" style="border-left-color: #16A34A;">
+          <div class="kc-name">David Park</div>
+          <div class="kc-address">55 Water St, 12F</div>
+          <div class="kc-value">$5,200/mo</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Buttons & Badges -->
+    <div class="section-label">Buttons</div>
+    <div class="btn-row">
+      <button class="btn btn-primary">Primary Action</button>
+      <button class="btn btn-secondary">Secondary</button>
+      <button class="btn btn-ghost">Ghost</button>
+      <button class="btn btn-danger">Delete</button>
+    </div>
+
+    <div class="section-label">Status Badges</div>
+    <div class="badge-row">
+      <span class="badge" style="background:#E8EEF7; color:#3B5998;"><span class="badge-dot" style="background:#3B5998;"></span> New Lead</span>
+      <span class="badge" style="background:#F0EDFF; color:#6C5CE7;"><span class="badge-dot" style="background:#6C5CE7;"></span> Contacted</span>
+      <span class="badge" style="background:#FFF3E0; color:#E67E22;"><span class="badge-dot" style="background:#E67E22;"></span> Showing</span>
+      <span class="badge" style="background:#E8F5E9; color:#2E7D32;"><span class="badge-dot" style="background:#2E7D32;"></span> Under Contract</span>
+      <span class="badge" style="background:#F0FDF4; color:#16A34A;"><span class="badge-dot" style="background:#16A34A;"></span> Closed Won</span>
+      <span class="badge" style="background:#F1F5F9; color:#94A3B8;"><span class="badge-dot" style="background:#94A3B8;"></span> Closed Lost</span>
+    </div>
+
+    <div style="margin-top:16px;" class="badge-row">
+      <span class="badge" style="background:#FEE2E2; color:#DC2626;">Hot</span>
+      <span class="badge" style="background:#FEF3C7; color:#F59E0B;">Warm</span>
+      <span class="badge" style="background:#E8EEF7; color:#3B5998;">Cool</span>
+      <span class="badge" style="background:#F1F5F9; color:#94A3B8;">Cold</span>
+      <span class="badge" style="background:var(--semantic-success-subtle); color:var(--semantic-success);">Signed</span>
+      <span class="badge" style="background:var(--semantic-error-subtle); color:var(--semantic-error);">Overdue</span>
+      <span class="badge" style="background:var(--semantic-warning-subtle); color:var(--semantic-warning);">Expiring</span>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Table -->
+    <div class="section-label">Data Table</div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Contact</th>
+          <th>Status</th>
+          <th>Property</th>
+          <th>Deal Value</th>
+          <th>Last Activity</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cell-primary">Sarah Chen</td>
+          <td><span class="badge" style="background:#E8EEF7; color:#3B5998; font-size:10px; padding:2px 8px;"><span class="badge-dot" style="background:#3B5998;"></span> New Lead</span></td>
+          <td>242 W 72nd St, Apt 4B</td>
+          <td class="cell-primary">$50,400</td>
+          <td style="color: var(--text-tertiary);">2 hours ago</td>
+        </tr>
+        <tr>
+          <td class="cell-primary">James Kwan</td>
+          <td><span class="badge" style="background:#FFF3E0; color:#E67E22; font-size:10px; padding:2px 8px;"><span class="badge-dot" style="background:#E67E22;"></span> Showing</span></td>
+          <td>156 E 2nd St, Unit 3</td>
+          <td class="cell-primary">$34,800</td>
+          <td style="color: var(--text-tertiary);">Yesterday</td>
+        </tr>
+        <tr>
+          <td class="cell-primary">Elena Voronova</td>
+          <td><span class="badge" style="background:#E8F5E9; color:#2E7D32; font-size:10px; padding:2px 8px;"><span class="badge-dot" style="background:#2E7D32;"></span> Under Contract</span></td>
+          <td>401 E 34th St, PH-A</td>
+          <td class="cell-primary">$90,000</td>
+          <td style="color: var(--text-tertiary);">3 days ago</td>
+        </tr>
+        <tr>
+          <td class="cell-primary">David Park</td>
+          <td><span class="badge" style="background:#F0FDF4; color:#16A34A; font-size:10px; padding:2px 8px;"><span class="badge-dot" style="background:#16A34A;"></span> Closed Won</span></td>
+          <td>55 Water St, 12F</td>
+          <td class="cell-primary">$62,400</td>
+          <td style="color: var(--text-tertiary);">Mar 28</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="divider"></div>
+
+    <!-- Forms -->
+    <div class="section-label">Form Elements</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">First Name</label>
+        <input class="form-input" type="text" placeholder="Enter first name" value="Nathan"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Last Name</label>
+        <input class="form-input" type="text" placeholder="Enter last name"/>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Typography -->
+    <div class="section-label">Typography Scale</div>
+    <div>
+      <div class="type-row">
+        <span class="type-label">Display</span>
+        <span class="type-sample" style="font-size:36px; font-weight:700; letter-spacing:-0.02em; line-height:1.2;">$4.2M Pipeline</span>
+        <span class="type-spec">700 / 36px</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Heading</span>
+        <span class="type-sample" style="font-size:24px; font-weight:700; letter-spacing:-0.01em; line-height:1.3;">Active Deals Overview</span>
+        <span class="type-spec">700 / 24px</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Subheading</span>
+        <span class="type-sample" style="font-size:18px; font-weight:600; line-height:1.4;">Market Intel Summary</span>
+        <span class="type-spec">600 / 18px</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Body</span>
+        <span class="type-sample" style="font-size:14px; font-weight:400; line-height:1.5; color:var(--text-secondary);">VettdRE combines CRM, brokerage management, and AI-powered property intelligence into one platform for NYC real estate professionals.</span>
+        <span class="type-spec">400 / 14px</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Caption</span>
+        <span class="type-sample" style="font-size:12px; font-weight:500; line-height:1.4; color:var(--text-tertiary);">Last updated 2 hours ago &middot; 847 contacts</span>
+        <span class="type-spec">500 / 12px</span>
+      </div>
+      <div class="type-row">
+        <span class="type-label">Overline</span>
+        <span class="type-sample" style="font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-tertiary);">Pipeline Stages</span>
+        <span class="type-spec">600 / 11px</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- Color Swatches -->
+    <div class="section-label">Core Palette</div>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-color" style="background:#0F172A;"></div><div class="swatch-info"><div class="swatch-name">Brand Navy</div><div class="swatch-hex">#0F172A</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#3B5998;"></div><div class="swatch-info"><div class="swatch-name">Brand Accent</div><div class="swatch-hex">#3B5998</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#F7F9FB;"></div><div class="swatch-info"><div class="swatch-name">Surface Base</div><div class="swatch-hex">#F7F9FB</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#EFF2F5;"></div><div class="swatch-info"><div class="swatch-name">Surface Sunken</div><div class="swatch-hex">#EFF2F5</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#9F403D;"></div><div class="swatch-info"><div class="swatch-name">Brick Error</div><div class="swatch-hex">#9F403D</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:#16A34A;"></div><div class="swatch-info"><div class="swatch-name">Verdant</div><div class="swatch-hex">#16A34A</div></div></div>
+    </div>
+
+    <div style="height: 64px;"></div>
+  </div>
+</div>
+
+</body>
+</html>

@@ -252,10 +252,11 @@ export default function MapLayersRenderer({ map, visibility, onFootprintClick, s
           },
         );
         // Override getTileUrl to use proper bbox from tile coords
-        floodLayerRef.current.getTileUrl = function (coords: any) {
+        floodLayerRef.current.getTileUrl = function (this: any, coords: any) {
+          if (!coords || coords.z === undefined || !this._map) return "";
           const tileSize = 256;
-          const nw = map.unproject([coords.x * tileSize, coords.y * tileSize], coords.z);
-          const se = map.unproject([(coords.x + 1) * tileSize, (coords.y + 1) * tileSize], coords.z);
+          const nw = this._map.unproject([coords.x * tileSize, coords.y * tileSize], coords.z);
+          const se = this._map.unproject([(coords.x + 1) * tileSize, (coords.y + 1) * tileSize], coords.z);
           return `https://hazards.fema.gov/gis/nfhl/rest/services/public/NFHL/MapServer/export?bbox=${se.lng},${se.lat},${nw.lng},${nw.lat}&bboxSR=4326&imageSR=4326&size=${tileSize},${tileSize}&format=png32&transparent=true&layers=show:28&f=image`;
         };
         floodLayerRef.current.addTo(map);

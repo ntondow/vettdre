@@ -45,7 +45,6 @@ ANTHROPIC_API_KEY=               # Claude AI for ownership analysis, email parsi
 
 # Data APIs
 NYC_OPEN_DATA_APP_TOKEN=         # NYC Open Data (Socrata)
-NYC_OPEN_DATA_TOKEN=             # Alternate NYC token
 NYS_OPEN_DATA_TOKEN=             # NYS entity/filing data
 CENSUS_API_KEY=                  # Census demographic data
 GEOCODIO_API_KEY=                # Geocoding
@@ -144,6 +143,11 @@ src/
 │   │   │   ├── import/route.ts           # Bulk unit import
 │   │   │   ├── upgrade/route.ts          # Stripe checkout session
 │   │   │   └── benchmarks/route.ts       # Anonymous benchmarking
+│   │   ├── terminal/
+│   │   │   ├── ingest/route.ts            # Cron: NYC Open Data polling (15m)
+│   │   │   ├── enrich/route.ts            # Cron: BBL-keyed enrichment (+5m offset)
+│   │   │   ├── generate-briefs/route.ts   # Cron: AI brief generation (+10m offset)
+│   │   │   └── backfill/route.ts          # One-time historical backfill (POST)
 │   │   ├── webhooks/stripe/route.ts      # Stripe subscription lifecycle
 │   │   ├── stripe/
 │   │   │   ├── checkout/route.ts         # Create checkout session
@@ -171,6 +175,8 @@ src/
 │       ├── properties/                   # My Properties unified hub
 │       ├── prospecting/                  # Saved prospects from Market Intel
 │       ├── portfolios/                   # Portfolio dashboard
+│       ├── terminal/                     # NYC Real Estate Terminal (Bloomberg-style feed)
+│       │   └── components/              # Feed, event cards, filters
 │       ├── brokerage/                    # Brokerage Management System (BMS)
 │       │   ├── dashboard/               # BMS overview stats
 │       │   ├── agents/[id]/             # Agent detail
@@ -232,7 +238,8 @@ src/
 │           └── admin/                   # Admin user/waitlist management
 │               ├── users/               # User management (role, plan, team assignment)
 │               ├── teams/               # Team CRUD + hierarchy management
-│               └── teams/[id]/          # Team detail (members, sub-teams, edit)
+│               ├── teams/[id]/          # Team detail (members, sub-teams, edit)
+│               └── terminal/            # Terminal pipeline health dashboard
 │
 ├── components/
 │   ├── layout/
@@ -372,6 +379,13 @@ src/
 │   ├── agent-badges.ts                  # Badge definitions
 │   ├── push-notifications.ts            # Web push (VAPID)
 │   ├── rss-feed.ts                      # Market news RSS aggregation
+│   │
+│   │  # Terminal Pipeline
+│   ├── terminal-datasets.ts             # Dataset registry (7 NYC Open Data sources)
+│   ├── terminal-ingestion.ts            # 2-phase polling (metadata check → incremental fetch)
+│   ├── terminal-enrichment.ts           # BBL-keyed enrichment (PLUTO, violations, permits, comps, ownership)
+│   ├── terminal-ai.ts                   # AI brief generation (Claude Sonnet, Bloomberg voice)
+│   ├── terminal-backfill.ts             # Historical backfill (30-90 days, paginated SODA queries)
 │   │
 │   └── supabase/
 │       ├── client.ts                    # Supabase browser client (.trim() on env)
@@ -681,6 +695,51 @@ Profile, Team, Gmail, Sync, API Keys, Pipeline, Branding, Signature, Notificatio
 - Phone number management in Settings → Phone
 - Used by AI Leasing Agent for multi-channel conversation
 
+### Terminal — Working
+**Routes:** `/terminal` (feed), `/api/terminal/ingest`, `/api/terminal/enrich`, `/api/terminal/generate-briefs`, `/api/terminal/backfill`, `/settings/admin/terminal` (health dashboard)
+
+Bloomberg-style real-time feed of NYC real estate events (sales, loans, permits, violations, stalled sites) sourced from 7 NYC Open Data APIs via a 3-stage pipeline.
+
+**Architecture:** 3-stage pipeline, staggered on 15-minute cron cycles via Google Cloud Scheduler:
+1. **Ingest** (`:00/:15/:30/:45`) — 2-phase polling: metadata check (has dataset changed?) → incremental fetch (new records since last poll). Writes raw `TerminalEvent` records. ACRIS requires 3-table join (Master → Legals → Parties) to resolve BBL + buyer/seller names.
+2. **Enrich** (`:05/:20/:35/:50`) — BBL-keyed lookups: PLUTO profile, HPD/DOB violations, active permits, ACRIS deed history, comp sales, portfolio cross-reference. Produces `EnrichmentPackage` JSON stored on the event.
+3. **Generate Briefs** (`:10/:25/:40/:55`) — AI brief generation using Claude claude-sonnet-4-5-20250514 (temp 0) in Bloomberg terminal voice with color-coded tags. Max 30 events per run.
+
+**Data Sources (7 datasets, all Tier A, 15m polling):**
+- DOB NOW Job Applications (`w9ak-ipjd`) — new building permits, major alterations
+- DOB Job Applications Legacy (`ic3t-wcy2`) — same event types, legacy system
+- HPD Violations (`wvxf-dwi5`) — Class C (hazardous) and I (lead paint) only
+- DOB Violations (`3h2n-5cm9`) — stop work orders only
+- DOB ECB Violations (`6bgk-3dad`) — high-penalty (>$10K) only
+- DOB Stalled Sites (`i296-73x5`) — stalled construction
+- ACRIS Master (`bnx9-e6tj`) — deeds, mortgages (joined with Legals + Parties)
+
+**UI:** Dark theme (Bloomberg-inspired, scoped to Terminal only — `bg-[#0D1117]`). Three-column desktop layout: left sidebar (event type filters, neighborhood filter with NTA-based toggles + search, watchlists, recently viewed BBLs), center feed (infinite scroll, address-first event cards with neighborhood context, dollar amounts, color-coded AI briefs, inline expand with progressive disclosure), right panel (full BuildingProfile from Market Intel, light theme, 480px wide, collapsible via chevron toggle). Keyboard navigation: j/k move focus, Enter expand, o open building, w watch, / search, ? help. Mobile: single-column feed with bottom sheet filters including neighborhoods.
+
+**Key Files:**
+- `lib/terminal-datasets.ts` — dataset configs with `bblExtractor`, `eventTypeMapper`, `recordIdExtractor`
+- `lib/terminal-ingestion.ts` — `runIngestion(orgId)` orchestrator, `pollStandardDataset()`, `pollAcris()`
+- `lib/terminal-enrichment.ts` — `enrichTerminalEvent()`, `EnrichmentPackage` interface
+- `lib/terminal-ai.ts` — `generateBrief()`, Bloomberg-voice system prompt
+- `lib/terminal-backfill.ts` — `runBackfill(orgId, daysBack, datasetIds?)` for historical seeding
+- `terminal/components/terminal-feed.tsx` — main feed component (filters, infinite scroll, detail panel, keyboard nav, neighborhood filter)
+- `terminal/components/terminal-event-card.tsx` — event card (address-first header, dollar amounts, inline expand/collapse, hover glow)
+- `terminal/components/event-detail-expanded.tsx` — expanded card detail (filing info, parties, property snapshot, related events, web research)
+- `terminal/components/neighborhood-filter.tsx` — NTA-based neighborhood filter sidebar section
+- `terminal/components/keyboard-shortcuts-help.tsx` — keyboard shortcut overlay (? key)
+- `settings/admin/terminal/` — health dashboard (summary cards, dataset table, manual triggers, error log)
+- `scripts/terminal-scheduler-setup.sh` — Google Cloud Scheduler setup (5 jobs, idempotent create/update)
+
+**DB Models:** `TerminalEvent` (events with enrichment + AI brief), `TerminalEventCategory` (event type registry), `UserTerminalPreferences` (per-user filter state), `TerminalWatchlist` + `TerminalWatchlistAlert` (Phase 2), `DatasetRegistry` (dataset metadata), `IngestionState` (per-dataset polling state with error tracking).
+
+**Conventions:**
+- BBL is the universal join key (10-char string: `{boro}{block:5}{lot:4}`)
+- Borough codes: 1=Manhattan, 2=Bronx, 3=Brooklyn, 4=Queens, 5=Staten Island
+- All cron endpoints use `Bearer ${CRON_SECRET}` auth header
+- Terminal dark theme is scoped — does NOT affect other pages
+- Right panel reuses Market Intel's `BuildingProfile` component (light theme, dynamic import)
+- Feature-gated via `hasPermission("terminal", plan)` — currently requires pro+ plan
+
 ### Automations Engine — Working
 **Routes:** `/settings/automations`, `/api/automations/cron`
 
@@ -769,17 +828,47 @@ Digital document signing workflow for onboarding new clients. Agents create onbo
 | Google Workspace AI tools | **Working** | 11 gws tools wired into leasing engine + reusable agent runner; needs UI exposure for email/deal agents |
 | Team hierarchy | **Working (Phase 1)** | Schema, CRUD, admin UI, auto-provisioning done; Phase 2: team-scoped data filtering, team dashboards |
 | Client onboarding | **Working** | Template-based PDF signing, multi-channel delivery (email+SMS), delete/archive, prefill display. Field positions verified against real government PDFs. |
+| Terminal | **Working (Phase 2)** | 3-stage pipeline + feed UI v2 (address-first cards, inline expand with progressive disclosure, neighborhood filters, keyboard navigation, collapsible panel) + admin health dashboard. Phase 3: watchlist alerts, push notifications, custom watchlist CRUD UI |
 
 ## Known Issues / Tech Debt
 1. **"use server" constraint** — Next.js 16 requires ALL exported functions in "use server" files to be async
-2. **Map marker error** — "Cannot read properties of undefined (reading 'x')" in map-search.tsx when map hasn't initialized
+2. ~~**Map marker error**~~ — Fixed: added null guard on `latLngToContainerPoint` in map-search.tsx
 3. **Lead scoring** — grading thresholds need tuning for buyer vs seller vs owner contact types
 4. **Dashboard** — shows hardcoded placeholder data, not wired to real queries
 5. **Gmail token encryption** — `encryption.ts` created but not yet wired into Gmail token read/write
 6. **Edge env var workaround** — NEXT_PUBLIC keys hardcoded in next.config.ts due to Turbopack edge bundling issue
 7. **docker-entrypoint.sh** — exists on disk but not referenced by Dockerfile (abandoned approach for Prisma migrations at startup)
 
-## Recent Changes (2026-03-30)
+## Recent Changes (2026-04-05)
+- **NEW:** Terminal UI v2 — event card redesign: address as primary text, neighborhood + borough context, dollar amounts (color-coded), unit count badges. BBL moved to tooltip.
+- **NEW:** Terminal right panel collapse/expand — chevron toggle on panel edge, smooth width transition, auto-expand on new building click
+- **NEW:** Terminal inline expandable cards — two-level progressive disclosure: Level 1 shows filing details, parties, property snapshot, related BBL events from cached enrichment data; Level 2 on-demand web research via Firecrawl/Brave Search with article + listing results
+- **NEW:** Terminal neighborhood filter — left sidebar section with NTA-based multi-select toggles, event counts per neighborhood, search input, persisted to user preferences
+- **NEW:** Terminal keyboard navigation — j/k (move focus), Enter (expand/collapse), o (open building), w (quick-watch), Esc (close priority chain), / (search), ? (shortcuts help overlay)
+- **NEW:** Terminal polish pass — 150ms card animations, hover glow matching event type color, accessibility audit (aria-labels, aria-expanded, role=dialog), empty state with reset button, neighborhood search clear button
+- **NEW:** DOF Property Valuation (`8y4t-faws`) + DOF Annualized Sales (`w2pb-icbu`) datasets added to data-fusion-engine, cache-manager, terminal enrichment, and fetchBuildingCritical/Standard
+- **NEW:** NYC Open Data token consolidated — all files now use `NYC_OPEN_DATA_APP_TOKEN` (removed stale `NYC_OPEN_DATA_TOKEN` references)
+- **FIX:** ACRIS buyer/seller party types corrected (type 1=buyer/grantee, type 2=seller/grantor)
+- **FIX:** Plaid exchange crash in mock mode (plaidResult scoped outside conditional)
+- **FIX:** Document pipeline fetch uses Supabase signed URLs instead of raw storage paths
+- **FIX:** Map `latLngToContainerPoint` null guard prevents "reading 'x'" crash
+- **FIX:** Risk score hidden from applicant-facing UI (FCRA compliance)
+- **FIX:** Signature route captures IP from server headers, not client body
+- **FIX:** Terminal server actions enforce plan-level permission checks
+- **FIX:** ECB penalty filter uses `penalty_applied` instead of `amount_paid`
+- **FIX:** Terminal enrichment query excludes retried-out events at DB level (prevents crowding)
+- **FIX:** NYC Open Data 403s — `isValidToken` guard skips sending placeholder app token
+- **NEW:** Terminal — Bloomberg-style NYC real estate event feed with 3-stage pipeline (ingest → enrich → AI briefs)
+- **NEW:** Terminal ingestion from 7 NYC Open Data sources (DOB permits, HPD violations, ECB penalties, ACRIS sales/loans, stalled sites)
+- **NEW:** Terminal enrichment — BBL-keyed PLUTO profiles, violation summaries, permit history, ownership chain, comp sales
+- **NEW:** Terminal AI briefs — Claude Sonnet-generated summaries in Bloomberg voice with color-coded tags
+- **NEW:** Terminal right panel uses full Market Intel BuildingProfile component (light theme, dynamic import)
+- **NEW:** Terminal historical backfill endpoint + library for seeding 30-90 days of events
+- **NEW:** Terminal admin health dashboard at /settings/admin/terminal (pipeline status, per-dataset stats, manual triggers, error log)
+- **NEW:** Google Cloud Scheduler setup script (`scripts/terminal-scheduler-setup.sh`) for 5 cron jobs
+- **NEW:** Terminal Health link in admin settings nav
+
+## Previous Changes (2026-03-30)
 - **NEW:** Client Onboarding Tool — full digital signing workflow with template-based PDF prefill, logo stamping, multi-page preview overlays, signature capture
 - **NEW:** Real government PDF templates uploaded (DOS-1735-f, DOS-2156) + Tenant Rep Agreement to Supabase Storage with mapped field coordinates
 - **NEW:** Multi-channel delivery — agents can send onboarding invites via email, SMS, or both simultaneously (Twilio + Resend)

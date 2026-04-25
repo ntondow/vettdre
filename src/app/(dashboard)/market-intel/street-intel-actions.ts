@@ -7,6 +7,13 @@
 
 const NYC = "https://data.cityofnewyork.us/resource";
 
+// Run async tasks in parallel with bounded concurrency
+async function parallelBatches(tasks: (() => Promise<void>)[], concurrency = 4): Promise<void> {
+  for (let i = 0; i < tasks.length; i += concurrency) {
+    await Promise.allSettled(tasks.slice(i, i + concurrency).map(fn => fn()));
+  }
+}
+
 // Dataset IDs
 const DOB_PERMITS = "ic3t-wcy2"; // DOB Job Applications
 const ROLLING_SALES = "usep-8jbt"; // DOF Rolling Sales
@@ -466,24 +473,28 @@ export async function fetchViolationCountsByBlocks(
     byBoro.get(key)!.add(b.block);
   }
 
+  // Build all chunk fetches, then run in parallel (4 concurrent max)
+  const fetches: (() => Promise<void>)[] = [];
   for (const [boroCode, blockSet] of byBoro) {
-    // Batch blocks in chunks of 50
     const blockArr = Array.from(blockSet);
     for (let i = 0; i < blockArr.length; i += 50) {
       const chunk = blockArr.slice(i, i + 50);
       const blockIn = chunk.map(b => `'${b}'`).join(",");
-      try {
-        const url = `${NYC}/${HPD_VIOLATIONS}.json?$select=block,lot,count(*) as cnt&$group=block,lot&$where=boroid='${boroCode}' AND block IN(${blockIn})&$limit=5000`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const row of data) {
-          const key = `${boroCode}-${row.block}-${row.lot}`;
-          counts[key] = parseInt(row.cnt || "0");
-        }
-      } catch { /* skip failed batch */ }
+      fetches.push(async () => {
+        try {
+          const url = `${NYC}/${HPD_VIOLATIONS}.json?$select=block,lot,count(*) as cnt&$group=block,lot&$where=boroid='${boroCode}' AND block IN(${blockIn})&$limit=5000`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!res.ok) return;
+          const data = await res.json();
+          for (const row of data) {
+            const key = `${boroCode}-${row.block}-${row.lot}`;
+            counts[key] = parseInt(row.cnt || "0");
+          }
+        } catch { /* skip failed batch */ }
+      });
     }
   }
+  await parallelBatches(fetches, 4);
 
   return counts;
 }
@@ -529,6 +540,7 @@ export async function fetchPermitCountsByBlocks(
 
   const boroNameMap: Record<string, string> = { "1": "MANHATTAN", "2": "BRONX", "3": "BROOKLYN", "4": "QUEENS", "5": "STATEN ISLAND" };
 
+  const fetches: (() => Promise<void>)[] = [];
   for (const [boroCode, blockSet] of byBoro) {
     const boroName = boroNameMap[boroCode];
     if (!boroName) continue;
@@ -536,20 +548,23 @@ export async function fetchPermitCountsByBlocks(
     for (let i = 0; i < blockArr.length; i += 50) {
       const chunk = blockArr.slice(i, i + 50);
       const blockIn = chunk.map(b => `'${b.replace(/^0+/, "")}'`).join(",");
-      try {
-        const url = `${NYC}/${DOB_PERMITS}.json?$select=block,lot,count(*) as cnt&$group=block,lot&$where=borough='${boroName}' AND block IN(${blockIn})&$limit=5000`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const row of data) {
-          const blk = (row.block || "").replace(/^0+/, "");
-          const lt = (row.lot || "").replace(/^0+/, "");
-          const key = `${boroCode}-${blk}-${lt}`;
-          counts[key] = (counts[key] || 0) + parseInt(row.cnt || "0");
-        }
-      } catch { /* skip */ }
+      fetches.push(async () => {
+        try {
+          const url = `${NYC}/${DOB_PERMITS}.json?$select=block,lot,count(*) as cnt&$group=block,lot&$where=borough='${boroName}' AND block IN(${blockIn})&$limit=5000`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!res.ok) return;
+          const data = await res.json();
+          for (const row of data) {
+            const blk = (row.block || "").replace(/^0+/, "");
+            const lt = (row.lot || "").replace(/^0+/, "");
+            const key = `${boroCode}-${blk}-${lt}`;
+            counts[key] = (counts[key] || 0) + parseInt(row.cnt || "0");
+          }
+        } catch { /* skip */ }
+      });
     }
   }
+  await parallelBatches(fetches, 4);
 
   return counts;
 }
@@ -569,28 +584,32 @@ export async function fetchRecentSalesByBlocks(
     byBoro.get(b.boroCode)!.add(b.block);
   }
 
+  const fetches: (() => Promise<void>)[] = [];
   for (const [boroCode, blockSet] of byBoro) {
     const blockArr = Array.from(blockSet);
     for (let i = 0; i < blockArr.length; i += 50) {
       const chunk = blockArr.slice(i, i + 50);
       const blockIn = chunk.map(b => `'${b}'`).join(",");
-      try {
-        const url = `${NYC}/${ROLLING_SALES}.json?$select=block,lot,sale_date,sale_price&$where=borough='${boroCode}' AND block IN(${blockIn}) AND sale_price>'0'&$order=sale_date DESC&$limit=5000`;
-        const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!res.ok) continue;
-        const data = await res.json();
-        for (const row of data) {
-          const key = `${boroCode}-${row.block}-${row.lot}`;
-          if (!results[key]) {
-            results[key] = {
-              date: row.sale_date || "",
-              price: parseInt(row.sale_price || "0"),
-            };
+      fetches.push(async () => {
+        try {
+          const url = `${NYC}/${ROLLING_SALES}.json?$select=block,lot,sale_date,sale_price&$where=borough='${boroCode}' AND block IN(${blockIn}) AND sale_price>'0'&$order=sale_date DESC&$limit=5000`;
+          const res = await fetch(url, { signal: AbortSignal.timeout(10000) });
+          if (!res.ok) return;
+          const data = await res.json();
+          for (const row of data) {
+            const key = `${boroCode}-${row.block}-${row.lot}`;
+            if (!results[key]) {
+              results[key] = {
+                date: row.sale_date || "",
+                price: parseInt(row.sale_price || "0"),
+              };
+            }
           }
-        }
-      } catch { /* skip */ }
+        } catch { /* skip */ }
+      });
     }
   }
+  await parallelBatches(fetches, 4);
 
   return results;
 }

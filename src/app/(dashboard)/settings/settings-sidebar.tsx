@@ -56,6 +56,12 @@ const NAV: NavGroup[] = [
     ],
   },
   {
+    group: "Workflows",
+    items: [
+      { href: "/settings/automations", icon: "⚡", label: "Automations", adminOnly: true },
+    ],
+  },
+  {
     group: "Data",
     items: [
       { href: "/settings/api-keys", icon: "🔑", label: "API Keys", adminOnly: true },
@@ -71,6 +77,7 @@ const ADMIN_NAV: NavGroup = {
     { href: "/settings/admin/users", icon: "👥", label: "Manage Users" },
     { href: "/settings/admin/teams", icon: "🏢", label: "Teams" },
     { href: "/settings/admin/waitlist", icon: "➕", label: "Add User" },
+    { href: "/settings/admin/terminal", icon: "📡", label: "Terminal Health" },
   ],
 };
 

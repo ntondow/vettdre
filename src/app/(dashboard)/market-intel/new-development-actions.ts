@@ -98,7 +98,7 @@ export async function searchNewDevelopments(filters: {
 
   try {
     const res = await fetch(url, {
-      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
       next: { revalidate: 3600 },
     });
 

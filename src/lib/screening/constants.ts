@@ -99,10 +99,11 @@ export const RED_FLAG_CATEGORIES = new Set(VETTDRE_CATEGORIES.red_flags);
 export const WIZARD_STEPS = [
   { step: 1, label: "Personal Info", key: "personal_info" },
   { step: 2, label: "Legal & E-Sign", key: "signature" },
-  { step: 3, label: "Bank Account", key: "plaid" },
-  { step: 4, label: "Documents", key: "documents" },
-  { step: 5, label: "Payment", key: "payment" },
-  { step: 6, label: "Confirmation", key: "confirmation" },
+  { step: 3, label: "Identity Check", key: "idv" },
+  { step: 4, label: "Bank Account", key: "plaid" },
+  { step: 5, label: "Documents", key: "documents" },
+  { step: 6, label: "Payment", key: "payment" },
+  { step: 7, label: "Confirmation", key: "confirmation" },
 ] as const;
 
 // ── Legal Documents Required for E-Sign ───────────────────────

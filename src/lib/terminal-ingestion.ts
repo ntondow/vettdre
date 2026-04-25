@@ -20,6 +20,8 @@ import {
 
 const NYC = "https://data.cityofnewyork.us";
 const APP_TOKEN = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
+// Detect placeholder/invalid tokens — sending a bad X-App-Token causes 403
+const isValidToken = APP_TOKEN.length > 0 && !APP_TOKEN.startsWith("YOUR_");
 const FETCH_TIMEOUT = 8000;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 200;
@@ -55,7 +57,7 @@ async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT): Promise
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers: Record<string, string> = {};
-    if (APP_TOKEN) headers["X-App-Token"] = APP_TOKEN;
+    if (isValidToken) headers["X-App-Token"] = APP_TOKEN;
     return await fetch(url, { signal: controller.signal, headers });
   } finally {
     clearTimeout(timeout);
@@ -143,11 +145,10 @@ async function pollStandardDataset(
 
     // Add $where for incremental — only fetch records newer than last poll
     if (state?.lastRecordTimestamp && config.timestampField) {
-      const ts = state.lastRecordTimestamp.toISOString().replace("T", " ").replace("Z", "");
+      const ts = config.formatSinceDate
+        ? config.formatSinceDate(state.lastRecordTimestamp)
+        : state.lastRecordTimestamp.toISOString().slice(0, 19);
       params.$where = `${config.timestampField} > '${ts}'`;
-    } else if (state?.lastRecordTimestamp) {
-      const ts = state.lastRecordTimestamp.toISOString().replace("T", " ").replace("Z", "");
-      params.$where = `:updated_at > '${ts}'`;
     }
 
     const records = await querySoda(config.datasetId, params);

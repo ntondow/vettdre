@@ -6,6 +6,12 @@
  * national origin, sex, familial status, or disability.
  */
 
+export interface IdvScoreInput {
+  status: string;               // "approved", "declined", "skipped", etc.
+  livenessScore?: number | null;  // 0-100
+  faceMatchScore?: number | null; // 0-100
+}
+
 export interface RiskScoreInputs {
   creditScore: number | null;            // 300-850 (null if not available)
   financialHealthScore: number | null;   // 0-100
@@ -15,6 +21,7 @@ export interface RiskScoreInputs {
   rentPaymentConsistency: string | null; // excellent/good/fair/poor/no_history
   evictionCount: number;
   hasActiveBankruptcy: boolean;
+  idv?: IdvScoreInput | null;            // Identity verification (BONUS modifier)
 }
 
 export interface RiskScoreResult {
@@ -28,6 +35,7 @@ export interface RiskScoreResult {
     documentIntegrity: number;
     rentHistory: number;
   };
+  idvBonus: number;  // BONUS modifier from identity verification (-10 to +15)
 }
 
 const RENT_HISTORY_MAP: Record<string, number> = {
@@ -91,6 +99,31 @@ export function computeRiskScore(data: RiskScoreInputs): RiskScoreResult {
     fraudComponent  * 0.10 +
     rentComponent   * 0.10;
 
+  // ── IDV Bonus Modifier ──────────────────────────────────────
+  // Identity verification is a BONUS on top of the 100-point scale.
+  // Approved with high confidence: +15, lower confidence: +5 to +10
+  // Not verified/skipped: +0, Declined/fraud: -10 penalty
+  let idvBonus = 0;
+  if (data.idv) {
+    if (data.idv.status === "approved") {
+      const liveness = data.idv.livenessScore ?? 0;
+      const faceMatch = data.idv.faceMatchScore ?? 0;
+      if (liveness >= 90 && faceMatch >= 90) {
+        idvBonus = 15;
+      } else if (liveness >= 75 && faceMatch >= 75) {
+        idvBonus = 10;
+      } else {
+        idvBonus = 5;
+      }
+      factors.push(`Identity verified (+${idvBonus} bonus)`);
+    } else if (data.idv.status === "declined") {
+      idvBonus = -10;
+      factors.push("Identity verification failed (−10 penalty)");
+    }
+    // skipped / not verified = 0 bonus, no factor added
+  }
+  score += idvBonus;
+
   // ── Hard Penalties ──────────────────────────────────────────
   // Active evictions are a severe risk signal
   if (data.evictionCount > 0) {
@@ -122,7 +155,8 @@ export function computeRiskScore(data: RiskScoreInputs): RiskScoreResult {
     factors.push("Limited or poor rent payment history");
   }
 
-  // ── Round + Recommendation ──────────────────────────────────
+  // ── Round + Clamp + Recommendation ──────────────────────────
+  score = Math.max(0, Math.min(100, score));
   score = Math.round(score * 100) / 100;
 
   let recommendation: "approve" | "conditional" | "decline";
@@ -141,5 +175,6 @@ export function computeRiskScore(data: RiskScoreInputs): RiskScoreResult {
       documentIntegrity: Math.round(fraudComponent * 100) / 100,
       rentHistory: Math.round(rentComponent * 100) / 100,
     },
+    idvBonus,
   };
 }

@@ -6,11 +6,19 @@ import {
   checkRateLimit,
   rateLimitHeaders,
   documentUploadLimiter,
+  getClientIP,
 } from "@/lib/rate-limit";
 import { validateApplicantSession } from "@/lib/screening/session";
 
 const BUCKET_NAME = "screening-documents";
 const MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+  "image/heif",
+]);
 
 function sanitizeFileName(fileName: string): string {
   // Remove special characters but keep extension
@@ -37,26 +45,27 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting and session validation (soft requirements)
+    // Rate limiting (optional — depends on Redis config)
     if (isRateLimitEnabled()) {
-      const rl = await checkRateLimit(documentUploadLimiter(), token);
+      const rl = await checkRateLimit(documentUploadLimiter(), getClientIP(req));
       if (!rl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please try again later." },
           { status: 429, headers: rateLimitHeaders(rl) },
         );
       }
+    }
 
-      const session = await validateApplicantSession(
-        token,
-        req.headers.get("cookie"),
+    // Session validation (mandatory)
+    const session = await validateApplicantSession(
+      token,
+      req.headers.get("cookie"),
+    );
+    if (!session.valid) {
+      return NextResponse.json(
+        { error: session.error || "Invalid session" },
+        { status: 401 },
       );
-      if (!session.valid) {
-        return NextResponse.json(
-          { error: session.error || "Invalid session" },
-          { status: 401 },
-        );
-      }
     }
 
     // Look up application by token first
@@ -136,6 +145,13 @@ export async function POST(
       if (file.size > MAX_FILE_SIZE_BYTES) {
         return NextResponse.json(
           { error: `File "${file.name}" exceeds 20 MB limit` },
+          { status: 400 },
+        );
+      }
+
+      if (!ALLOWED_MIME_TYPES.has(file.type)) {
+        return NextResponse.json(
+          { error: `File "${file.name}" has unsupported type "${file.type}". Allowed: PDF, JPEG, PNG, HEIC.` },
           { status: 400 },
         );
       }

@@ -8,6 +8,7 @@ import {
   rateLimitHeaders,
   getClientIP,
   tokenAccessLimiter,
+  otpRequestLimiter,
 } from "@/lib/rate-limit";
 
 /**
@@ -26,14 +27,23 @@ export async function POST(
       return NextResponse.json({ error: "Missing token" }, { status: 400 });
     }
 
-    // Rate limiting — prevent OTP spam
+    // Rate limiting — prevent OTP spam (IP + per-token)
     if (isRateLimitEnabled()) {
       const ip = getClientIP(req);
-      const rl = await checkRateLimit(tokenAccessLimiter(), ip);
-      if (!rl.success) {
+      // Global IP-based limiter
+      const ipRl = await checkRateLimit(tokenAccessLimiter(), ip);
+      if (!ipRl.success) {
         return NextResponse.json(
           { error: "Too many requests. Please wait before requesting another code." },
-          { status: 429, headers: rateLimitHeaders(rl) },
+          { status: 429, headers: rateLimitHeaders(ipRl) },
+        );
+      }
+      // Per-token limiter: 3 OTP sends per 15 minutes per screening token
+      const tokenRl = await checkRateLimit(otpRequestLimiter(), `otp-send:${token}`);
+      if (!tokenRl.success) {
+        return NextResponse.json(
+          { error: "Too many verification codes requested. Please wait 15 minutes." },
+          { status: 429, headers: rateLimitHeaders(tokenRl) },
         );
       }
     }
@@ -103,8 +113,12 @@ export async function POST(
         `,
       });
     } else {
-      // Dev fallback — log to console so local testing works
-      console.log(`\n[OTP] Code for ${email}: ${code}\n`);
+      // Dev fallback — only log code in development, never in production
+      if (process.env.NODE_ENV === "development") {
+        console.log(`[OTP] Dev-only code for ${masked}: ${code}`);
+      } else {
+        console.log(`[OTP] Code sent to ${masked} (Resend not configured)`);
+      }
     }
 
     // Log event

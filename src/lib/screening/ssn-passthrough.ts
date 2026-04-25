@@ -68,10 +68,9 @@ export async function retrieveAndDeleteSSN(
   let raw: string | null = null;
   try {
     raw = await redis.getdel(key) as string | null;
-  } catch {
-    // Fallback: non-atomic get + delete if GETDEL not supported
-    raw = await redis.get(key) as string | null;
-    if (raw) await redis.del(key);
+  } catch (err) {
+    console.error("[SSN Pass-Through] GETDEL failed — refusing non-atomic fallback:", err);
+    return { success: false, error: "SSN retrieval failed. Please try again." };
   }
 
   if (!raw) {

@@ -30,7 +30,7 @@ export async function fetchMarketCapRate(
     const plutoUrl = `${PLUTO_API}?$where=${encodeURIComponent(plutoWhere)}&$select=address,unitsres,unitstotal,yearbuilt,bldgclass,bldgarea,numfloors,assesstot,latitude,longitude&$limit=1`;
 
     const plutoRes = await fetch(plutoUrl, {
-      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_TOKEN || "" },
+      headers: { "X-App-Token": process.env.NYC_OPEN_DATA_APP_TOKEN || "" },
     });
 
     if (!plutoRes.ok) return null;
