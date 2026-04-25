@@ -1312,21 +1312,27 @@ model FollowUpReminder {
 // Portfolio Intelligence
 // ============================================================
 model Portfolio {
+  // NOTE: This table was created with camelCase column names (no migration ever
+  // converted them to snake_case). DO NOT add @map("snake_case") directives to
+  // these fields — production columns are camelCase. The previous snake_case
+  // @map directives were schema drift that didn't match the actual DB.
+  // Discovered during Phase 9 STEP 2 diagnosis. If you want to migrate to
+  // snake_case, write a proper ALTER TABLE ... RENAME COLUMN migration.
   id             String              @id @default(uuid())
   orgId          String              @map("org_id")
   name           String // Primary entity name (e.g., "Parkway Management NY LLC")
   slug           String              @unique
-  totalBuildings Int                 @default(0) @map("total_buildings")
-  totalUnits     Int                 @default(0) @map("total_units")
-  totalValue     Float               @default(0) @map("total_value")
-  avgDistress    Float               @default(0) @map("avg_distress")
+  totalBuildings Int                 @default(0)
+  totalUnits     Int                 @default(0)
+  totalValue     Float               @default(0)
+  avgDistress    Float               @default(0)
   borough        String?
   neighborhood   String?
-  entityNames    String[]            @map("entity_names") // All linked entity names (LLCs, individuals)
-  headOfficers   String[]            @map("head_officers") // Known head officers
+  entityNames    String[] // All linked entity names (LLCs, individuals)
+  headOfficers   String[] // Known head officers
   addresses      String[] // Known business addresses
-  createdAt      DateTime            @default(now()) @map("created_at")
-  updatedAt      DateTime            @updatedAt @map("updated_at")
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
   buildingId     String?             @map("building_id")
   buildings      PortfolioBuilding[]
 
