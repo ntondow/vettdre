@@ -546,3 +546,120 @@ export async function normalizeAddressWithGeocodio(
     return null;
   }
 }
+
+// ============================================================
+// Phase 4 — Entity Resolution + Beneficial-Owner Unmasking
+// ============================================================
+
+// ---- Types ----
+
+export interface BeneficialOwner {
+  entityId: string;
+  name: string;
+  entityType: string;
+  confidence: number;
+  sources: string[];
+  edgeTypes: string[];
+}
+
+export interface RelatedEntity {
+  entityId: string;
+  name: string;
+  entityType: string;
+  relationship: string;
+  confidence: number;
+  source: string;
+}
+
+// ---- Honorific / Middle-Initial Stripping ----
+
+const HONORIFICS = /\b(MR|MRS|MS|DR|JR|SR|II|III|IV|ESQ)\b\.?/gi;
+
+/**
+ * Enhanced name normalization for Phase 4 matching.
+ * Strips honorifics and middle initials in addition to the base normalizeName().
+ */
+export function normalizeNameStrict(raw: string): string {
+  if (!raw) return "";
+  let n = normalizeName(raw);
+  // Remove honorifics
+  n = n.replace(HONORIFICS, "").trim();
+  // Remove single-letter tokens (middle initials) between words
+  n = n.replace(/\b[A-Z]\b/g, "").replace(/\s+/g, " ").trim();
+  return n;
+}
+
+// ---- Bayesian Confidence Aggregation ----
+
+/**
+ * Aggregate multiple independent confidence signals using Bayesian combination.
+ * `1 - (1 - p1)(1 - p2)(1 - p3)...`
+ * Caps at 0.99 — no source combination is perfect.
+ */
+export function aggregateConfidence(confidences: number[]): number {
+  if (confidences.length === 0) return 0;
+  if (confidences.length === 1) return Math.min(confidences[0], 0.99);
+
+  const complement = confidences.reduce((acc, p) => acc * (1 - p), 1);
+  return Math.min(1 - complement, 0.99);
+}
+
+// ---- Entity Matching (Phase 4 enhanced) ----
+
+/**
+ * Match two entity names with Phase 4 rules:
+ * - Exact normalized → 0.99
+ * - Jaro-Winkler ≥ 0.95 → source confidence
+ * - Levenshtein within 2 on tokens ≥ 6 chars → 0.85
+ * - Avoids cross-type merges (individual vs LLC)
+ */
+export function matchEntities(
+  name1: string,
+  name2: string,
+  type1?: string,
+  type2?: string,
+): { match: boolean; confidence: number; method: string } {
+  // Avoid cross-type merges
+  if (type1 && type2) {
+    const isIndividual1 = type1 === "individual";
+    const isIndividual2 = type2 === "individual";
+    const isEntity1 = ["llc", "corp", "trust", "partnership"].includes(type1);
+    const isEntity2 = ["llc", "corp", "trust", "partnership"].includes(type2);
+    if ((isIndividual1 && isEntity2) || (isIndividual2 && isEntity1)) {
+      return { match: false, confidence: 0, method: "cross_type_blocked" };
+    }
+  }
+
+  const n1 = normalizeNameStrict(name1);
+  const n2 = normalizeNameStrict(name2);
+  if (!n1 || !n2) return { match: false, confidence: 0, method: "empty" };
+
+  // Exact normalized match
+  if (n1 === n2) return { match: true, confidence: 0.99, method: "exact_normalized" };
+
+  // Jaro-Winkler
+  const jw = jaroWinklerSimilarity(n1, n2);
+  if (jw >= 0.95) return { match: true, confidence: jw, method: "jaro_winkler" };
+
+  // Token-level Levenshtein for long tokens
+  const tokens1 = n1.split(" ").filter(t => t.length >= 6);
+  const tokens2 = n2.split(" ").filter(t => t.length >= 6);
+  if (tokens1.length > 0 && tokens2.length > 0) {
+    let allClose = true;
+    for (const t1 of tokens1) {
+      const bestDist = Math.min(...tokens2.map(t2 => levenshtein(t1, t2)));
+      if (bestDist > 2) { allClose = false; break; }
+    }
+    if (allClose && tokens1.length === tokens2.length) {
+      return { match: true, confidence: 0.85, method: "token_levenshtein" };
+    }
+  }
+
+  // Fall back to base isSameEntity for containment + last-name matching
+  const baseMatch = isSameEntity(name1, name2);
+  if (baseMatch.match) {
+    return { match: true, confidence: baseMatch.confidence / 100, method: baseMatch.method };
+  }
+
+  return { match: false, confidence: jw, method: "no_match" };
+}
