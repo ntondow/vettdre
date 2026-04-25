@@ -282,7 +282,8 @@ function briefForLoanRecorded(event: TemplateEvent): string | null {
   const loc = locationTag(profile);
   const when = relativeDay(event.detectedAt);
 
-  // ACRIS mortgage: type 1 = mortgagor (borrower), type 2 = mortgagee (lender)
+  // ACRIS mortgage: type 1 = grantor/mortgagor (borrower), type 2 = grantee/mortgagee (lender)
+  // Verified 2026-04-25 — type 1 = grantor in all ACRIS docs
   const parties: Array<{ name: string; type: string | number }> = meta._parties || [];
   const borrower = parties.find(p => String(p.type) === "1")?.name;
   const lender = parties.find(p => String(p.type) === "2")?.name;
@@ -307,10 +308,11 @@ function briefForSaleRecorded(event: TemplateEvent): string | null {
   const loc = locationTag(profile);
   const when = relativeDay(event.detectedAt);
 
-  // ACRIS deed: type 1 = grantee (buyer), type 2 = grantor (seller)
+  // ACRIS deed: type 1 = grantor (seller), type 2 = grantee (buyer)
+  // Verified 2026-04-25 against live Socrata 636b-3b5g doc 2015081800233001
   const parties: Array<{ name: string; type: string | number }> = meta._parties || [];
-  const buyer = parties.find(p => String(p.type) === "1")?.name;
-  const seller = parties.find(p => String(p.type) === "2")?.name;
+  const buyer = parties.find(p => String(p.type) === "2")?.name;
+  const seller = parties.find(p => String(p.type) === "1")?.name;
 
   let brief = `${addr}${loc} sold for ${formatDollar(amount)} ${when}`;
   if (seller && buyer) {

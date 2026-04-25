@@ -489,6 +489,7 @@ test("LOAN_RECORDED — no parties still produces brief", () => {
 // ══════════════════════════════════════════════════════════════
 
 test("SALE_RECORDED — happy path with prepositions lowered", () => {
+  // ACRIS: type 1 = grantor (seller), type 2 = grantee (buyer)
   const event = {
     eventType: "SALE_RECORDED",
     bbl: "2056780001",
@@ -497,8 +498,8 @@ test("SALE_RECORDED — happy path with prepositions lowered", () => {
     metadata: {
       document_amt: "3200000",
       _parties: [
-        { name: "ESTATE OF ANNA I. SILVA", type: "1" },
-        { name: "BRONX REALTY INC", type: "2" },
+        { name: "BRONX REALTY INC", type: "1" },           // grantor = seller
+        { name: "ESTATE OF ANNA I. SILVA", type: "2" },    // grantee = buyer
       ],
     },
     enrichmentPackage: {
@@ -517,6 +518,7 @@ test("SALE_RECORDED — happy path with prepositions lowered", () => {
 });
 
 test("SALE_RECORDED — NYC REO LLC acronyms preserved", () => {
+  // ACRIS: type 1 = grantor (seller), type 2 = grantee (buyer)
   const event = {
     eventType: "SALE_RECORDED",
     bbl: "3056780001",
@@ -525,8 +527,8 @@ test("SALE_RECORDED — NYC REO LLC acronyms preserved", () => {
     metadata: {
       document_amt: "500000",
       _parties: [
-        { name: "SMITH, DAMION", type: "1" },
-        { name: "NYC REO LLC", type: "2" },
+        { name: "NYC REO LLC", type: "1" },              // grantor = seller
+        { name: "SMITH, DAMION", type: "2" },             // grantee = buyer
       ],
     },
     enrichmentPackage: {
@@ -553,6 +555,7 @@ test("SALE_RECORDED — zero amount returns null", () => {
 });
 
 test("SALE_RECORDED — only buyer, no seller", () => {
+  // type 2 = grantee (buyer), no type 1 (seller) present
   const event = {
     eventType: "SALE_RECORDED",
     bbl: "2056780001",
@@ -560,7 +563,7 @@ test("SALE_RECORDED — only buyer, no seller", () => {
     detectedAt: new Date().toISOString(),
     metadata: {
       document_amt: "500000",
-      _parties: [{ name: "ACME LLC", type: "1" }],
+      _parties: [{ name: "ACME LLC", type: "2" }],
     },
     enrichmentPackage: baseEnrichment,
   };
