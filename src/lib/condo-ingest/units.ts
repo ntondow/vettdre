@@ -74,7 +74,7 @@ function padBbl(boro: number, block: number, lot: number): string {
  * Derive the condo billing BBL from a unit record.
  * Condo billing lots are typically 7501+ (the "base lot").
  * The dataset provides condo_base_boro + condo_base_block.
- * The base lot is the lowest lot in the condo_lot range — we use the lot from the first unit.
+ * The base lot is the lowest lot in the unit_lot range — we use the lot from the first unit.
  */
 function deriveBillingBbl(
   condoBaseBoro: number,
@@ -165,7 +165,7 @@ async function refreshBorough(orgId: string, boro: number): Promise<UnitRefreshR
     try {
       const records = await querySoda(CONDO_UNITS_DATASET, {
         $where: `condo_base_boro='${boro}'`,
-        $order: "condo_base_block ASC, condo_lot ASC",
+        $order: "condo_base_block ASC, unit_lot ASC",
         $limit: String(PAGE_SIZE),
         $offset: String(offset),
       });
@@ -226,7 +226,7 @@ async function upsertBuildingAndUnits(
   const condoBaseBlock = parseInt(first.condo_base_block || first.block || "0");
 
   // Collect all lot numbers to derive billing BBL
-  const lots = unitRecords.map((r) => parseInt(r.condo_lot || r.lot || "0")).filter((l) => l > 0);
+  const lots = unitRecords.map((r) => parseInt(r.unit_lot || r.lot || "0")).filter((l) => l > 0);
   if (lots.length === 0) return { building: false, units: 0 };
 
   const billingBbl = deriveBillingBbl(boro, condoBaseBlock, lots);
@@ -283,7 +283,7 @@ async function upsertBuildingAndUnits(
   // Upsert individual units
   let unitCount = 0;
   for (const r of unitRecords) {
-    const unitLot = parseInt(r.condo_lot || r.lot || "0");
+    const unitLot = parseInt(r.unit_lot || r.lot || "0");
     if (!unitLot) continue;
 
     const unitBbl = padBbl(boro, condoBaseBlock, unitLot);
