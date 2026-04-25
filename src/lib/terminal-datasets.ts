@@ -228,10 +228,64 @@ export const ACRIS_MASTER: DatasetConfig = {
 
 export const ACRIS_LEGALS_ID = "8h5j-fqxa";
 export const ACRIS_PARTIES_ID = "636b-3b5g";
+export const ACRIS_CODES_ID = "7isb-wh4c";
+
+// ── Building Intelligence Datasets (Phase 2) ─────────────────
+
+/** Condo unit spine — Digital Tax Map Condominium Units */
+const CONDO_UNITS: DatasetConfig = {
+  datasetId: "eguu-7ie3",
+  displayName: "Digital Tax Map: Condominium Units",
+  kind: "snapshot",
+  pollTier: "C",
+  pollIntervalMinutes: 10080, // weekly
+  timestampField: null, // snapshot — no incremental timestamp
+  bblExtractor: (r) => {
+    // Unit BBL: condo_boro + condo_block + condo_lot (pad to 10 chars)
+    const boro = r.condo_boro || r.boro;
+    const block = r.condo_block || r.block;
+    const lot = r.condo_lot || r.lot;
+    return padBbl(String(boro), String(block), String(lot));
+  },
+  eventTypeMapper: () => null, // not an event source
+  recordIdExtractor: (r) => `${r.boro}-${r.block}-${r.lot}`,
+  eventTier: 3,
+  category: "Spine",
+};
+
+/** DOF Property Valuation (current tax years 2023-2027) — NOT w7rz-68fs (stale) */
+const DOF_ASSESSMENT: DatasetConfig = {
+  datasetId: "8y4t-faws",
+  displayName: "DOF Property Valuation & Assessment",
+  kind: "snapshot",
+  pollTier: "C",
+  pollIntervalMinutes: 10080, // weekly
+  timestampField: null,
+  bblExtractor: (r) => padBbl(String(r.boro), String(r.block), String(r.lot)),
+  eventTypeMapper: () => null,
+  recordIdExtractor: (r) => `${r.boro}-${r.block}-${r.lot}-${r.bldg_class || ""}`,
+  eventTier: 3,
+  category: "Assessment",
+};
+
+/** ACRIS Document Control Codes — for dynamic whitelist building */
+const ACRIS_CODES: DatasetConfig = {
+  datasetId: ACRIS_CODES_ID,
+  displayName: "ACRIS Document Control Codes",
+  kind: "snapshot",
+  pollTier: "C",
+  pollIntervalMinutes: 43200, // monthly
+  timestampField: null,
+  bblExtractor: () => null,
+  eventTypeMapper: () => null,
+  recordIdExtractor: (r) => r.doc__type || r.record_type || "",
+  eventTier: 3,
+  category: "Reference",
+};
 
 // ── Exported Registry ─────────────────────────────────────────
 
-/** All non-ACRIS datasets (standard polling) */
+/** All non-ACRIS event datasets (standard polling → TerminalEvent) */
 export const STANDARD_DATASETS: DatasetConfig[] = [
   DOB_NOW_JOBS,
   DOB_JOBS_LEGACY,
@@ -241,11 +295,19 @@ export const STANDARD_DATASETS: DatasetConfig[] = [
   DOB_STALLED_SITES,
 ];
 
-/** ACRIS dataset (requires multi-table join) */
+/** ACRIS dataset (requires multi-table join → TerminalEvent) */
 export const ACRIS_DATASET = ACRIS_MASTER;
+
+/** Building Intelligence spine datasets (snapshot/join-driven → condo_ownership tables) */
+export const SPINE_DATASETS: DatasetConfig[] = [
+  CONDO_UNITS,
+  DOF_ASSESSMENT,
+  ACRIS_CODES,
+];
 
 /** All datasets (for registry seeding) */
 export const ALL_DATASETS: DatasetConfig[] = [
   ...STANDARD_DATASETS,
   ACRIS_MASTER,
+  ...SPINE_DATASETS,
 ];
