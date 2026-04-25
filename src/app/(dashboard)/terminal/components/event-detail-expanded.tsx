@@ -101,9 +101,10 @@ export default function EventDetailExpanded({ event, onBblClick, cachedWebIntel,
   const filingDate = metadata.good_through_date || metadata.recorded_datetime || metadata.filing_date || "";
 
   // Parties from metadata._parties or ownership chain
+  // ACRIS: type 1 = grantor (seller), type 2 = grantee (buyer)
   const parties = metadata._parties || [];
-  const buyers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
-  const sellers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
+  const buyers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
+  const sellers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
   const deed = ownership?.deedHistory?.[0];
   const buyerNames = buyers.length > 0 ? buyers : deed?.buyerName ? [deed.buyerName] : [];
   const sellerNames = sellers.length > 0 ? sellers : deed?.sellerName ? [deed.sellerName] : [];

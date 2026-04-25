@@ -848,7 +848,7 @@ Digital document signing workflow for onboarding new clients. Agents create onbo
 - **NEW:** Terminal polish pass — 150ms card animations, hover glow matching event type color, accessibility audit (aria-labels, aria-expanded, role=dialog), empty state with reset button, neighborhood search clear button
 - **NEW:** DOF Property Valuation (`8y4t-faws`) + DOF Annualized Sales (`w2pb-icbu`) datasets added to data-fusion-engine, cache-manager, terminal enrichment, and fetchBuildingCritical/Standard
 - **NEW:** NYC Open Data token consolidated — all files now use `NYC_OPEN_DATA_APP_TOKEN` (removed stale `NYC_OPEN_DATA_TOKEN` references)
-- **FIX:** ACRIS buyer/seller party types corrected (type 1=buyer/grantee, type 2=seller/grantor)
+- **FIX:** ACRIS party types corrected: type 1=grantor/seller, type 2=grantee/buyer (verified 2026-04-25 against live Socrata 636b-3b5g)
 - **FIX:** Plaid exchange crash in mock mode (plaidResult scoped outside conditional)
 - **FIX:** Document pipeline fetch uses Supabase signed URLs instead of raw storage paths
 - **FIX:** Map `latLngToContainerPoint` null guard prevents "reading 'x'" crash

@@ -33,9 +33,10 @@ function test(name: string, fn: () => void) {
 /** Ownership chain builder — mirrors lines 322-337 of terminal-enrichment.ts */
 function buildDeedHistory(metadata: any) {
   const parties = metadata._parties || [];
-  // ACRIS party types: type 1 = grantee (buyer), type 2 = grantor (seller)
-  const buyers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
-  const sellers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
+  // ACRIS party types: type 1 = grantor (seller), type 2 = grantee (buyer)
+  // Verified 2026-04-25 against live Socrata 636b-3b5g doc 2015081800233001
+  const buyers = parties.filter((p: any) => String(p.type) === "2").map((p: any) => p.name).filter(Boolean);
+  const sellers = parties.filter((p: any) => String(p.type) === "1").map((p: any) => p.name).filter(Boolean);
 
   return metadata.document_id
     ? [{
@@ -51,10 +52,10 @@ function buildDeedHistory(metadata: any) {
 
 /** extractRawFields for SALE_RECORDED — mirrors lines 376-385 of terminal-enrichment.ts */
 function extractSaleRawFields(metadata: any) {
-  // ACRIS party types: type 1 = grantee (buyer), type 2 = grantor (seller)
+  // ACRIS party types: type 1 = grantor (seller), type 2 = grantee (buyer)
   return {
-    buyers: (metadata._parties || []).filter((p: any) => String(p.type) === "1").map((p: any) => p.name),
-    sellers: (metadata._parties || []).filter((p: any) => String(p.type) === "2").map((p: any) => p.name),
+    buyers: (metadata._parties || []).filter((p: any) => String(p.type) === "2").map((p: any) => p.name),
+    sellers: (metadata._parties || []).filter((p: any) => String(p.type) === "1").map((p: any) => p.name),
   };
 }
 
@@ -66,10 +67,10 @@ const DEED_METADATA = {
   doc_amount: "680000",
   good_through_date: "2015-08-31",
   _parties: [
-    { name: "ESTATE OF ANNA I. SILVA", type: "1" },        // grantee = buyer
-    { name: "MARTA TERESA MOTTA", type: "1" },             // grantee = buyer
-    { name: "ISLAM, MOHAMMAD S", type: "2" },               // grantor = seller
-    { name: "ISLAM, RUFISA", type: "2" },                   // grantor = seller
+    { name: "ESTATE OF ANNA I. SILVA", type: "1" },        // grantor = seller
+    { name: "MARTA TERESA MOTTA", type: "1" },             // grantor = seller
+    { name: "ISLAM, MOHAMMAD S", type: "2" },               // grantee = buyer
+    { name: "ISLAM, RUFISA", type: "2" },                   // grantee = buyer
   ],
 };
 
@@ -86,31 +87,34 @@ const MORTGAGE_METADATA = {
 
 // ── Tests ────────────────────────────────────────────────────
 
-test("DEED: type-1 parties map to buyerName (grantee/buyer)", () => {
+test("DEED: type-2 parties (grantee) map to buyerName", () => {
   const deeds = buildDeedHistory(DEED_METADATA);
   assert(deeds.length === 1, "produces one deed record");
-  assert(deeds[0].buyerName === "ESTATE OF ANNA I. SILVA", `buyerName should be type-1 party, got "${deeds[0].buyerName}"`);
+  assert(deeds[0].buyerName === "ISLAM, MOHAMMAD S", `buyerName should be type-2 (grantee), got "${deeds[0].buyerName}"`);
 });
 
-test("DEED: type-2 parties map to sellerName (grantor/seller)", () => {
+test("DEED: type-1 parties (grantor) map to sellerName", () => {
   const deeds = buildDeedHistory(DEED_METADATA);
-  assert(deeds[0].sellerName === "ISLAM, MOHAMMAD S", `sellerName should be type-2 party, got "${deeds[0].sellerName}"`);
+  assert(deeds[0].sellerName === "ESTATE OF ANNA I. SILVA", `sellerName should be type-1 (grantor), got "${deeds[0].sellerName}"`);
 });
 
-test("DEED: extractRawFields maps type-1 to buyers, type-2 to sellers", () => {
+test("DEED: extractRawFields maps type-2 to buyers, type-1 to sellers", () => {
   const fields = extractSaleRawFields(DEED_METADATA);
-  assert(fields.buyers.includes("ESTATE OF ANNA I. SILVA"), `buyers should include type-1 party`);
-  assert(fields.buyers.includes("MARTA TERESA MOTTA"), `buyers should include all type-1 parties`);
-  assert(fields.sellers.includes("ISLAM, MOHAMMAD S"), `sellers should include type-2 party`);
-  assert(fields.sellers.includes("ISLAM, RUFISA"), `sellers should include all type-2 parties`);
-  assert(!fields.buyers.includes("ISLAM, MOHAMMAD S"), `buyers must NOT include type-2 party`);
-  assert(!fields.sellers.includes("ESTATE OF ANNA I. SILVA"), `sellers must NOT include type-1 party`);
+  assert(fields.buyers.includes("ISLAM, MOHAMMAD S"), `buyers should include type-2 (grantee) party`);
+  assert(fields.buyers.includes("ISLAM, RUFISA"), `buyers should include all type-2 parties`);
+  assert(fields.sellers.includes("ESTATE OF ANNA I. SILVA"), `sellers should include type-1 (grantor) party`);
+  assert(fields.sellers.includes("MARTA TERESA MOTTA"), `sellers should include all type-1 parties`);
+  assert(!fields.buyers.includes("ESTATE OF ANNA I. SILVA"), `buyers must NOT include type-1 (grantor) party`);
+  assert(!fields.sellers.includes("ISLAM, MOHAMMAD S"), `sellers must NOT include type-2 (grantee) party`);
 });
 
-test("MORTGAGE: type-1 = borrower (mortgagor), type-2 = lender (mortgagee)", () => {
+test("MORTGAGE: type-1 = grantor/borrower, type-2 = grantee/lender", () => {
+  // In a mortgage, grantor (type 1) = borrower, grantee (type 2) = lender
+  // Our buildDeedHistory maps type 2 → buyerName, type 1 → sellerName
+  // For mortgages: buyerName field = lender (type 2), sellerName field = borrower (type 1)
   const deeds = buildDeedHistory(MORTGAGE_METADATA);
-  assert(deeds[0].buyerName === "MANHATTAN HOLDINGS LLC", `buyerName (borrower) should be type-1, got "${deeds[0].buyerName}"`);
-  assert(deeds[0].sellerName === "SIGNATURE BANK", `sellerName (lender) should be type-2, got "${deeds[0].sellerName}"`);
+  assert(deeds[0].buyerName === "SIGNATURE BANK", `buyerName (grantee/lender) should be type-2, got "${deeds[0].buyerName}"`);
+  assert(deeds[0].sellerName === "MANHATTAN HOLDINGS LLC", `sellerName (grantor/borrower) should be type-1, got "${deeds[0].sellerName}"`);
 });
 
 test("No document_id produces empty deedHistory", () => {
