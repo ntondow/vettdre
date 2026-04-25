@@ -38,7 +38,47 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    return NextResponse.json(serialize(items));
+    // Enrich with condo_intel block if building has Co_buildings data
+    const enriched = await Promise.all(items.map(async (item) => {
+      let condoIntel = null;
+      if (item.block && item.lot) {
+        const borough = item.borough || "";
+        const boroMap: Record<string, number> = { manhattan: 1, bronx: 2, brooklyn: 3, queens: 4, "staten island": 5, "1": 1, "2": 2, "3": 3, "4": 4, "5": 5 };
+        const boroCode = boroMap[borough.toLowerCase()] || 0;
+        if (boroCode) {
+          const bbl = `${boroCode}${item.block!.padStart(5, "0")}${item.lot!.padStart(4, "0")}`;
+          try {
+            const building = await prisma.coBuilding.findFirst({
+              where: { orgId: ctx.orgId, bbl },
+              select: { id: true },
+            });
+            if (building) {
+              const signal = await prisma.coBuildingSignal.findFirst({
+                where: { orgId: ctx.orgId, buildingId: building.id },
+                orderBy: { score: "desc" },
+                select: { signalType: true, score: true },
+              });
+              const ownerStats = await prisma.coUnitOwnershipCurrent.aggregate({
+                where: { orgId: ctx.orgId, buildingId: building.id },
+                _count: { id: true },
+                _avg: { primaryResidenceFlag: false } as any, // Prisma limitation
+              }).catch(() => null);
+              const distress = await prisma.coBuildingSignal.findFirst({
+                where: { orgId: ctx.orgId, buildingId: building.id, signalType: "pre_foreclosure_risk", score: { gte: 60 } },
+              });
+              condoIntel = {
+                signalsSummary: { highestSignal: signal?.signalType || null, score: signal?.score ? Number(signal.score) : null },
+                ownershipSummary: ownerStats ? { uniqueOwners: ownerStats._count.id, investorPct: 0 } : null,
+                distressFlag: distress != null,
+              };
+            }
+          } catch { /* condoIntel stays null */ }
+        }
+      }
+      return { ...item, condoIntel };
+    }));
+
+    return NextResponse.json(serialize(enriched));
   } catch (error: unknown) {
     console.error("[mobile/buildings] GET error:", error);
     return NextResponse.json(
