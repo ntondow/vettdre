@@ -1168,6 +1168,7 @@ model ProspectingItem {
   contactId        String?  @map("contact_id")
   dealId           String?  @map("deal_id")
   createdAt        DateTime @default(now()) @map("created_at")
+  buildingId       String?  @map("building_id")
   updatedAt        DateTime @updatedAt @map("updated_at")
 
   list         ProspectingList @relation(fields: [listId], references: [id], onDelete: Cascade)
@@ -1326,6 +1327,7 @@ model Portfolio {
   addresses      String[] // Known business addresses
   createdAt      DateTime            @default(now()) @map("created_at")
   updatedAt      DateTime            @updatedAt @map("updated_at")
+  buildingId     String?             @map("building_id")
   buildings      PortfolioBuilding[]
 
   @@index([orgId])
@@ -1349,6 +1351,7 @@ model PortfolioBuilding {
   ownerName     String?   @map("owner_name")
   buildingClass String?   @map("building_class")
   zoning        String?
+  buildingId    String?   @map("building_id")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   @@unique([portfolioId, bbl])
@@ -2444,8 +2447,9 @@ model BuildingCache {
   bbl       String   @db.VarChar(10)
   source    String   @db.VarChar(40)
   data      Json
-  fetchedAt DateTime @default(now()) @map("fetched_at")
-  expiresAt DateTime @map("expires_at")
+  fetchedAt  DateTime @default(now()) @map("fetched_at")
+  expiresAt  DateTime @map("expires_at")
+  buildingId String?  @map("building_id")
 
   @@unique([bbl, source])
   @@index([expiresAt])
@@ -3334,6 +3338,7 @@ model TerminalEvent {
   aiBrief           String?  @map("ai_brief") @db.Text
   tier              Int      @default(1)
   metadata          Json?
+  buildingId        String?  @map("building_id")
 
   // Relations
   organization      Organization             @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -3435,4 +3440,342 @@ model IngestionState {
   lastError           String?   @map("last_error") @db.Text
 
   @@map("ingestion_state")
+}
+
+// ============================================================
+// CONDO OWNERSHIP / BUILDING INTELLIGENCE SPINE
+// Phase 1 of the Building Intelligence Overhaul (10-phase build).
+// Tables live in the "condo_ownership" Postgres schema for namespace isolation.
+// ============================================================
+
+model CoBuilding {
+  id                String    @id @default(uuid())
+  orgId             String    @map("org_id")
+  bbl               String
+  bin               String?
+  borough           Int       @db.SmallInt
+  block             Int
+  lot               Int
+  address           String
+  normalizedAddress String    @map("normalized_address")
+  buildingClass     String?   @map("building_class")
+  propertyType      String?   @map("property_type")
+  yearBuilt         Int?      @map("year_built")
+  totalUnits        Int?      @map("total_units")
+  residentialUnits  Int?      @map("residential_units")
+  commercialUnits   Int?      @map("commercial_units")
+  grossSqft         Int?      @map("gross_sqft")
+  lastSyncedAt      DateTime? @map("last_synced_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  units             CoUnit[]
+  ownership         CoUnitOwnershipCurrent[]
+  mortgages         CoMortgage[]
+  taxLiens          CoTaxLien[]
+  signals           CoBuildingSignal[]
+
+  @@unique([orgId, bbl])
+  @@index([orgId, normalizedAddress])
+  @@index([bin])
+  @@index([orgId, propertyType])
+  @@index([borough])
+  @@map("condo_ownership.buildings")
+}
+
+model CoUnit {
+  id              String    @id @default(uuid())
+  orgId           String    @map("org_id")
+  buildingId      String    @map("building_id")
+  subjectType     String    @map("subject_type")
+  unitBbl         String?   @map("unit_bbl")
+  shareBlockId    String?   @map("share_block_id")
+  unitNumber      String?   @map("unit_number")
+  bedrooms        Int?
+  bathrooms       Decimal?
+  sqft            Int?
+  lastRefreshed   DateTime? @map("last_refreshed")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  building        CoBuilding @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  ownership       CoUnitOwnershipCurrent[]
+  mortgages       CoMortgage[]
+
+  @@index([buildingId])
+  @@index([orgId, unitBbl])
+  @@map("condo_ownership.units")
+}
+
+model CoEntity {
+  id                String    @id @default(uuid())
+  orgId             String    @map("org_id")
+  canonicalName     String    @map("canonical_name")
+  nameNormalized    String    @map("name_normalized")
+  entityType        String    @map("entity_type")
+  dosId             String?   @map("dos_id")
+  flDocNumber       String?   @map("fl_doc_number")
+  ein               String?
+  icijNodeId        String?   @map("icij_node_id")
+  ofacSdnId         String?   @map("ofac_sdn_id")
+  primaryAddress    String?   @map("primary_address")
+  mailingAddresses  String[]  @map("mailing_addresses")
+  phone             String?
+  email             String?
+  metadata          Json?
+  confidence        Decimal   @default(0.5)
+  sources           String[]  @default([])
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @default(now()) @map("updated_at")
+
+  aliases           CoEntityAlias[]
+  edgesAsSource     CoEntityResolutionEdge[] @relation("EdgeSource")
+  edgesAsTarget     CoEntityResolutionEdge[] @relation("EdgeTarget")
+  acrisParties      CoAcrisParty[]
+  ownershipAsOwner  CoUnitOwnershipCurrent[] @relation("OwnerEntity")
+  ownershipAsGrantor CoUnitOwnershipCurrent[] @relation("GrantorEntity")
+  mortgagesAsBorrower CoMortgage[] @relation("BorrowerEntity")
+  mortgagesAsLender   CoMortgage[] @relation("LenderEntity")
+
+  @@index([orgId, nameNormalized])
+  @@index([orgId, entityType])
+  @@index([dosId])
+  @@map("condo_ownership.entities")
+}
+
+model CoEntityAlias {
+  id              String   @id @default(uuid())
+  entityId        String   @map("entity_id")
+  alias           String
+  aliasNormalized String   @map("alias_normalized")
+  source          String
+
+  entity          CoEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([entityId, aliasNormalized])
+  @@index([aliasNormalized])
+  @@map("condo_ownership.entity_aliases")
+}
+
+model CoEntityResolutionEdge {
+  id            String   @id @default(uuid())
+  sourceEntityId String  @map("source_entity")
+  targetEntityId String  @map("target_entity")
+  edgeType      String   @map("edge_type")
+  confidence    Decimal
+  signalSource  String   @map("signal_source")
+  evidence      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  sourceEntity  CoEntity @relation("EdgeSource", fields: [sourceEntityId], references: [id])
+  targetEntity  CoEntity @relation("EdgeTarget", fields: [targetEntityId], references: [id])
+
+  @@unique([sourceEntityId, targetEntityId, edgeType, signalSource])
+  @@index([sourceEntityId, edgeType])
+  @@index([targetEntityId, edgeType])
+  @@map("condo_ownership.entity_resolution_edges")
+}
+
+model CoAcrisMaster {
+  documentId       String    @id @map("document_id")
+  recordType       String?   @map("record_type")
+  crfn             String?
+  recordedBorough  Int?      @map("recorded_borough") @db.SmallInt
+  docType          String?   @map("doc_type")
+  documentDate     DateTime? @map("document_date") @db.Date
+  documentAmount   Decimal?  @map("document_amount")
+  recordedDatetime DateTime? @map("recorded_datetime")
+  modifiedDate     DateTime? @map("modified_date")
+  goodThroughDate  DateTime? @map("good_through_date") @db.Date
+  raw              Json?
+
+  @@index([docType, documentDate(sort: Desc)])
+  @@index([modifiedDate])
+  @@map("condo_ownership.acris_master")
+}
+
+model CoAcrisLegal {
+  id                String  @id @default(uuid())
+  documentId        String  @map("document_id")
+  recordType        String? @map("record_type")
+  borough           Int?    @db.SmallInt
+  block             Int?
+  lot               Int?
+  easement          String?
+  partialLot        String? @map("partial_lot")
+  airRights         String? @map("air_rights")
+  subterraneanRights String? @map("subterranean_rights")
+  propertyType      String? @map("property_type")
+  streetNumber      String? @map("street_number")
+  streetName        String? @map("street_name")
+  unit              String?
+
+  @@index([documentId])
+  @@map("condo_ownership.acris_legals")
+}
+
+model CoAcrisParty {
+  id            String  @id @default(uuid())
+  documentId    String  @map("document_id")
+  partySequence Int     @map("party_sequence")
+  partyType     Int?    @map("party_type") @db.SmallInt
+  name          String?
+  address1      String? @map("address_1")
+  address2      String? @map("address_2")
+  country       String?
+  city          String?
+  state         String?
+  zip           String?
+  entityId      String? @map("entity_id")
+
+  entity        CoEntity? @relation(fields: [entityId], references: [id])
+
+  @@unique([documentId, partyType, partySequence])
+  @@index([documentId])
+  @@index([entityId])
+  @@map("condo_ownership.acris_parties")
+}
+
+model CoUnitOwnershipCurrent {
+  id                    String    @id @default(uuid())
+  orgId                 String    @map("org_id")
+  unitId                String    @map("unit_id")
+  buildingId            String    @map("building_id")
+  currentOwnerEntityId  String?   @map("current_owner_entity")
+  currentOwnerName      String?   @map("current_owner_name")
+  currentOwnerType      String?   @map("current_owner_type")
+  lastDeedDocId         String?   @map("last_deed_doc_id")
+  lastSaleDate          DateTime? @map("last_sale_date") @db.Date
+  lastSalePrice         Decimal?  @map("last_sale_price")
+  grantorEntityId       String?   @map("grantor_entity")
+  grantorName           String?   @map("grantor_name")
+  ownerMailingAddress   String?   @map("owner_mailing_address")
+  mailingDiffersFromUnit Boolean? @map("mailing_differs_from_unit")
+  deedCount             Int       @default(0) @map("deed_count")
+  primaryResidenceFlag  Boolean?  @map("primary_residence_flag")
+  starEnrolled          Boolean?  @map("star_enrolled")
+  lastRefreshed         DateTime  @default(now()) @map("last_refreshed")
+
+  unit              CoUnit     @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  building          CoBuilding @relation(fields: [buildingId], references: [id])
+  currentOwnerEntity CoEntity? @relation("OwnerEntity", fields: [currentOwnerEntityId], references: [id])
+  grantorEntity     CoEntity?  @relation("GrantorEntity", fields: [grantorEntityId], references: [id])
+
+  @@unique([orgId, unitId])
+  @@index([orgId, buildingId])
+  @@index([currentOwnerEntityId])
+  @@index([lastSaleDate(sort: Desc)])
+  @@map("condo_ownership.unit_ownership_current")
+}
+
+model CoMortgage {
+  id              String    @id @default(uuid())
+  orgId           String    @map("org_id")
+  buildingId      String?   @map("building_id")
+  unitId          String?   @map("unit_id")
+  documentId      String?   @map("document_id")
+  borrowerEntityId String?  @map("borrower_entity")
+  lenderEntityId  String?   @map("lender_entity")
+  amount          Decimal?
+  recordedDate    DateTime? @map("recorded_date") @db.Date
+  maturityDate    DateTime? @map("maturity_date") @db.Date
+  status          String?
+  mortgageType    String?   @map("mortgage_type")
+  raw             Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  building        CoBuilding? @relation(fields: [buildingId], references: [id])
+  unit            CoUnit?     @relation(fields: [unitId], references: [id])
+  borrowerEntity  CoEntity?   @relation("BorrowerEntity", fields: [borrowerEntityId], references: [id])
+  lenderEntity    CoEntity?   @relation("LenderEntity", fields: [lenderEntityId], references: [id])
+
+  @@index([buildingId])
+  @@index([lenderEntityId])
+  @@map("condo_ownership.mortgages")
+}
+
+model CoTaxLien {
+  id          String    @id @default(uuid())
+  orgId       String    @map("org_id")
+  buildingId  String    @map("building_id")
+  lienType    String?   @map("lien_type")
+  amount      Decimal?
+  filedDate   DateTime? @map("filed_date") @db.Date
+  status      String?
+  saleYear    Int?      @map("sale_year")
+  cycle       String?
+  raw         Json?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  building    CoBuilding @relation(fields: [buildingId], references: [id])
+
+  @@index([buildingId, status])
+  @@map("condo_ownership.tax_liens")
+}
+
+model CoSyncMetrics {
+  id              String    @id @default(uuid())
+  datasetId       String    @map("dataset_id")
+  runStartedAt    DateTime  @map("run_started_at")
+  runCompletedAt  DateTime? @map("run_completed_at")
+  rowsFetched     Int?      @map("rows_fetched")
+  rowsUpserted    Int?      @map("rows_upserted")
+  rowsFailed      Int?      @map("rows_failed")
+  lagP50Days      Decimal?  @map("lag_p50_days")
+  lagP95Days      Decimal?  @map("lag_p95_days")
+  errors          Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([datasetId, runStartedAt(sort: Desc)])
+  @@map("condo_ownership.sync_metrics")
+}
+
+model CoLenderStressMetrics {
+  id                    String    @id @default(uuid())
+  ffiecId               String    @map("ffiec_id")
+  fdicCertNumber        String?   @map("fdic_cert_number")
+  bankNameCanonical     String    @map("bank_name_canonical")
+  quarterEndDate        DateTime  @map("quarter_end_date") @db.Date
+  totalAssets           Decimal?  @map("total_assets")
+  realEstateLoansPercent Decimal? @map("real_estate_loans_pct")
+  loanLossReservesPercent Decimal? @map("loan_loss_reserves_pct")
+  tier1CapitalRatio     Decimal?  @map("tier_1_capital_ratio")
+  camelsScore           String?   @map("camels_score")
+  stressFlag            Boolean   @default(false) @map("stress_flag")
+  stressReason          String[]  @map("stress_reason")
+  raw                   Json?
+  createdAt             DateTime  @default(now()) @map("created_at")
+
+  @@unique([ffiecId, quarterEndDate])
+  @@index([bankNameCanonical, quarterEndDate(sort: Desc)])
+  @@map("condo_ownership.lender_stress_metrics")
+}
+
+model CoBuildingSignal {
+  id          String   @id @default(uuid())
+  orgId       String   @map("org_id")
+  buildingId  String   @map("building_id")
+  signalType  String   @map("signal_type")
+  score       Decimal
+  confidence  String
+  evidence    Json?
+  computedAt  DateTime @default(now()) @map("computed_at")
+
+  building    CoBuilding @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, buildingId, signalType, computedAt])
+  @@index([orgId, signalType, score(sort: Desc)])
+  @@index([buildingId, signalType, computedAt(sort: Desc)])
+  @@map("condo_ownership.building_signals")
+}
+
+model CoUnresolvedRecord {
+  id             String   @id @default(uuid())
+  sourceTable    String   @map("source_table")
+  sourceRecordId String   @map("source_record_id")
+  reason         String
+  raw            Json
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([sourceTable, createdAt(sort: Desc)])
+  @@map("condo_ownership.unresolved_records")
 }
