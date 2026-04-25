@@ -4,6 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { ExternalLink, Building2, FileText, Scale, Search } from "lucide-react";
 import { getRelatedEvents, searchEventWebIntel } from "../actions";
 import type { WebIntelResult } from "../types";
+import { intelApi } from "@/lib/intel-api-client";
+import type { IntelSignal } from "@/lib/intel-api-types";
+import SignalChip from "@/components/intel/SignalChip";
 
 interface Props {
   event: {
@@ -128,8 +131,27 @@ export default function EventDetailExpanded({ event, onBblClick, cachedWebIntel,
   const address = profile?.address || "";
   const underwriteUrl = `/deals/new?address=${encodeURIComponent(address)}&bbl=${event.bbl}`;
 
+  // Phase 8: fetch signals for this building (best-effort, no blocking)
+  const [signals, setSignals] = useState<IntelSignal[]>([]);
+  useEffect(() => {
+    if (!event.bbl) return;
+    intelApi.getSignals(event.bbl).then(d => {
+      if (d) setSignals(d.signals.filter(s => s.score !== null && (s.score || 0) > 0));
+    }).catch(() => {});
+  }, [event.bbl]);
+
   return (
     <div className="px-4 pb-3 pt-1 space-y-3" onClick={(e) => e.stopPropagation()}>
+      {/* Phase 8: Top-3 signals as compact chips */}
+      {signals.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {signals
+            .sort((a, b) => (b.score || 0) - (a.score || 0))
+            .slice(0, 3)
+            .map(s => <SignalChip key={s.signalType} signal={s} compact />)}
+        </div>
+      )}
+
       {/* Filing Details */}
       {(docId || docType || filingDate) && (
         <div>
