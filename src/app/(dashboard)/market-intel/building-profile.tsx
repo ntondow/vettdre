@@ -790,34 +790,36 @@ export default function BuildingProfile({ boroCode, block, lot, address, borough
           {/* Tab Content */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {activeTab === "overview" && (
-              <TabOverview
-                pluto={p}
-                intel={intel}
-                data={data}
-                ownershipChain={ownershipChain}
-                entityIntel={entityIntel}
-                portfolioDiscovery={portfolioDiscovery}
-                contactEnrichment={contactEnrichment}
-                contactEnrichmentLoading={contactEnrichmentLoading}
-                ownershipDeepLoading={ownershipDeepLoading}
-                deepOwnershipStarted={deepOwnershipStarted}
-                ownerPortfolio={ownerPortfolio}
-                portfolioLoading={portfolioLoading}
-                motivationScore={motivationScore}
-                motivationLoading={motivationLoading}
-                fannieLoan={fannieLoan}
-                loading={!data}
-                onLoadDeepAnalysis={loadDeepOwnership}
-                onNameClick={onNameClick}
-                onSmsClick={(phone, name) => setSmsTarget({ phone, name })}
-                onPhoneResolved={(phone) => { setPrimaryPhone(phone); onPrimaryPhoneChange?.(phone); }}
-                onDealClick={handleUnderwrite}
-                onNavigateTab={(tab) => setActiveTab(tab as ProfileTab)}
-              />
-              {/* Phase 8: Condo Intelligence panel — plan-gated, graceful degradation */}
-              <div className="mt-4">
-                <IntelPanel bbl={boroCode + block.padStart(5, "0") + lot.padStart(4, "0")} plan={plan} />
-              </div>
+              <>
+                <TabOverview
+                  pluto={p}
+                  intel={intel}
+                  data={data}
+                  ownershipChain={ownershipChain}
+                  entityIntel={entityIntel}
+                  portfolioDiscovery={portfolioDiscovery}
+                  contactEnrichment={contactEnrichment}
+                  contactEnrichmentLoading={contactEnrichmentLoading}
+                  ownershipDeepLoading={ownershipDeepLoading}
+                  deepOwnershipStarted={deepOwnershipStarted}
+                  ownerPortfolio={ownerPortfolio}
+                  portfolioLoading={portfolioLoading}
+                  motivationScore={motivationScore}
+                  motivationLoading={motivationLoading}
+                  fannieLoan={fannieLoan}
+                  loading={!data}
+                  onLoadDeepAnalysis={loadDeepOwnership}
+                  onNameClick={onNameClick}
+                  onSmsClick={(phone, name) => setSmsTarget({ phone, name })}
+                  onPhoneResolved={(phone) => { setPrimaryPhone(phone); onPrimaryPhoneChange?.(phone); }}
+                  onDealClick={handleUnderwrite}
+                  onNavigateTab={(tab) => setActiveTab(tab as ProfileTab)}
+                />
+                {/* Phase 8: Condo Intelligence panel — plan-gated, graceful degradation */}
+                <div className="mt-4">
+                  <IntelPanel bbl={boroCode + block.padStart(5, "0") + lot.padStart(4, "0")} plan={plan} />
+                </div>
+              </>
             )}
 
             {activeTab === "ownership" && (
