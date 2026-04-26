@@ -126,8 +126,12 @@ steps:
       - |
         set -euo pipefail
         REGION="us-east1"
-        SERVICE_URL=$$(gcloud run services describe vettdre --region=$$REGION --project=$$PROJECT_ID --format="value(status.url)")
-        CRON_SECRET_VAL=$$(gcloud secrets versions access latest --secret=CRON_SECRET --project=$$PROJECT_ID)
+        # Cloud Build substitutes $PROJECT_ID at YAML parse time into a bash var.
+        # Inside the script we reference it as $$PROJECT (bash variable) consistently
+        # with $$REGION and $$SERVICE_URL.
+        PROJECT="$PROJECT_ID"
+        SERVICE_URL=$$(gcloud run services describe vettdre --region=$$REGION --project=$$PROJECT --format="value(status.url)")
+        CRON_SECRET_VAL=$$(gcloud secrets versions access latest --secret=CRON_SECRET --project=$$PROJECT)
 
         # job_name|schedule|path|deadline_seconds
         JOBS=(
@@ -157,12 +161,12 @@ steps:
             --schedule="$$SCHEDULE" --uri="$$URI" --http-method=GET \
             --headers="Authorization=Bearer $$CRON_SECRET_VAL" \
             --time-zone="America/New_York" --attempt-deadline="$${DEADLINE}s" \
-            --location="$$REGION" --project="$$PROJECT_ID" 2>/dev/null; then
+            --location="$$REGION" --project="$$PROJECT" 2>/dev/null; then
             gcloud scheduler jobs update http "$$NAME" \
               --schedule="$$SCHEDULE" --uri="$$URI" --http-method=GET \
               --headers="Authorization=Bearer $$CRON_SECRET_VAL" \
               --time-zone="America/New_York" --attempt-deadline="$${DEADLINE}s" \
-              --location="$$REGION" --project="$$PROJECT_ID"
+              --location="$$REGION" --project="$$PROJECT"
           fi
         done
         echo "Cloud Scheduler jobs verified."
