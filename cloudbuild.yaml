@@ -154,8 +154,10 @@ steps:
         )
 
         for job_def in "$${JOBS[@]}"; do
-          IFS='|' read -r NAME SCHEDULE PATH DEADLINE <<< "$$job_def"
-          URI="$${SERVICE_URL}$${PATH}"
+          # NOTE: don't name a variable PATH — it shadows the executable search
+          # PATH env var and breaks gcloud lookups inside the loop.
+          IFS='|' read -r NAME SCHEDULE URL_PATH DEADLINE <<< "$$job_def"
+          URI="$${SERVICE_URL}$${URL_PATH}"
           echo "Ensuring scheduler job: $$NAME → $$URI"
           if ! gcloud scheduler jobs create http "$$NAME" \
             --schedule="$$SCHEDULE" --uri="$$URI" --http-method=GET \
