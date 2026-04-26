@@ -330,7 +330,11 @@ async function upsertBuildingAndUnits(
     },
   });
 
-  // Upsert individual units
+  // Upsert individual units via raw SQL.
+  // Prisma's typed coUnit.upsert can't be used because the unit_bbl unique is a
+  // PARTIAL index (WHERE unit_bbl IS NOT NULL) which Prisma's @@unique can't
+  // express. Cast building_id to uuid since Prisma binds string parameters as
+  // text by default.
   let unitCount = 0;
   for (const r of unitRecords) {
     const unitLot = parseInt(r.unit_lot || r.lot || "0");
@@ -340,35 +344,15 @@ async function upsertBuildingAndUnits(
     const unitNumber = r.unit_designation || r.apt_no || null;
 
     try {
-      await prisma.coUnit.upsert({
-        where: { orgId_unitBbl: { orgId, unitBbl } },
-        create: {
-          orgId,
-          buildingId: building.id,
-          subjectType: "condo_bbl",
-          unitBbl,
-          unitNumber,
-          lastRefreshed: new Date(),
-        },
-        update: {
-          unitNumber: unitNumber || undefined,
-          lastRefreshed: new Date(),
-        },
-      });
+      await prisma.$executeRaw`
+        INSERT INTO condo_ownership.units (id, org_id, building_id, subject_type, unit_bbl, unit_number, last_refreshed, created_at)
+        VALUES (gen_random_uuid(), ${orgId}, ${building.id}::uuid, 'condo_bbl', ${unitBbl}, ${unitNumber}, NOW(), NOW())
+        ON CONFLICT (org_id, unit_bbl) WHERE unit_bbl IS NOT NULL
+        DO UPDATE SET unit_number = COALESCE(EXCLUDED.unit_number, condo_ownership.units.unit_number), last_refreshed = NOW()
+      `;
       unitCount++;
     } catch (err) {
-      // Partial unique index may not work with Prisma — fall back to raw upsert
-      try {
-        await prisma.$executeRaw`
-          INSERT INTO condo_ownership.units (id, org_id, building_id, subject_type, unit_bbl, unit_number, last_refreshed, created_at)
-          VALUES (gen_random_uuid(), ${orgId}, ${building.id}, 'condo_bbl', ${unitBbl}, ${unitNumber}, NOW(), NOW())
-          ON CONFLICT (org_id, unit_bbl) WHERE unit_bbl IS NOT NULL
-          DO UPDATE SET unit_number = COALESCE(EXCLUDED.unit_number, condo_ownership.units.unit_number), last_refreshed = NOW()
-        `;
-        unitCount++;
-      } catch (rawErr) {
-        console.error(`[CondoUnits] Unit upsert failed bbl=${unitBbl}:`, rawErr);
-      }
+      console.error(`[CondoUnits] Unit upsert failed bbl=${unitBbl}:`, err);
     }
   }
 
