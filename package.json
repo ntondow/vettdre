@@ -39,7 +39,7 @@
     "react-dom": "19.2.3",
     "react-pdf": "^10.4.1",
     "react-plaid-link": "^3.4.0",
-    "react-window": "^2.2.7",
+    "react-window": "^1.8.11",
     "recharts": "^3.7.0",
     "resend": "^6.9.4",
     "signature_pad": "^5.1.3",
