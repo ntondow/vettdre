@@ -76,11 +76,12 @@ for job_def in "${JOBS[@]}"; do
        --location="$REGION" \
        --project="$PROJECT" \
        >/dev/null 2>&1; then
+    # update-http uses --update-headers (not --headers — that's create-only)
     gcloud scheduler jobs update http "$NAME" \
       --schedule="$SCHEDULE" \
       --uri="$URI" \
       --http-method=GET \
-      --headers="Authorization=Bearer $CRON_SECRET_VAL" \
+      --update-headers="Authorization=Bearer $CRON_SECRET_VAL" \
       --time-zone="America/New_York" \
       --attempt-deadline="${DEADLINE}s" \
       --location="$REGION" \
