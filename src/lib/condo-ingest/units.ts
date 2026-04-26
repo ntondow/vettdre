@@ -181,8 +181,21 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
   // Group records by condo_base_boro + condo_base_block (the building grouping key)
   const buildingMap = new Map<string, Array<any>>();
 
-  // Paginate through all condo units in this borough
+  // Paginate through condo units in this borough.
+  // Stop fetching when buildingMap has enough distinct buildings to satisfy
+  // the budget — no point pulling 80K records to upsert only 200 buildings.
+  // Use buildingBudget * 2 as a safety margin so we don't undershoot due to
+  // records being clustered in the same building.
+  const fetchTarget = Number.isFinite(buildingBudget)
+    ? buildingBudget * 2
+    : Number.POSITIVE_INFINITY;
   while (true) {
+    if (buildingMap.size >= fetchTarget) {
+      console.log(
+        `[CondoUnits] Boro ${boro}: fetched ${buildingMap.size} buildings (target ${fetchTarget}), stopping fetch loop`,
+      );
+      break;
+    }
     try {
       const records = await querySoda(CONDO_UNITS_DATASET, {
         $where: `condo_base_boro='${boro}'`,
