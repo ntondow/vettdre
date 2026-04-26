@@ -3,12 +3,14 @@
 
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["multiSchema"]
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+  schemas   = ["public", "condo_ownership"]
 }
 
 // ============================================================
@@ -19,6 +21,7 @@ enum OrgTier {
   solo
   pro
   enterprise
+  @@schema("public")
 }
 
 enum SubscriptionStatus {
@@ -27,6 +30,7 @@ enum SubscriptionStatus {
   past_due
   canceled
   paused
+  @@schema("public")
 }
 
 enum UserRole {
@@ -36,6 +40,7 @@ enum UserRole {
   manager
   agent
   viewer
+  @@schema("public")
 }
 
 enum ContactType {
@@ -43,6 +48,7 @@ enum ContactType {
   buyer
   seller
   renter
+  @@schema("public")
 }
 
 enum ContactStatus {
@@ -51,12 +57,14 @@ enum ContactStatus {
   client
   past_client
   archived
+  @@schema("public")
 }
 
 enum ConfidenceLevel {
   high
   medium
   low
+  @@schema("public")
 }
 
 enum PropertyType {
@@ -68,12 +76,14 @@ enum PropertyType {
   land
   commercial
   rental_unit
+  @@schema("public")
 }
 
 enum TransactionType {
   sale
   rental
   new_development
+  @@schema("public")
 }
 
 enum PropertyStatus {
@@ -83,12 +93,14 @@ enum PropertyStatus {
   sold
   leased
   off_market
+  @@schema("public")
 }
 
 enum DealStatus {
   open
   won
   lost
+  @@schema("public")
 }
 
 enum DealAnalysisStatus {
@@ -98,6 +110,7 @@ enum DealAnalysisStatus {
   under_contract
   closed
   dead
+  @@schema("public")
 }
 
 enum DealType {
@@ -106,6 +119,7 @@ enum DealType {
   new_development
   mixed_use
   ground_up
+  @@schema("public")
 }
 
 enum DealSource {
@@ -114,6 +128,7 @@ enum DealSource {
   new_development
   referral
   other
+  @@schema("public")
 }
 
 enum PipelineType {
@@ -121,6 +136,7 @@ enum PipelineType {
   rental
   new_development
   custom
+  @@schema("public")
 }
 
 enum ActivityType {
@@ -133,11 +149,13 @@ enum ActivityType {
   document
   system
   screening
+  @@schema("public")
 }
 
 enum ActivityDirection {
   inbound
   outbound
+  @@schema("public")
 }
 
 enum TaskType {
@@ -149,6 +167,7 @@ enum TaskType {
   review
   meeting
   custom
+  @@schema("public")
 }
 
 enum TaskPriority {
@@ -156,6 +175,7 @@ enum TaskPriority {
   high
   medium
   low
+  @@schema("public")
 }
 
 enum TaskStatus {
@@ -164,6 +184,7 @@ enum TaskStatus {
   completed
   skipped
   overdue
+  @@schema("public")
 }
 
 enum ShowingStatus {
@@ -172,6 +193,7 @@ enum ShowingStatus {
   completed
   cancelled
   no_show
+  @@schema("public")
 }
 
 enum InterestLevel {
@@ -179,11 +201,13 @@ enum InterestLevel {
   warm
   neutral
   cold
+  @@schema("public")
 }
 
 enum TemplateChannel {
   email
   sms
+  @@schema("public")
 }
 
 enum AutomationTrigger {
@@ -199,6 +223,7 @@ enum AutomationTrigger {
   contact_enriched
   screening_completed
   custom
+  @@schema("public")
 }
 
 enum UserPlan {
@@ -207,6 +232,7 @@ enum UserPlan {
   pro
   team
   enterprise
+  @@schema("public")
 }
 
 enum BmsDealType {
@@ -217,6 +243,7 @@ enum BmsDealType {
   commercial_lease
   land
   new_construction
+  @@schema("public")
 }
 
 enum TransactionStage {
@@ -239,11 +266,13 @@ enum TransactionStage {
   // Terminal
   closed
   cancelled
+  @@schema("public")
 }
 
 enum BmsTransactionType {
   rental
   sale
+  @@schema("public")
 }
 
 enum InvoiceStatus {
@@ -251,12 +280,14 @@ enum InvoiceStatus {
   sent
   paid
   void
+  @@schema("public")
 }
 
 enum CommissionPlanType {
   volume_based
   value_based
   flat
+  @@schema("public")
 }
 
 enum ComplianceDocType {
@@ -265,6 +296,7 @@ enum ComplianceDocType {
   continuing_education
   background_check
   other
+  @@schema("public")
 }
 
 enum PaymentMethod {
@@ -274,6 +306,7 @@ enum PaymentMethod {
   cash
   stripe
   other
+  @@schema("public")
 }
 
 enum BrokerageRole {
@@ -281,6 +314,7 @@ enum BrokerageRole {
   broker
   manager
   agent
+  @@schema("public")
 }
 
 enum BmsListingStatus {
@@ -290,17 +324,20 @@ enum BmsListingStatus {
   approved
   leased
   off_market
+  @@schema("public")
 }
 
 enum BmsListingType {
   rental
   sale
+  @@schema("public")
 }
 
 enum BmsCommissionType {
   one_month
   percentage
   flat
+  @@schema("public")
 }
 
 // ── AI Leasing Agent ──
@@ -309,6 +346,7 @@ enum LeasingTier {
   free
   pro
   team
+  @@schema("public")
 }
 
 enum ConversationStatus {
@@ -320,6 +358,7 @@ enum ConversationStatus {
   closed_won
   closed_lost
   stale
+  @@schema("public")
 }
 
 enum LeadTemperature {
@@ -327,6 +366,7 @@ enum LeadTemperature {
   warm
   cool
   cold
+  @@schema("public")
 }
 
 enum EscalationReason {
@@ -338,12 +378,14 @@ enum EscalationReason {
   complaint
   manual
   sms_delivery_failure
+  @@schema("public")
 }
 
 enum MessageSender {
   prospect
   ai
   agent
+  @@schema("public")
 }
 
 enum ConversationChannel {
@@ -351,6 +393,7 @@ enum ConversationChannel {
   email
   voice
   web_chat
+  @@schema("public")
 }
 
 enum FollowUpType {
@@ -366,12 +409,14 @@ enum FollowUpType {
   post_showing
   app_nudge
   re_engage
+  @@schema("public")
 }
 
 enum FollowUpStatus {
   pending
   sent
   canceled
+  @@schema("public")
 }
 
 // ── Client Onboarding ────────────────────────────────────────
@@ -383,18 +428,21 @@ enum OnboardingStatus {
   completed
   expired
   voided
+  @@schema("public")
 }
 
 enum OnboardingDocType {
   tenant_rep_agreement
   nys_disclosure
   fair_housing_notice
+  @@schema("public")
 }
 
 enum SigningStatus {
   pending
   viewed
   signed
+  @@schema("public")
 }
 
 // ── Tenant Screening ────────────────────────────────────────
@@ -402,6 +450,7 @@ enum SigningStatus {
 enum ScreeningTier {
   base
   enhanced
+  @@schema("public")
 }
 
 enum ScreeningStatus {
@@ -415,6 +464,7 @@ enum ScreeningStatus {
   conditional
   denied
   withdrawn
+  @@schema("public")
 }
 
 enum ScreeningApplicantRole {
@@ -422,6 +472,7 @@ enum ScreeningApplicantRole {
   co_applicant
   guarantor
   occupant
+  @@schema("public")
 }
 
 enum ScreeningApplicantStatus {
@@ -429,6 +480,7 @@ enum ScreeningApplicantStatus {
   in_progress
   completed
   skipped
+  @@schema("public")
 }
 
 enum FraudAssessment {
@@ -437,6 +489,7 @@ enum FraudAssessment {
   medium_risk
   high_risk
   fraudulent
+  @@schema("public")
 }
 
 enum ScreeningDocType {
@@ -449,12 +502,14 @@ enum ScreeningDocType {
   landlord_reference
   government_id
   other
+  @@schema("public")
 }
 
 enum CreditBureau {
   equifax
   experian
   transunion
+  @@schema("public")
 }
 
 // ── Terminal ───────────────────────────────────────────────
@@ -463,6 +518,7 @@ enum PollTier {
   A  // 15 minutes
   B  // 60 minutes
   C  // 24 hours
+  @@schema("public")
 }
 
 enum WatchType {
@@ -470,6 +526,7 @@ enum WatchType {
   block
   owner
   nta
+  @@schema("public")
 }
 
 // ============================================================
@@ -562,6 +619,7 @@ model Organization {
   terminalWatchlists         TerminalWatchlist[]
 
   @@map("organizations")
+  @@schema("public")
 }
 
 model User {
@@ -632,6 +690,7 @@ model User {
   @@index([orgId])
   @@index([teamId])
   @@map("users")
+  @@schema("public")
 }
 
 model Team {
@@ -656,6 +715,7 @@ model Team {
   @@index([orgId])
   @@index([parentTeamId])
   @@map("teams")
+  @@schema("public")
 }
 
 model Contact {
@@ -716,6 +776,7 @@ model Contact {
   @@index([orgId, email])
   @@index([orgId, lastName, firstName])
   @@map("contacts")
+  @@schema("public")
 }
 
 model EnrichmentProfile {
@@ -759,6 +820,7 @@ model EnrichmentProfile {
   @@unique([contactId, version])
   @@index([contactId])
   @@map("enrichment_profiles")
+  @@schema("public")
 }
 
 model QualificationScore {
@@ -781,6 +843,7 @@ model QualificationScore {
 
   @@index([contactId])
   @@map("qualification_scores")
+  @@schema("public")
 }
 
 model Property {
@@ -825,6 +888,7 @@ model Property {
   @@index([orgId, transactionType])
   @@index([orgId, city])
   @@map("properties")
+  @@schema("public")
 }
 
 model Pipeline {
@@ -842,6 +906,7 @@ model Pipeline {
 
   @@index([orgId])
   @@map("pipelines")
+  @@schema("public")
 }
 
 model Deal {
@@ -888,6 +953,7 @@ model Deal {
   @@index([assignedTo])
   @@index([pipelineId, stageId])
   @@map("deals")
+  @@schema("public")
 }
 
 model Activity {
@@ -915,6 +981,7 @@ model Activity {
   @@index([dealId])
   @@index([userId])
   @@map("activities")
+  @@schema("public")
 }
 
 model Task {
@@ -948,6 +1015,7 @@ model Task {
   @@index([assignedTo, status, dueAt])
   @@index([orgId, status])
   @@map("tasks")
+  @@schema("public")
 }
 
 model Showing {
@@ -973,6 +1041,7 @@ model Showing {
 
   @@index([orgId, scheduledAt])
   @@map("showings")
+  @@schema("public")
 }
 
 model EmailTemplate {
@@ -995,6 +1064,7 @@ model EmailTemplate {
 
   @@index([orgId])
   @@map("email_templates")
+  @@schema("public")
 }
 
 model Automation {
@@ -1020,6 +1090,7 @@ model Automation {
 
   @@index([orgId, triggerType, isActive])
   @@map("automations")
+  @@schema("public")
 }
 
 model AutomationRun {
@@ -1037,6 +1108,7 @@ model AutomationRun {
 
   @@index([automationId])
   @@map("automation_runs")
+  @@schema("public")
 }
 
 model ScheduledAutomationAction {
@@ -1057,6 +1129,7 @@ model ScheduledAutomationAction {
   @@index([orgId, status, scheduledFor])
   @@index([automationId])
   @@map("scheduled_automation_actions")
+  @@schema("public")
 }
 
 model ContactPropertyInterest {
@@ -1071,6 +1144,7 @@ model ContactPropertyInterest {
 
   @@unique([contactId, propertyId])
   @@map("contact_property_interests")
+  @@schema("public")
 }
 
 model AuditLog {
@@ -1102,6 +1176,7 @@ model AuditLog {
   @@index([orgId, entityType, entityId])
   @@index([orgId, action])
   @@map("audit_log")
+  @@schema("public")
 }
 
 // ── Webhook Idempotency ─────────────────────────────────────
@@ -1118,6 +1193,7 @@ model ProcessedWebhook {
   @@index([provider, eventId])
   @@index([processedAt])
   @@map("processed_webhooks")
+  @@schema("public")
 }
 
 model ProspectingList {
@@ -1135,6 +1211,7 @@ model ProspectingList {
   items        ProspectingItem[]
 
   @@map("prospecting_lists")
+  @@schema("public")
 }
 
 model ProspectingItem {
@@ -1180,6 +1257,7 @@ model ProspectingItem {
   @@index([orgId])
   @@index([contactId])
   @@map("prospecting_items")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1202,6 +1280,7 @@ model GmailAccount {
   @@unique([userId, email])
   @@index([userId])
   @@map("gmail_accounts")
+  @@schema("public")
 }
 
 model EmailMessage {
@@ -1255,6 +1334,7 @@ model EmailMessage {
   @@index([orgId, category])
   @@index([orgId, snoozedUntil])
   @@map("email_messages")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1274,6 +1354,7 @@ model EmailLabel {
 
   @@unique([orgId, name])
   @@map("email_labels")
+  @@schema("public")
 }
 
 model EmailThreadLabel {
@@ -1287,6 +1368,7 @@ model EmailThreadLabel {
 
   @@unique([threadId, labelId])
   @@map("email_thread_labels")
+  @@schema("public")
 }
 
 model FollowUpReminder {
@@ -1306,6 +1388,7 @@ model FollowUpReminder {
   @@unique([orgId, threadId, reason])
   @@index([orgId, status, dueAt])
   @@map("follow_up_reminders")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1338,6 +1421,7 @@ model Portfolio {
 
   @@index([orgId])
   @@map("portfolios")
+  @@schema("public")
 }
 
 model PortfolioBuilding {
@@ -1363,6 +1447,7 @@ model PortfolioBuilding {
   @@unique([portfolioId, bbl])
   @@index([bbl])
   @@map("portfolio_buildings")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1384,6 +1469,7 @@ model EmailSignature {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("email_signatures")
+  @@schema("public")
 }
 
 model NotificationPreferences {
@@ -1403,6 +1489,7 @@ model NotificationPreferences {
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+  @@schema("public")
 }
 
 model WorkingHours {
@@ -1415,6 +1502,7 @@ model WorkingHours {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("working_hours")
+  @@schema("public")
 }
 
 model LeadAssignmentRule {
@@ -1429,6 +1517,7 @@ model LeadAssignmentRule {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("lead_assignment_rules")
+  @@schema("public")
 }
 
 model AiSettings {
@@ -1447,6 +1536,7 @@ model AiSettings {
   organization        Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("ai_settings")
+  @@schema("public")
 }
 
 model BrandSettings {
@@ -1463,6 +1553,7 @@ model BrandSettings {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("brand_settings")
+  @@schema("public")
 }
 
 model SyncSettings {
@@ -1479,6 +1570,7 @@ model SyncSettings {
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("sync_settings")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1537,6 +1629,7 @@ model CalendarEvent {
   @@index([contactId])
   @@index([propertyAddress])
   @@map("calendar_events")
+  @@schema("public")
 }
 
 model ShowingSlot {
@@ -1569,6 +1662,7 @@ model ShowingSlot {
 
   @@index([orgId, propertyAddress, startAt])
   @@map("showing_slots")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1607,6 +1701,7 @@ model DealAnalysis {
   @@index([orgId, status])
   @@index([userId])
   @@map("deal_analyses")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1628,6 +1723,7 @@ model PromoteModel {
 
   @@index([dealAnalysisId])
   @@map("promote_models")
+  @@schema("public")
 }
 
 // ============================================================
@@ -1638,11 +1734,13 @@ enum PhoneNumberStatus {
   active
   suspended
   released
+  @@schema("public")
 }
 
 enum MessageDirection {
   inbound
   outbound
+  @@schema("public")
 }
 
 enum SmsStatus {
@@ -1651,11 +1749,13 @@ enum SmsStatus {
   delivered
   failed
   received
+  @@schema("public")
 }
 
 enum CallDirection {
   inbound
   outbound
+  @@schema("public")
 }
 
 enum CallStatus {
@@ -1665,6 +1765,7 @@ enum CallStatus {
   completed
   missed
   failed
+  @@schema("public")
 }
 
 model PhoneNumber {
@@ -1689,6 +1790,7 @@ model PhoneNumber {
   @@index([userId])
   @@index([organizationId])
   @@map("phone_numbers")
+  @@schema("public")
 }
 
 model SmsMessage {
@@ -1712,6 +1814,7 @@ model SmsMessage {
   @@index([phoneNumberId, createdAt(sort: Desc)])
   @@index([userId, to])
   @@map("sms_messages")
+  @@schema("public")
 }
 
 model PhoneCall {
@@ -1735,6 +1838,7 @@ model PhoneCall {
   @@index([phoneNumberId, createdAt(sort: Desc)])
   @@index([userId])
   @@map("phone_calls")
+  @@schema("public")
 }
 
 model BrokerAgent {
@@ -1817,6 +1921,7 @@ model BrokerAgent {
   @@index([orgId])
   @@index([email])
   @@map("broker_agents")
+  @@schema("public")
 }
 
 model DealSubmission {
@@ -1909,6 +2014,7 @@ model DealSubmission {
   @@index([orgId, status])
   @@index([agentEmail])
   @@map("deal_submissions")
+  @@schema("public")
 }
 
 model Invoice {
@@ -1961,6 +2067,7 @@ model Invoice {
   @@index([orgId, status])
   @@index([invoiceNumber])
   @@map("invoices")
+  @@schema("public")
 }
 
 model CommissionPlan {
@@ -1981,6 +2088,7 @@ model CommissionPlan {
 
   @@index([orgId])
   @@map("commission_plans")
+  @@schema("public")
 }
 
 model CommissionTier {
@@ -2000,6 +2108,7 @@ model CommissionTier {
 
   @@index([planId, tierOrder])
   @@map("commission_tiers")
+  @@schema("public")
 }
 
 model ComplianceDocument {
@@ -2029,6 +2138,7 @@ model ComplianceDocument {
   @@index([orgId, agentId])
   @@index([expiryDate])
   @@map("compliance_documents")
+  @@schema("public")
 }
 
 model Payment {
@@ -2059,6 +2169,7 @@ model Payment {
   @@index([agentId])
   @@index([stripePaymentId])
   @@map("payments")
+  @@schema("public")
 }
 
 model FileAttachment {
@@ -2081,6 +2192,7 @@ model FileAttachment {
   @@index([orgId, entityType, entityId])
   @@index([entityId])
   @@map("file_attachments")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2173,6 +2285,7 @@ model Transaction {
   @@index([orgId, agentId])
   @@index([invoiceId])
   @@map("transactions")
+  @@schema("public")
 }
 
 model TransactionAgent {
@@ -2202,6 +2315,7 @@ model TransactionAgent {
   @@index([transactionId])
   @@index([agentId])
   @@map("transaction_agents")
+  @@schema("public")
 }
 
 model TransactionTask {
@@ -2226,6 +2340,7 @@ model TransactionTask {
 
   @@index([transactionId, stage])
   @@map("transaction_tasks")
+  @@schema("public")
 }
 
 model TransactionTemplate {
@@ -2244,6 +2359,7 @@ model TransactionTemplate {
 
   @@index([orgId, type])
   @@map("transaction_templates")
+  @@schema("public")
 }
 
 model TransactionTemplateTask {
@@ -2261,6 +2377,7 @@ model TransactionTemplateTask {
 
   @@index([templateId])
   @@map("transaction_template_tasks")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2306,6 +2423,7 @@ model BmsProperty {
   @@index([orgId])
   @@index([orgId, name])
   @@map("bms_properties")
+  @@schema("public")
 }
 
 model BmsListing {
@@ -2381,6 +2499,7 @@ model BmsListing {
   @@index([orgId, agentId])
   @@index([orgId, type])
   @@map("bms_listings")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2423,6 +2542,7 @@ model AgentGoal {
   @@unique([orgId, agentId, year, month])
   @@index([orgId, year, month])
   @@map("agent_goals")
+  @@schema("public")
 }
 
 model AgentBadge {
@@ -2442,6 +2562,7 @@ model AgentBadge {
 
   @@index([orgId, agentId])
   @@map("agent_badges")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2460,6 +2581,7 @@ model BuildingCache {
   @@unique([bbl, source])
   @@index([expiresAt])
   @@map("building_cache")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2486,6 +2608,7 @@ model VitalitySnapshot {
   @@index([market, level])
   @@index([expiresAt])
   @@map("vitality_snapshots")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2543,6 +2666,7 @@ model LeasingConfig {
   @@index([orgId])
   @@index([orgId, isActive])
   @@map("leasing_configs")
+  @@schema("public")
 }
 
 model LeasingConversation {
@@ -2604,6 +2728,7 @@ model LeasingConversation {
   @@index([prospectPhone])
   @@index([prospectEmail])
   @@map("leasing_conversations")
+  @@schema("public")
 }
 
 model LeasingMessage {
@@ -2627,6 +2752,7 @@ model LeasingMessage {
 
   @@index([conversationId, createdAt])
   @@map("leasing_messages")
+  @@schema("public")
 }
 
 model LeasingFollowUp {
@@ -2649,6 +2775,7 @@ model LeasingFollowUp {
   @@index([conversationId])
   @@index([variantId])
   @@map("leasing_follow_ups")
+  @@schema("public")
 }
 
 model LeasingDailyUsage {
@@ -2665,6 +2792,7 @@ model LeasingDailyUsage {
   @@unique([configId, date])
   @@index([configId, date])
   @@map("leasing_daily_usage")
+  @@schema("public")
 }
 
 // ── Leasing Benchmarks (anonymous cross-building aggregation) ──
@@ -2682,6 +2810,7 @@ model LeasingBenchmark {
 
   @@unique([date, segment, metric])
   @@map("leasing_benchmark")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2739,6 +2868,7 @@ model ClientOnboarding {
   @@index([orgId, status])
   @@index([token])
   @@map("client_onboardings")
+  @@schema("public")
 }
 
 model OnboardingDocument {
@@ -2775,6 +2905,7 @@ model OnboardingDocument {
   @@index([onboardingId, docType])
   @@index([templateId])
   @@map("onboarding_documents")
+  @@schema("public")
 }
 
 model SigningAuditLog {
@@ -2802,6 +2933,7 @@ model SigningAuditLog {
   @@index([documentId])
   @@index([onboardingId, action])
   @@map("signing_audit_logs")
+  @@schema("public")
 }
 
 model DocumentTemplate {
@@ -2828,6 +2960,7 @@ model DocumentTemplate {
   @@index([orgId])
   @@index([orgId, category])
   @@map("document_templates")
+  @@schema("public")
 }
 
 // ============================================================
@@ -2889,6 +3022,7 @@ model ScreeningApplication {
   @@index([contactId])
   @@index([accessToken])
   @@map("screening_applications")
+  @@schema("public")
 }
 
 model ScreeningApplicant {
@@ -2941,6 +3075,7 @@ model ScreeningApplicant {
   @@index([applicationId])
   @@index([email])
   @@map("screening_applicants")
+  @@schema("public")
 }
 
 model ScreeningSignature {
@@ -2968,6 +3103,7 @@ model ScreeningSignature {
 
   @@index([applicantId])
   @@map("screening_signatures")
+  @@schema("public")
 }
 
 model PlaidConnection {
@@ -3001,6 +3137,7 @@ model PlaidConnection {
 
   @@index([applicantId])
   @@map("plaid_connections")
+  @@schema("public")
 }
 
 model FinancialTransaction {
@@ -3035,6 +3172,7 @@ model FinancialTransaction {
   @@index([date])
   @@index([vettdreCategory])
   @@map("financial_transactions")
+  @@schema("public")
 }
 
 model CreditReport {
@@ -3088,6 +3226,7 @@ model CreditReport {
 
   @@index([applicantId])
   @@map("credit_reports")
+  @@schema("public")
 }
 
 model ScreeningDocument {
@@ -3112,6 +3251,7 @@ model ScreeningDocument {
 
   @@index([applicantId])
   @@map("screening_documents")
+  @@schema("public")
 }
 
 model DocumentAnalysis {
@@ -3153,6 +3293,7 @@ model DocumentAnalysis {
   @@index([applicantId])
   @@index([fraudAssessment])
   @@map("document_analyses")
+  @@schema("public")
 }
 
 model FinancialWellnessProfile {
@@ -3210,6 +3351,7 @@ model FinancialWellnessProfile {
 
   @@index([applicantId])
   @@map("financial_wellness_profiles")
+  @@schema("public")
 }
 
 model ScreeningPayment {
@@ -3246,6 +3388,7 @@ model ScreeningPayment {
   @@index([applicationId])
   @@index([stripePaymentIntentId])
   @@map("screening_payments")
+  @@schema("public")
 }
 
 model ScreeningEvent {
@@ -3271,6 +3414,7 @@ model ScreeningEvent {
   @@index([eventType])
   @@index([createdAt])
   @@map("screening_events")
+  @@schema("public")
 }
 
 model IdentityVerification {
@@ -3324,6 +3468,7 @@ model IdentityVerification {
   @@index([providerSessionId])
   @@index([status])
   @@map("identity_verifications")
+  @@schema("public")
 }
 
 // ============================================================
@@ -3357,6 +3502,7 @@ model TerminalEvent {
   @@index([eventType, detectedAt(sort: Desc)])
   @@index([sourceDataset, sourceRecordId])
   @@map("terminal_events")
+  @@schema("public")
 }
 
 model TerminalEventCategory {
@@ -3369,6 +3515,7 @@ model TerminalEventCategory {
   sortOrder      Int     @default(0) @map("sort_order")
 
   @@map("terminal_event_categories")
+  @@schema("public")
 }
 
 model UserTerminalPreferences {
@@ -3385,6 +3532,7 @@ model UserTerminalPreferences {
   organization       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
 
   @@map("user_terminal_preferences")
+  @@schema("public")
 }
 
 model TerminalWatchlist {
@@ -3406,6 +3554,7 @@ model TerminalWatchlist {
   @@index([userId])
   @@index([watchType, watchValue])
   @@map("terminal_watchlists")
+  @@schema("public")
 }
 
 model TerminalWatchlistAlert {
@@ -3421,6 +3570,7 @@ model TerminalWatchlistAlert {
 
   @@index([watchlistId, read])
   @@map("terminal_watchlist_alerts")
+  @@schema("public")
 }
 
 model DatasetRegistry {
@@ -3434,6 +3584,7 @@ model DatasetRegistry {
   enabled           Boolean   @default(true)
 
   @@map("dataset_registry")
+  @@schema("public")
 }
 
 model IngestionState {
@@ -3446,6 +3597,7 @@ model IngestionState {
   lastError           String?   @map("last_error") @db.Text
 
   @@map("ingestion_state")
+  @@schema("public")
 }
 
 // ============================================================
@@ -3488,7 +3640,8 @@ model CoBuilding {
   @@index([bin])
   @@index([orgId, propertyType])
   @@index([borough])
-  @@map("condo_ownership.buildings")
+  @@map("buildings")
+  @@schema("condo_ownership")
 }
 
 model CoUnit {
@@ -3512,7 +3665,8 @@ model CoUnit {
 
   @@index([buildingId])
   @@index([orgId, unitBbl])
-  @@map("condo_ownership.units")
+  @@map("units")
+  @@schema("condo_ownership")
 }
 
 model CoEntity {
@@ -3551,7 +3705,8 @@ model CoEntity {
   @@index([orgId, nameNormalized])
   @@index([orgId, entityType])
   @@index([dosId])
-  @@map("condo_ownership.entities")
+  @@map("entities")
+  @@schema("condo_ownership")
 }
 
 model CoEntityAlias {
@@ -3565,7 +3720,8 @@ model CoEntityAlias {
 
   @@unique([entityId, aliasNormalized])
   @@index([aliasNormalized])
-  @@map("condo_ownership.entity_aliases")
+  @@map("entity_aliases")
+  @@schema("condo_ownership")
 }
 
 model CoEntityResolutionEdge {
@@ -3584,7 +3740,8 @@ model CoEntityResolutionEdge {
   @@unique([sourceEntityId, targetEntityId, edgeType, signalSource])
   @@index([sourceEntityId, edgeType])
   @@index([targetEntityId, edgeType])
-  @@map("condo_ownership.entity_resolution_edges")
+  @@map("entity_resolution_edges")
+  @@schema("condo_ownership")
 }
 
 model CoAcrisMaster {
@@ -3602,7 +3759,8 @@ model CoAcrisMaster {
 
   @@index([docType, documentDate(sort: Desc)])
   @@index([modifiedDate])
-  @@map("condo_ownership.acris_master")
+  @@map("acris_master")
+  @@schema("condo_ownership")
 }
 
 model CoAcrisLegal {
@@ -3622,7 +3780,8 @@ model CoAcrisLegal {
   unit              String?
 
   @@index([documentId])
-  @@map("condo_ownership.acris_legals")
+  @@map("acris_legals")
+  @@schema("condo_ownership")
 }
 
 model CoAcrisParty {
@@ -3644,7 +3803,8 @@ model CoAcrisParty {
   @@unique([documentId, partyType, partySequence])
   @@index([documentId])
   @@index([entityId])
-  @@map("condo_ownership.acris_parties")
+  @@map("acris_parties")
+  @@schema("condo_ownership")
 }
 
 model CoUnitOwnershipCurrent {
@@ -3676,7 +3836,8 @@ model CoUnitOwnershipCurrent {
   @@index([orgId, buildingId])
   @@index([currentOwnerEntityId])
   @@index([lastSaleDate(sort: Desc)])
-  @@map("condo_ownership.unit_ownership_current")
+  @@map("unit_ownership_current")
+  @@schema("condo_ownership")
 }
 
 model CoMortgage {
@@ -3707,7 +3868,8 @@ model CoMortgage {
   @@index([lenderEntityId])
   @@index([originalDocId])
   @@index([status])
-  @@map("condo_ownership.mortgages")
+  @@map("mortgages")
+  @@schema("condo_ownership")
 }
 
 model CoTaxLien {
@@ -3726,7 +3888,8 @@ model CoTaxLien {
   building    CoBuilding @relation(fields: [buildingId], references: [id])
 
   @@index([buildingId, status])
-  @@map("condo_ownership.tax_liens")
+  @@map("tax_liens")
+  @@schema("condo_ownership")
 }
 
 model CoSyncMetrics {
@@ -3743,7 +3906,8 @@ model CoSyncMetrics {
   createdAt       DateTime  @default(now()) @map("created_at")
 
   @@index([datasetId, runStartedAt(sort: Desc)])
-  @@map("condo_ownership.sync_metrics")
+  @@map("sync_metrics")
+  @@schema("condo_ownership")
 }
 
 model CoLenderStressMetrics {
@@ -3764,7 +3928,8 @@ model CoLenderStressMetrics {
 
   @@unique([ffiecId, quarterEndDate])
   @@index([bankNameCanonical, quarterEndDate(sort: Desc)])
-  @@map("condo_ownership.lender_stress_metrics")
+  @@map("lender_stress_metrics")
+  @@schema("condo_ownership")
 }
 
 model CoBuildingSignal {
@@ -3782,7 +3947,8 @@ model CoBuildingSignal {
   @@unique([orgId, buildingId, signalType, computedAt])
   @@index([orgId, signalType, score(sort: Desc)])
   @@index([buildingId, signalType, computedAt(sort: Desc)])
-  @@map("condo_ownership.building_signals")
+  @@map("building_signals")
+  @@schema("condo_ownership")
 }
 
 model CoUnresolvedRecord {
@@ -3794,7 +3960,8 @@ model CoUnresolvedRecord {
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@index([sourceTable, createdAt(sort: Desc)])
-  @@map("condo_ownership.unresolved_records")
+  @@map("unresolved_records")
+  @@schema("condo_ownership")
 }
 
 // ── Phase 3: Auxiliary Free-Data Source Tables ────────────────
@@ -3825,7 +3992,8 @@ model CoHpdRegistration {
   @@unique([orgId, registrationId])
   @@index([buildingId])
   @@index([bbl])
-  @@map("condo_ownership.hpd_registrations")
+  @@map("hpd_registrations")
+  @@schema("condo_ownership")
 }
 
 model CoPropertyExemption {
@@ -3850,7 +4018,8 @@ model CoPropertyExemption {
   @@unique([orgId, bbl, exemptionCode, taxYear])
   @@index([buildingId])
   @@index([bbl])
-  @@map("condo_ownership.property_exemptions")
+  @@map("property_exemptions")
+  @@schema("condo_ownership")
 }
 
 model CoNysEntity {
@@ -3874,7 +4043,8 @@ model CoNysEntity {
   @@unique([orgId, dosId])
   @@index([dosId])
   @@index([entityNameNormalized])
-  @@map("condo_ownership.nys_entities")
+  @@map("nys_entities")
+  @@schema("condo_ownership")
 }
 
 model CoIcijEntity {
@@ -3893,7 +4063,8 @@ model CoIcijEntity {
 
   @@index([nameNormalized])
   @@index([sourceLeak])
-  @@map("condo_ownership.icij_entities")
+  @@map("icij_entities")
+  @@schema("condo_ownership")
 }
 
 model CoOfacSdn {
@@ -3913,5 +4084,6 @@ model CoOfacSdn {
 
   @@index([nameNormalized])
   @@index([program])
-  @@map("condo_ownership.ofac_sdn")
+  @@map("ofac_sdn")
+  @@schema("condo_ownership")
 }
