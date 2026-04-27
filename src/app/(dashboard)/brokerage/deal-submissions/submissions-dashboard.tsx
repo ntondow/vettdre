@@ -273,7 +273,11 @@ export default function SubmissionsDashboard({
     setTimeout(() => setPanelEntered(true), 10);
     try {
       const sub = await getSubmissionById(id);
-      setPanelData(sub);
+      if (sub?.success && sub.data) {
+        setPanelData(sub.data as Submission);
+      } else {
+        setPanelData(null);
+      }
     } catch {
       setPanelData(null);
     } finally {
