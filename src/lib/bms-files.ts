@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type { FileAttachment } from "@prisma/client";
 
 // NOTE: The Supabase Storage bucket "bms-files" must be created manually
@@ -30,16 +31,9 @@ const EXTENSION_MIME_MAP: Record<string, string[]> = {
 // ── Auth Helper ──────────────────────────────────────────────
 
 async function getCurrentUserOrg() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-  });
-  if (!user) throw new Error("User not found");
-
-  return { orgId: user.orgId, userId: user.id };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  return { orgId: ctx.orgId, userId: ctx.userId };
 }
 
 // ── Upload File ──────────────────────────────────────────────

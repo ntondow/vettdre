@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { getExclusiveProperties } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
 import SubmitDealForm from "./submit-deal-form";
 
@@ -21,17 +21,13 @@ interface ExclusiveBuilding {
 export const dynamic = "force-dynamic";
 
 export default async function SubmitDealPage() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-
-  if (!authUser) {
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) {
     redirect("/login");
   }
 
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: {
       brokerAgent: {
         select: {

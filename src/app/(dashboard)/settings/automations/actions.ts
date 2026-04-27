@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 import type { AutomationTrigger } from "@prisma/client";
 import type { Conditions, AutomationAction } from "@/lib/automation-types";
@@ -10,18 +10,9 @@ import { getRecipeById } from "@/lib/automation-recipes";
 // ── Auth Helper ─────────────────────────────────────────────
 
 async function getCurrentOrg() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-  });
-  if (!user) throw new Error("User not found");
-
-  return { userId: user.id, orgId: user.orgId };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 function serialize<T>(data: T): T {

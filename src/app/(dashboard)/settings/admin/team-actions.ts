@@ -1,16 +1,16 @@
 "use server";
 
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { requireAdmin } from "./admin-actions";
 
 async function getAdminOrgId() {
-  const authUser = await requireAdmin();
-  const dbUser = await prisma.user.findFirst({
-    where: { authProviderId: authUser.id },
-    select: { orgId: true },
-  });
-  if (!dbUser?.orgId) throw new Error("No organization found");
-  return dbUser.orgId;
+  // requireAdmin() throws on non-admin; layered with the helper so super_admin
+  // override (?as_org=...) flows through.
+  await requireAdmin();
+  const ctx = await getCurrentOrgContext();
+  if (!ctx?.orgId) throw new Error("No organization found");
+  return ctx.orgId;
 }
 
 export async function getTeams() {
