@@ -47,6 +47,28 @@ export async function getUserIdFromAuth(
       });
 
       if (agent) {
+        // Resolve preferred plan from inviting org's
+        // settings.default_invite_plan; fall back to "free" on missing/invalid
+        // config so a bad setting cannot break sign-ups.
+        const VALID_PLANS = ["free", "explorer", "pro", "team", "enterprise"] as const;
+        type Plan = (typeof VALID_PLANS)[number];
+        const org = await prisma.organization.findUnique({
+          where: { id: agent.orgId },
+          select: { settings: true },
+        });
+        const settings = (org?.settings ?? {}) as Record<string, unknown>;
+        const requestedPlan = settings.default_invite_plan;
+        let chosenPlan: Plan = "free";
+        if (typeof requestedPlan === "string") {
+          if ((VALID_PLANS as readonly string[]).includes(requestedPlan)) {
+            chosenPlan = requestedPlan as Plan;
+          } else {
+            console.warn(
+              `[resolve-user] org ${agent.orgId} has invalid default_invite_plan='${requestedPlan}' — falling back to 'free'`,
+            );
+          }
+        }
+
         const roleMap: Record<string, string> = {
           brokerage_admin: "admin",
           broker: "admin",
@@ -66,7 +88,7 @@ export async function getUserIdFromAuth(
             email: authUser.email!,
             fullName,
             role: userRole as "owner" | "admin" | "agent",
-            plan: "free",
+            plan: chosenPlan,
             isApproved: true,
             isActive: true,
           },
