@@ -122,6 +122,9 @@ export interface InvoiceInput {
   agentPayout: number;
   housePayout: number;
 
+  processingFeePct?: number;
+  processingFeeAmt?: number;
+
   paymentTerms: string;
   dueDate: string;
 }
