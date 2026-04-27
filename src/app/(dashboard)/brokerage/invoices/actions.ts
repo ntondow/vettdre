@@ -9,6 +9,8 @@ import type { InvoiceInput, BrokerageConfig, InvoiceNumberInput } from "@/lib/bm
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import { logInvoiceAction } from "@/lib/bms-audit";
 import { syncTransactionFromInvoice } from "@/app/(dashboard)/brokerage/transactions/actions";
+import { computeProcessingFee } from "@/lib/processing-fee";
+import { revalidatePath } from "next/cache";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
@@ -222,6 +224,9 @@ export async function createInvoice(input: InvoiceInput) {
         agentPayout: input.agentPayout,
         housePayout: input.housePayout,
 
+        processingFeePct: input.processingFeePct ?? null,
+        processingFeeAmt: input.processingFeeAmt ?? null,
+
         paymentTerms: input.paymentTerms || "Net 30",
         issueDate,
         dueDate,
@@ -241,6 +246,10 @@ export async function createInvoice(input: InvoiceInput) {
       invoiceNumber: invoice.invoiceNumber,
       propertyAddress: input.propertyAddress,
       agentName: input.agentName,
+      feePct: input.processingFeePct ?? 0,
+      feeAmt: input.processingFeeAmt ?? 0,
+      totalCommission: input.totalCommission,
+      agentPayout: input.agentPayout,
     });
 
     return JSON.parse(JSON.stringify({ success: true, invoice }));
@@ -271,7 +280,57 @@ export async function createInvoiceFromSubmission(submissionId: string) {
       return { success: false, error: "Submission must be approved before invoicing" };
     }
 
-    return createInvoice({
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true },
+    });
+    if (existingInvoice) {
+      return {
+        success: false,
+        error: "An invoice already exists for this submission.",
+        invoiceId: existingInvoice.id,
+      };
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { processingFeePct: true },
+    });
+
+    const fee = computeProcessingFee({
+      totalCommission: submission.totalCommission,
+      agentSplitPct: submission.agentSplitPct,
+      organizationDefaultPct: org?.processingFeePct ?? null,
+      override: submission.processingFeeOverride,
+      overridePct: submission.processingFeePct,
+    });
+
+    const submissionAgentPayout = submission.processingFeeOverride
+      ? Number(submission.agentPayout)
+      : fee.agentPayout;
+    const submissionHousePayout = submission.processingFeeOverride
+      ? Number(submission.housePayout)
+      : fee.housePayout;
+    const invoiceFeePct = submission.processingFeeOverride
+      ? Number(submission.processingFeePct ?? 0)
+      : fee.feePct;
+    const invoiceFeeAmt = submission.processingFeeOverride
+      ? Number(submission.processingFeeAmt ?? 0)
+      : fee.feeAmt;
+
+    if (!submission.processingFeeOverride) {
+      await prisma.dealSubmission.update({
+        where: { id: submissionId, orgId },
+        data: {
+          processingFeePct: invoiceFeePct,
+          processingFeeAmt: invoiceFeeAmt,
+          agentPayout: submissionAgentPayout,
+          housePayout: submissionHousePayout,
+        },
+      });
+    }
+
+    const result = await createInvoice({
       dealSubmissionId: submission.id,
       agentId: submission.agentId || undefined,
 
@@ -290,12 +349,21 @@ export async function createInvoiceFromSubmission(submissionId: string) {
       totalCommission: Number(submission.totalCommission),
       agentSplitPct: Number(submission.agentSplitPct),
       houseSplitPct: Number(submission.houseSplitPct),
-      agentPayout: Number(submission.agentPayout),
-      housePayout: Number(submission.housePayout),
+      agentPayout: submissionAgentPayout,
+      housePayout: submissionHousePayout,
+
+      processingFeePct: invoiceFeePct,
+      processingFeeAmt: invoiceFeeAmt,
 
       paymentTerms: "Net 30",
       dueDate: "",
     });
+
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/my-deals");
+    revalidatePath("/brokerage/invoices");
+
+    return result;
   } catch (error) {
     console.error("createInvoiceFromSubmission error:", error);
     return { success: false, error: "Failed to create invoice from submission" };

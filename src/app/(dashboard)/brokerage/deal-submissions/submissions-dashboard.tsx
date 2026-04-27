@@ -9,6 +9,7 @@ import {
   pushToInvoice,
   getSubmissionStats,
   getOrgAgents,
+  updateProcessingFee,
 } from "./actions";
 import {
   recordPayout,
@@ -166,6 +167,11 @@ export default function SubmissionsDashboard({
   const [editingSplitId, setEditingSplitId] = useState<string | null>(null);
   const [editAgentSplit, setEditAgentSplit] = useState("");
   const [editHouseSplit, setEditHouseSplit] = useState("");
+
+  // Processing fee inline edit
+  const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
+  const [editFeePct, setEditFeePct] = useState("");
+  const [feeSaving, setFeeSaving] = useState(false);
 
   // Action state
   const [actionLoading, setActionLoading] = useState<string | null>(null);
@@ -346,6 +352,28 @@ export default function SubmissionsDashboard({
       showToast("error", "Failed to reject submission");
     } finally {
       setActionLoading(null);
+    }
+  }
+
+  async function handleSaveFee(submissionId: string, mode: "reset" | "override", pct?: number) {
+    setFeeSaving(true);
+    try {
+      const result = await updateProcessingFee(
+        submissionId,
+        mode === "reset" ? { mode: "reset" } : { mode: "override", pct: pct ?? 0 },
+      );
+      if (result.success) {
+        showToast("success", mode === "reset" ? "Reset to brokerage default" : "Processing fee updated");
+        setEditingFeeId(null);
+        if (panelData?.id === submissionId) await openPanel(submissionId);
+        loadData();
+      } else {
+        showToast("error", result.error || "Failed to update fee");
+      }
+    } catch {
+      showToast("error", "Failed to update fee");
+    } finally {
+      setFeeSaving(false);
     }
   }
 
@@ -1305,6 +1333,146 @@ export default function SubmissionsDashboard({
                           </>
                         )}
                       </div>
+
+                      {/* Processing Fee — editable while approved, read-only post-invoice */}
+                      {(() => {
+                        const status = panelData.status as string;
+                        const isLocked = status === "invoiced" || status === "paid";
+                        const isApproved = status === "approved";
+                        if (!isApproved && !isLocked) return null;
+
+                        const inv = panelData.invoice as
+                          | { processingFeePct?: number | string | null; processingFeeAmt?: number | string | null }
+                          | null
+                          | undefined;
+
+                        if (isLocked) {
+                          const feeAmt = Number(inv?.processingFeeAmt ?? 0);
+                          const feePct = Number(inv?.processingFeePct ?? 0);
+                          if (!feeAmt) return null;
+                          return (
+                            <div className="border-t border-slate-200 pt-1.5">
+                              <div className="flex justify-between">
+                                <span className="text-slate-500">
+                                  Processing Fee ({feePct.toFixed(2)}%)
+                                </span>
+                                <span className="text-rose-600">
+                                  &minus;{fmt(feeAmt)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const defaultPct = Number(panelData.organizationDefaultFeePct ?? 0);
+                        const override = !!panelData.processingFeeOverride;
+                        const totalComm = Number(panelData.totalCommission ?? 0);
+                        const agentSplit = Number(panelData.agentSplitPct ?? 0);
+                        const currentPct = override
+                          ? Number(panelData.processingFeePct ?? 0)
+                          : defaultPct;
+                        const currentAmt = Math.round((totalComm * currentPct) / 100 * 100) / 100;
+                        const isEditing = editingFeeId === panelData.id;
+
+                        if (isEditing) {
+                          const previewPct = Math.max(0, Math.min(100, parseFloat(editFeePct) || 0));
+                          const previewFee = Math.round((totalComm * previewPct) / 100 * 100) / 100;
+                          const previewGross = Math.round((totalComm * agentSplit) / 100 * 100) / 100;
+                          const previewNet = Math.round((previewGross - previewFee) * 100) / 100;
+                          return (
+                            <div className="border-t border-slate-200 pt-1.5 space-y-2">
+                              <div className="flex items-center gap-2">
+                                <label className="text-xs text-slate-500 flex-1">
+                                  Processing Fee
+                                </label>
+                                <input
+                                  type="number"
+                                  value={editFeePct}
+                                  onChange={(e) => setEditFeePct(e.target.value)}
+                                  onBlur={() => {
+                                    const pct = parseFloat(editFeePct);
+                                    if (Number.isFinite(pct) && pct >= 0 && pct <= 100) {
+                                      handleSaveFee(panelData.id, "override", pct);
+                                    }
+                                  }}
+                                  className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  step="0.01"
+                                  min="0"
+                                  max="100"
+                                  autoFocus
+                                  disabled={feeSaving}
+                                />
+                                <span className="text-xs text-slate-500">%</span>
+                                <span className="text-rose-600 text-sm w-24 text-right">
+                                  &minus;{fmt(previewFee)}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                <button
+                                  onClick={() => handleSaveFee(panelData.id, "override", 0)}
+                                  disabled={feeSaving}
+                                  className="px-2 py-1 text-[11px] font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                                >
+                                  Set to 0% &mdash; exempt this deal
+                                </button>
+                                <button
+                                  onClick={() => handleSaveFee(panelData.id, "reset")}
+                                  disabled={feeSaving}
+                                  className="px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-100 rounded hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                                >
+                                  Reset to brokerage default
+                                </button>
+                                <button
+                                  onClick={() => setEditingFeeId(null)}
+                                  disabled={feeSaving}
+                                  className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                              <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
+                                <span className="text-slate-500">
+                                  Net agent payout (preview)
+                                </span>
+                                <span className="text-green-600 font-semibold">
+                                  {fmt(previewNet)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="border-t border-slate-200 pt-1.5">
+                            <div className="flex justify-between items-center">
+                              <span className="text-slate-500">
+                                {override ? "Processing Fee" : "Brokerage Processing Fee"}{" "}
+                                ({currentPct.toFixed(2)}%)
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={currentAmt > 0 ? "text-rose-600" : "text-slate-400"}>
+                                  {currentAmt > 0 ? `−${fmt(currentAmt)}` : fmt(0)}
+                                </span>
+                                <button
+                                  onClick={() => {
+                                    setEditingFeeId(panelData.id);
+                                    setEditFeePct(currentPct.toFixed(2));
+                                  }}
+                                  className="p-0.5 text-slate-400 hover:text-blue-600 transition-colors"
+                                  title={override ? "Edit fee" : "Customize"}
+                                >
+                                  <Edit3 className="h-3 w-3" />
+                                </button>
+                              </div>
+                            </div>
+                            {override && (
+                              <div className="text-[10px] text-amber-600 mt-0.5">
+                                Custom override (brokerage default: {defaultPct.toFixed(2)}%)
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </PanelSection>
 

@@ -376,6 +376,8 @@ function DealCard({
   const clientName = str(submission.clientName);
   const totalCommission = num(submission.totalCommission);
   const agentPayout = num(submission.agentPayout);
+  const processingFeePct = num(submission.processingFeePct);
+  const processingFeeAmt = num(submission.processingFeeAmt);
   const rejectionReason = str(submission.rejectionReason);
   const createdAt = str(submission.createdAt);
   const id = str(submission.id);
@@ -438,6 +440,11 @@ function DealCard({
           <p className="text-sm font-semibold text-green-700">
             {fmtFull(agentPayout)}
           </p>
+          {processingFeeAmt > 0 && (
+            <p className="text-[10px] text-rose-500">
+              after {processingFeePct.toFixed(2)}% fee
+            </p>
+          )}
         </div>
       </div>
 
@@ -687,6 +694,25 @@ function AgentDetailPanel({
               value={`${num(data.houseSplitPct)}%`}
               mono
             />
+            {(() => {
+              // Prefer invoice snapshot once frozen; otherwise show the
+              // submission's current fee value. Hide when there's no fee.
+              const invFee = invoice
+                ? { pct: num(invoice.processingFeePct), amt: num(invoice.processingFeeAmt) }
+                : null;
+              const subFee = { pct: num(data.processingFeePct), amt: num(data.processingFeeAmt) };
+              const fee = invFee && (invFee.amt > 0 || invFee.pct > 0) ? invFee : subFee;
+              if (fee.amt <= 0) return null;
+              return (
+                <InfoRow
+                  label={`Processing Fee (${fee.pct.toFixed(2)}%)`}
+                  value={
+                    <span className="text-rose-600">&minus;{fmtFull(fee.amt)}</span>
+                  }
+                  mono
+                />
+              );
+            })()}
             <div className="mt-2 pt-2 border-t border-gray-100">
               <InfoRow
                 label="Your Payout"
