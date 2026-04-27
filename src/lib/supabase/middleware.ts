@@ -156,7 +156,7 @@ export async function updateSession(request: NextRequest) {
     // Look up by email (reliable) — auth_provider_id may be NULL for admin-created users
     const { data: dbUser } = await supabase
       .from("users")
-      .select("id, is_approved, is_active, auth_provider_id, org_id")
+      .select("id, is_approved, is_active, auth_provider_id, org_id, last_login_at")
       .eq("email", user.email!)
       .limit(1)
       .maybeSingle();
@@ -168,6 +168,23 @@ export async function updateSession(request: NextRequest) {
           .from("users")
           .update({ auth_provider_id: user.id })
           .eq("email", user.email!);
+      }
+
+      // Track last_login_at. Threshold de-bounces to "first activity per
+      // 5-min window" — catches fresh sign-ins (NULL or old) without
+      // writing on every page nav. Fire-and-forget; errors go to logs.
+      const FIVE_MIN_MS = 5 * 60 * 1000;
+      const lastLoginMs = dbUser.last_login_at
+        ? new Date(dbUser.last_login_at).getTime()
+        : 0;
+      if (Date.now() - lastLoginMs > FIVE_MIN_MS) {
+        supabase
+          .from("users")
+          .update({ last_login_at: new Date().toISOString() })
+          .eq("email", user.email!)
+          .then(({ error }) => {
+            if (error) console.error("[middleware] last_login_at update failed:", error);
+          });
       }
 
       // Block unapproved or deactivated users
