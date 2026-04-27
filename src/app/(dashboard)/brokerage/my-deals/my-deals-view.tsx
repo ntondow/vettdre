@@ -488,7 +488,11 @@ function AgentDetailPanel({
       setLoading(true);
       try {
         const sub = await getSubmissionById(submissionId);
-        setData(sub);
+        if (sub?.success && sub.data) {
+          setData(sub.data as Record<string, unknown>);
+        } else {
+          setData(null);
+        }
       } catch {
         setData(null);
       } finally {
