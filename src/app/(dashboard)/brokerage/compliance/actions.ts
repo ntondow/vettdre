@@ -1,19 +1,16 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type { ComplianceDocInput, AgentComplianceSummary } from "@/lib/bms-types";
 import { logComplianceAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
 async function getCurrentOrg() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-  if (!user) throw new Error("User not found");
-  return { userId: user.id, orgId: user.orgId };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 // ── Helpers ───────────────────────────────────────────────────

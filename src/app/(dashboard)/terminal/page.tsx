@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/feature-gate";
 import type { UserPlan } from "@/lib/feature-gate";
 import { getTerminalPreferences, getTerminalEvents, getEventCategories, getEventCategoryCounts } from "./actions";
@@ -10,19 +10,18 @@ export const metadata = { title: "Terminal — VettdRE" };
 
 export default async function TerminalPage() {
   // Feature gate: check user plan server-side
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const ctx = await getCurrentOrgContext();
   let orgId = "";
-  if (authUser) {
-    const user = await prisma.user.findFirst({
-      where: { OR: [{ authProviderId: authUser.id }, { email: authUser.email || "" }] },
-      select: { plan: true, orgId: true },
+  if (ctx) {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
+      select: { plan: true },
     });
     const plan = (user?.plan || "free") as UserPlan;
     if (!hasPermission(plan, "terminal_access")) {
       return <TerminalPaywall />;
     }
-    orgId = user?.orgId || "";
+    orgId = ctx.orgId;
   }
 
   const [prefs, categories] = await Promise.all([

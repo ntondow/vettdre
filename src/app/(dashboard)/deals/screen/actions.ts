@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { calculateAll, DEFAULT_INPUTS } from "@/lib/deal-calculator";
 import type { DealInputs, DealOutputs } from "@/lib/deal-calculator";
 import { getExpenseBenchmark } from "@/lib/expense-benchmarks";
@@ -10,15 +10,9 @@ import { getCurrentMortgageRate } from "@/lib/fred";
 // ── Auth ────────────────────────────────────────────────────
 
 async function getCurrentOrg(): Promise<{ userId: string; orgId: string } | null> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
-  const dbUser = await prisma.user.findFirst({
-    where: { OR: [{ authProviderId: user.id }, ...(user.email ? [{ email: user.email }] : [])] },
-    select: { id: true, orgId: true },
-  });
-  if (!dbUser) return null;
-  return { userId: dbUser.id, orgId: dbUser.orgId };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
+  return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 // ── Types ───────────────────────────────────────────────────
