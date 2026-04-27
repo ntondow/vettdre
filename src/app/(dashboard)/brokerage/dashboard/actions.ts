@@ -1,19 +1,13 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
 async function getCurrentOrg() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-    select: { orgId: true },
-  });
-  return user?.orgId || null;
+  const ctx = await getCurrentOrgContext();
+  return ctx?.orgId || null;
 }
 
 // ── Screening Dashboard Stats ──────────────────────────────────

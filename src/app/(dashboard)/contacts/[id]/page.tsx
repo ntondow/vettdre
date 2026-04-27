@@ -1,18 +1,14 @@
 import { notFound } from "next/navigation";
-import Header from "@/components/layout/header";
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import ContactDossier from "./contact-dossier";
 
 async function getContact(id: string) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-  if (!user) return null;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
 
   const contact = await prisma.contact.findFirst({
-    where: { id, orgId: user.orgId },
+    where: { id, orgId: ctx.orgId },
     include: {
       assignedAgent: { select: { fullName: true, email: true } },
       activities: { orderBy: { occurredAt: "desc" }, take: 50, include: { user: { select: { fullName: true } } } },

@@ -1,20 +1,13 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import ApiKeysClient from "./api-keys-client";
 
 export default async function ApiKeysPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const dbUser = await prisma.user.findFirst({
-    where: { authProviderId: user.id },
-    select: { role: true },
-  });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
 
   const adminRoles = ["super_admin", "admin", "owner"];
-  if (!dbUser || !adminRoles.includes(dbUser.role)) {
+  if (!adminRoles.includes(ctx.userRole)) {
     redirect("/settings");
   }
 

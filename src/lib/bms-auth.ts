@@ -1,12 +1,13 @@
 "use server";
 
+import { cache } from "react";
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
 import type { BrokerageRoleType, AgentStatus } from "./bms-types";
 
 // ── Get Current Brokerage Role ──────────────────────────────
 
-export async function getCurrentBrokerageRole(): Promise<BrokerageRoleType | null> {
+export const getCurrentBrokerageRole = cache(async function (): Promise<BrokerageRoleType | null> {
   try {
     const supabase = await createClient();
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -65,11 +66,11 @@ export async function getCurrentBrokerageRole(): Promise<BrokerageRoleType | nul
     console.error("getCurrentBrokerageRole error:", error);
     return null;
   }
-}
+});
 
 // ── Get Current Agent Info (role + agentId + status) ─────────
 
-export async function getCurrentAgentInfo(): Promise<{
+export const getCurrentAgentInfo = cache(async function (): Promise<{
   role: BrokerageRoleType;
   agentId: string;
   agentStatus: AgentStatus;
@@ -143,4 +144,4 @@ export async function getCurrentAgentInfo(): Promise<{
     console.error("getCurrentAgentInfo error:", error);
     return null;
   }
-}
+});

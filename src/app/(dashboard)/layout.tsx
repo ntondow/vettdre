@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/sidebar";
 import MobileNav from "@/components/layout/mobile-nav";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
@@ -11,22 +11,13 @@ import type { UserPlan } from "@/lib/feature-gate";
 import DashboardShell from "./dashboard-shell";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
 
-  // Primary lookup by authProviderId, fallback to email (covers newly provisioned users)
-  let dbUser = await prisma.user.findUnique({
-    where: { authProviderId: user.id },
+  const dbUser = await prisma.user.findUnique({
+    where: { id: ctx.userId },
     select: { id: true, plan: true, role: true, trialEndsAt: true, usageCounters: true },
   });
-
-  if (!dbUser && user.email) {
-    dbUser = await prisma.user.findFirst({
-      where: { email: user.email },
-      select: { id: true, plan: true, role: true, trialEndsAt: true, usageCounters: true },
-    });
-  }
 
   const userId = dbUser?.id ?? "";
   let plan = (dbUser?.plan || "free") as UserPlan;
