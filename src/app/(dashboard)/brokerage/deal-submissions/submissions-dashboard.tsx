@@ -207,17 +207,21 @@ export default function SubmissionsDashboard({
             exclusiveFilter === "all" ? undefined : exclusiveFilter,
           dealType: dealTypeFilter === "all" ? undefined : dealTypeFilter,
           agentId: agentFilter === "all" ? undefined : agentFilter,
-          dateFrom: dateFrom || undefined,
-          dateTo: dateTo || undefined,
+          startDate: dateFrom || undefined,
+          endDate: dateTo || undefined,
           search: search || undefined,
           page,
           limit: pageSize,
         }),
         getSubmissionStats(),
       ]);
-      setSubmissions(subsResult.submissions || []);
-      setTotal(subsResult.total || 0);
-      if (statsResult) setStats(statsResult);
+      if (subsResult.success) {
+        setSubmissions((subsResult.data as Submission[]) || []);
+        setTotal(subsResult.total || 0);
+      }
+      if (statsResult.success && statsResult.data) {
+        setStats(statsResult.data as typeof stats);
+      }
     } catch {
       showToast("error", "Failed to load submissions");
     } finally {
