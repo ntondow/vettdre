@@ -1,18 +1,11 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import HealthDashboard from "./components/health-dashboard";
 
 export default async function AdminTerminalPage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
-
-  const dbUser = await prisma.user.findFirst({
-    where: { authProviderId: user.id },
-    select: { role: true },
-  });
-  if (dbUser?.role !== "super_admin") redirect("/settings");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
+  if (ctx.userRole !== "super_admin") redirect("/settings");
 
   return (
     <div className="max-w-6xl mx-auto px-4 md:px-6 py-6">

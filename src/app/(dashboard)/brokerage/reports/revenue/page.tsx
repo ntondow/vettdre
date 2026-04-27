@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/bms-permissions";
 import type { BrokerageRoleType } from "@/lib/bms-types";
 import { getAgentEarningsReport, getRevenuePipeline, getRevenueByMonth } from "./actions";
@@ -10,12 +10,11 @@ export const dynamic = "force-dynamic";
 
 export default async function RevenueReportPage() {
   // ── Auth + Permission Check ────────────────────────────────
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
 
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: { brokerAgent: { select: { brokerageRole: true } } },
   });
   if (!user) redirect("/login");

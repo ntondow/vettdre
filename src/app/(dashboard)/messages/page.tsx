@@ -1,6 +1,6 @@
 import Header from "@/components/layout/header";
-import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { redirect } from "next/navigation";
 import MessagesTabs from "./messages-tabs";
 import { ensureDefaultLabels } from "./label-actions";
@@ -8,16 +8,13 @@ import { getFollowUpCount } from "./follow-up-actions";
 import { seedDefaultTemplates } from "./template-actions";
 
 async function getData() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-  if (!user) return null;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
 
   // Auto-unsnooze expired threads
   await prisma.emailMessage.updateMany({
     where: {
-      orgId: user.orgId,
+      orgId: ctx.orgId,
       snoozedUntil: { lte: new Date() },
       NOT: { snoozedUntil: null },
     },
@@ -25,7 +22,7 @@ async function getData() {
   });
 
   const gmailAccount = await prisma.gmailAccount.findFirst({
-    where: { userId: user.id, isActive: true },
+    where: { userId: ctx.userId, isActive: true },
   });
 
   // Seed default templates if none exist
@@ -33,12 +30,12 @@ async function getData() {
 
   const [templates, unreadCount, labels, followUpCount] = await Promise.all([
     prisma.emailTemplate.findMany({
-      where: { orgId: user.orgId },
+      where: { orgId: ctx.orgId },
       orderBy: { timesUsed: "desc" },
       take: 50,
     }),
     prisma.emailMessage.count({
-      where: { orgId: user.orgId, isRead: false, direction: "inbound" },
+      where: { orgId: ctx.orgId, isRead: false, direction: "inbound" },
     }),
     ensureDefaultLabels(),
     getFollowUpCount(),

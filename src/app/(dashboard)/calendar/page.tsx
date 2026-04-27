@@ -1,18 +1,15 @@
 import Header from "@/components/layout/header";
-import { createClient } from "@/lib/supabase/server";
 import prisma from "@/lib/prisma";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { redirect } from "next/navigation";
 import CalendarView from "./calendar-view";
 
 async function getData() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-  if (!user) return null;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
 
   const gmailAccount = await prisma.gmailAccount.findFirst({
-    where: { userId: user.id, isActive: true },
+    where: { userId: ctx.userId, isActive: true },
   });
 
   return {

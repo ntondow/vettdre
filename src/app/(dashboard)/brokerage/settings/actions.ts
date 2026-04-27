@@ -1,41 +1,24 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
+import { getCurrentBrokerageRole } from "@/lib/bms-auth";
 import type { BrokerageSettings } from "@/lib/bms-types";
 import { logSettingsAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
 async function getCurrentOrgAsAdmin() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-    include: { brokerAgent: { select: { brokerageRole: true } } },
-  });
-  if (!user) throw new Error("User not found");
-
-  return {
-    userId: user.id,
-    orgId: user.orgId,
-    role: (user.brokerAgent?.brokerageRole as string) || null,
-  };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const role = await getCurrentBrokerageRole();
+  return { userId: ctx.userId, orgId: ctx.orgId, role: role ?? null };
 }
 
 async function getCurrentOrg() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-  });
-  if (!user) throw new Error("User not found");
-
-  return { orgId: user.orgId };
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  return { orgId: ctx.orgId };
 }
 
 // ── BMS Settings Defaults ────────────────────────────────────
