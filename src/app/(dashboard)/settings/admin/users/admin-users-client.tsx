@@ -105,8 +105,8 @@ export default function AdminUsersClient() {
 
   const fetchTeamOptions = useCallback(async () => {
     try {
-      const teams = await getTeams();
-      setTeamOptions(teams.map((t: any) => ({ id: t.id, name: t.name })));
+      const result = await getTeams();
+      setTeamOptions(result.teams.map((t: any) => ({ id: t.id, name: t.name })));
     } catch (e) {
       // Team model may not exist yet — silently skip
       console.warn("Teams not available:", e);

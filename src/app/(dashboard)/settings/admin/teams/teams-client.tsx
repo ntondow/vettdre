@@ -9,6 +9,8 @@ interface TeamRow {
   name: string;
   slug: string;
   type: string;
+  orgId: string;
+  orgName: string;
   parentTeamId: string | null;
   parentTeamName: string | null;
   description: string | null;
@@ -40,6 +42,8 @@ const typeColors: Record<string, string> = {
 
 export default function TeamsClient() {
   const [teams, setTeams] = useState<TeamRow[]>([]);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [viewerOrgId, setViewerOrgId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<Toast | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -60,8 +64,10 @@ export default function TeamsClient() {
   const fetchTeams = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getTeams();
-      setTeams(data);
+      const result = await getTeams();
+      setTeams(result.teams);
+      setIsSuperAdmin(result.isSuperAdmin);
+      setViewerOrgId(result.viewerOrgId);
     } catch (e) {
       console.error(e);
     }
@@ -162,7 +168,14 @@ export default function TeamsClient() {
 
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-1">Teams</h1>
+          <div className="flex items-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold text-slate-900">Teams</h1>
+            {isSuperAdmin && (
+              <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
+                Super-admin · cross-org view
+              </span>
+            )}
+          </div>
           <p className="text-sm text-slate-500">Manage teams and organizational hierarchy.</p>
         </div>
         <button
@@ -255,13 +268,22 @@ export default function TeamsClient() {
                 team={team}
                 subTeams={childrenOf(team.id)}
                 onDelete={setConfirmDelete}
+                viewerOrgId={viewerOrgId}
+                showOrgChip={isSuperAdmin}
               />
             ))}
             {/* Orphaned teams (parent deleted but parentTeamId still set to a missing team) */}
             {teams
               .filter((t) => t.parentTeamId && !teams.find((p) => p.id === t.parentTeamId))
               .map((team) => (
-                <TeamRowItem key={team.id} team={team} subTeams={[]} onDelete={setConfirmDelete} />
+                <TeamRowItem
+                  key={team.id}
+                  team={team}
+                  subTeams={[]}
+                  onDelete={setConfirmDelete}
+                  viewerOrgId={viewerOrgId}
+                  showOrgChip={isSuperAdmin}
+                />
               ))}
           </div>
         )}
@@ -279,21 +301,29 @@ function TeamRowItem({
   team,
   subTeams,
   onDelete,
+  viewerOrgId,
+  showOrgChip,
   indent = false,
 }: {
   team: TeamRow;
   subTeams: TeamRow[];
   onDelete: (id: string) => void;
+  viewerOrgId: string;
+  showOrgChip: boolean;
   indent?: boolean;
 }) {
   const typeLabel = TEAM_TYPES.find((t) => t.value === team.type)?.label ?? team.type;
   const colorClass = typeColors[team.type] ?? typeColors.generic;
+  const isOwnOrg = team.orgId === viewerOrgId;
+  const orgChipClass = isOwnOrg
+    ? "bg-slate-100 text-slate-600 border-slate-200"
+    : "bg-amber-50 text-amber-800 border-amber-200";
 
   return (
     <>
       <div className={`flex items-center gap-3 px-4 py-3 hover:bg-slate-50 ${indent ? "pl-10" : ""}`}>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Link
               href={`/settings/admin/teams/${team.id}`}
               className="text-sm font-medium text-slate-900 hover:text-blue-600 truncate"
@@ -304,6 +334,11 @@ function TeamRowItem({
             <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${colorClass}`}>
               {typeLabel}
             </span>
+            {showOrgChip && team.orgName && (
+              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded border ${orgChipClass}`}>
+                {team.orgName}
+              </span>
+            )}
           </div>
           {team.description && (
             <p className="text-xs text-slate-500 truncate mt-0.5">{team.description}</p>
@@ -325,20 +360,32 @@ function TeamRowItem({
               href={`/settings/admin/teams/${team.id}`}
               className="text-[11px] text-blue-600 hover:text-blue-800 font-medium"
             >
-              Manage
+              {isOwnOrg ? "Manage" : "View"}
             </Link>
-            <span className="text-slate-200">|</span>
-            <button
-              onClick={() => onDelete(team.id)}
-              className="text-[11px] text-red-500 hover:text-red-700 font-medium"
-            >
-              Delete
-            </button>
+            {isOwnOrg && (
+              <>
+                <span className="text-slate-200">|</span>
+                <button
+                  onClick={() => onDelete(team.id)}
+                  className="text-[11px] text-red-500 hover:text-red-700 font-medium"
+                >
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
       {subTeams.map((child) => (
-        <TeamRowItem key={child.id} team={child} subTeams={[]} onDelete={onDelete} indent />
+        <TeamRowItem
+          key={child.id}
+          team={child}
+          subTeams={[]}
+          onDelete={onDelete}
+          viewerOrgId={viewerOrgId}
+          showOrgChip={showOrgChip}
+          indent
+        />
       ))}
     </>
   );
