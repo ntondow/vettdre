@@ -4,48 +4,63 @@ import prisma from "@/lib/prisma";
 import { requireAdmin } from "./admin-actions";
 
 async function getAdminOrgId() {
+  const ctx = await getAdminContext();
+  return ctx.orgId;
+}
+
+async function getAdminContext() {
   const authUser = await requireAdmin();
   const dbUser = await prisma.user.findFirst({
     where: { authProviderId: authUser.id },
-    select: { orgId: true },
+    select: { orgId: true, role: true },
   });
   if (!dbUser?.orgId) throw new Error("No organization found");
-  return dbUser.orgId;
+  return { orgId: dbUser.orgId, isSuperAdmin: dbUser.role === "super_admin" };
 }
 
 export async function getTeams() {
-  const orgId = await getAdminOrgId();
+  const { orgId, isSuperAdmin } = await getAdminContext();
 
   const teams = await prisma.team.findMany({
-    where: { orgId },
-    orderBy: { name: "asc" },
+    where: isSuperAdmin ? {} : { orgId },
+    orderBy: isSuperAdmin
+      ? [{ organization: { name: "asc" } }, { name: "asc" }]
+      : { name: "asc" },
     include: {
       _count: { select: { users: true, subTeams: true } },
       parentTeam: { select: { id: true, name: true } },
+      organization: { select: { id: true, name: true } },
     },
   });
 
-  return teams.map((t) => ({
-    id: t.id,
-    name: t.name,
-    slug: t.slug,
-    type: t.type,
-    parentTeamId: t.parentTeamId,
-    parentTeamName: t.parentTeam?.name ?? null,
-    description: t.description,
-    memberCount: t._count.users,
-    subTeamCount: t._count.subTeams,
-    createdAt: t.createdAt.toISOString(),
-  }));
+  return {
+    isSuperAdmin,
+    viewerOrgId: orgId,
+    teams: teams.map((t) => ({
+      id: t.id,
+      name: t.name,
+      slug: t.slug,
+      type: t.type,
+      orgId: t.orgId,
+      orgName: t.organization?.name ?? "",
+      parentTeamId: t.parentTeamId,
+      parentTeamName: t.parentTeam?.name ?? null,
+      description: t.description,
+      memberCount: t._count.users,
+      subTeamCount: t._count.subTeams,
+      createdAt: t.createdAt.toISOString(),
+    })),
+  };
 }
 
 export async function getTeamDetail(teamId: string) {
-  const orgId = await getAdminOrgId();
+  const { orgId, isSuperAdmin } = await getAdminContext();
 
   const team = await prisma.team.findFirst({
-    where: { id: teamId, orgId },
+    where: isSuperAdmin ? { id: teamId } : { id: teamId, orgId },
     include: {
       parentTeam: { select: { id: true, name: true } },
+      organization: { select: { id: true, name: true } },
       subTeams: {
         select: { id: true, name: true, slug: true, type: true, _count: { select: { users: true } } },
         orderBy: { name: "asc" },
@@ -64,6 +79,8 @@ export async function getTeamDetail(teamId: string) {
     slug: team.slug,
     type: team.type,
     description: team.description,
+    orgId: team.orgId,
+    orgName: team.organization?.name ?? "",
     parentTeamId: team.parentTeamId,
     parentTeamName: team.parentTeam?.name ?? null,
     createdAt: team.createdAt.toISOString(),
