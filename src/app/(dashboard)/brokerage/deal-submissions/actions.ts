@@ -7,6 +7,8 @@ import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/l
 import { notifyAgentOfStatusChange } from "@/lib/deal-notifications";
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import type { DealSubmissionInput, ExclusiveType, BrokerageRoleType } from "@/lib/bms-types";
+import { computeProcessingFee } from "@/lib/processing-fee";
+import { revalidatePath } from "next/cache";
 
 // ── Auth Helper ─────────────────────────────────────────────
 
@@ -260,13 +262,25 @@ export async function getSubmissionById(
       return { success: false, error: "Not authorized" };
     }
 
-    const files = await prisma.fileAttachment.findMany({
-      where: { orgId: ctx.orgId, entityType: "deal_submission", entityId: id },
-      orderBy: { createdAt: "desc" },
-    });
+    const [files, org, invoice] = await Promise.all([
+      prisma.fileAttachment.findMany({
+        where: { orgId: ctx.orgId, entityType: "deal_submission", entityId: id },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.organization.findUnique({
+        where: { id: ctx.orgId },
+        select: { processingFeePct: true },
+      }),
+      prisma.invoice.findUnique({
+        where: { dealSubmissionId: id },
+        select: { id: true, processingFeePct: true, processingFeeAmt: true, agentPayout: true, housePayout: true },
+      }),
+    ]);
 
     const result = serialize(submission as unknown as Record<string, unknown>);
     result.files = files.map((f) => serialize(f as unknown as Record<string, unknown>));
+    result.organizationDefaultFeePct = Number(org?.processingFeePct ?? 0);
+    result.invoice = invoice ? serialize(invoice as unknown as Record<string, unknown>) : null;
 
     return { success: true, data: result };
   } catch (error: unknown) {
@@ -476,11 +490,46 @@ export async function pushToInvoice(
       return { success: false, error: "Submission must be approved before creating an invoice" };
     }
 
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true, invoiceNumber: true },
+    });
+    if (existingInvoice) {
+      return {
+        success: false,
+        error: "An invoice already exists for this submission.",
+        invoiceId: existingInvoice.id,
+      };
+    }
+
     const org = await prisma.organization.findUnique({
       where: { id: ctx.orgId },
-      select: { name: true, address: true, phone: true, settings: true, bmsSettings: true },
+      select: { name: true, address: true, phone: true, settings: true, bmsSettings: true, processingFeePct: true },
     });
     if (!org) return { success: false, error: "Organization not found" };
+
+    const fee = computeProcessingFee({
+      totalCommission: submission.totalCommission,
+      agentSplitPct: submission.agentSplitPct,
+      organizationDefaultPct: org.processingFeePct,
+      override: submission.processingFeeOverride,
+      overridePct: submission.processingFeePct,
+    });
+
+    // override=true: manager set values deliberately on the submission; trust them.
+    // override=false: brokerage default; recompute net-of-fee payouts and persist.
+    const submissionAgentPayout = submission.processingFeeOverride
+      ? num(submission.agentPayout)
+      : fee.agentPayout;
+    const submissionHousePayout = submission.processingFeeOverride
+      ? num(submission.housePayout)
+      : fee.housePayout;
+    const invoiceFeePct = submission.processingFeeOverride
+      ? Number(submission.processingFeePct ?? 0)
+      : fee.feePct;
+    const invoiceFeeAmt = submission.processingFeeOverride
+      ? Number(submission.processingFeeAmt ?? 0)
+      : fee.feeAmt;
 
     const bmsSettings = (org.bmsSettings as Record<string, unknown>) ?? {};
     const defaultPaymentTerms = (bmsSettings.defaultPaymentTerms as string) || "Net 30";
@@ -503,6 +552,17 @@ export async function pushToInvoice(
       : `${submission.agentFirstName} ${submission.agentLastName}`;
 
     const result = await prisma.$transaction(async (tx) => {
+      // When override=false, persist the freshly-computed fee + net payout back
+      // onto the submission so all downstream reads (panel, leaderboards, P&L)
+      // see the same numbers as the invoice.
+      const submissionUpdate: Record<string, unknown> = { status: "invoiced" };
+      if (!submission.processingFeeOverride) {
+        submissionUpdate.processingFeePct = invoiceFeePct;
+        submissionUpdate.processingFeeAmt = invoiceFeeAmt;
+        submissionUpdate.agentPayout = submissionAgentPayout;
+        submissionUpdate.housePayout = submissionHousePayout;
+      }
+
       const invoice = await tx.invoice.create({
         data: {
           orgId: ctx.orgId,
@@ -526,8 +586,10 @@ export async function pushToInvoice(
           totalCommission: submission.totalCommission,
           agentSplitPct: submission.agentSplitPct,
           houseSplitPct: submission.houseSplitPct,
-          agentPayout: submission.agentPayout,
-          housePayout: submission.housePayout,
+          agentPayout: submissionAgentPayout,
+          housePayout: submissionHousePayout,
+          processingFeePct: invoiceFeePct,
+          processingFeeAmt: invoiceFeeAmt,
           paymentTerms: defaultPaymentTerms,
           dueDate,
           status: "draft",
@@ -557,8 +619,8 @@ export async function pushToInvoice(
           leaseStartDate: submission.leaseStartDate || null,
           leaseEndDate: submission.leaseEndDate || null,
           agentSplitPct: submission.agentSplitPct,
-          agentPayoutAmount: submission.agentPayout,
-          housePayoutAmount: submission.housePayout,
+          agentPayoutAmount: submissionAgentPayout,
+          housePayoutAmount: submissionHousePayout,
           agentPayoutStatus: "pending",
           invoiceCreatedAt: new Date(),
         },
@@ -566,7 +628,7 @@ export async function pushToInvoice(
 
       await tx.dealSubmission.update({
         where: { id: submissionId },
-        data: { status: "invoiced" },
+        data: submissionUpdate,
       });
 
       return { invoice, transaction };
@@ -577,15 +639,122 @@ export async function pushToInvoice(
     });
     logInvoiceAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "created", result.invoice.id, {
       fromSubmission: submissionId,
+      feePct: invoiceFeePct,
+      feeAmt: invoiceFeeAmt,
+      override: submission.processingFeeOverride,
+      totalCommission: num(submission.totalCommission),
+      agentPayout: submissionAgentPayout,
     });
     logTransactionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "created", result.transaction.id, {
       fromSubmission: submissionId,
     });
 
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/my-deals");
+    revalidatePath("/brokerage/invoices");
+
     return { success: true, invoiceId: result.invoice.id, transactionId: result.transaction.id };
   } catch (error: unknown) {
     console.error("pushToInvoice error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to create invoice" };
+  }
+}
+
+// ── 7b. updateProcessingFee ─────────────────────────────────
+
+export type ProcessingFeeUpdate =
+  | { mode: "reset" }
+  | { mode: "override"; pct: number };
+
+export async function updateProcessingFee(
+  submissionId: string,
+  update: ProcessingFeeUpdate,
+): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "approve_deal")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const submission = await prisma.dealSubmission.findFirst({
+      where: { id: submissionId, orgId: ctx.orgId },
+    });
+    if (!submission) return { success: false, error: "Submission not found" };
+    // Once invoiced, the fee is locked on the invoice row — submission edits
+    // would no longer flow through to the displayed numbers.
+    if (submission.status === "invoiced" || submission.status === "paid") {
+      return { success: false, error: "Cannot edit fee after invoice has been created" };
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { processingFeePct: true },
+    });
+
+    let nextOverride: boolean;
+    let nextPct: number;
+
+    if (update.mode === "reset") {
+      nextOverride = false;
+      nextPct = Number(org?.processingFeePct ?? 0);
+    } else {
+      const pct = Number(update.pct);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        return { success: false, error: "Fee percentage must be between 0 and 100" };
+      }
+      nextOverride = true;
+      nextPct = Math.round(pct * 100) / 100;
+    }
+
+    const fee = computeProcessingFee({
+      totalCommission: submission.totalCommission,
+      agentSplitPct: submission.agentSplitPct,
+      organizationDefaultPct: org?.processingFeePct ?? null,
+      override: nextOverride,
+      overridePct: nextPct,
+    });
+
+    const data: Record<string, unknown> = {
+      processingFeeOverride: nextOverride,
+      // On reset, null out the manual values so the submission re-aligns with
+      // whatever the brokerage default is at invoice time. On override, persist.
+      processingFeePct: update.mode === "reset" ? null : nextPct,
+      processingFeeAmt: update.mode === "reset" ? null : fee.feeAmt,
+      agentPayout: fee.agentPayout,
+      housePayout: fee.housePayout,
+    };
+
+    await prisma.dealSubmission.update({
+      where: { id: submissionId },
+      data,
+    });
+
+    logSubmissionAction(
+      ctx.orgId,
+      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
+      "fee_updated",
+      submissionId,
+      { override: nextOverride, feePct: nextPct, feeAmt: fee.feeAmt, mode: update.mode },
+    );
+
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/my-deals");
+
+    return {
+      success: true,
+      data: {
+        processingFeeOverride: nextOverride,
+        processingFeePct: update.mode === "reset" ? null : nextPct,
+        processingFeeAmt: update.mode === "reset" ? null : fee.feeAmt,
+        agentPayout: fee.agentPayout,
+        housePayout: fee.housePayout,
+        organizationDefaultPct: Number(org?.processingFeePct ?? 0),
+      },
+    };
+  } catch (error: unknown) {
+    console.error("updateProcessingFee error:", error);
+    return { success: false, error: "Failed to update processing fee" };
   }
 }
 

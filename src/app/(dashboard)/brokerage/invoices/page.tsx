@@ -539,6 +539,14 @@ export default function InvoicesPage() {
                       <span className="text-sm font-semibold text-green-600">
                         {fmt(agentPayoutNum)}
                       </span>
+                      {Number(inv.processingFeeAmt ?? 0) > 0 && (
+                        <div
+                          className="text-[10px] text-rose-500 mt-0.5"
+                          title={`Total commission ${fmt(Number(inv.totalCommission))} − ${Number(inv.processingFeePct ?? 0).toFixed(2)}% processing fee`}
+                        >
+                          after {Number(inv.processingFeePct ?? 0).toFixed(2)}% fee (&minus;{fmt(Number(inv.processingFeeAmt))})
+                        </div>
+                      )}
                       {hasPartialPayment ? (
                         <div className="mt-1">
                           <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
@@ -746,6 +754,11 @@ export default function InvoicesPage() {
                   <div className="flex-1">
                     <span className="text-xs text-slate-500">Agent Payout</span>
                     <p className="font-semibold text-green-600">{fmt(agentPayoutNum)}</p>
+                    {Number(inv.processingFeeAmt ?? 0) > 0 && (
+                      <p className="text-[10px] text-rose-500">
+                        after {Number(inv.processingFeePct ?? 0).toFixed(2)}% fee
+                      </p>
+                    )}
                     {hasPartialPayment ? (
                       <div className="mt-1 w-full">
                         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
