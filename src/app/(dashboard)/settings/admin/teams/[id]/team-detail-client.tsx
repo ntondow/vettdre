@@ -97,13 +97,13 @@ export default function TeamDetailClient({ teamId }: { teamId: string }) {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [detail, teams, users] = await Promise.all([
+      const [detail, teamsResult, users] = await Promise.all([
         getTeamDetail(teamId),
         getTeams(),
         getUnassignedUsers(),
       ]);
       setTeam(detail);
-      setAllTeams(teams.map((t) => ({ id: t.id, name: t.name })));
+      setAllTeams(teamsResult.teams.map((t) => ({ id: t.id, name: t.name })));
       setUnassigned(users);
       if (detail) {
         setEditName(detail.name);
