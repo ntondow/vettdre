@@ -178,13 +178,11 @@ export async function updateSession(request: NextRequest) {
         ? new Date(dbUser.last_login_at).getTime()
         : 0;
       if (Date.now() - lastLoginMs > FIVE_MIN_MS) {
-        supabase
+        const { error } = await supabase
           .from("users")
           .update({ last_login_at: new Date().toISOString() })
-          .eq("email", user.email!)
-          .then(({ error }) => {
-            if (error) console.error("[middleware] last_login_at update failed:", error);
-          });
+          .eq("email", user.email!);
+        if (error) console.error("[middleware] last_login_at update failed:", error);
       }
 
       // Block unapproved or deactivated users
