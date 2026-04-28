@@ -6,7 +6,7 @@
  */
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/feature-gate";
 import type { UserPlan } from "@/lib/feature-gate";
 import BuildingDossierClient from "./client";
@@ -22,16 +22,22 @@ export async function generateMetadata({ params }: { params: Promise<{ bbl: stri
   };
 }
 
-export default async function BuildingDossierPage({ params }: { params: Promise<{ bbl: string }> }) {
+export default async function BuildingDossierPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ bbl: string }>;
+  searchParams: Promise<{ as_org?: string }>;
+}) {
   const { bbl } = await params;
+  const { as_org } = await searchParams;
 
   // Auth + plan check
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
+  const ctx = await getCurrentOrgContext({ overrideAsOrg: as_org });
   let plan: UserPlan = "free";
-  if (authUser) {
-    const user = await prisma.user.findFirst({
-      where: { OR: [{ authProviderId: authUser.id }, { email: authUser.email || "" }] },
+  if (ctx) {
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
       select: { plan: true },
     });
     plan = (user?.plan || "free") as UserPlan;

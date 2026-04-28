@@ -3,8 +3,8 @@ import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 import ContactDossier from "./contact-dossier";
 
-async function getContact(id: string) {
-  const ctx = await getCurrentOrgContext();
+async function getContact(id: string, overrideAsOrg?: string) {
+  const ctx = await getCurrentOrgContext({ overrideAsOrg });
   if (!ctx) return null;
 
   const contact = await prisma.contact.findFirst({
@@ -37,9 +37,16 @@ async function getContact(id: string) {
   return contact;
 }
 
-export default async function ContactPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ContactPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ as_org?: string }>;
+}) {
   const { id } = await params;
-  const contact = await getContact(id);
+  const { as_org } = await searchParams;
+  const contact = await getContact(id, as_org);
   if (!contact) notFound();
   return <ContactDossier contact={JSON.parse(JSON.stringify(contact))} />;
 }

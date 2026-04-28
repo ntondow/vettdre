@@ -7,19 +7,20 @@ import MyDealsView from "./my-deals-view";
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ submitted?: string }>;
+  searchParams: Promise<{ submitted?: string; as_org?: string }>;
 }
 
 export default async function MyDealsPage({ searchParams }: Props) {
-  const role = await getCurrentBrokerageRole();
+  const params = await searchParams;
+  const as_org = params.as_org;
+  const role = await getCurrentBrokerageRole({ overrideAsOrg: as_org });
   if (!role || !hasPermission(role, "view_own_submissions")) {
     redirect("/login");
   }
 
-  const params = await searchParams;
   const showSuccessBanner = params.submitted === "1";
 
-  const result = await getMySubmissions();
+  const result = await getMySubmissions({ overrideAsOrg: as_org });
 
   return (
     <MyDealsView

@@ -8,9 +8,14 @@ import RevenueDashboard from "./revenue-dashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function RevenueReportPage() {
+export default async function RevenueReportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
   // ── Auth + Permission Check ────────────────────────────────
-  const ctx = await getCurrentOrgContext();
+  const ctx = await getCurrentOrgContext({ overrideAsOrg: as_org });
   if (!ctx) redirect("/login");
 
   const user = await prisma.user.findUnique({
@@ -32,9 +37,9 @@ export default async function RevenueReportPage() {
 
   // ── Parallel Data Fetch ────────────────────────────────────
   const [earningsReport, pipeline, monthlyRevenue] = await Promise.all([
-    getAgentEarningsReport(),
-    getRevenuePipeline(),
-    getRevenueByMonth(),
+    getAgentEarningsReport({ overrideAsOrg: as_org }),
+    getRevenuePipeline({ overrideAsOrg: as_org }),
+    getRevenueByMonth(undefined, { overrideAsOrg: as_org }),
   ]);
 
   return (
