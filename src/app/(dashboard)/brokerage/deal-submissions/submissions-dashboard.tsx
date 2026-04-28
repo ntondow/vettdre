@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   getAllSubmissions,
   getSubmissionById,
@@ -102,6 +102,7 @@ type Agent = { id: string; firstName?: string; lastName?: string; email?: string
 // ── Props ──────────────────────────────────────────────────────
 
 interface SubmissionsDashboardProps {
+  asOrg?: string;
   initialSubmissions: Record<string, unknown>[];
   initialTotal: number;
   initialStats: {
@@ -116,10 +117,20 @@ interface SubmissionsDashboardProps {
 // ── Main Component ─────────────────────────────────────────────
 
 export default function SubmissionsDashboard({
+  asOrg,
   initialSubmissions,
   initialTotal,
   initialStats,
 }: SubmissionsDashboardProps) {
+  // Forwarded to every server action so the super_admin override target survives
+  // client-side refetches (filter changes, pagination, panel open). Without this,
+  // SSR shows the override target's data but the first client-side `loadData()`
+  // replaces it with the real org's data — server actions don't see searchParams,
+  // and the referer fallback is unreliable across Next.js 16 runtimes.
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   // ── State ────────────────────────────────────────────────────
   const [submissions, setSubmissions] = useState<Submission[]>(
     initialSubmissions as Submission[]
@@ -197,9 +208,10 @@ export default function SubmissionsDashboard({
 
   // ── Fetch agents on mount ────────────────────────────────────
   useEffect(() => {
-    getOrgAgents().then((result) => {
+    getOrgAgents(overrideOpts).then((result) => {
       if (Array.isArray(result)) setAgents(result);
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Load submissions ─────────────────────────────────────────
@@ -207,19 +219,22 @@ export default function SubmissionsDashboard({
     setLoading(true);
     try {
       const [subsResult, statsResult] = await Promise.all([
-        getAllSubmissions({
-          status: statusFilter === "all" ? undefined : statusFilter,
-          exclusiveType:
-            exclusiveFilter === "all" ? undefined : exclusiveFilter,
-          dealType: dealTypeFilter === "all" ? undefined : dealTypeFilter,
-          agentId: agentFilter === "all" ? undefined : agentFilter,
-          startDate: dateFrom || undefined,
-          endDate: dateTo || undefined,
-          search: search || undefined,
-          page,
-          limit: pageSize,
-        }),
-        getSubmissionStats(),
+        getAllSubmissions(
+          {
+            status: statusFilter === "all" ? undefined : statusFilter,
+            exclusiveType:
+              exclusiveFilter === "all" ? undefined : exclusiveFilter,
+            dealType: dealTypeFilter === "all" ? undefined : dealTypeFilter,
+            agentId: agentFilter === "all" ? undefined : agentFilter,
+            startDate: dateFrom || undefined,
+            endDate: dateTo || undefined,
+            search: search || undefined,
+            page,
+            limit: pageSize,
+          },
+          overrideOpts,
+        ),
+        getSubmissionStats(overrideOpts),
       ]);
       if (subsResult.success) {
         setSubmissions((subsResult.data as Submission[]) || []);
@@ -243,6 +258,7 @@ export default function SubmissionsDashboard({
     search,
     page,
     showToast,
+    overrideOpts,
   ]);
 
   // Reload on filter change (not search)
@@ -273,23 +289,26 @@ export default function SubmissionsDashboard({
   }, [search]);
 
   // ── Open detail panel ────────────────────────────────────────
-  const openPanel = useCallback(async (id: string) => {
-    setPanelOpen(true);
-    setPanelLoading(true);
-    setTimeout(() => setPanelEntered(true), 10);
-    try {
-      const sub = await getSubmissionById(id);
-      if (sub?.success && sub.data) {
-        setPanelData(sub.data as Submission);
-      } else {
+  const openPanel = useCallback(
+    async (id: string) => {
+      setPanelOpen(true);
+      setPanelLoading(true);
+      setTimeout(() => setPanelEntered(true), 10);
+      try {
+        const sub = await getSubmissionById(id, overrideOpts);
+        if (sub?.success && sub.data) {
+          setPanelData(sub.data as Submission);
+        } else {
+          setPanelData(null);
+        }
+      } catch {
         setPanelData(null);
+      } finally {
+        setPanelLoading(false);
       }
-    } catch {
-      setPanelData(null);
-    } finally {
-      setPanelLoading(false);
-    }
-  }, []);
+    },
+    [overrideOpts],
+  );
 
   const closePanel = useCallback(() => {
     setPanelEntered(false);
@@ -304,7 +323,7 @@ export default function SubmissionsDashboard({
   async function handleApprove(id: string) {
     setActionLoading(id);
     try {
-      const result = await approveSubmission(id);
+      const result = await approveSubmission(id, undefined, overrideOpts);
       if (result?.success) {
         showToast("success", "Submission approved");
         loadData();
@@ -339,7 +358,7 @@ export default function SubmissionsDashboard({
     if (!rejectTargetId) return;
     setActionLoading(rejectTargetId);
     try {
-      const result = await rejectSubmission(rejectTargetId, rejectReason || undefined);
+      const result = await rejectSubmission(rejectTargetId, rejectReason || undefined, overrideOpts);
       if (result?.success) {
         showToast("success", "Submission rejected");
         closeRejectModal();
@@ -361,6 +380,7 @@ export default function SubmissionsDashboard({
       const result = await updateProcessingFee(
         submissionId,
         mode === "reset" ? { mode: "reset" } : { mode: "override", pct: pct ?? 0 },
+        overrideOpts,
       );
       if (result.success) {
         showToast("success", mode === "reset" ? "Reset to brokerage default" : "Processing fee updated");
@@ -380,7 +400,7 @@ export default function SubmissionsDashboard({
   async function handlePushToInvoice(id: string) {
     setActionLoading(id);
     try {
-      const result = await pushToInvoice(id);
+      const result = await pushToInvoice(id, overrideOpts);
       if (result?.success) {
         showToast("success", "Invoice created successfully");
         loadData();
@@ -441,7 +461,7 @@ export default function SubmissionsDashboard({
   async function handleMarkPaid(id: string) {
     setActionLoading(id);
     try {
-      const result = await markSubmissionPaid(id);
+      const result = await markSubmissionPaid(id, overrideOpts);
       if (result?.success) {
         showToast("success", "Marked as paid");
         loadData();
