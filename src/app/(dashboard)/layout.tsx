@@ -3,6 +3,7 @@ import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 import Sidebar from "@/components/layout/sidebar";
 import MobileNav from "@/components/layout/mobile-nav";
+import SuperAdminBanner from "@/components/layout/super-admin-banner";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
 import { ToastProvider } from "@/components/ui/toast";
 import { UserPlanProvider } from "@/components/providers/user-plan-provider";
@@ -41,6 +42,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <SidebarProvider>
         <ToastProvider>
           <div className="min-h-screen bg-slate-50">
+            {ctx.isOverride ? (
+              <SuperAdminBanner realOrgName={ctx.realOrgName} viewingOrgName={ctx.viewingOrgName} />
+            ) : null}
             <Sidebar />
             <MobileNav />
             <DashboardShell>{children}</DashboardShell>

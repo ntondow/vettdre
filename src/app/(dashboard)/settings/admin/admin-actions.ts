@@ -56,6 +56,33 @@ export async function getAdminStats() {
   return { total, approved, pending, free, pro, team, enterprise };
 }
 
+export interface OrgListEntry {
+  id: string;
+  name: string;
+  slug: string;
+  userCount: number;
+}
+
+// Used by the super_admin org switcher to pick a tenant for ?as_org=...
+export async function getAllOrganizations(): Promise<OrgListEntry[]> {
+  await requireAdmin();
+  const orgs = await prisma.organization.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      _count: { select: { users: true } },
+    },
+  });
+  return orgs.map((o) => ({
+    id: o.id,
+    name: o.name,
+    slug: o.slug,
+    userCount: o._count.users,
+  }));
+}
+
 export async function getUsers(
   search?: string,
   planFilter?: string,
