@@ -30,8 +30,8 @@ const EXTENSION_MIME_MAP: Record<string, string[]> = {
 
 // ── Auth Helper ──────────────────────────────────────────────
 
-async function getCurrentUserOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentUserOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { orgId: ctx.orgId, userId: ctx.userId };
 }
@@ -42,9 +42,10 @@ export async function uploadFile(
   formData: FormData,
   entityType: string,
   entityId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ attachment?: FileAttachment; error?: string }> {
   try {
-    const { orgId, userId } = await getCurrentUserOrg();
+    const { orgId, userId } = await getCurrentUserOrg(options);
 
     const file = formData.get("file") as File | null;
     if (!file || !(file instanceof File)) {
@@ -113,9 +114,10 @@ export async function uploadFile(
 export async function getFilesForEntity(
   entityType: string,
   entityId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<FileAttachment[]> {
   try {
-    const { orgId } = await getCurrentUserOrg();
+    const { orgId } = await getCurrentUserOrg(options);
 
     const files = await prisma.fileAttachment.findMany({
       where: { orgId, entityType, entityId },
@@ -133,9 +135,10 @@ export async function getFilesForEntity(
 
 export async function deleteFile(
   attachmentId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { orgId } = await getCurrentUserOrg();
+    const { orgId } = await getCurrentUserOrg(options);
 
     const attachment = await prisma.fileAttachment.findFirst({
       where: { id: attachmentId, orgId },
@@ -169,9 +172,10 @@ export async function deleteFile(
 
 export async function getSignedUrl(
   attachmentId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ url?: string; error?: string }> {
   try {
-    const { orgId } = await getCurrentUserOrg();
+    const { orgId } = await getCurrentUserOrg(options);
 
     const attachment = await prisma.fileAttachment.findFirst({
       where: { id: attachmentId, orgId },

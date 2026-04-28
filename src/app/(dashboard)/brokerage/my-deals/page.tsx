@@ -24,6 +24,7 @@ export default async function MyDealsPage({ searchParams }: Props) {
 
   return (
     <MyDealsView
+      asOrg={as_org}
       initialSubmissions={result.data ?? []}
       showSuccessBanner={showSuccessBanner}
     />
