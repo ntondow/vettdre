@@ -4,7 +4,7 @@ import { verifyLead } from "./lead-verification";
 import { getZillowDataForZip, getNYCAverages } from "@/lib/zillow-data";
 import { apolloEnrichPerson, apolloEnrichOrganization, apolloFindPeopleAtOrg } from "@/lib/apollo";
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 import { cacheManager, SOURCE_CONFIG } from "@/lib/cache-manager";
 
@@ -1199,11 +1199,9 @@ export async function createContactFromBuilding(
     lot?: string;
   }
 ) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-  if (!user) throw new Error("User not found");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const user = { id: ctx.userId, orgId: ctx.orgId };
 
   // Create landlord contact
   const contact = await prisma.contact.create({

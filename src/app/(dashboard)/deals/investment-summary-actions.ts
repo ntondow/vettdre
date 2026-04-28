@@ -8,7 +8,7 @@
 // ============================================================
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type {
   InvestmentSummaryPayload,
   InvestmentPropertyData,
@@ -34,18 +34,18 @@ import { checkFeatureAccess } from "@/lib/feature-gate-server";
 // ── Auth Helper ──────────────────────────────────────────────
 
 async function getAuthContext() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
 
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: {
       organization: { include: { brandSettings: true } },
     },
   });
   if (!user) throw new Error("User not found");
-  return user;
+  // Effective orgId from ctx (honors super_admin ?as_org override).
+  return { ...user, orgId: ctx.orgId };
 }
 
 // ── Public Actions ───────────────────────────────────────────

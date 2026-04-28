@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 
@@ -20,41 +20,26 @@ function getSupabaseAdmin() {
   return _supabaseAdmin;
 }
 
-// Helper: look up user role from DB
-async function getUserRole(authProviderId: string): Promise<string | null> {
-  const dbUser = await prisma.user.findFirst({
-    where: { authProviderId },
-    select: { role: true, plan: true },
-  });
-  return dbUser?.role ?? null;
-}
-
 // Require super_admin role for platform admin pages
 export async function requireAdmin() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
-
-  const role = await getUserRole(authUser.id);
-  if (role !== "super_admin") redirect("/settings");
-  return authUser;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
+  if (ctx.userRole !== "super_admin") redirect("/settings");
 }
 
 // Admin access for auth actions: super_admin OR team/enterprise plan
 async function requireAdminAccess() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) redirect("/login");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) redirect("/login");
+  if (ctx.userRole === "super_admin") return;
 
-  const dbUser = await prisma.user.findFirst({
-    where: { authProviderId: authUser.id },
-    select: { role: true, plan: true },
+  const dbUser = await prisma.user.findUnique({
+    where: { id: ctx.userId },
+    select: { plan: true },
   });
-  if (dbUser?.role === "super_admin") return authUser;
   if (!dbUser || !["team", "enterprise"].includes(dbUser.plan)) {
     throw new Error("Unauthorized: requires super_admin role or team/enterprise plan");
   }
-  return authUser;
 }
 
 export async function getAdminStats() {

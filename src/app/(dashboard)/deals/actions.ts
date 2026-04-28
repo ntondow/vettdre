@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { checkFeatureAccess } from "@/lib/feature-gate-server";
 import { generateDealAssumptions, calibrateWithCensusData } from "@/lib/ai-assumptions";
 import type { BuildingData } from "@/lib/ai-assumptions";
@@ -15,12 +15,12 @@ import { getRedfinMetrics } from "@/lib/redfin-market";
 import { assessBuildingCondition } from "@/lib/building-condition-engine";
 
 async function getUser() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const user = await prisma.user.findUnique({ where: { id: ctx.userId } });
   if (!user) throw new Error("User not found");
-  return user;
+  // Effective orgId from ctx (honors super_admin ?as_org override).
+  return { ...user, orgId: ctx.orgId };
 }
 
 export async function saveDealAnalysis(data: {
