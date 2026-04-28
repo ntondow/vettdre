@@ -254,7 +254,6 @@ export async function calculateAgentActuals(
     },
     select: {
       transactionId: true,
-      payoutAmount: true,
       splitPct: true,
       transaction: { select: { commissionAmount: true } },
     },
@@ -287,16 +286,16 @@ export async function calculateAgentActuals(
 
   const dealsClosed = transactions.length + uniqueCoSplits.length + uniqueSubmissions.length;
 
-  // Revenue: prefer Transaction.commissionAmount, fallback to DealSubmission.totalCommission
-  // For co-agent splits, use their payoutAmount or calculate from splitPct
+  // Revenue: prefer Transaction.commissionAmount, fallback to DealSubmission.totalCommission.
+  // For co-agents, use their GROSS share (commission * splitPct) — using payoutAmount
+  // would pull the net-of-fee value (post-PATCH-C agentPayout) and rank co-agents
+  // lower whenever the brokerage raises its processing fee.
   let revenue = 0;
   for (const t of transactions) {
     revenue += Number(t.commissionAmount || 0);
   }
   for (const s of uniqueCoSplits) {
-    if (s.payoutAmount) {
-      revenue += Number(s.payoutAmount);
-    } else if (s.splitPct && s.transaction.commissionAmount) {
+    if (s.splitPct && s.transaction.commissionAmount) {
       revenue += Number(s.transaction.commissionAmount) * Number(s.splitPct) / 100;
     }
   }
