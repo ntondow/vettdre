@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 
-async function getUser() {
-  const ctx = await getCurrentOrgContext();
+async function getUser(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
   return { id: ctx.userId, orgId: ctx.orgId };
 }
@@ -186,8 +186,10 @@ export async function incrementTemplateUsage(id: string) {
 // Seed Defaults
 // ============================================================
 
-export async function seedDefaultTemplates(): Promise<void> {
-  const user = await getUser();
+export async function seedDefaultTemplates(
+  options: { overrideAsOrg?: string } = {},
+): Promise<void> {
+  const user = await getUser(options);
   if (!user) return;
 
   const count = await prisma.emailTemplate.count({ where: { orgId: user.orgId } });

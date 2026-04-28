@@ -1,24 +1,36 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
 interface Props {
+  // Org id → name map. Empty/undefined when the viewer is not super_admin —
+  // the banner self-hides via the as_org check, so the map only matters when
+  // an override is actually active.
+  orgsById?: Record<string, string>;
+  realOrgId?: string;
   realOrgName?: string;
-  viewingOrgName?: string;
 }
 
-// Strips ?as_org=... from the current URL so a click on "Exit override"
-// keeps the user on the same path with the override cleared.
-function buildClearHref(pathname: string): string {
-  if (typeof window === "undefined") return pathname;
-  const url = new URL(window.location.href);
-  url.searchParams.delete("as_org");
-  return url.pathname + (url.searchParams.toString() ? `?${url.searchParams}` : "");
-}
-
-export default function SuperAdminBanner({ realOrgName, viewingOrgName }: Props) {
+export default function SuperAdminBanner({ orgsById, realOrgId, realOrgName }: Props) {
+  const sp = useSearchParams();
   const pathname = usePathname();
+  const router = useRouter();
+  const asOrg = sp.get("as_org");
+
+  // Self-hide for: no override param, no-op override (target = home), or when
+  // a non-super_admin user lands on a URL with ?as_org=... (no orgsById passed).
+  if (!asOrg) return null;
+  if (realOrgId && asOrg === realOrgId) return null;
+  if (!orgsById) return null;
+
+  const viewingName = orgsById[asOrg] ?? "another organization";
+
+  function handleExit() {
+    const newParams = new URLSearchParams(sp.toString());
+    newParams.delete("as_org");
+    const qs = newParams.toString();
+    router.push(qs ? `${pathname}?${qs}` : pathname);
+  }
 
   return (
     <div className="bg-amber-500 text-amber-950 text-sm font-medium shadow-sm border-b border-amber-600">
@@ -27,18 +39,19 @@ export default function SuperAdminBanner({ realOrgName, viewingOrgName }: Props)
           <span aria-hidden className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
           <span className="truncate">
             <strong>Super-admin override:</strong> viewing as{" "}
-            <strong className="font-semibold">{viewingOrgName || "another organization"}</strong>
+            <strong className="font-semibold">{viewingName}</strong>
             {realOrgName ? (
               <span className="text-amber-900/80 ml-2">(home: {realOrgName})</span>
             ) : null}
           </span>
         </div>
-        <Link
-          href={buildClearHref(pathname)}
+        <button
+          type="button"
+          onClick={handleExit}
           className="flex-shrink-0 underline underline-offset-2 hover:text-amber-900 whitespace-nowrap"
         >
           Exit override
-        </Link>
+        </button>
       </div>
     </div>
   );

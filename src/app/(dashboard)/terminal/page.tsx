@@ -8,9 +8,14 @@ import TerminalPaywall from "./components/terminal-paywall";
 
 export const metadata = { title: "Terminal — VettdRE" };
 
-export default async function TerminalPage() {
+export default async function TerminalPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
   // Feature gate: check user plan server-side
-  const ctx = await getCurrentOrgContext();
+  const ctx = await getCurrentOrgContext({ overrideAsOrg: as_org });
   let orgId = "";
   if (ctx) {
     const user = await prisma.user.findUnique({
@@ -25,7 +30,7 @@ export default async function TerminalPage() {
   }
 
   const [prefs, categories] = await Promise.all([
-    getTerminalPreferences(),
+    getTerminalPreferences({ overrideAsOrg: as_org }),
     getEventCategories(),
   ]);
 
@@ -39,8 +44,8 @@ export default async function TerminalPage() {
       categories: enabledCategories,
       ntas: selectedNtas,
       limit: 20,
-    }),
-    getEventCategoryCounts(enabledBoroughs),
+    }, { overrideAsOrg: as_org }),
+    getEventCategoryCounts(enabledBoroughs, { overrideAsOrg: as_org }),
   ]);
 
   return (

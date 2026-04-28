@@ -20,8 +20,13 @@ interface ExclusiveBuilding {
 
 export const dynamic = "force-dynamic";
 
-export default async function SubmitDealPage() {
-  const ctx = await getCurrentOrgContext();
+export default async function SubmitDealPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
+  const ctx = await getCurrentOrgContext({ overrideAsOrg: as_org });
   if (!ctx) {
     redirect("/login");
   }
@@ -96,7 +101,7 @@ export default async function SubmitDealPage() {
     : undefined;
 
   // Fetch exclusive buildings for the brokerage dropdown
-  const exclusivesResult = await getExclusiveProperties();
+  const exclusivesResult = await getExclusiveProperties({ overrideAsOrg: as_org });
   const exclusiveBuildings = (exclusivesResult.data ?? []) as ExclusiveBuilding[];
 
   return (

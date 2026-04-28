@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 
-async function getUser() {
-  const ctx = await getCurrentOrgContext();
+async function getUser(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
   return { id: ctx.userId, orgId: ctx.orgId };
 }
@@ -58,8 +58,10 @@ export async function getPendingFollowUps(): Promise<FollowUpData[]> {
   }));
 }
 
-export async function getFollowUpCount(): Promise<number> {
-  const user = await getUser();
+export async function getFollowUpCount(
+  options: { overrideAsOrg?: string } = {},
+): Promise<number> {
+  const user = await getUser(options);
   if (!user) return 0;
 
   return prisma.followUpReminder.count({

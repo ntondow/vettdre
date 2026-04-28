@@ -3,8 +3,13 @@ import { getContacts } from "./actions";
 import ContactForm from "./contact-form";
 import ContactList from "./contact-list";
 
-export default async function ContactsPage() {
-  const contacts = await getContacts();
+export default async function ContactsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
+  const contacts = await getContacts({ overrideAsOrg: as_org });
 
   return (
     <>

@@ -12,6 +12,9 @@ import type { UserPlan } from "@/lib/feature-gate";
 import DashboardShell from "./dashboard-shell";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  // Layouts don't receive searchParams in App Router, so the helper here uses
+  // referer-fallback. The banner below uses useSearchParams() client-side to
+  // detect the override from the live URL — this layout's ctx is informational.
   const ctx = await getCurrentOrgContext();
   if (!ctx) redirect("/login");
 
@@ -37,14 +40,24 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const today = new Date().toISOString().slice(0, 10);
   const searchesToday = counters.lastSearchDate === today ? (counters.searchesToday || 0) : 0;
 
+  // Org name lookup map for the banner — only fetched when the viewer is a
+  // super_admin (the only role that can trigger an override).
+  let orgsById: Record<string, string> | undefined;
+  if (ctx.userRole === "super_admin") {
+    const orgs = await prisma.organization.findMany({ select: { id: true, name: true } });
+    orgsById = Object.fromEntries(orgs.map((o) => [o.id, o.name]));
+  }
+
   return (
     <UserPlanProvider plan={plan} userId={userId} role={dbUser?.role || "agent"} trialEndsAt={trialEndsAt} searchesToday={searchesToday}>
       <SidebarProvider>
         <ToastProvider>
           <div className="min-h-screen bg-slate-50">
-            {ctx.isOverride ? (
-              <SuperAdminBanner realOrgName={ctx.realOrgName} viewingOrgName={ctx.viewingOrgName} />
-            ) : null}
+            <SuperAdminBanner
+              orgsById={orgsById}
+              realOrgId={ctx.realOrgId}
+              realOrgName={ctx.realOrgName}
+            />
             <Sidebar />
             <MobileNav />
             <DashboardShell>{children}</DashboardShell>
