@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getLeaderboard,
   getGoalsByMonth,
@@ -91,6 +92,15 @@ function rowBg(rank: number) {
 // ── Component ─────────────────────────────────────────────────
 
 export default function LeaderboardPage() {
+  const searchParams = useSearchParams();
+  const asOrg = searchParams.get("as_org") || undefined;
+  // Forwarded to every server-action call so the super_admin override target
+  // survives client-side refetches. Without this, the leaderboard reverts to
+  // the real org's data on first hydration (referer-fallback is unreliable).
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -115,7 +125,8 @@ export default function LeaderboardPage() {
   // ── Load ──────────────────────────────────────────────────
 
   useEffect(() => {
-    getCurrentBrokerageRole().then(setRole);
+    getCurrentBrokerageRole(overrideOpts).then(setRole);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function loadLeaderboard() {
@@ -126,7 +137,7 @@ export default function LeaderboardPage() {
         quarter: "current_quarter",
         year: "current_year",
       };
-      const data = await getLeaderboard(periodMap[period]);
+      const data = await getLeaderboard(periodMap[period], overrideOpts);
       setEntries(data);
     } catch {
       setEntries([]);
@@ -144,7 +155,7 @@ export default function LeaderboardPage() {
     setRefreshing(true);
     try {
       const now = new Date();
-      await refreshLeaderboard(now.getFullYear(), now.getMonth() + 1);
+      await refreshLeaderboard(now.getFullYear(), now.getMonth() + 1, overrideOpts);
       await loadLeaderboard();
     } finally {
       setRefreshing(false);
@@ -161,7 +172,7 @@ export default function LeaderboardPage() {
     setGoalYear(new Date().getFullYear());
     setGoalMonth(new Date().getMonth() + 1);
     try {
-      const ag = await getAgents();
+      const ag = await getAgents(undefined, overrideOpts);
       setAgents((ag || []).filter((a: any) => a.status === "active"));
       if (ag.length > 0 && !selectedAgentId) setSelectedAgentId(ag[0].id);
     } catch {
@@ -175,10 +186,10 @@ export default function LeaderboardPage() {
     try {
       if (goalMode === "individual") {
         if (!selectedAgentId) return;
-        await setAgentGoals(selectedAgentId, goalYear, goalMonth, goalTargets);
+        await setAgentGoals(selectedAgentId, goalYear, goalMonth, goalTargets, overrideOpts);
         setGoalSuccess("Goals saved for agent");
       } else if (goalMode === "bulk") {
-        await setBulkGoals(goalYear, goalMonth, goalTargets);
+        await setBulkGoals(goalYear, goalMonth, goalTargets, overrideOpts);
         setGoalSuccess(`Goals applied to all active agents`);
       }
       setGoalTargets({});
@@ -193,7 +204,7 @@ export default function LeaderboardPage() {
   async function loadHistory() {
     setHistoryLoading(true);
     try {
-      const goals = await getGoalsByMonth(goalYear, goalMonth);
+      const goals = await getGoalsByMonth(goalYear, goalMonth, overrideOpts);
       setHistoryGoals(goals);
     } catch {
       setHistoryGoals([]);

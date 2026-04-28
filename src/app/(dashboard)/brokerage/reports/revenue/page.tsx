@@ -44,6 +44,7 @@ export default async function RevenueReportPage({
 
   return (
     <RevenueDashboard
+      asOrg={as_org}
       initialEarnings={earningsReport}
       initialPipeline={pipeline}
       initialMonthly={monthlyRevenue}

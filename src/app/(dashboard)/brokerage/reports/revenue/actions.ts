@@ -446,9 +446,12 @@ export async function getRevenueByMonth(
 
 // ── 5. 1099 Data ──────────────────────────────────────────────
 
-export async function get1099Data(year: number) {
+export async function get1099Data(
+  year: number,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
 
     if (!hasPermission(ctx.role, "view_1099")) {
       return { agents: [], summary: null };

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
@@ -112,6 +112,16 @@ function LifecycleIndicator({ stage }: { stage: string }) {
 
 export default function TransactionsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const asOrg = searchParams.get("as_org") || undefined;
+  // Forwarded to every server-action call so the super_admin override target
+  // survives client-side refetches (filter changes, debounced search, create
+  // modal). Without this, the dashboard reverts to the real org's data on
+  // first hydration (referer-fallback is unreliable).
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
 
   // Data
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
@@ -145,8 +155,8 @@ export default function TransactionsPage() {
       if (debouncedSearch) filters.search = debouncedSearch;
 
       const [txs, st] = await Promise.all([
-        getTransactions(filters),
-        getTransactionStats(),
+        getTransactions(filters, overrideOpts),
+        getTransactionStats(overrideOpts),
       ]);
       setTransactions(txs);
       setStats(st);
@@ -160,7 +170,7 @@ export default function TransactionsPage() {
   useEffect(() => {
     loadData();
     // Load agents for the create modal
-    getAgents({ status: "active", limit: 100 })
+    getAgents({ status: "active", limit: 100 }, overrideOpts)
       .then((res) => {
         if (res?.agents) setAgents(res.agents as AgentOption[]);
       })
@@ -196,7 +206,7 @@ export default function TransactionsPage() {
     setCreating(true);
     setCreateError("");
     try {
-      const tx = await createTransaction(form);
+      const tx = await createTransaction(form, overrideOpts);
       setShowCreate(false);
       setForm({ type: "rental", propertyAddress: "" });
       router.push(`/brokerage/transactions/${tx.id}`);

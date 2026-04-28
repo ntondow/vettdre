@@ -8,17 +8,20 @@ import { syncTransactionFromInvoice } from "@/app/(dashboard)/brokerage/transact
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 // ── Record Payment ───────────────────────────────────────────
 
-export async function recordPayment(input: PaymentInput) {
+export async function recordPayment(
+  input: PaymentInput,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     // Verify invoice belongs to org
     const invoice = await prisma.invoice.findFirst({

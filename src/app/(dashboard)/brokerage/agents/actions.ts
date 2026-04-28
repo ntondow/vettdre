@@ -6,22 +6,25 @@ import { logAgentAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 // ── Agent Roster ──────────────────────────────────────────────
 
-export async function getAgents(filters?: {
-  status?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
+export async function getAgents(
+  filters?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const status = filters?.status || "all";
     const search = filters?.search?.trim() || "";
     const page = filters?.page || 1;

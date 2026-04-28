@@ -14,8 +14,8 @@ import { revalidatePath } from "next/cache";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
@@ -57,9 +57,11 @@ function parsePaymentTermsDays(terms: string): number {
 
 // ── Brokerage Config ──────────────────────────────────────────
 
-export async function getBrokerageConfig(): Promise<BrokerageConfig> {
+export async function getBrokerageConfig(
+  options: { overrideAsOrg?: string } = {},
+): Promise<BrokerageConfig> {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -91,14 +93,17 @@ export async function getBrokerageConfig(): Promise<BrokerageConfig> {
 
 // ── Invoice List ──────────────────────────────────────────────
 
-export async function getInvoices(filters?: {
-  status?: string;
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
+export async function getInvoices(
+  filters?: {
+    status?: string;
+    search?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const status = filters?.status || "all";
     const search = filters?.search?.trim() || "";
     const page = filters?.page || 1;
@@ -160,9 +165,12 @@ export async function getInvoices(filters?: {
 
 // ── Create Invoice ────────────────────────────────────────────
 
-export async function createInvoice(input: InvoiceInput) {
+export async function createInvoice(
+  input: InvoiceInput,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const invoiceNumber = await generateInvoiceNumber(orgId, {
       propertyName: input.propertyName,
@@ -258,9 +266,12 @@ export async function createInvoice(input: InvoiceInput) {
 
 // ── Create From Submission ────────────────────────────────────
 
-export async function createInvoiceFromSubmission(submissionId: string) {
+export async function createInvoiceFromSubmission(
+  submissionId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const submission = await prisma.dealSubmission.findFirst({
       where: { id: submissionId, orgId },
@@ -389,9 +400,10 @@ export async function updateInvoiceStatus(
   invoiceId: string,
   status: string,
   paidDate?: string,
+  options: { overrideAsOrg?: string } = {},
 ) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const prev = await prisma.invoice.findFirst({
       where: { id: invoiceId, orgId },
@@ -440,9 +452,12 @@ export async function updateInvoiceStatus(
 
 // ── Delete Invoice ────────────────────────────────────────────
 
-export async function deleteInvoice(invoiceId: string) {
+export async function deleteInvoice(
+  invoiceId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, orgId },
@@ -478,9 +493,12 @@ export async function deleteInvoice(invoiceId: string) {
 
 // ── Get Invoice By ID ─────────────────────────────────────────
 
-export async function getInvoiceById(invoiceId: string) {
+export async function getInvoiceById(
+  invoiceId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, orgId },
@@ -503,6 +521,7 @@ export async function getInvoiceById(invoiceId: string) {
 export async function createBulkInvoices(
   rows: ExcelDealRow[],
   defaultAgentSplitPct?: number,
+  options: { overrideAsOrg?: string } = {},
 ) {
   try {
     const results: Array<{ success: boolean; invoiceNumber?: string; error?: string; row: number }> = [];
@@ -523,24 +542,27 @@ export async function createBulkInvoices(
       const agentPayout = row._agentPayout ?? totalCommission * splitPct / 100;
       const housePayout = row._housePayout ?? totalCommission * houseSplitPct / 100;
 
-      const result = await createInvoice({
-        agentName: row.agentName,
-        brokerageName: "",
-        propertyAddress: row.propertyAddress,
-        dealType: (row.dealType?.toLowerCase() as "sale" | "lease" | "rental") || "sale",
-        transactionValue: row.transactionValue,
-        closingDate: row.closingDate || undefined,
-        clientName: row.clientName || undefined,
+      const result = await createInvoice(
+        {
+          agentName: row.agentName,
+          brokerageName: "",
+          propertyAddress: row.propertyAddress,
+          dealType: (row.dealType?.toLowerCase() as "sale" | "lease" | "rental") || "sale",
+          transactionValue: row.transactionValue,
+          closingDate: row.closingDate || undefined,
+          clientName: row.clientName || undefined,
 
-        totalCommission,
-        agentSplitPct: splitPct,
-        houseSplitPct,
-        agentPayout,
-        housePayout,
+          totalCommission,
+          agentSplitPct: splitPct,
+          houseSplitPct,
+          agentPayout,
+          housePayout,
 
-        paymentTerms: "Net 30",
-        dueDate: "",
-      });
+          paymentTerms: "Net 30",
+          dueDate: "",
+        },
+        options,
+      );
 
       if (result.success) {
         created++;
@@ -665,9 +687,12 @@ function parseNumeric(value: unknown): number {
 
 // ── Bulk Mark Paid ────────────────────────────────────────────
 
-export async function bulkMarkPaid(invoiceIds: string[]) {
+export async function bulkMarkPaid(
+  invoiceIds: string[],
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
     const now = new Date();
 
     const result = await prisma.invoice.updateMany({

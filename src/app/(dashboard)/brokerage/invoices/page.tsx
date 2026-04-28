@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, Fragment, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getInvoices,
   updateInvoiceStatus,
@@ -67,6 +67,15 @@ const getPaidAmount = (inv: any) => (inv.payments || []).reduce((s: number, p: a
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const asOrg = searchParams.get("as_org") || undefined;
+  // Forwarded to every server-action call so the super_admin override target
+  // survives client-side refetches. Without this, the dashboard reverts to the
+  // real org's data on first hydration (referer-fallback is unreliable).
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   const [invoices, setInvoices] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
@@ -91,10 +100,13 @@ export default function InvoicesPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const result = await getInvoices({
-        status: statusFilter === "all" ? undefined : statusFilter,
-        search: search || undefined,
-      });
+      const result = await getInvoices(
+        {
+          status: statusFilter === "all" ? undefined : statusFilter,
+          search: search || undefined,
+        },
+        overrideOpts,
+      );
       setInvoices(result.invoices || []);
       setCounts(result.counts || {});
       setTotal(result.total || 0);
@@ -106,7 +118,8 @@ export default function InvoicesPage() {
   }
 
   useEffect(() => {
-    getBrokerageConfig().then(c => setBrokerageConfig(c)).catch(() => {});
+    getBrokerageConfig(overrideOpts).then(c => setBrokerageConfig(c)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -176,14 +189,14 @@ export default function InvoicesPage() {
 
   async function handleMarkPaid(id: string) {
     setActionLoading(id);
-    await updateInvoiceStatus(id, "paid");
+    await updateInvoiceStatus(id, "paid", undefined, overrideOpts);
     setActionLoading(null);
     loadData();
   }
 
   async function handleVoid(id: string) {
     setActionLoading(id);
-    await updateInvoiceStatus(id, "void");
+    await updateInvoiceStatus(id, "void", undefined, overrideOpts);
     setActionLoading(null);
     loadData();
   }
@@ -191,7 +204,7 @@ export default function InvoicesPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this invoice? This cannot be undone.")) return;
     setActionLoading(id);
-    await deleteInvoice(id);
+    await deleteInvoice(id, overrideOpts);
     setActionLoading(null);
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n; });
     loadData();
@@ -201,7 +214,7 @@ export default function InvoicesPage() {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
     setActionLoading("bulk");
-    await bulkMarkPaid(ids);
+    await bulkMarkPaid(ids, overrideOpts);
     setActionLoading(null);
     setSelected(new Set());
     loadData();
@@ -220,13 +233,16 @@ export default function InvoicesPage() {
     if (!amount || amount <= 0) { setPaymentError("Enter a valid amount"); return; }
     setPaymentLoading(true);
     setPaymentError("");
-    const result = await recordPayment({
-      invoiceId: inv.id,
-      agentId: inv.agentId || undefined,
-      amount,
-      paymentMethod: paymentForm.method as any,
-      referenceNumber: paymentForm.reference || undefined,
-    });
+    const result = await recordPayment(
+      {
+        invoiceId: inv.id,
+        agentId: inv.agentId || undefined,
+        amount,
+        paymentMethod: paymentForm.method as any,
+        referenceNumber: paymentForm.reference || undefined,
+      },
+      overrideOpts,
+    );
     setPaymentLoading(false);
     if (result.success) {
       setPaymentFormId(null);
@@ -373,7 +389,7 @@ export default function InvoicesPage() {
             <X className="h-5 w-5" />
           </button>
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Upload Excel / CSV</h2>
-          <ExcelUpload onComplete={() => { setShowUpload(false); loadData(); }} />
+          <ExcelUpload asOrg={asOrg} onComplete={() => { setShowUpload(false); loadData(); }} />
         </div>
       )}
 
