@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -28,6 +29,35 @@ interface LogParams {
 
 export async function logAction(params: LogParams): Promise<void> {
   try {
+    // Stamp override metadata when a super_admin is acting via ?as_org=...:
+    // the orgId we write is the *effective* (target) org so org owners see
+    // changes against their own data, but `details._override` records that
+    // a super_admin from another org actually performed the action. Keeps
+    // the cross-tenant trail auditable without splitting the row across
+    // two orgs.
+    let overrideDetails: Record<string, unknown> | undefined;
+    try {
+      const ctx = await getCurrentOrgContext();
+      if (ctx?.isOverride) {
+        overrideDetails = {
+          _override: {
+            asOrg: true,
+            realOrgId: ctx.realOrgId,
+            realOrgName: ctx.realOrgName,
+            realActorId: ctx.userId,
+            realActorName: ctx.userName,
+            realActorRole: ctx.userRole,
+          },
+        };
+      }
+    } catch {
+      // ctx lookup is best-effort; never block audit writes on it.
+    }
+
+    const mergedDetails = overrideDetails || params.details
+      ? { ...(params.details || {}), ...(overrideDetails || {}) }
+      : undefined;
+
     prisma.auditLog
       .create({
         data: {
@@ -38,7 +68,7 @@ export async function logAction(params: LogParams): Promise<void> {
           action: params.action,
           entityType: params.entityType,
           entityId: params.entityId || null,
-          details: (params.details || undefined) as Prisma.InputJsonValue | undefined,
+          details: (mergedDetails || undefined) as Prisma.InputJsonValue | undefined,
           previousValue: (params.previousValue || undefined) as Prisma.InputJsonValue | undefined,
           newValue: (params.newValue || undefined) as Prisma.InputJsonValue | undefined,
         },
