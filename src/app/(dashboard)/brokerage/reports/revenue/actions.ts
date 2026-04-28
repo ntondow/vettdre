@@ -281,13 +281,17 @@ export async function getAgentEarningsReport(filters?: {
       else orgTotalPending += agentPay;
     }
 
-    // Compute avg deal size and sort by payout desc
+    // Compute avg deal size and sort by GROSS commission contribution.
+    // Sorting by totalAgentPayout (net post-PATCH-C) would rank an agent lower
+    // whenever the brokerage raises its processing fee — wrong incentive for a
+    // performance leaderboard. totalAgentPayout (net) stays in the response for
+    // the take-home column.
     const agents = Array.from(agentMap.values())
       .map((a) => ({
         ...a,
         avgDealSize: a.dealCount > 0 ? a.totalTransactionValue / a.dealCount : 0,
       }))
-      .sort((a, b) => b.totalAgentPayout - a.totalAgentPayout);
+      .sort((a, b) => b.totalCommission - a.totalCommission);
 
     const orgTotals = {
       totalCommission: orgTotalCommission,
