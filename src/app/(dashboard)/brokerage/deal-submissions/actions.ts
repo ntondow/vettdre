@@ -470,7 +470,7 @@ export async function rejectSubmission(
 
 export async function pushToInvoice(
   submissionId: string,
-): Promise<{ success: boolean; invoiceId?: string; transactionId?: string; error?: string }> {
+): Promise<{ success: boolean; invoiceId?: string; transactionId?: string; stage?: string; error?: string }> {
   try {
     const ctx = await getAuthContext();
     if (!ctx) return { success: false, error: "Not authenticated" };
@@ -499,6 +499,23 @@ export async function pushToInvoice(
         success: false,
         error: "An invoice already exists for this submission.",
         invoiceId: existingInvoice.id,
+      };
+    }
+
+    // Symmetric guard: a transaction can exist without an invoice if a prior
+    // pushToInvoice walk crashed mid-$transaction. Without this, the action
+    // throws P2002 on transactions.deal_submission_id with the unhelpful
+    // "Failed to create invoice." message.
+    const existingTransaction = await prisma.transaction.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true, stage: true },
+    });
+    if (existingTransaction) {
+      return {
+        success: false,
+        error: "A transaction already exists for this submission.",
+        transactionId: existingTransaction.id,
+        stage: existingTransaction.stage,
       };
     }
 
