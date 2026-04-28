@@ -239,9 +239,10 @@ export async function getMySubmissions(
 
 export async function getSubmissionById(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const submission = await prisma.dealSubmission.findFirst({
@@ -354,9 +355,10 @@ export async function getAllSubmissions(
 export async function approveSubmission(
   id: string,
   overrides?: { exclusiveType?: ExclusiveType; agentSplitPct?: number; notes?: string },
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "approve_deal")) {
       return { success: false, error: "Not authorized" };
@@ -428,9 +430,10 @@ export async function approveSubmission(
 export async function rejectSubmission(
   id: string,
   reason: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "reject_deal")) {
       return { success: false, error: "Not authorized" };
@@ -470,9 +473,10 @@ export async function rejectSubmission(
 
 export async function pushToInvoice(
   submissionId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; invoiceId?: string; transactionId?: string; stage?: string; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "create_invoice")) {
       return { success: false, error: "Not authorized" };
@@ -686,9 +690,10 @@ export type ProcessingFeeUpdate =
 export async function updateProcessingFee(
   submissionId: string,
   update: ProcessingFeeUpdate,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "approve_deal")) {
       return { success: false, error: "Not authorized" };
@@ -945,13 +950,15 @@ export async function getSubmissionStats(
 
 // ── 12. getOrgAgents ────────────────────────────────────────
 
-export async function getOrgAgents(): Promise<{
+export async function getOrgAgents(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   success: boolean;
   data?: Array<{ id: string; firstName: string; lastName: string; email: string }>;
   error?: string;
 }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const agents = await prisma.brokerAgent.findMany({

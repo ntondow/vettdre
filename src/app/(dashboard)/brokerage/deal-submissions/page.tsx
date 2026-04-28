@@ -24,6 +24,7 @@ export default async function DealSubmissionsPage({
 
   return (
     <SubmissionsDashboard
+      asOrg={as_org}
       initialSubmissions={submissionsResult.data ?? []}
       initialTotal={submissionsResult.total ?? 0}
       initialStats={
