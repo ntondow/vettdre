@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   getAgentEarningsReport,
@@ -102,6 +102,7 @@ interface Summary1099 {
 }
 
 interface Props {
+  asOrg?: string;
   initialEarnings: { agents: AgentEarning[]; orgTotals: OrgTotals | null };
   initialPipeline: PipelineData | null;
   initialMonthly: MonthEntry[];
@@ -123,11 +124,18 @@ type SortKey = "agentName" | "dealCount" | "totalCommission" | "totalAgentPayout
 // ── Main Component ────────────────────────────────────────────
 
 export default function RevenueDashboard({
+  asOrg,
   initialEarnings,
   initialPipeline,
   initialMonthly,
   canView1099,
 }: Props) {
+  // Forwarded to every server-action call so the super_admin override target
+  // survives client-side refetches (year changes for monthly + 1099).
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   // State
   const [earnings, setEarnings] = useState(initialEarnings);
   const [pipeline, setPipeline] = useState(initialPipeline);
@@ -150,14 +158,14 @@ export default function RevenueDashboard({
   const loadMonthly = useCallback(async (year: number) => {
     setLoading(true);
     try {
-      const data = await getRevenueByMonth(year);
+      const data = await getRevenueByMonth(year, overrideOpts);
       setMonthly(data);
     } catch {
       // silent
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [overrideOpts]);
 
   useEffect(() => {
     if (monthlyYear !== new Date().getFullYear()) {
@@ -170,14 +178,14 @@ export default function RevenueDashboard({
   const load1099 = useCallback(async (year: number) => {
     setLoading1099(true);
     try {
-      const data = await get1099Data(year);
+      const data = await get1099Data(year, overrideOpts);
       setData1099(data);
     } catch {
       setData1099(null);
     } finally {
       setLoading1099(false);
     }
-  }, []);
+  }, [overrideOpts]);
 
   useEffect(() => {
     if (show1099) {

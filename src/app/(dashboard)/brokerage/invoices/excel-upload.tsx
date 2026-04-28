@@ -7,6 +7,7 @@ import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, X } from "lucide-rea
 
 interface Props {
   onComplete: () => void;
+  asOrg?: string;
 }
 
 type Stage = "upload" | "preview" | "success";
@@ -47,7 +48,8 @@ function downloadTemplate() {
 
 // ── Component ─────────────────────────────────────────────────
 
-export default function ExcelUpload({ onComplete }: Props) {
+export default function ExcelUpload({ onComplete, asOrg }: Props) {
+  const overrideOpts = asOrg ? { overrideAsOrg: asOrg } : {};
   const [stage, setStage] = useState<Stage>("upload");
   const [rows, setRows] = useState<ExcelDealRow[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -134,7 +136,7 @@ export default function ExcelUpload({ onComplete }: Props) {
 
     setCreating(true);
     try {
-      const res = await createBulkInvoices(selectedRows, defaultSplit);
+      const res = await createBulkInvoices(selectedRows, defaultSplit, overrideOpts);
       setResult({ created: res.created, total: res.total });
       setStage("success");
     } catch {

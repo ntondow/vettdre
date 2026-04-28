@@ -19,12 +19,12 @@ import type {
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   // brokerageRole and agentId are not in the lean OrgContext; fetch them via
   // the cached helper so consecutive calls in this request are free.
-  const agentInfo = await getCurrentAgentInfo();
+  const agentInfo = await getCurrentAgentInfo(options);
   return {
     userId: ctx.userId,
     orgId: ctx.orgId,
@@ -50,8 +50,9 @@ export async function setAgentGoals(
   year: number,
   month: number,
   targets: AgentGoalInput,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<AgentGoalRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   // Permission check: only brokerage_admin and broker can set goals
   if (ctx.role !== "brokerage_admin" && ctx.role !== "broker") {
@@ -108,8 +109,9 @@ export async function setBulkGoals(
   year: number,
   month: number,
   targets: AgentGoalInput,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<AgentGoalRecord[]> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   if (ctx.role !== "brokerage_admin" && ctx.role !== "broker") {
     throw new Error("Only admins and brokers can set goals");
@@ -193,8 +195,9 @@ export async function getAgentGoals(
 export async function getGoalsByMonth(
   year: number,
   month: number,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<AgentGoalRecord[]> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const goals = await prisma.agentGoal.findMany({
     where: { orgId: ctx.orgId, year, month },
@@ -591,8 +594,9 @@ async function getLifetimeStats(
 export async function refreshLeaderboard(
   year: number,
   month: number,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<void> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   // Get all goals for this month
   const goals = await prisma.agentGoal.findMany({
@@ -626,8 +630,9 @@ export async function refreshLeaderboard(
 
 export async function getLeaderboard(
   period: { year: number; month: number } | "current_month" | "current_quarter" | "current_year",
+  options: { overrideAsOrg?: string } = {},
 ): Promise<LeaderboardEntry[]> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const now = new Date();
   let months: Array<{ year: number; month: number }>;
@@ -841,8 +846,9 @@ export async function getLeaderboard(
 
 export async function getAgentDashboard(
   agentId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<AgentDashboardData> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const now = new Date();
   const currentYear = now.getFullYear();

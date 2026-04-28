@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import Link from "next/link";
 import {
   CheckCircle,
@@ -121,6 +121,7 @@ const REQUIRED_DOCS = [
 // ── Props ─────────────────────────────────────────────────────
 
 interface MyDealsViewProps {
+  asOrg?: string;
   initialSubmissions: Record<string, unknown>[];
   showSuccessBanner: boolean;
 }
@@ -208,10 +209,12 @@ function MissingDocUploader({
   submissionId,
   existingDocs,
   onUploaded,
+  overrideOpts,
 }: {
   submissionId: string;
   existingDocs: { id: string; fileName: string }[];
   onUploaded: () => void;
+  overrideOpts: { overrideAsOrg?: string };
 }) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -238,7 +241,7 @@ function MissingDocUploader({
     try {
       const formData = new FormData();
       formData.set("file", file);
-      const result = await uploadFile(formData, "deal_submission", submissionId);
+      const result = await uploadFile(formData, "deal_submission", submissionId, overrideOpts);
       if (result.error) {
         setError(result.error);
       } else {
@@ -480,9 +483,11 @@ function DealCard({
 function AgentDetailPanel({
   submissionId,
   onClose,
+  overrideOpts,
 }: {
   submissionId: string;
   onClose: () => void;
+  overrideOpts: { overrideAsOrg?: string };
 }) {
   const [data, setData] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -494,7 +499,7 @@ function AgentDetailPanel({
     async function load() {
       setLoading(true);
       try {
-        const sub = await getSubmissionById(submissionId);
+        const sub = await getSubmissionById(submissionId, overrideOpts);
         if (sub?.success && sub.data) {
           setData(sub.data as Record<string, unknown>);
         } else {
@@ -614,6 +619,7 @@ function AgentDetailPanel({
             submissionId={str(data.id)}
             existingDocs={existingDocs}
             onDocUploaded={() => setDocRefresh((p) => p + 1)}
+            overrideOpts={overrideOpts}
           />
         </div>
 
@@ -763,7 +769,7 @@ function AgentDetailPanel({
             {existingDocs.length > 0 ? (
               <div className="space-y-2">
                 {existingDocs.map((doc) => (
-                  <DocFileRow key={doc.id} doc={doc} />
+                  <DocFileRow key={doc.id} doc={doc} overrideOpts={overrideOpts} />
                 ))}
               </div>
             ) : (
@@ -775,6 +781,7 @@ function AgentDetailPanel({
                 submissionId={str(data.id)}
                 existingDocs={existingDocs}
                 onUploaded={() => setDocRefresh((p) => p + 1)}
+                overrideOpts={overrideOpts}
               />
             )}
           </PanelSection>
@@ -797,13 +804,19 @@ function AgentDetailPanel({
 
 // ── Doc File Row (with signed URL viewer) ─────────────────────
 
-function DocFileRow({ doc }: { doc: { id: string; fileName: string } }) {
+function DocFileRow({
+  doc,
+  overrideOpts,
+}: {
+  doc: { id: string; fileName: string };
+  overrideOpts: { overrideAsOrg?: string };
+}) {
   const [loading, setLoading] = useState(false);
 
   async function handleView() {
     setLoading(true);
     try {
-      const result = await getSignedUrl(doc.id);
+      const result = await getSignedUrl(doc.id, overrideOpts);
       if (result.url) {
         window.open(result.url, "_blank");
       }
@@ -844,6 +857,7 @@ function AgentActionBar({
   submissionId,
   existingDocs,
   onDocUploaded,
+  overrideOpts,
 }: {
   status: string;
   agentPayout: number;
@@ -851,6 +865,7 @@ function AgentActionBar({
   submissionId: string;
   existingDocs: { id: string; fileName: string }[];
   onDocUploaded: () => void;
+  overrideOpts: { overrideAsOrg?: string };
 }) {
   if (status === "submitted" || status === "under_review") {
     return (
@@ -865,6 +880,7 @@ function AgentActionBar({
           submissionId={submissionId}
           existingDocs={existingDocs}
           onUploaded={onDocUploaded}
+          overrideOpts={overrideOpts}
         />
       </div>
     );
@@ -921,9 +937,16 @@ function AgentActionBar({
 // ── Main Component ────────────────────────────────────────────
 
 export default function MyDealsView({
+  asOrg,
   initialSubmissions,
   showSuccessBanner,
 }: MyDealsViewProps) {
+  // Forwarded to every server-action call so the super_admin override target
+  // survives client-side actions (open detail panel, file upload/download).
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   const [submissions] = useState(initialSubmissions);
   const [banner, setBanner] = useState(showSuccessBanner);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1310,6 +1333,7 @@ export default function MyDealsView({
         <AgentDetailPanel
           submissionId={selectedId}
           onClose={() => setSelectedId(null)}
+          overrideOpts={overrideOpts}
         />
       )}
     </div>

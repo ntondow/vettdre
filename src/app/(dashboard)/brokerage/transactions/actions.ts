@@ -28,10 +28,10 @@ import type {
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
-  const agentInfo = await getCurrentAgentInfo();
+  const agentInfo = await getCurrentAgentInfo(options);
   return {
     userId: ctx.userId,
     orgId: ctx.orgId,
@@ -110,8 +110,9 @@ export async function ensureDefaultTemplates(orgId: string): Promise<void> {
 
 export async function createTransaction(
   input: CreateTransactionInput,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<TransactionRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
   const txType = input.type as BmsTransactionType;
 
   // Ensure default templates exist for this org
@@ -318,13 +319,16 @@ export async function createTransactionFromSubmission(
 
 // ── Get Transactions (list) ─────────────────────────────────
 
-export async function getTransactions(filters?: {
-  type?: string;
-  stage?: string;
-  agentId?: string;
-  search?: string;
-}): Promise<TransactionRecord[]> {
-  const ctx = await getCurrentOrg();
+export async function getTransactions(
+  filters?: {
+    type?: string;
+    stage?: string;
+    agentId?: string;
+    search?: string;
+  },
+  options: { overrideAsOrg?: string } = {},
+): Promise<TransactionRecord[]> {
+  const ctx = await getCurrentOrg(options);
 
   const where: Record<string, unknown> = { orgId: ctx.orgId };
 
@@ -778,8 +782,10 @@ export async function getTemplates(): Promise<
 
 // ── Transaction Stats ───────────────────────────────────────
 
-export async function getTransactionStats(): Promise<TransactionStats> {
-  const ctx = await getCurrentOrg();
+export async function getTransactionStats(
+  options: { overrideAsOrg?: string } = {},
+): Promise<TransactionStats> {
+  const ctx = await getCurrentOrg(options);
 
   const [total, transactions, closedThisMonth] = await Promise.all([
     prisma.transaction.count({ where: { orgId: ctx.orgId } }),
