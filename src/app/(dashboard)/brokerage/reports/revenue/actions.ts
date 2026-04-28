@@ -54,15 +54,18 @@ function buildDateFilter(startDate?: string, endDate?: string) {
 
 // ── 1. Record Payout ──────────────────────────────────────────
 
-export async function recordPayout(input: {
-  submissionId: string;
-  paymentMethod: string;
-  paymentDate?: string;
-  referenceNumber?: string;
-  notes?: string;
-}) {
+export async function recordPayout(
+  input: {
+    submissionId: string;
+    paymentMethod: string;
+    paymentDate?: string;
+    referenceNumber?: string;
+    notes?: string;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
 
     if (!hasPermission(ctx.role, "record_payment")) {
       return { success: false, error: "Insufficient permissions" };
@@ -544,10 +547,16 @@ export async function get1099Data(year: number) {
 
 // ── 6. Mark Submission Paid (convenience wrapper) ─────────────
 
-export async function markSubmissionPaid(submissionId: string) {
-  return recordPayout({
-    submissionId,
-    paymentMethod: "check",
-    paymentDate: new Date().toISOString().slice(0, 10),
-  });
+export async function markSubmissionPaid(
+  submissionId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
+  return recordPayout(
+    {
+      submissionId,
+      paymentMethod: "check",
+      paymentDate: new Date().toISOString().slice(0, 10),
+    },
+    options,
+  );
 }
