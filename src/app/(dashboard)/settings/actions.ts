@@ -1,13 +1,15 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 
 export async function getAuthUser() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  return prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
+  const user = await prisma.user.findUnique({ where: { id: ctx.userId } });
+  if (!user) return null;
+  // Effective orgId from ctx (honors super_admin ?as_org override).
+  return { ...user, orgId: ctx.orgId };
 }
 
 // ============================================================

@@ -2,19 +2,14 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
 
 // ── Auth Helper ─────────────────────────────────────────────
 
 async function getOrgId(): Promise<string | null> {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-    select: { orgId: true },
-  });
-  return user?.orgId ?? null;
+  const ctx = await getCurrentOrgContext();
+  return ctx?.orgId ?? null;
 }
 
 function serialize<T>(obj: T): T {

@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 // feature-gate imported dynamically to avoid module init issues in Node 20 Docker builds
 // Types inlined to avoid cross-module issues with "use server" bundling
 interface SearchResult {
@@ -23,22 +23,16 @@ interface WebIntelResult {
 // ── Auth Helper ─────────────────────────────────────────────
 
 async function getAuthContext(): Promise<{ userId: string; orgId: string; plan: string } | null> {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
 
-  let user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-    select: { id: true, orgId: true, plan: true },
+  // Plan is always tied to the real user — feature-gating doesn't change
+  // when a super_admin is viewing as another org.
+  const user = await prisma.user.findUnique({
+    where: { id: ctx.userId },
+    select: { plan: true },
   });
-  if (!user && authUser.email) {
-    user = await prisma.user.findFirst({
-      where: { email: authUser.email },
-      select: { id: true, orgId: true, plan: true },
-    });
-  }
-  if (!user) return null;
-  return { userId: user.id, orgId: user.orgId, plan: user.plan || "free" };
+  return { userId: ctx.userId, orgId: ctx.orgId, plan: user?.plan || "free" };
 }
 
 async function requireTerminalAccess(ctx: { plan: string } | null): Promise<boolean> {
