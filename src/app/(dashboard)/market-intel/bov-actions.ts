@@ -6,7 +6,7 @@
 // typed BovPayload ready for client-side PDF generation.
 // ============================================================
 
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import prisma from "@/lib/prisma";
 import { checkFeatureAccess } from "@/lib/feature-gate-server";
 import { fetchBuildingIntelligence } from "@/lib/data-fusion-engine";
@@ -66,19 +66,20 @@ export async function assembleBovData(
   const includeComps = options?.includeComps !== false;
 
   // ── Auth + user/org lookup ────────────────────────────────
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
 
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+  const userRow = await prisma.user.findUnique({
+    where: { id: ctx.userId },
     include: {
       organization: {
         include: { brandSettings: true },
       },
     },
   });
-  if (!user) throw new Error("User not found");
+  if (!userRow) throw new Error("User not found");
+  // Effective orgId from ctx (honors super_admin ?as_org override).
+  const user = { ...userRow, orgId: ctx.orgId };
 
   // ── Feature gate ────────────────────────────────────────
   const { allowed } = await checkFeatureAccess(user.id, "bov_generation");
@@ -523,12 +524,11 @@ export async function assembleBovData(
 // ── Branding-Only Fetch ─────────────────────────────────────
 
 export async function getBovBranding(): Promise<BovBranding> {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
 
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: {
       organization: {
         include: { brandSettings: true },

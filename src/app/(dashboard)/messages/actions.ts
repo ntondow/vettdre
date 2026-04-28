@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { getUserGmailAccount } from "@/lib/gmail";
 import { initialSync, incrementalSync } from "@/lib/gmail-sync";
 import { sendEmail } from "@/lib/gmail-send";
@@ -9,10 +9,9 @@ import { checkFollowUps } from "@/lib/follow-up-checker";
 import type { LabelData } from "./label-actions";
 
 async function getUser() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  return prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
+  return { id: ctx.userId, orgId: ctx.orgId };
 }
 
 // ============================================================

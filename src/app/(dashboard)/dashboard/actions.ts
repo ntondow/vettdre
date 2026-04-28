@@ -1,29 +1,25 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
+import { getCurrentAgentInfo } from "@/lib/bms-auth";
 
 // ── Auth ──────────────────────────────────────────────────────
 
 async function getAuthContext() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-    include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
-  });
-  if (!user) throw new Error("User not found");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const agentInfo = await getCurrentAgentInfo();
 
-  const isAdmin = user.role === "owner" || user.role === "admin" ||
-    (!!user.brokerAgent && ["brokerage_admin", "broker", "manager"].includes(user.brokerAgent.brokerageRole));
+  const isAdmin = ctx.userRole === "owner" || ctx.userRole === "admin" ||
+    (!!agentInfo && ["brokerage_admin", "broker", "manager"].includes(agentInfo.role ?? ""));
 
   return {
-    userId: user.id,
-    orgId: user.orgId,
-    fullName: user.fullName || "there",
+    userId: ctx.userId,
+    orgId: ctx.orgId,
+    fullName: ctx.userName || "there",
     isAdmin,
-    agentId: user.brokerAgent?.id || null,
+    agentId: agentInfo?.agentId || null,
   };
 }
 

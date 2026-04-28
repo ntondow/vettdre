@@ -1,19 +1,16 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 
 // ── Auth ──────────────────────────────────────────────────────
 
 async function getCurrentAgent() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
 
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: {
       brokerAgent: { select: { id: true, firstName: true, lastName: true, defaultSplitPct: true } },
     },
@@ -23,7 +20,7 @@ async function getCurrentAgent() {
 
   return {
     userId: user.id,
-    orgId: user.orgId,
+    orgId: ctx.orgId,
     agentId: user.brokerAgent.id,
     agentName: `${user.brokerAgent.firstName} ${user.brokerAgent.lastName}`,
     defaultSplit: Number(user.brokerAgent.defaultSplitPct) || 70,

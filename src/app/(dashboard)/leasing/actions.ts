@@ -1,7 +1,6 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 import { getTwilio } from "@/lib/twilio";
 import { geocodeAddress } from "@/lib/geocodio";
@@ -1920,15 +1919,11 @@ export async function getAbTestResults(configId: string): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return { error: "Unauthorized" };
-
-    const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
-    if (!user) return { error: "User not found" };
+    const ctx = await getCurrentOrgContext();
+    if (!ctx) return { error: "Unauthorized" };
 
     const config = await prisma.leasingConfig.findFirst({
-      where: { id: configId, orgId: user.orgId },
+      where: { id: configId, orgId: ctx.orgId },
     });
     if (!config) return { error: "Config not found" };
 

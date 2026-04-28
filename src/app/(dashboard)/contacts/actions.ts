@@ -1,46 +1,20 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 import { apolloBulkEnrich } from "@/lib/apollo";
 import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 
-// Helper: get or create the user's org
-async function getOrCreateUserOrg(authUser: { id: string; email?: string; user_metadata?: { full_name?: string } }) {
-  // Check if user already exists in our DB
-  let user = await prisma.user.findUnique({ where: { authProviderId: authUser.id }, include: { organization: true } });
-
-  if (!user) {
-    // First time: create org + user
-    const org = await prisma.organization.create({
-      data: {
-        name: `${authUser.user_metadata?.full_name || "My"}'s Organization`,
-        slug: `org-${authUser.id.slice(0, 8)}`,
-      },
-    });
-
-    user = await prisma.user.create({
-      data: {
-        orgId: org.id,
-        authProviderId: authUser.id,
-        email: authUser.email || "",
-        fullName: authUser.user_metadata?.full_name || "User",
-        role: "owner",
-      },
-      include: { organization: true },
-    });
-  }
-
-  return { user, org: user.organization };
-}
+// Auto-provisioning lives in the auth middleware now; by the time any of these
+// server actions run, the (User, Organization) pair already exists. ctx.orgId
+// is override-aware (super_admin ?as_org=...).
 
 export async function createContact(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const { user, org } = await getOrCreateUserOrg(authUser);
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const user = { id: ctx.userId, role: ctx.userRole };
+  const org = { id: ctx.orgId };
 
   const firstName = formData.get("firstName") as string;
   const lastName = formData.get("lastName") as string;
@@ -94,11 +68,10 @@ export async function createContact(formData: FormData) {
 }
 
 export async function getContacts(limit = 200, offset = 0) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return [];
-
-  const { user, org } = await getOrCreateUserOrg(authUser);
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return [];
+  const user = { id: ctx.userId, role: ctx.userRole };
+  const org = { id: ctx.orgId };
 
   // Agents only see their own contacts; admins/owners see all org contacts
   const isAdmin = ["super_admin", "owner", "admin"].includes(user.role);
@@ -117,11 +90,10 @@ export async function getContacts(limit = 200, offset = 0) {
 }
 
 export async function deleteContact(contactId: string) {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-
-  const { user, org } = await getOrCreateUserOrg(authUser);
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const user = { id: ctx.userId, role: ctx.userRole };
+  const org = { id: ctx.orgId };
 
   // Agents can only delete their own contacts
   const isAdmin = ["super_admin", "owner", "admin"].includes(user.role);
@@ -148,10 +120,9 @@ export async function bulkEnrichContacts(contactIds: string[]): Promise<{
   creditsUsed: number;
   errors: number;
 }> {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const { org } = await getOrCreateUserOrg(authUser);
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const org = { id: ctx.orgId };
 
   const contacts = await prisma.contact.findMany({
     where: { id: { in: contactIds }, orgId: org.id },

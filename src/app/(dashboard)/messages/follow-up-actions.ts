@@ -1,13 +1,12 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 
 async function getUser() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  return prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
+  return { id: ctx.userId, orgId: ctx.orgId };
 }
 
 export interface FollowUpData {
