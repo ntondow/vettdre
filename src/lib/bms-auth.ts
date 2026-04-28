@@ -2,43 +2,33 @@
 
 import { cache } from "react";
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type { BrokerageRoleType, AgentStatus } from "./bms-types";
 
 // ── Get Current Brokerage Role ──────────────────────────────
 
-export const getCurrentBrokerageRole = cache(async function (): Promise<BrokerageRoleType | null> {
+export const getCurrentBrokerageRole = cache(async function (
+  options: { overrideAsOrg?: string } = {},
+): Promise<BrokerageRoleType | null> {
   try {
-    const supabase = await createClient();
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
+    const ctx = await getCurrentOrgContext(options);
+    if (!ctx) return null;
 
-    // Primary lookup by authProviderId, fallback to email
-    // (covers invited users whose authProviderId is not yet linked)
-    let user = await prisma.user.findUnique({
-      where: { authProviderId: authUser.id },
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
       include: { brokerAgent: { select: { brokerageRole: true, status: true } } },
     });
-    if (!user && authUser.email) {
-      user = await prisma.user.findFirst({
-        where: { email: authUser.email },
-        include: { brokerAgent: { select: { brokerageRole: true, status: true } } },
-      });
-    }
     if (!user) return null;
 
     // Org owner/admin/super_admin always gets brokerage_admin — regardless of BrokerAgent record
-    // (BrokerAgent defaults to role "agent", which would incorrectly downgrade owners)
     if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
       return "brokerage_admin";
     }
 
-    // Fallback: check if user is the first user created in their org (de facto owner).
-    // The middleware creates the org and owner user together, so the earliest user
-    // is always the org creator. Covers cases where user.role was never updated
-    // from the default "agent" (e.g. Supabase RLS blocked the role column write).
+    // Fallback: first user in the org is the de facto owner (uses effective org so
+    // override carries through cleanly).
     const firstOrgUser = await prisma.user.findFirst({
-      where: { orgId: user.orgId },
+      where: { orgId: ctx.orgId },
       orderBy: { createdAt: "asc" },
       select: { id: true },
     });
@@ -46,8 +36,6 @@ export const getCurrentBrokerageRole = cache(async function (): Promise<Brokerag
       return "brokerage_admin";
     }
 
-    // Map app-level role to brokerage role for users whose BrokerAgent.brokerageRole
-    // was never explicitly set or is null
     const ROLE_MAP: Partial<Record<string, BrokerageRoleType>> = {
       admin:   "brokerage_admin",
       manager: "manager",
@@ -56,7 +44,6 @@ export const getCurrentBrokerageRole = cache(async function (): Promise<Brokerag
       return ROLE_MAP[user.role]!;
     }
 
-    // Other users: use BrokerAgent role if linked
     if (user.brokerAgent?.brokerageRole) {
       return user.brokerAgent.brokerageRole as BrokerageRoleType;
     }
@@ -70,30 +57,23 @@ export const getCurrentBrokerageRole = cache(async function (): Promise<Brokerag
 
 // ── Get Current Agent Info (role + agentId + status) ─────────
 
-export const getCurrentAgentInfo = cache(async function (): Promise<{
+export const getCurrentAgentInfo = cache(async function (
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   role: BrokerageRoleType;
   agentId: string;
   agentStatus: AgentStatus;
 } | null> {
   try {
-    const supabase = await createClient();
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
+    const ctx = await getCurrentOrgContext(options);
+    if (!ctx) return null;
 
-    // Primary lookup by authProviderId, fallback to email
-    let user = await prisma.user.findUnique({
-      where: { authProviderId: authUser.id },
+    const user = await prisma.user.findUnique({
+      where: { id: ctx.userId },
       include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
     });
-    if (!user && authUser.email) {
-      user = await prisma.user.findFirst({
-        where: { email: authUser.email },
-        include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
-      });
-    }
     if (!user) return null;
 
-    // Org owner/admin/super_admin always gets brokerage_admin
     if (user.role === "owner" || user.role === "admin" || user.role === "super_admin") {
       return {
         role: "brokerage_admin",
@@ -102,9 +82,8 @@ export const getCurrentAgentInfo = cache(async function (): Promise<{
       };
     }
 
-    // Fallback: first user in the org is the de facto owner
     const firstOrgUser = await prisma.user.findFirst({
-      where: { orgId: user.orgId },
+      where: { orgId: ctx.orgId },
       orderBy: { createdAt: "asc" },
       select: { id: true },
     });
@@ -116,8 +95,6 @@ export const getCurrentAgentInfo = cache(async function (): Promise<{
       };
     }
 
-    // Map app-level role to brokerage role for users whose BrokerAgent.brokerageRole
-    // was never explicitly set or is null
     const ROLE_MAP2: Partial<Record<string, BrokerageRoleType>> = {
       admin:   "brokerage_admin",
       manager: "manager",
@@ -130,7 +107,6 @@ export const getCurrentAgentInfo = cache(async function (): Promise<{
       };
     }
 
-    // Other users: use BrokerAgent role if linked
     if (user.brokerAgent?.brokerageRole) {
       return {
         role: user.brokerAgent.brokerageRole as BrokerageRoleType,

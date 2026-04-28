@@ -7,8 +7,8 @@ import { ensureDefaultLabels } from "./label-actions";
 import { getFollowUpCount } from "./follow-up-actions";
 import { seedDefaultTemplates } from "./template-actions";
 
-async function getData() {
-  const ctx = await getCurrentOrgContext();
+async function getData(overrideAsOrg?: string) {
+  const ctx = await getCurrentOrgContext({ overrideAsOrg });
   if (!ctx) return null;
 
   // Auto-unsnooze expired threads
@@ -26,7 +26,7 @@ async function getData() {
   });
 
   // Seed default templates if none exist
-  await seedDefaultTemplates();
+  await seedDefaultTemplates({ overrideAsOrg });
 
   const [templates, unreadCount, labels, followUpCount] = await Promise.all([
     prisma.emailTemplate.findMany({
@@ -37,8 +37,8 @@ async function getData() {
     prisma.emailMessage.count({
       where: { orgId: ctx.orgId, isRead: false, direction: "inbound" },
     }),
-    ensureDefaultLabels(),
-    getFollowUpCount(),
+    ensureDefaultLabels({ overrideAsOrg }),
+    getFollowUpCount({ overrideAsOrg }),
   ]);
 
   return {
@@ -51,8 +51,13 @@ async function getData() {
   };
 }
 
-export default async function MessagesPage() {
-  const data = await getData();
+export default async function MessagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
+  const data = await getData(as_org);
   if (!data) redirect("/login");
 
   return (

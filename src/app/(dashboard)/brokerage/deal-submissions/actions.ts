@@ -20,8 +20,10 @@ interface AuthContext {
   fullName: string;
 }
 
-async function getAuthContext(): Promise<AuthContext | null> {
-  const ctx = await getCurrentOrgContext();
+async function getAuthContext(
+  options: { overrideAsOrg?: string } = {},
+): Promise<AuthContext | null> {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
 
   const user = await prisma.user.findUnique({
@@ -213,9 +215,11 @@ export async function submitDeal(
 
 // ── 2. getMySubmissions ─────────────────────────────────────
 
-export async function getMySubmissions(): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
+export async function getMySubmissions(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const submissions = await prisma.dealSubmission.findMany({
@@ -284,18 +288,21 @@ export async function getSubmissionById(
 
 // ── 4. getAllSubmissions ─────────────────────────────────────
 
-export async function getAllSubmissions(filters?: {
-  status?: string;
-  agentId?: string;
-  exclusiveType?: string;
-  dealType?: string;
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  limit?: number;
-}): Promise<{ success: boolean; data?: Record<string, unknown>[]; total?: number; error?: string }> {
+export async function getAllSubmissions(
+  filters?: {
+    status?: string;
+    agentId?: string;
+    exclusiveType?: string;
+    dealType?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ success: boolean; data?: Record<string, unknown>[]; total?: number; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     if (!hasPermission(ctx.role, "view_all_submissions")) {
@@ -753,9 +760,11 @@ export async function updateProcessingFee(
 
 // ── 8. getExclusiveProperties ───────────────────────────────
 
-export async function getExclusiveProperties(): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
+export async function getExclusiveProperties(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ success: boolean; data?: Record<string, unknown>[]; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const properties = await prisma.bmsProperty.findMany({
@@ -863,9 +872,11 @@ export async function getAgentSplitForDeal(
 
 // ── 11. getSubmissionStats ──────────────────────────────────
 
-export async function getSubmissionStats(): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
+export async function getSubmissionStats(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const canViewAll = hasPermission(ctx.role, "view_all_submissions");

@@ -6,15 +6,20 @@ import SubmissionsDashboard from "./submissions-dashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function DealSubmissionsPage() {
-  const role = await getCurrentBrokerageRole();
+export default async function DealSubmissionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ as_org?: string }>;
+}) {
+  const { as_org } = await searchParams;
+  const role = await getCurrentBrokerageRole({ overrideAsOrg: as_org });
   if (!role || !hasPermission(role, "view_all_submissions")) {
     redirect("/brokerage/my-deals");
   }
 
   const [submissionsResult, statsResult] = await Promise.all([
-    getAllSubmissions({ page: 1, limit: 25 }),
-    getSubmissionStats(),
+    getAllSubmissions({ page: 1, limit: 25 }, { overrideAsOrg: as_org }),
+    getSubmissionStats({ overrideAsOrg: as_org }),
   ]);
 
   return (

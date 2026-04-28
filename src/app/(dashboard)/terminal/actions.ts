@@ -22,8 +22,10 @@ interface WebIntelResult {
 
 // ── Auth Helper ─────────────────────────────────────────────
 
-async function getAuthContext(): Promise<{ userId: string; orgId: string; plan: string } | null> {
-  const ctx = await getCurrentOrgContext();
+async function getAuthContext(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ userId: string; orgId: string; plan: string } | null> {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
 
   // Plan is always tied to the real user — feature-gating doesn't change
@@ -47,15 +49,18 @@ function serialize<T>(obj: T): T {
 
 // ── Fetch Events ────────────────────────────────────────────
 
-export async function getTerminalEvents(params: {
-  boroughs: number[];
-  categories: string[];
-  ntas: string[];
-  cursor?: string;
-  cursorId?: string;
-  limit?: number;
-}): Promise<{ events: any[]; hasMore: boolean }> {
-  const ctx = await getAuthContext();
+export async function getTerminalEvents(
+  params: {
+    boroughs: number[];
+    categories: string[];
+    ntas: string[];
+    cursor?: string;
+    cursorId?: string;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ events: any[]; hasMore: boolean }> {
+  const ctx = await getAuthContext(options);
   if (!ctx || !await requireTerminalAccess(ctx)) return { events: [], hasMore: false };
 
   const limit = params.limit || 20;
@@ -91,12 +96,14 @@ export async function getTerminalEvents(params: {
 
 // ── User Preferences ────────────────────────────────────────
 
-export async function getTerminalPreferences(): Promise<{
+export async function getTerminalPreferences(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   enabledCategories: string[];
   enabledBoroughs: number[];
   selectedNtas: string[];
 } | null> {
-  const ctx = await getAuthContext();
+  const ctx = await getAuthContext(options);
   if (!ctx) return null;
 
   const prefs = await prisma.userTerminalPreferences.findUnique({
@@ -163,9 +170,10 @@ export async function updateTerminalPreferences(prefs: {
 
 export async function getEventCategoryCounts(
   boroughs: number[],
-  sinceHours = 24,
+  options: { overrideAsOrg?: string; sinceHours?: number } = {},
 ): Promise<Record<string, number>> {
-  const ctx = await getAuthContext();
+  const sinceHours = options.sinceHours ?? 24;
+  const ctx = await getAuthContext({ overrideAsOrg: options.overrideAsOrg });
   if (!ctx) return {};
 
   const since = new Date(Date.now() - sinceHours * 60 * 60 * 1000);

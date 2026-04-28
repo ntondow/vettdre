@@ -67,8 +67,11 @@ export async function createContact(formData: FormData) {
   return { success: true };
 }
 
-export async function getContacts(limit = 200, offset = 0) {
-  const ctx = await getCurrentOrgContext();
+export async function getContacts(
+  options: { limit?: number; offset?: number; overrideAsOrg?: string } = {},
+) {
+  const { limit = 200, offset = 0, overrideAsOrg } = options;
+  const ctx = await getCurrentOrgContext({ overrideAsOrg });
   if (!ctx) return [];
   const user = { id: ctx.userId, role: ctx.userRole };
   const org = { id: ctx.orgId };

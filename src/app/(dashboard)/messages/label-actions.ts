@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 
-async function getUser() {
-  const ctx = await getCurrentOrgContext();
+async function getUser(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
   return { id: ctx.userId, orgId: ctx.orgId };
 }
@@ -28,8 +28,10 @@ const DEFAULT_LABELS: Array<{ name: string; color: string; icon: string }> = [
 // Label CRUD
 // ============================================================
 
-export async function getLabels(): Promise<LabelData[]> {
-  const user = await getUser();
+export async function getLabels(
+  options: { overrideAsOrg?: string } = {},
+): Promise<LabelData[]> {
+  const user = await getUser(options);
   if (!user) return [];
 
   const labels = await prisma.emailLabel.findMany({
@@ -45,13 +47,15 @@ export async function getLabels(): Promise<LabelData[]> {
   }));
 }
 
-export async function ensureDefaultLabels(): Promise<LabelData[]> {
-  const user = await getUser();
+export async function ensureDefaultLabels(
+  options: { overrideAsOrg?: string } = {},
+): Promise<LabelData[]> {
+  const user = await getUser(options);
   if (!user) return [];
 
   const existing = await prisma.emailLabel.count({ where: { orgId: user.orgId } });
   if (existing > 0) {
-    return getLabels();
+    return getLabels(options);
   }
 
   // Seed defaults

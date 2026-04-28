@@ -8,8 +8,8 @@ import type { BmsPropertyInput } from "@/lib/bms-types";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getAuthContext() {
-  const ctx = await getCurrentOrgContext();
+async function getAuthContext(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
 
   const user = await prisma.user.findUnique({
@@ -32,13 +32,16 @@ async function getAuthContext() {
 
 // ── 1. List Exclusive Buildings ──────────────────────────────
 
-export async function getExclusiveBuildings(params?: {
-  search?: string;
-  page?: number;
-  limit?: number;
-}) {
+export async function getExclusiveBuildings(
+  params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getAuthContext();
+    const { orgId } = await getAuthContext(options);
 
     const search = params?.search?.trim() || "";
     const page = params?.page || 1;

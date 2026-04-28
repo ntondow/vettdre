@@ -8,8 +8,8 @@ import type { BrokerageRoleType } from "@/lib/bms-types";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getAuthContext() {
-  const ctx = await getCurrentOrgContext();
+async function getAuthContext(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   const user = await prisma.user.findUnique({
     where: { id: ctx.userId },
@@ -161,9 +161,10 @@ export async function getAgentEarningsReport(filters?: {
   startDate?: string;
   endDate?: string;
   year?: number;
+  overrideAsOrg?: string;
 }) {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext({ overrideAsOrg: filters?.overrideAsOrg });
 
     if (!hasPermission(ctx.role, "view_reports")) {
       return { agents: [], orgTotals: null };
@@ -311,9 +312,10 @@ export async function getAgentEarningsReport(filters?: {
 export async function getRevenuePipeline(filters?: {
   startDate?: string;
   endDate?: string;
+  overrideAsOrg?: string;
 }) {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext({ overrideAsOrg: filters?.overrideAsOrg });
 
     if (!hasPermission(ctx.role, "view_reports")) {
       return null;
@@ -380,9 +382,12 @@ export async function getRevenuePipeline(filters?: {
 
 // ── 4. Revenue by Month ───────────────────────────────────────
 
-export async function getRevenueByMonth(year?: number) {
+export async function getRevenueByMonth(
+  year?: number,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
 
     if (!hasPermission(ctx.role, "view_reports")) {
       return [];
