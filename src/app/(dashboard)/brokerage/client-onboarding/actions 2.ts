@@ -2,6 +2,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/lib/bms-audit";
 import { buildInvoiceNumber } from "@/lib/bms-types";
@@ -23,20 +24,13 @@ interface AuthContext {
 }
 
 async function getAuthContext(): Promise<AuthContext | null> {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) return null;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
 
-  let user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+  const user = await prisma.user.findUnique({
+    where: { id: ctx.userId },
     include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
   });
-  if (!user && authUser.email) {
-    user = await prisma.user.findFirst({
-      where: { email: authUser.email },
-      include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
-    });
-  }
   if (!user) return null;
 
   let role: BrokerageRoleType | null = null;
@@ -44,7 +38,7 @@ async function getAuthContext(): Promise<AuthContext | null> {
     role = "brokerage_admin";
   } else {
     const firstOrgUser = await prisma.user.findFirst({
-      where: { orgId: user.orgId },
+      where: { orgId: ctx.orgId },
       orderBy: { createdAt: "asc" },
       select: { id: true },
     });
@@ -59,7 +53,7 @@ async function getAuthContext(): Promise<AuthContext | null> {
 
   return {
     userId: user.id,
-    orgId: user.orgId,
+    orgId: ctx.orgId,
     agentId: user.brokerAgent?.id ?? user.id,
     role,
     fullName: user.fullName || user.email,

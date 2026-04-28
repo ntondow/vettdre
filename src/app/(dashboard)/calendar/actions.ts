@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { revalidatePath } from "next/cache";
 import { dispatchAutomationSafe } from "@/lib/automation-dispatcher";
 import {
@@ -60,15 +60,9 @@ export interface ShowingSlotData {
 // ============================================================
 
 async function getUser() {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
-  if (!authUser) return null;
-  const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
-  });
-  return user;
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) return null;
+  return { id: ctx.userId, orgId: ctx.orgId };
 }
 
 // ============================================================

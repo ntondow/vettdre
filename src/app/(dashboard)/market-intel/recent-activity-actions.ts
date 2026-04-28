@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import prisma from "@/lib/prisma";
 
 export interface RecentActivityData {
@@ -22,17 +22,9 @@ export interface RecentActivityData {
 
 export async function fetchRecentActivity(): Promise<RecentActivityData | null> {
   try {
-    const supabase = await createClient();
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (!authUser) return null;
-
-    const user = await prisma.user.findUnique({
-      where: { authProviderId: authUser.id },
-      select: { id: true, orgId: true },
-    });
-    if (!user) return null;
-
-    const orgId = user.orgId;
+    const ctx = await getCurrentOrgContext();
+    if (!ctx) return null;
+    const orgId = ctx.orgId;
     const fiveDaysAgo = new Date();
     fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 

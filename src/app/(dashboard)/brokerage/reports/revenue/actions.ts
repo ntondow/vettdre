@@ -1,7 +1,7 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logPaymentAction } from "@/lib/bms-audit";
 import type { BrokerageRoleType } from "@/lib/bms-types";
@@ -9,11 +9,10 @@ import type { BrokerageRoleType } from "@/lib/bms-types";
 // ── Auth Helper ───────────────────────────────────────────────
 
 async function getAuthContext() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
   const user = await prisma.user.findUnique({
-    where: { authProviderId: authUser.id },
+    where: { id: ctx.userId },
     include: { brokerAgent: { select: { id: true, brokerageRole: true, status: true } } },
   });
   if (!user) throw new Error("User not found");
@@ -28,7 +27,7 @@ async function getAuthContext() {
 
   return {
     userId: user.id,
-    orgId: user.orgId,
+    orgId: ctx.orgId,
     role,
     agentId: user.brokerAgent?.id || null,
   };

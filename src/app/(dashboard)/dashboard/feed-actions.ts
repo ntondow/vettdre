@@ -12,7 +12,7 @@ import {
 import { braveWebSearch } from "@/lib/brave-search";
 import { getDashboardData } from "./actions";
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type {
   MarketStripData,
   MarketMetric,
@@ -27,14 +27,8 @@ import type {
 
 async function getAuthUserId(): Promise<string | null> {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return null;
-    const dbUser = await prisma.user.findUnique({
-      where: { authProviderId: user.id },
-      select: { id: true },
-    });
-    return dbUser?.id ?? null;
+    const ctx = await getCurrentOrgContext();
+    return ctx?.userId ?? null;
   } catch {
     return null;
   }

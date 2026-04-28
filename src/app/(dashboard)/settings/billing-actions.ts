@@ -1,16 +1,17 @@
 "use server";
 
 import prisma from "@/lib/prisma";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentOrgContext } from "@/lib/auth-context";
 import type { UserPlan } from "@/lib/feature-gate";
 import { FREE_DAILY_SEARCH_LIMIT } from "@/lib/feature-gate";
 
 async function getAuthUser() {
-  const supabase = await createClient();
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  if (!authUser) throw new Error("Not authenticated");
-  const user = await prisma.user.findUnique({ where: { authProviderId: authUser.id } });
+  const ctx = await getCurrentOrgContext();
+  if (!ctx) throw new Error("Not authenticated");
+  const user = await prisma.user.findUnique({ where: { id: ctx.userId } });
   if (!user) throw new Error("User not found");
+  // Billing is always tied to the real user; do not honor ?as_org override
+  // for plan/trial/subscription fields.
   return user;
 }
 
