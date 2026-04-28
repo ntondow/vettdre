@@ -289,6 +289,22 @@ export async function createInvoiceFromSubmission(submissionId: string) {
       };
     }
 
+    // Symmetric guard: a transaction can exist without an invoice if a prior
+    // walk crashed mid-$transaction. Without this, P2002 on
+    // transactions.deal_submission_id surfaces as a generic create failure.
+    const existingTransaction = await prisma.transaction.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true, stage: true },
+    });
+    if (existingTransaction) {
+      return {
+        success: false,
+        error: "A transaction already exists for this submission.",
+        transactionId: existingTransaction.id,
+        stage: existingTransaction.stage,
+      };
+    }
+
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
       select: { processingFeePct: true },
