@@ -539,6 +539,51 @@ describe("Slice 3 — Payment tab", () => {
   });
 });
 
+// ── Slice 1.5: Sidebar count badge for Submissions ──────────
+//
+// Slice 1.5 contracts:
+//   1. getSubmittedCount is exported from deal-submissions/actions and
+//      threads overrideAsOrg. Without override threading the badge would
+//      show the super_admin's home-org count when viewing a target
+//      tenant — same regression class as 0c3.
+//   2. The brokerage layout renders a numeric badge next to the
+//      Submissions item, hidden when count is zero, and rendered in
+//      both the desktop sidebar and the mobile pill bar.
+//   3. Layout reads `?as_org` so the badge stays correct under
+//      super_admin override.
+describe("Slice 1.5 — Sidebar count badge", () => {
+  it("getSubmittedCount is exported with override threading + permission gate", () => {
+    const src = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/actions.ts",
+    );
+    expect(src).toMatch(/^export\s+async\s+function\s+getSubmittedCount\b/m);
+    expect(exportThreadsOverride(src, "getSubmittedCount")).toBe(true);
+    const body = src.slice(src.indexOf("export async function getSubmittedCount"));
+    // Permission-gated so agents don't see an org-wide count.
+    expect(body).toMatch(/hasPermission\([^)]*"view_all_submissions"/);
+    // Counts only "submitted" status.
+    expect(body).toMatch(/status:\s*"submitted"/);
+  });
+
+  it("brokerage layout renders the badge + reads ?as_org", () => {
+    const src = readSource("src/app/(dashboard)/brokerage/layout.tsx");
+    expect(src).toMatch(
+      /import\s*\{[^}]*getSubmittedCount[^}]*\}\s*from\s*["']\.\/deal-submissions\/actions["']/,
+    );
+    expect(src).toMatch(/useSearchParams/);
+    expect(src).toMatch(/as_org/);
+    // Badge surface is keyed by href so other items (Compliance,
+    // Invoices) can pick up the same channel without touching render.
+    expect(src).toMatch(/badges\[item\.href\]/);
+    // Hidden when zero.
+    expect(src).toMatch(/badge\s*&&\s*badge\s*>\s*0/);
+    // Both desktop + mobile render the same testid hook.
+    expect(src).toMatch(
+      /data-testid=\{`brokerage-nav-badge-\$\{item\.href\}`\}/,
+    );
+  });
+});
+
 describe("Slice 0c — auth-context priority", () => {
   it("getCurrentOrgContext consumes options.overrideAsOrg before referer fallback", () => {
     // Source-level guard: the priority comment + code line must coexist. If

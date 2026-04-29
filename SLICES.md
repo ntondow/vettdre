@@ -256,9 +256,17 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No — originally-approved wireframe being completed.
 
 ### 1.5 — Sidebar count badge for Submissions
-- **Status:** `pending`
-- **Goal:** Brokerage sub-sidebar "Submissions" item shows `[N]` where N is count of `status='submitted'` for current tenant. Updates on submission state changes.
-- **Files:** brokerage layout sub-sidebar component (`src/app/(dashboard)/brokerage/layout.tsx` or whatever component renders the brokerage sub-nav).
+- **Status:** `awaiting_review`
+- **Goal:** Brokerage sub-sidebar "Submissions" item shows `[N]` where N is count of `status='submitted'` for current tenant. Hidden when zero. Override-aware so super_admins viewing another tenant see the target org's count.
+- **Files:** `src/app/(dashboard)/brokerage/layout.tsx` (badge wiring + `?as_org` reading), `src/app/(dashboard)/brokerage/deal-submissions/actions.ts` (`getSubmittedCount`).
+- **Server action:** `getSubmittedCount(options?)` — `view_all_submissions` permission gated (agents return 0), counts `status: "submitted"`. Override-threaded.
+- **Cache strategy:** client-side fetch on mount + every pathname change. Cheap COUNT query; no extra invalidation needed since the existing `revalidatePath("/brokerage/deal-submissions")` calls in approve/reject/push-to-invoice actions plus the pathname-change refetch keep the badge fresh as managers move between sections.
+- **Visual:** numeric pill (white-on-blue when inactive, blue-on-blue-tint when item is active), max display "99+". Per-href `badges` map keyed on item.href so future items (Compliance expiring, unpaid invoices) can share the same surface without touching render branches.
+- **Smoke contracts (+2):**
+  - `getSubmittedCount` exported, override-threaded, permission-gated, scoped to `status: "submitted"`.
+  - Layout imports the action, reads `?as_org`, renders the per-href badge with hidden-when-zero behavior + `data-testid="brokerage-nav-badge-<href>"` hook for both desktop sidebar and mobile pill bar.
+- **Gates:** lint 4530 (held — verified at full-project level after a pre-existing `react-hooks/set-state-in-effect` warning surfaced on a line I didn't touch); typecheck 113 (held); 73 / 73 tests (+2); build clean.
+- **Stack:** `feat/bms-overhaul-1.5-sidebar-badge` → base `feat/bms-overhaul-3-payment-tab` (PR #13).
 - **Depends on:** Slice 1 (uses the same status/count source).
 - **Requires approval:** No.
 
