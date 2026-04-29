@@ -1595,3 +1595,113 @@ export async function sendInvoiceToAgent(
     };
   }
 }
+
+// ── Slice 3: Payment tab — recordPaymentForInvoice ──────────
+//
+// Wraps the existing /brokerage/payments `recordPayment` action so the
+// Payment tab inside the inline-expanded submission card uses the same
+// validation, balance math, status auto-flip, and transaction sync. The
+// only thing this wrapper adds is an invoice-scoped audit row tagged
+// "payment_recorded" (or "payment_recorded_paid_in_full" when this
+// payment closed the balance) — recordPayment itself doesn't audit.
+//
+// Auto-flip: recordPayment already promotes invoice → "paid" + cascades
+// the deal submission to "paid" when sum(payments) hits agentPayout
+// (with 0.5% rounding tolerance). We surface that via the `paidInFull`
+// flag on the response so the Payment tab can show the "✓ Marked
+// invoice as Paid" toast.
+
+export async function recordPaymentForInvoice(
+  invoiceId: string,
+  input: {
+    amount: number;
+    paymentMethod: string;
+    paymentDate?: string;
+    referenceNumber?: string;
+    notes?: string;
+  },
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
+  success: boolean;
+  paidInFull?: boolean;
+  paymentId?: string;
+  error?: string;
+}> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "record_payment")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    if (!input.amount || input.amount <= 0) {
+      return { success: false, error: "Enter a valid amount greater than zero" };
+    }
+
+    // Confirm invoice belongs to ctx.orgId before reusing recordPayment —
+    // the wrapper's auth guard runs ahead of the underlying action's guard
+    // so we can return a friendly error before crossing the import boundary.
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, orgId: ctx.orgId },
+      select: { id: true, agentId: true, invoiceNumber: true, status: true },
+    });
+    if (!invoice) return { success: false, error: "Invoice not found" };
+    if (invoice.status === "void") {
+      return { success: false, error: "Cannot record a payment on a voided invoice" };
+    }
+
+    const { recordPayment } = await import("../payments/actions");
+    const result = await recordPayment(
+      {
+        invoiceId,
+        agentId: invoice.agentId ?? undefined,
+        amount: input.amount,
+        paymentMethod: input.paymentMethod as never,
+        paymentDate: input.paymentDate,
+        referenceNumber: input.referenceNumber,
+        notes: input.notes,
+      },
+      options,
+    );
+
+    if (!result || result.success === false) {
+      return {
+        success: false,
+        error: (result as { error?: string } | null)?.error || "Failed to record payment",
+      };
+    }
+
+    const paidInFull = (result as { isFullyPaid?: boolean }).isFullyPaid === true;
+    const payment = (result as { payment?: { id: string } }).payment;
+
+    logInvoiceAction(
+      ctx.orgId,
+      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
+      paidInFull ? "payment_recorded_paid_in_full" : "payment_recorded",
+      invoiceId,
+      {
+        invoiceNumber: invoice.invoiceNumber,
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        referenceNumber: input.referenceNumber || null,
+        paidInFull,
+      },
+    );
+
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/invoices");
+    revalidatePath("/brokerage/payments");
+
+    return {
+      success: true,
+      paidInFull,
+      paymentId: payment?.id,
+    };
+  } catch (error) {
+    console.error("recordPaymentForInvoice error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to record payment",
+    };
+  }
+}
