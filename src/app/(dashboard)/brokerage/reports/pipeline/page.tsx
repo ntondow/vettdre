@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getDealPipelineReport } from "../actions";
 import type { PipelineReport } from "@/lib/bms-types";
 import { DEAL_TYPE_LABELS } from "@/lib/bms-types";
@@ -57,6 +58,13 @@ const SOURCE_CONFIG: Record<string, { label: string; color: string; icon: typeof
 // ── Component ─────────────────────────────────────────────────
 
 export default function PipelineReportPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [report, setReport] = useState<PipelineReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(defaultStartDate);
@@ -65,7 +73,7 @@ export default function PipelineReportPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const data = await getDealPipelineReport(startDate, endDate);
+      const data = await getDealPipelineReport(startDate, endDate, overrideOpts);
       setReport(data);
     } catch {
       setReport(null);

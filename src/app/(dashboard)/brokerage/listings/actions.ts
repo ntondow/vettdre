@@ -24,8 +24,8 @@ import type {
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   const agentInfo = await getCurrentAgentInfo();
   return {
@@ -57,8 +57,11 @@ const LISTING_STATUS_ORDER: BmsListingStatusType[] = [
 
 // ── Create Listing ──────────────────────────────────────────
 
-export async function createListing(input: BmsListingInput): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function createListing(
+  input: BmsListingInput,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   // Calculate days on market from available date
   let daysOnMarket: number | undefined;
@@ -123,8 +126,9 @@ export async function createListing(input: BmsListingInput): Promise<BmsListingR
 export async function updateListing(
   id: string,
   data: Partial<BmsListingInput>,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const existing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -218,8 +222,8 @@ export async function getListings(filters?: {
   bedrooms?: string;
   search?: string;
   unassigned?: boolean;
-}): Promise<BmsListingRecord[]> {
-  const ctx = await getCurrentOrg();
+}, options: { overrideAsOrg?: string } = {}): Promise<BmsListingRecord[]> {
+  const ctx = await getCurrentOrg(options);
 
   const where: Record<string, unknown> = { orgId: ctx.orgId };
 
@@ -487,8 +491,9 @@ export async function assignListing(id: string, agentId: string | null): Promise
 export async function updateListingStatus(
   id: string,
   newStatus: BmsListingStatusType,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -641,8 +646,10 @@ export async function createTransactionFromListing(
 
 // ── Listing Stats ───────────────────────────────────────────
 
-export async function getListingStats(): Promise<ListingStats> {
-  const ctx = await getCurrentOrg();
+export async function getListingStats(
+  options: { overrideAsOrg?: string } = {},
+): Promise<ListingStats> {
+  const ctx = await getCurrentOrg(options);
 
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -743,8 +750,11 @@ export async function bulkCreateListings(
 
 // ── Property CRUD ───────────────────────────────────────────
 
-export async function createProperty(input: BmsPropertyInput): Promise<BmsPropertyRecord> {
-  const ctx = await getCurrentOrg();
+export async function createProperty(
+  input: BmsPropertyInput,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsPropertyRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const property = await prisma.bmsProperty.create({
     data: {
@@ -843,8 +853,10 @@ export async function getProperty(id: string): Promise<BmsPropertyRecord> {
   return result;
 }
 
-export async function getProperties(): Promise<BmsPropertyRecord[]> {
-  const ctx = await getCurrentOrg();
+export async function getProperties(
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsPropertyRecord[]> {
+  const ctx = await getCurrentOrg(options);
 
   const properties = await prisma.bmsProperty.findMany({
     where: { orgId: ctx.orgId },
@@ -911,10 +923,12 @@ export async function getPropertySummaries(): Promise<PropertySummary[]> {
 
 // ── Agents list (for dropdowns) ─────────────────────────────
 
-export async function getAgentsForDropdown(): Promise<
+export async function getAgentsForDropdown(
+  options: { overrideAsOrg?: string } = {},
+): Promise<
   Array<{ id: string; firstName: string; lastName: string; email: string }>
 > {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const agents = await prisma.brokerAgent.findMany({
     where: { orgId: ctx.orgId, status: "active" },

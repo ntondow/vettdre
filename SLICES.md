@@ -144,7 +144,22 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Depends on:** Z5
 - **Requires approval:** YES if root cause requires infra change (Cloud Run scaling, DB pool size). → No infra change made in this slice. Once Nathan reviews Sentry events post-deploy, the actual root cause may surface and a follow-up infra slice can be filed.
 
-**[PHASE 0 APPROVAL GATE — `awaiting_review` 2026-04-29]**
+### 0c2 — Page-level wiring sweep for `?as_org` override (follow-up to 0c)
+- **Status:** `awaiting_review`
+- **Goal:** Phase 0 verification on production found that BMS pages still showed home-org KPIs while the banner reported "Viewing as Gulino Group." Action layer was already override-capable from 0c, but client pages were not threading `?as_org` from the URL into action calls — server actions then fell back to referer-parsing, which is unreliable.
+- **Closes bug:** Phase 0 verification Failure 1 (TOTAL PAID = $0 on `/brokerage/payments` for Gulino), Failure 3 (B-012 redirect shim at `reports/page.tsx` dropping query params). Completes B-013 page-side.
+- **Files:**
+  - **DB audit (read-only):** `scripts/2026-04-29_audit_payments_kpi.ts` — confirmed Gulino orgId `5ecba9ba-6de1-4b1e-bb6a-3f2dfef81670` has 18 Payment rows / $20,110.83 sum. Backfill correct; bug was page wiring.
+  - **Page wiring (12 surfaces):** `payments/page.tsx`, `dashboard/page.tsx`, `commission-plans/page.tsx`, `agents/page.tsx`, `compliance/page.tsx`, `listings/page.tsx`, `setup/page.tsx`, `client-onboarding/page.tsx`, `settings/page.tsx`, `settings/audit-log.tsx`, `reports/{pnl,production,tax-prep,pipeline}/page.tsx`. Pattern: `useSearchParams()` + `useMemo(overrideOpts)` + thread `overrideOpts` to all action call sites; add `overrideOpts` to relevant `useEffect` deps so loaders re-run on `?as_org` change.
+  - **Redirect shim:** `reports/page.tsx` rewritten as async server component that reads `searchParams` and forwards them to `/brokerage/reports/pnl?…`.
+  - **Action layer extensions:** `transactions/actions.ts` (added `options` to `getRecentActiveTransactions`), `setup/actions.ts` (`getSetupProgress`), `agents/onboarding-actions.ts` (`inviteAgent`, `bulkInviteAgents`, `revokeInvite`, `getPendingInvites`), `listings/actions.ts` (8 actions: `createListing`, `updateListing`, `getListings`, `updateListingStatus`, `getListingStats`, `createProperty`, `getProperties`, `getAgentsForDropdown`), `client-onboarding/actions.ts` (`getOnboardings`, `voidOnboarding`, `resendOnboarding`, `deleteOnboarding`, `archiveOnboarding`), `deal-submissions/actions.ts` (`getPublicSubmissionLink`, `regenerateSubmissionToken`).
+- **Success criteria:** Visiting `?as_org=<gulino-id>` makes every BMS page consistently show Gulino data — KPIs, lists, settings, reports, onboardings, listings, agents. ✓ verified locally via build; awaiting prod verification.
+- **Out of scope:** Detail pages with route params (e.g. `/brokerage/agents/[id]`, `/brokerage/transactions/[id]`) — these need a separate pattern since `useSearchParams` is fine but the param-bearing pages are also reading from layouts. Filed as 0c3 if a verification gap emerges.
+- **Gates:** typecheck 294 (= baseline 294), test 33/33, lint 4530 (= baseline 4530), build ✓.
+- **Depends on:** 0c, 0b
+- **Requires approval:** No (but stops Phase 0 verification gate from passing until merged + deployed).
+
+**[PHASE 0 APPROVAL GATE — `awaiting_review` 2026-04-29 (re-verification needed after 0c2 deploy)]**
 
 Phase 0 status as of 2026-04-29:
 - 0a discovery committed in PR #2 (data sources map, canonical-store decision)
@@ -152,8 +167,9 @@ Phase 0 status as of 2026-04-29:
 - 0c override threading swept across 9 BMS action files + smoke test (PR #4)
 - 0d banner z-index fix (PR #5)
 - 14 client-onboarding observability + 503 retry (PR #6)
-- Phase 0 gates: typecheck 295 (= baseline 295), test 33/33, lint 4530 (= baseline 4530), build ✓
-- Awaiting Nathan's approval to start Phase 1
+- 0c2 page-level wiring sweep — addresses Phase 0 verification Failures 1 & 3 (PR pending, stacked on PR #6)
+- Phase 0 gates: typecheck 294 (= baseline 294), test 33/33, lint 4530 (= baseline 4530), build ✓
+- Awaiting Nathan's approval after re-verifying `?as_org` flow in production post-0c2 deploy
 
 ---
 
@@ -318,6 +334,19 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** Manual + smoke test pass on mobile + desktop.
 - **Depends on:** Phase 2
 - **Requires approval:** No.
+
+### 3.Y — Structural fix for override-context propagation
+- **Status:** `pending`
+- **Goal:** Replace per-callsite override threading with a single OrgContext wrapper that every Prisma query must use. Make it impossible to forget threading without a typecheck error.
+- **Why:** 0c covered ~50 action exports + threading; 0c2 found another ~22 server actions + 12 read-side pages that 0c missed. Pattern will keep recurring as new code is added. Architectural fix collapses this into one place.
+- **Approach (agent proposes details when slice begins):**
+  - QueryClient wrapper takes OrgContext at construction.
+  - Lint rule or TypeScript constraint blocking direct `prisma.*` calls from `app/(dashboard)/brokerage/*` — must go through OrgContext.
+  - Migration plan: progressive — new code uses the wrapper; existing code migrates slice-by-slice as it gets touched.
+- **Files:** `lib/prisma.ts`, `lib/team-context.ts`, all of `src/app/(dashboard)/brokerage/**`.
+- **Success criteria:** `tests/smoke/override-scoping.test.ts` becomes obsolete because the type system enforces it.
+- **Depends on:** Phase 1, 2 (don't refactor while major surfaces are in flux).
+- **Requires approval:** YES — architectural change.
 
 ### 3.X — Parent branch cleanup
 - **Status:** `pending`

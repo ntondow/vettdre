@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   Circle,
@@ -34,6 +34,13 @@ interface SetupStep {
 
 export default function BrokerSetupPage() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [loading, setLoading] = useState(true);
   const [steps, setSteps] = useState<SetupStep[]>([]);
   const [expandedTip, setExpandedTip] = useState<string | null>(null);
@@ -41,7 +48,7 @@ export default function BrokerSetupPage() {
   useEffect(() => {
     async function load() {
       try {
-        const progress = await getSetupProgress();
+        const progress = await getSetupProgress(overrideOpts);
         const stepDefs: SetupStep[] = [
           {
             id: "agents",
@@ -118,7 +125,7 @@ export default function BrokerSetupPage() {
       }
     }
     load();
-  }, []);
+  }, [overrideOpts]);
 
   const completed = steps.filter((s) => s.complete).length;
   const total = steps.length;

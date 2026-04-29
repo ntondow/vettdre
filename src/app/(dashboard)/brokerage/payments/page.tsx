@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getPaymentHistory,
   getPaymentSummary,
@@ -67,6 +68,17 @@ const METHOD_COLORS: Record<string, string> = {
 // ── Component ─────────────────────────────────────────────────
 
 export default function PaymentsPage() {
+  // Server actions called from useEffect lose searchParams; the page must
+  // read ?as_org= directly and forward it through every action call. Without
+  // this, the KPI queries fall back to the user's home org and return $0
+  // even when the URL has ?as_org=<other> (Phase 0 verification Failure 1).
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [payments, setPayments] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -110,16 +122,20 @@ export default function PaymentsPage() {
     setLoading(true);
     try {
       const [historyResult, summaryResult] = await Promise.all([
-        getPaymentHistory({
-          startDate: startDate || undefined,
-          endDate: endDate || undefined,
-          method: method !== "all" ? method : undefined,
-          page,
-        }),
+        getPaymentHistory(
+          {
+            startDate: startDate || undefined,
+            endDate: endDate || undefined,
+            method: method !== "all" ? method : undefined,
+            page,
+          },
+          overrideOpts,
+        ),
         getPaymentSummary(
           startDate || endDate
             ? { startDate: startDate || undefined, endDate: endDate || undefined }
             : undefined,
+          overrideOpts,
         ),
       ]);
       setPayments(historyResult.payments || []);
@@ -131,7 +147,7 @@ export default function PaymentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, method, page]);
+  }, [startDate, endDate, method, page, overrideOpts]);
 
   useEffect(() => {
     loadData();
@@ -167,8 +183,8 @@ export default function PaymentsPage() {
     // Load unpaid invoices
     try {
       const [draftResult, sentResult] = await Promise.all([
-        getInvoices({ status: "draft", limit: 100 }),
-        getInvoices({ status: "sent", limit: 100 }),
+        getInvoices({ status: "draft", limit: 100 }, overrideOpts),
+        getInvoices({ status: "sent", limit: 100 }, overrideOpts),
       ]);
       setUnpaidInvoices([
         ...(draftResult.invoices || []),
@@ -211,7 +227,7 @@ export default function PaymentsPage() {
       paymentDate: newPayment.paymentDate || undefined,
       referenceNumber: newPayment.referenceNumber || undefined,
       notes: newPayment.notes || undefined,
-    });
+    }, overrideOpts);
 
     setRecordLoading(false);
 
@@ -227,7 +243,7 @@ export default function PaymentsPage() {
 
   async function handleDelete(id: string) {
     setActionLoading(id);
-    await deletePayment(id);
+    await deletePayment(id, overrideOpts);
     setActionLoading(null);
     setDeleteConfirm(null);
     loadData();
@@ -238,7 +254,7 @@ export default function PaymentsPage() {
   async function handleExport() {
     const start = startDate || "2020-01-01";
     const end = endDate || new Date().toISOString().split("T")[0];
-    const result = await exportPaymentHistory(start, end);
+    const result = await exportPaymentHistory(start, end, overrideOpts);
     if (result.success && result.csv) {
       const blob = new Blob([result.csv], { type: "text/csv" });
       const url = URL.createObjectURL(blob);

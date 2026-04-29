@@ -189,6 +189,8 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
   const fetchTarget = Number.isFinite(buildingBudget)
     ? buildingBudget * 2
     : Number.POSITIVE_INFINITY;
+  console.log(`[CondoUnits] Boro ${boro} (${BORO_NAMES[boro]}): starting SODA fetch loop`);
+  let pageCount = 0;
   while (true) {
     if (buildingMap.size >= fetchTarget) {
       console.log(
@@ -197,12 +199,14 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
       break;
     }
     try {
+      const fetchStart = Date.now();
       const records = await querySoda(CONDO_UNITS_DATASET, {
         $where: `condo_base_boro='${boro}'`,
         $order: "condo_base_block ASC, unit_lot ASC",
         $limit: String(PAGE_SIZE),
         $offset: String(offset),
       });
+      const fetchMs = Date.now() - fetchStart;
 
       if (records.length === 0) break;
 
@@ -218,6 +222,11 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
         buildingMap.get(key)!.push(r);
       }
 
+      pageCount++;
+      console.log(
+        `[CondoUnits] Boro ${boro}: page ${pageCount} fetched ${records.length} records in ${fetchMs}ms (offset=${offset}, buildings=${buildingMap.size})`,
+      );
+
       offset += records.length;
       if (records.length < PAGE_SIZE) break;
     } catch (err) {
@@ -226,6 +235,9 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
       break;
     }
   }
+  console.log(
+    `[CondoUnits] Boro ${boro}: fetch complete — ${pageCount} pages, ${buildingMap.size} buildings to upsert`,
+  );
 
   // Process each building group, respecting buildingBudget for cron timeout safety
   const buildingKeys = [...buildingMap.keys()];
@@ -240,6 +252,8 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
     );
   }
 
+  console.log(`[CondoUnits] Boro ${boro}: starting upsert loop for ${cappedKeys.length} buildings`);
+  const upsertStart = Date.now();
   for (let i = 0; i < cappedKeys.length; i += UPSERT_BATCH) {
     const batch = cappedKeys.slice(i, i + UPSERT_BATCH);
 
@@ -256,6 +270,18 @@ async function refreshBorough(orgId: string, boro: number, buildingBudget: numbe
         }
       }),
     );
+
+    // Progress log every 50 buildings (5 batches of 10)
+    const completed = Math.min(i + UPSERT_BATCH, cappedKeys.length);
+    if (completed % 50 === 0 || completed === cappedKeys.length) {
+      const elapsed = (Date.now() - upsertStart) / 1000;
+      const rate = completed / elapsed;
+      const remaining = cappedKeys.length - completed;
+      const eta = remaining / rate;
+      console.log(
+        `[CondoUnits] Boro ${boro}: upserted ${buildingsUpserted}/${completed} buildings, ${unitsUpserted} units, ${errors} errors (${elapsed.toFixed(0)}s elapsed, ${rate.toFixed(1)}/s, ETA ${eta.toFixed(0)}s)`,
+      );
+    }
 
     if (i + UPSERT_BATCH < cappedKeys.length) {
       await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));

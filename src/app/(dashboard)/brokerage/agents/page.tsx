@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   getAgents,
   createAgent,
@@ -116,6 +117,13 @@ const STATE_OPTIONS = ["NY", "NJ", "CT", "PA"] as const;
 // ── Component ─────────────────────────────────────────────────
 
 export default function AgentsPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [agents, setAgents] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [total, setTotal] = useState(0);
@@ -148,7 +156,7 @@ export default function AgentsPage() {
       const result = await getAgents({
         status: statusFilter === "all" ? undefined : statusFilter,
         search: search || undefined,
-      });
+      }, overrideOpts);
       setAgents(result.agents || []);
       setCounts(result.counts || {});
       setTotal(result.total || 0);
@@ -161,7 +169,7 @@ export default function AgentsPage() {
 
   async function loadPendingInvites() {
     try {
-      const invites = await getPendingInvites();
+      const invites = await getPendingInvites(overrideOpts);
       setPendingInvites(invites);
     } catch {
       setPendingInvites([]);
@@ -171,14 +179,14 @@ export default function AgentsPage() {
   useEffect(() => {
     loadData();
     loadPendingInvites();
-    getCommissionPlans().then((r) => setPlans(r.plans || [])).catch(() => {});
+    getCommissionPlans(undefined, overrideOpts).then((r) => setPlans(r.plans || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [overrideOpts]);
 
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter]);
+  }, [statusFilter, overrideOpts]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -256,8 +264,8 @@ export default function AgentsPage() {
       };
 
       const result = showForm === "new"
-        ? await createAgent(payload)
-        : await updateAgent(showForm as string, payload);
+        ? await createAgent(payload, overrideOpts)
+        : await updateAgent(showForm as string, payload, overrideOpts);
 
       if (!result.success) {
         setFormError(result.error || "Operation failed");
@@ -281,14 +289,14 @@ export default function AgentsPage() {
 
   async function handleDeactivate(id: string) {
     setActionLoading(id);
-    await deactivateAgent(id);
+    await deactivateAgent(id, overrideOpts);
     setActionLoading(null);
     loadData();
   }
 
   async function handleReactivate(id: string) {
     setActionLoading(id);
-    await reactivateAgent(id);
+    await reactivateAgent(id, overrideOpts);
     setActionLoading(null);
     loadData();
   }
@@ -296,7 +304,7 @@ export default function AgentsPage() {
   async function handleDelete(id: string) {
     if (!confirm("Delete this agent? This cannot be undone.")) return;
     setActionLoading(id);
-    const result = await deleteAgent(id);
+    const result = await deleteAgent(id, overrideOpts);
     setActionLoading(null);
     if (!result.success) {
       alert(result.error || "Failed to delete agent");
@@ -310,7 +318,7 @@ export default function AgentsPage() {
   async function handleInvite(agentId: string) {
     setInviteLoading(agentId);
     try {
-      const result = await inviteAgent(agentId);
+      const result = await inviteAgent(agentId, overrideOpts);
       if (result.error) {
         alert(result.error);
         return;
@@ -338,7 +346,7 @@ export default function AgentsPage() {
     if (!confirm(`Send invites to ${uninvited.length} agent(s)?`)) return;
     setInviteLoading("bulk");
     try {
-      const result = await bulkInviteAgents(uninvited.map((a: any) => a.id));
+      const result = await bulkInviteAgents(uninvited.map((a: any) => a.id), overrideOpts);
       if (result.errors.length > 0) {
         alert(`Invited: ${result.invited}, Already linked: ${result.alreadyLinked}, Errors: ${result.errors.join(", ")}`);
       }
@@ -353,7 +361,7 @@ export default function AgentsPage() {
     if (!confirm("Revoke this invite? The agent will need a new invitation link.")) return;
     setInviteLoading(agentId);
     try {
-      const result = await revokeInvite(agentId);
+      const result = await revokeInvite(agentId, overrideOpts);
       if (!result.success) {
         alert(result.error || "Failed to revoke invite");
       }
