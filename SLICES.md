@@ -176,12 +176,20 @@ Phase 0 status as of 2026-04-29:
 ## Phase 1 — Manager workflow consolidation (Week 2)
 
 ### 1a — Make table rows clickable across BMS
-- **Status:** `pending`
+- **Status:** `awaiting_review`
 - **Goal:** Rows in deal-submissions, transactions, invoices, agents, onboarding open detail panel on click.
 - **Closes bug:** B-006
-- **Files:** Each list page + table component.
-- **Success criteria:** Click opens detail. Keyboard navigation works (Enter on row).
-- **Depends on:** Phase 0 done
+- **Files:**
+  - `deal-submissions/submissions-dashboard.tsx` — row click → existing `openPanel(s.id)`; Actions cell wrapped in stopPropagation.
+  - `agents/page.tsx` — desktop row click → `router.push('/brokerage/agents/[id]?as_org=...')`; Account-status + Actions cells stopPropagation; mobile card Link href + action-menu link both preserve `?as_org`.
+  - `client-onboarding/page.tsx` — desktop row click → `router.push('/brokerage/client-onboarding/[id]?as_org=...')`; mobile Links + action menu "View Details" preserve `?as_org`; Actions cell stopPropagation.
+  - `invoices/page.tsx` — row click toggles new inline detail-expand row (issued/sent/due/paid dates, total commission, processing fee, agent/house payouts, notes); checkbox + Actions cells stopPropagation. Decision: built inline expand instead of detail panel/route because no detail destination exists today; full panel deferred to a later slice.
+  - `listings/page.tsx` — added `tabIndex` + `onKeyDown` to existing table-row onClick (a11y completeness).
+  - `transactions/page.tsx` — already row-wrapped in `<Link>`; skipped.
+- **Success criteria:** Click opens detail. Keyboard navigation works (Enter on row). ✓ All wired surfaces use `tabIndex={0}` + `onKeyDown(Enter|Space)` + `cursor-pointer` + visible focus ring (`focus:ring-blue-500 ring-inset`).
+- **Out of scope (filed as follow-ups if needed):** Mobile invoice cards (currently no row-click expand on mobile — desktop only); detail panel for invoices replacing the inline expand (slice 2 territory — invoice creation in-context).
+- **Gates:** typecheck 294 (= baseline 294), test 33/33, lint 4530 (= baseline 4530), build ✓.
+- **Depends on:** Phase 0 done.
 - **Requires approval:** No.
 
 ### 1 — Unified Pending Approval queue
