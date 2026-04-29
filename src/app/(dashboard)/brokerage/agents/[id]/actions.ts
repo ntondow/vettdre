@@ -3,15 +3,18 @@
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
-export async function getAgentScreenings(agentUserId: string) {
+export async function getAgentScreenings(
+  agentUserId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const ctx = await getCurrentOrg();
+    const ctx = await getCurrentOrg(options);
     const screenings = await prisma.screeningApplication.findMany({
       where: { orgId: ctx.orgId, agentUserId },
       orderBy: { createdAt: "desc" },

@@ -8,15 +8,15 @@ import { logSettingsAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrgAsAdmin() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrgAsAdmin(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
-  const role = await getCurrentBrokerageRole();
+  const role = await getCurrentBrokerageRole(options);
   return { userId: ctx.userId, orgId: ctx.orgId, role: role ?? null };
 }
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { orgId: ctx.orgId };
 }
@@ -106,9 +106,11 @@ function parseBmsSettings(raw: unknown): BmsSettingsJson {
 
 // ── Get Brokerage Settings ───────────────────────────────────
 
-export async function getBrokerageSettings(): Promise<BrokerageSettings> {
+export async function getBrokerageSettings(
+  options: { overrideAsOrg?: string } = {},
+): Promise<BrokerageSettings> {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const org = await prisma.organization.findUnique({
       where: { id: orgId },
@@ -208,9 +210,9 @@ export async function updateBrokerageSettings(input: {
   defaultDealType?: string;
   invoiceDueDays?: number;
   autoApproveDealSubmissions?: boolean;
-}): Promise<{ success: boolean; error?: string }> {
+}, options: { overrideAsOrg?: string } = {}): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId, orgId, role } = await getCurrentOrgAsAdmin();
+    const { userId, orgId, role } = await getCurrentOrgAsAdmin(options);
 
     if (role !== "brokerage_admin") {
       return { success: false, error: "Only brokerage administrators can update settings" };
@@ -317,9 +319,10 @@ export async function updateBrokerageSettings(input: {
 
 export async function saveBrokerageLogo(
   logoUrl: string | null,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId, orgId, role } = await getCurrentOrgAsAdmin();
+    const { userId, orgId, role } = await getCurrentOrgAsAdmin(options);
 
     if (role !== "brokerage_admin") {
       return { success: false, error: "Only brokerage administrators can update the logo" };
@@ -349,12 +352,14 @@ export async function saveBrokerageLogo(
 
 // ── Team Members ────────────────────────────────────────────
 
-export async function getOrgTeamMembers(): Promise<{
+export async function getOrgTeamMembers(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   members: { id: string; fullName: string; email: string; role: string; createdAt: string }[];
   error?: string;
 }> {
   try {
-    const { orgId, role } = await getCurrentOrgAsAdmin();
+    const { orgId, role } = await getCurrentOrgAsAdmin(options);
     if (role !== "brokerage_admin") {
       return { members: [], error: "Only brokerage administrators can view team members" };
     }
@@ -383,9 +388,10 @@ export async function getOrgTeamMembers(): Promise<{
 export async function updateUserRole(
   targetUserId: string,
   newRole: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId, orgId, role } = await getCurrentOrgAsAdmin();
+    const { userId, orgId, role } = await getCurrentOrgAsAdmin(options);
     if (role !== "brokerage_admin") {
       return { success: false, error: "Only brokerage administrators can change roles" };
     }
@@ -427,17 +433,20 @@ export async function updateUserRole(
 
 // ── Audit Logs ──────────────────────────────────────────────
 
-export async function getAuditLogs(filters?: {
-  action?: string;
-  entityType?: string;
-  actorId?: string;
-  startDate?: string;
-  endDate?: string;
-  page?: number;
-  limit?: number;
-}) {
+export async function getAuditLogs(
+  filters?: {
+    action?: string;
+    entityType?: string;
+    actorId?: string;
+    startDate?: string;
+    endDate?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId, role } = await getCurrentOrgAsAdmin();
+    const { orgId, role } = await getCurrentOrgAsAdmin(options);
 
     if (role !== "brokerage_admin") {
       return { logs: [], total: 0, page: 1, totalPages: 0 };
