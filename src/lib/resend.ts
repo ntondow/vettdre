@@ -15,6 +15,9 @@ interface SendParams {
   html: string;
   from?: string;
   replyTo?: string;
+  // Slice 2: optional CC recipient(s) — used for the per-org
+  // "CC the brokerage on invoice send" toggle.
+  cc?: string | string[];
 }
 
 export async function sendTransactionalEmail(
@@ -32,6 +35,7 @@ export async function sendTransactionalEmail(
       subject: params.subject,
       html: params.html,
       replyTo: params.replyTo,
+      cc: params.cc,
     });
 
     if (error) {
