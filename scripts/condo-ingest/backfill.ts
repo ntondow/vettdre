@@ -19,7 +19,11 @@ const NYC_BASE = "https://data.cityofnewyork.us/resource";
 const FETCH_TIMEOUT = 15000;
 const PAGE_SIZE = 1000;
 const INTER_REQUEST_DELAY_MS = 250;
-const BATCH_SIZE = 5;
+// Per-chunk record concurrency. Each master record fans out to ~10-20
+// sub-queries (legals + parties INSERTs), so BATCH_SIZE=5 produced ~50-100
+// concurrent queries against the Supabase pooler's 15-slot limit, causing
+// EMAXCONNSESSION drops. BATCH_SIZE=2 keeps total concurrency under the limit.
+const BATCH_SIZE = 2;
 
 // ── CLI Args ─────────────────────────────────────────────────
 
@@ -150,25 +154,27 @@ async function main() {
 
     // Check if already done (resumable)
     if (await isChunkDone(chunkKey)) {
+      console.log(`  [${i + 1}/${chunks.length}] SKIP ${chunkKey} (already complete)`);
       totalSkipped++;
       continue;
     }
+
+    const chunkStart = Date.now();
+    console.log(`  [${i + 1}/${chunks.length}] START ${chunkKey} (${chunk.startDate} → ${chunk.endDate})`);
 
     try {
       const records = await processChunk(chunk);
       await markChunkDone(chunkKey, records);
       totalProcessed += records;
-
-      if ((i + 1) % 10 === 0) {
-        const elapsed = ((Date.now() - startTime) / 1000).toFixed(0);
-        console.log(
-          `  Progress: ${i + 1}/${chunks.length} chunks, ` +
-          `${totalProcessed} records, ${totalSkipped} skipped, ${elapsed}s elapsed`,
-        );
-      }
+      const chunkSec = ((Date.now() - chunkStart) / 1000).toFixed(0);
+      const totalSec = ((Date.now() - startTime) / 1000).toFixed(0);
+      console.log(
+        `  [${i + 1}/${chunks.length}] DONE  ${chunkKey} — ${records} records in ${chunkSec}s ` +
+        `(total ${totalProcessed} records, ${totalSec}s elapsed)`,
+      );
     } catch (err) {
       totalErrors++;
-      console.error(`  ERROR chunk ${chunkKey}:`, err);
+      console.error(`  [${i + 1}/${chunks.length}] ERROR ${chunkKey}:`, err);
       // Continue with next chunk — don't fail entire backfill
     }
 
