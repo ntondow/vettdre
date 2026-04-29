@@ -315,15 +315,18 @@ describe("Slice 1c — card-grid layout", () => {
     expect(dashSrc).not.toMatch(/<tbody\b/);
   });
 
-  it("renders DetailTabs with the Payment tab still placeholdered for slice 3", () => {
+  it("renders DetailTabs with all three keys present", () => {
     const tabsSrc = readSource(
       "src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx",
     );
-    // Slice 2 flipped Invoice from enabled:false → enabled:true, so we no
-    // longer assert "Available after Slice 2" copy. Payment must still be
-    // placeholdered — flipping it requires slice 3 to also wire the tab body.
-    expect(tabsSrc).toMatch(/Available after Slice 3/);
-    expect(tabsSrc).toMatch(/key:\s*"payment"[\s\S]*?enabled:\s*false/);
+    // The structural contract for 1c was "tabs exist". Slice 2 flipped
+    // Invoice live; slice 3 flipped Payment live — the placeholder copy
+    // checks moved into the slice 2/3 blocks. Here we just guard the
+    // shape: all three keys remain so the tab strip never silently
+    // collapses to a single tab.
+    expect(tabsSrc).toMatch(/key:\s*"details"/);
+    expect(tabsSrc).toMatch(/key:\s*"invoice"/);
+    expect(tabsSrc).toMatch(/key:\s*"payment"/);
   });
 
   it("relocates the three-button footer onto the inline-expanded card", () => {
@@ -446,6 +449,93 @@ describe("Slice 2 — Invoice tab", () => {
     );
     // UI control exists under the Defaults tab.
     expect(settingsPageSrc).toMatch(/id="ccBrokerageOnInvoiceSend"/);
+  });
+});
+
+// ── Slice 3: Payment tab inside inline-expanded card ─────────
+//
+// Slice 3 contracts:
+//   1. recordPaymentForInvoice is exported and threads overrideAsOrg.
+//      It wraps the existing /brokerage/payments recordPayment action
+//      (validation + balance math + auto-flip-to-paid live there) and
+//      adds an invoice audit row. Wrapper-not-rewrite is the contract.
+//   2. The wrapper writes "payment_recorded" or
+//      "payment_recorded_paid_in_full" via logInvoiceAction so the
+//      audit trail distinguishes balance-closing payments.
+//   3. PaymentTab is wired into submissions-dashboard for activeTab="payment".
+//      Replaces the "Payment tab coming soon" 1c placeholder.
+//   4. PaymentTab renders all four documented states (pre-invoiced empty,
+//      record-payment form, populated history, voided).
+//   5. detail-tabs.tsx flips Payment from enabled:false → enabled:true.
+//      No tabs left disabled in 3.
+describe("Slice 3 — Payment tab", () => {
+  const src = readSource(
+    "src/app/(dashboard)/brokerage/deal-submissions/actions.ts",
+  );
+
+  it("exports recordPaymentForInvoice with overrideAsOrg threading", () => {
+    expect(src).toMatch(
+      /^export\s+async\s+function\s+recordPaymentForInvoice\b/m,
+    );
+    expect(exportThreadsOverride(src, "recordPaymentForInvoice")).toBe(true);
+    const body = src.slice(
+      src.indexOf("export async function recordPaymentForInvoice"),
+    );
+    // Wrapper, not rewrite — must call the existing recordPayment from
+    // /brokerage/payments/actions, not roll its own balance math.
+    expect(body).toMatch(/await\s+import\(["']\.\.\/payments\/actions["']\)/);
+    expect(body).toMatch(/recordPayment\s*\(/);
+  });
+
+  it("writes a balance-aware audit row via logInvoiceAction", () => {
+    const body = src.slice(
+      src.indexOf("export async function recordPaymentForInvoice"),
+    );
+    // Both the partial-payment kind and the balance-closing kind must
+    // exist in the wrapper so the audit log distinguishes them.
+    expect(body).toMatch(/"payment_recorded_paid_in_full"/);
+    expect(body).toMatch(/"payment_recorded"/);
+    expect(body).toMatch(/logInvoiceAction\(/);
+  });
+
+  it("wires PaymentTab into the dashboard for activeTab='payment'", () => {
+    const dashSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/submissions-dashboard.tsx",
+    );
+    expect(dashSrc).toMatch(
+      /import\s*\{[^}]*PaymentTab[^}]*\}\s*from\s*["']\.\/components\/payment-tab["']/,
+    );
+    // The "Payment tab coming soon" placeholder must be gone.
+    expect(dashSrc).not.toMatch(/Payment tab coming soon/);
+    expect(dashSrc).toMatch(/activeTab\s*===\s*"payment"[\s\S]*?<PaymentTab\b/);
+  });
+
+  it("PaymentTab renders the four documented states", () => {
+    const tabSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/components/payment-tab.tsx",
+    );
+    // Pre-invoiced empty (with push-to-invoice CTA — same pattern as Invoice tab).
+    expect(tabSrc).toMatch(/data-testid="payment-tab-empty-no-invoice"/);
+    expect(tabSrc).toMatch(/Push this submission to an invoice/);
+    // Voided invoice — no payment activity expected.
+    expect(tabSrc).toMatch(/data-testid="payment-tab-void"/);
+    // Populated state with balance summary, history list, and form.
+    expect(tabSrc).toMatch(/data-testid="payment-tab-populated"/);
+    expect(tabSrc).toMatch(/data-testid="payment-tab-balance"/);
+    expect(tabSrc).toMatch(/data-testid="payment-tab-form"/);
+    expect(tabSrc).toMatch(/recordPaymentForInvoice\b/);
+  });
+
+  it("detail-tabs.tsx enables Payment tab (no tabs left disabled)", () => {
+    const tabsSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx",
+    );
+    // The 1c placeholder hint copy must be gone — both Invoice and Payment
+    // are live tabs in slice 3.
+    expect(tabsSrc).not.toMatch(/Available after Slice 2/);
+    expect(tabsSrc).not.toMatch(/Available after Slice 3/);
+    // No `enabled: false` flags left anywhere.
+    expect(tabsSrc).not.toMatch(/enabled:\s*false/);
   });
 });
 

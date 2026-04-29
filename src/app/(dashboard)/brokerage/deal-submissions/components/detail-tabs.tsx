@@ -12,15 +12,8 @@ const TABS: Array<{
   hint?: string;
 }> = [
   { key: "details", label: "Details", icon: FileText, enabled: true },
-  // Slice 3 wires the Payment tab. Invoice is live as of Slice 2.
   { key: "invoice", label: "Invoice", icon: Receipt, enabled: true },
-  {
-    key: "payment",
-    label: "Payment",
-    icon: Banknote,
-    enabled: false,
-    hint: "Available after Slice 3",
-  },
+  { key: "payment", label: "Payment", icon: Banknote, enabled: true },
 ];
 
 export function DetailTabs({
