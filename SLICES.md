@@ -262,13 +262,26 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Slice 1 (uses the same status/count source).
 - **Requires approval:** No.
 
-### 2 — Invoice creation in-context
-- **Status:** `pending`
-- **Goal:** Approving a submission auto-creates an Invoice draft. Manager doesn't navigate to /invoices separately.
-- **Files:** server actions for approval flow; Invoice model.
-- **Success criteria:** Approve triggers Invoice insert with the right values; visible on Invoices list.
-- **Depends on:** 1
-- **Requires approval:** No.
+### 2 — Invoice tab in-context (Invoice creation + send)
+- **Status:** `awaiting_review`
+- **Goal:** Wire the Invoice tab inside the inline-expanded card. Lazy fetch on tab activation; populated state shows invoice number, status badge, dates strip (Issued/Due/Sent/Paid), amounts grid (Total Commission/Agent Payout/House Split/Processing Fee), Send/Resend CTA with "Email agent" toggle and idempotent resend; empty states for rejected and pre-invoiced submissions; "Push this submission to an invoice" CTA in the empty-pre-invoiced state. Per-org "CC the brokerage on invoice send" toggle in Defaults tab.
+- **Closes (UX):** U-022 / U-023 (invoice context lives next to the deal, not in a separate /invoices page). Slice 1's Approve & Push already auto-creates the Invoice draft; slice 2 adds the surface where the manager interacts with it.
+- **Files:** `src/app/(dashboard)/brokerage/deal-submissions/components/invoice-tab.tsx` (new), `src/app/(dashboard)/brokerage/deal-submissions/actions.ts` (`getInvoiceForSubmission`, `sendInvoiceToAgent`), `src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx` (flip `enabled`), `src/app/(dashboard)/brokerage/deal-submissions/submissions-dashboard.tsx` (wire), `src/app/(dashboard)/brokerage/settings/{actions.ts,page.tsx}` (CC toggle), `src/lib/{bms-types.ts,resend.ts}`.
+- **Server actions added:**
+  - `getInvoiceForSubmission(submissionId, options?)` — lazy-fetch full Invoice + `Transaction.invoiceSentAt`. Returns `{ success: true, data: null }` for empty-state semantics; `success: false` only for actual errors. Override-threaded.
+  - `sendInvoiceToAgent(invoiceId, options?: { skipEmail?, overrideAsOrg? })` — first send: flips status via `updateInvoiceStatus(→"sent")` (keeps `Transaction.invoiceSentAt` + transaction-stage sync), Resend email, audit row "sent" (logged by `updateInvoiceStatus`). Resend (status === "sent"): skips status flip, re-fires email, writes "resent" audit row. CCs `bmsSettings.companyEmail` when `bmsSettings.ccBrokerageOnInvoiceSend === true`. `skipEmail` writes a "sent_offline" audit row on first-send only.
+- **Success criteria:**
+  - Invoice tab opens lazy: no fetch until clicked.
+  - Rejected submission renders the red empty state ("No invoice will be created").
+  - Pre-invoiced submission (no invoice yet) renders the empty state with a "Push this submission to an invoice" CTA. Click → existing `pushToInvoice` server action runs; toast offers "View invoice" link.
+  - Populated state shows invoice number (linked to `/brokerage/invoices/[id]?as_org=`), status badge, four date cells, four amount rows.
+  - Send CTA: idle → sending → ✓ Sent (1.5s) → idle. Label flips to "Resend" when status === "sent". "Email agent" checkbox controls `skipEmail`.
+  - Resend writes a separate "resent" audit row.
+  - Per-org CC toggle in Defaults tab; disabled when `companyEmail` is empty.
+- **Gates:** lint baseline 4530 unchanged on changed files (verified 0 errors / 3 preexisting warnings); typecheck no regression below 113 errors (was 115 — improved by 2); tests grow by 5 new contracts (`getInvoiceForSubmission` thread + transaction join, `sendInvoiceToAgent` thread + idempotent resend, dashboard wiring, InvoiceTab states, Resend cc + bms-settings + UI). Build ✓.
+- **Depends on:** Slice 1 (PR #10) + Slice 1c (PR #11).
+- **Stack:** `feat/bms-overhaul-2-invoice-tab` → base `feat/bms-overhaul-1c-card-grid-redesign` (PR #11).
+- **Requires approval:** No — directly approved by Nathan after slice 1c verification.
 
 ### 3 — Payment recording in-context
 - **Status:** `pending`

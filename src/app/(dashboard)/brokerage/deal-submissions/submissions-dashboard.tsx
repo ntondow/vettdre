@@ -56,6 +56,7 @@ import {
   type SubmissionCardData,
 } from "./components/submission-card";
 import { DetailTabs, type DetailTabKey } from "./components/detail-tabs";
+import { InvoiceTab } from "./components/invoice-tab";
 import { EmptyState } from "./components/empty-state";
 import {
   RecentlyApprovedRail,
@@ -833,7 +834,16 @@ export default function SubmissionsDashboard({
                           Submission not found
                         </p>
                       </div>
-                    ) : activeTab !== "details" ? (
+                    ) : activeTab === "invoice" ? (
+                      <InvoiceTab
+                        submissionId={expandedSubmission.id}
+                        submissionStatus={expandedSubmission.status}
+                        asOrg={asOrg}
+                        onShowToast={showToast}
+                        onInvoiceCreated={loadData}
+                        onInvoiceSent={loadData}
+                      />
+                    ) : activeTab === "payment" ? (
                       <div
                         data-testid="detail-tab-placeholder"
                         className="text-center py-10"
@@ -842,12 +852,10 @@ export default function SubmissionsDashboard({
                           <FileText className="h-5 w-5 text-slate-400" />
                         </div>
                         <p className="text-slate-500 font-medium">
-                          {activeTab === "invoice"
-                            ? "Invoice tab coming soon"
-                            : "Payment tab coming soon"}
+                          Payment tab coming soon
                         </p>
                         <p className="text-xs text-slate-400 mt-1">
-                          Available after Slice {activeTab === "invoice" ? "2" : "3"}
+                          Available after Slice 3
                         </p>
                       </div>
                     ) : (

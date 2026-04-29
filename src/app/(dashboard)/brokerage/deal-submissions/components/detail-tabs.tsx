@@ -12,17 +12,8 @@ const TABS: Array<{
   hint?: string;
 }> = [
   { key: "details", label: "Details", icon: FileText, enabled: true },
-  // Slice 2 wires the Invoice tab once the auto-create + view flow lands.
-  // Slice 3 wires the Payment tab. For 1c the tabs are visible-but-disabled
-  // so the structure is in place when 2/3 land — no migration churn for
-  // managers, no stale "TODO" copy.
-  {
-    key: "invoice",
-    label: "Invoice",
-    icon: Receipt,
-    enabled: false,
-    hint: "Available after Slice 2",
-  },
+  // Slice 3 wires the Payment tab. Invoice is live as of Slice 2.
+  { key: "invoice", label: "Invoice", icon: Receipt, enabled: true },
   {
     key: "payment",
     label: "Payment",
