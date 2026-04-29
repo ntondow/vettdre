@@ -177,8 +177,11 @@ export async function updateListing(
 
 // ── Delete Listing ──────────────────────────────────────────
 
-export async function deleteListing(id: string): Promise<void> {
-  const ctx = await getCurrentOrg();
+export async function deleteListing(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<void> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -194,8 +197,11 @@ export async function deleteListing(id: string): Promise<void> {
 
 // ── Get Single Listing ──────────────────────────────────────
 
-export async function getListing(id: string): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function getListing(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -278,8 +284,9 @@ export async function getListings(filters?: {
 export async function advanceListingStatus(
   id: string,
   tenantData?: { tenantName?: string; tenantEmail?: string; tenantPhone?: string; leaseStartDate?: string; commissionAmount?: number },
+  options: { overrideAsOrg?: string } = {},
 ): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -337,8 +344,11 @@ export async function advanceListingStatus(
 
 // ── Revert Listing Status ───────────────────────────────────
 
-export async function revertListingStatus(id: string): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function revertListingStatus(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -375,8 +385,11 @@ export async function revertListingStatus(id: string): Promise<BmsListingRecord>
 
 // ── Take Off Market ─────────────────────────────────────────
 
-export async function takeOffMarket(id: string): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function takeOffMarket(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -404,8 +417,11 @@ export async function takeOffMarket(id: string): Promise<BmsListingRecord> {
 
 // ── Put Back on Market ──────────────────────────────────────
 
-export async function putBackOnMarket(id: string): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function putBackOnMarket(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -434,8 +450,11 @@ export async function putBackOnMarket(id: string): Promise<BmsListingRecord> {
 
 // ── Claim Listing ───────────────────────────────────────────
 
-export async function claimListing(id: string): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function claimListing(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
   if (!ctx.agentId) throw new Error("You must be a registered agent to claim a listing");
 
   const listing = await prisma.bmsListing.findFirst({
@@ -462,8 +481,12 @@ export async function claimListing(id: string): Promise<BmsListingRecord> {
 
 // ── Assign Listing ──────────────────────────────────────────
 
-export async function assignListing(id: string, agentId: string | null): Promise<BmsListingRecord> {
-  const ctx = await getCurrentOrg();
+export async function assignListing(
+  id: string,
+  agentId: string | null,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsListingRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -540,8 +563,9 @@ export async function createTransactionFromListing(
     leaseStartDate?: string;
     commissionAmount?: number;
   },
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ transactionId: string }> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const listing = await prisma.bmsListing.findFirst({
     where: { id: listingId, orgId: ctx.orgId },
@@ -783,8 +807,9 @@ export async function createProperty(
 export async function updateProperty(
   id: string,
   data: Partial<BmsPropertyInput>,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<BmsPropertyRecord> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const existing = await prisma.bmsProperty.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -814,8 +839,11 @@ export async function updateProperty(
   return serialize(updated) as BmsPropertyRecord;
 }
 
-export async function deleteProperty(id: string): Promise<void> {
-  const ctx = await getCurrentOrg();
+export async function deleteProperty(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<void> {
+  const ctx = await getCurrentOrg(options);
 
   const property = await prisma.bmsProperty.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -837,8 +865,11 @@ export async function deleteProperty(id: string): Promise<void> {
   });
 }
 
-export async function getProperty(id: string): Promise<BmsPropertyRecord> {
-  const ctx = await getCurrentOrg();
+export async function getProperty(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<BmsPropertyRecord> {
+  const ctx = await getCurrentOrg(options);
 
   const property = await prisma.bmsProperty.findFirst({
     where: { id, orgId: ctx.orgId },

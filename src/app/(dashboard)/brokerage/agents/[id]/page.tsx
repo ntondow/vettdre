@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getAgentById, getAgentStats, updateAgent, deactivateAgent, reactivateAgent } from "../actions";
 import { inviteAgent, revokeInvite } from "../onboarding-actions";
 import { getAgentScreenings } from "./actions";
@@ -157,6 +158,14 @@ export default function AgentDetailPage({
 }) {
   const { id } = use(params);
 
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
+
   const [agent, setAgent] = useState<any>(null);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -222,7 +231,7 @@ export default function AgentDetailPage({
   async function loadAgent() {
     setLoading(true);
     try {
-      const [a, s] = await Promise.all([getAgentById(id), getAgentStats(id)]);
+      const [a, s] = await Promise.all([getAgentById(id, overrideOpts), getAgentStats(id, overrideOpts)]);
       setAgent(a);
       setStats(s);
       if (a?.notes) setNotesValue(a.notes);
@@ -235,7 +244,7 @@ export default function AgentDetailPage({
 
   async function loadCompliance() {
     try {
-      const docs = await getAgentComplianceDocs(id);
+      const docs = await getAgentComplianceDocs(id, overrideOpts);
       setComplianceDocs(docs || []);
     } catch {
       setComplianceDocs([]);
@@ -245,7 +254,7 @@ export default function AgentDetailPage({
   async function loadPerformance() {
     setPerfLoading(true);
     try {
-      const data = await getAgentDashboard(id);
+      const data = await getAgentDashboard(id, overrideOpts);
       setPerfData(data);
     } catch {
       setPerfData(null);
@@ -259,7 +268,7 @@ export default function AgentDetailPage({
     setScreeningLoading(true);
     try {
       const [data, stats] = await Promise.all([
-        getAgentScreenings(agent.userId),
+        getAgentScreenings(agent.userId, overrideOpts),
         getScreeningBmsStats(agent.orgId, agent.userId),
       ]);
       setScreeningData(data || []);
@@ -276,10 +285,10 @@ export default function AgentDetailPage({
     loadAgent();
     loadCompliance();
     loadPerformance();
-    getBrokerageConfig().then((c) => setBrokerageConfig(c)).catch(() => {});
-    getCommissionPlans().then((r) => setPlans(r.plans || [])).catch(() => {});
+    getBrokerageConfig(overrideOpts).then((c) => setBrokerageConfig(c)).catch(() => {});
+    getCommissionPlans(undefined, overrideOpts).then((r) => setPlans(r.plans || [])).catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
+  }, [id, overrideOpts]);
 
   // Lazy load screening data when tab is activated
   useEffect(() => {
@@ -355,7 +364,7 @@ export default function AgentDetailPage({
         zipCode: form.zipCode.trim() || undefined,
         dateOfBirth: form.dateOfBirth || undefined,
         notes: form.notes.trim() || undefined,
-      });
+      }, overrideOpts);
       if (!result.success) {
         setFormError(result.error || "Failed to update");
         return;
@@ -373,9 +382,9 @@ export default function AgentDetailPage({
     if (!agent) return;
     setActionLoading(true);
     if (agent.status === "active" || agent.status === "pending") {
-      await deactivateAgent(id);
+      await deactivateAgent(id, overrideOpts);
     } else {
-      await reactivateAgent(id);
+      await reactivateAgent(id, overrideOpts);
     }
     setActionLoading(false);
     loadAgent();
@@ -392,7 +401,7 @@ export default function AgentDetailPage({
   async function handleRegenerateInvite() {
     setInviteActionLoading(true);
     try {
-      const result = await inviteAgent(id);
+      const result = await inviteAgent(id, overrideOpts);
       if (result.inviteUrl) {
         await navigator.clipboard.writeText(result.inviteUrl);
         setInviteCopied(true);
@@ -407,7 +416,7 @@ export default function AgentDetailPage({
   async function handleRevokeInvite() {
     setInviteActionLoading(true);
     try {
-      await revokeInvite(id);
+      await revokeInvite(id, overrideOpts);
       loadAgent();
     } finally {
       setInviteActionLoading(false);
@@ -428,7 +437,7 @@ export default function AgentDetailPage({
         lastName: agent.lastName,
         email: agent.email,
         notes: notesValue.trim() || undefined,
-      });
+      }, overrideOpts);
       setEditingNotes(false);
       loadAgent();
     } finally {
@@ -447,7 +456,7 @@ export default function AgentDetailPage({
         issueDate: compForm.issueDate || undefined,
         expiryDate: compForm.expiryDate || undefined,
         notes: compForm.notes.trim() || undefined,
-      });
+      }, overrideOpts);
       setShowComplianceForm(false);
       setCompForm({ docType: "license", title: "", issueDate: "", expiryDate: "", notes: "" });
       loadCompliance();
@@ -458,7 +467,7 @@ export default function AgentDetailPage({
 
   async function handleDeleteComplianceDoc(docId: string) {
     if (!confirm("Delete this compliance document?")) return;
-    await deleteComplianceDoc(docId);
+    await deleteComplianceDoc(docId, overrideOpts);
     loadCompliance();
   }
 
@@ -482,7 +491,7 @@ export default function AgentDetailPage({
     return (
       <div className="max-w-6xl mx-auto px-4 py-8 text-center">
         <p className="text-slate-500">Agent not found</p>
-        <Link href="/brokerage/agents" className="text-sm text-blue-600 hover:text-blue-700 mt-2 inline-block">
+        <Link href={`/brokerage/agents${detailQs}`} className="text-sm text-blue-600 hover:text-blue-700 mt-2 inline-block">
           Back to Roster
         </Link>
       </div>
@@ -547,7 +556,7 @@ export default function AgentDetailPage({
 
       {/* Back link */}
       <Link
-        href="/brokerage/agents"
+        href={`/brokerage/agents${detailQs}`}
         className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 transition-colors mb-6"
       >
         <ArrowLeft className="h-4 w-4" />

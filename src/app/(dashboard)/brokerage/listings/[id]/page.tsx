@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle2,
@@ -83,6 +83,13 @@ const BATHROOM_OPTIONS = ["1", "1.5", "2", "2.5", "3+"];
 export default function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
   const [listing, setListing] = useState<BmsListingRecord | null>(null);
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,8 +123,8 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function loadData() {
     try {
       const [l, a] = await Promise.all([
-        getListing(id),
-        getAgentsForDropdown(),
+        getListing(id, overrideOpts),
+        getAgentsForDropdown(overrideOpts),
       ]);
       setListing(l);
       setAgents(a);
@@ -128,7 +135,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  useEffect(() => { loadData(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, [id, overrideOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ─────────────────────────────────────────────────
 
@@ -154,7 +161,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
 
     setActionLoading(true);
     try {
-      const updated = await advanceListingStatus(id);
+      const updated = await advanceListingStatus(id, undefined, overrideOpts);
       setListing(updated);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to advance status");
@@ -173,14 +180,14 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
         tenantPhone: leaseForm.tenantPhone || undefined,
         leaseStartDate: leaseForm.leaseStartDate || undefined,
         commissionAmount: leaseForm.commissionAmount ? Number(leaseForm.commissionAmount) : undefined,
-      });
+      }, overrideOpts);
       setShowLeaseForm(false);
       // Reload to show leased status + transaction link
       await loadData();
       // Show success
       if (result.transactionId) {
         if (confirm("Listing marked as leased. Transaction created. View transaction?")) {
-          router.push(`/brokerage/transactions/${result.transactionId}`);
+          router.push(`/brokerage/transactions/${result.transactionId}${detailQs}`);
         }
       }
     } catch (err) {
@@ -193,7 +200,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function handleRevert() {
     setActionLoading(true);
     try {
-      const updated = await revertListingStatus(id);
+      const updated = await revertListingStatus(id, overrideOpts);
       setListing(updated);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to revert status");
@@ -206,7 +213,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     if (!confirm("Take this listing off market?")) return;
     setActionLoading(true);
     try {
-      const updated = await takeOffMarket(id);
+      const updated = await takeOffMarket(id, overrideOpts);
       setListing(updated);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed");
@@ -218,7 +225,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function handleBackOnMarket() {
     setActionLoading(true);
     try {
-      const updated = await putBackOnMarket(id);
+      const updated = await putBackOnMarket(id, overrideOpts);
       setListing(updated);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed");
@@ -230,7 +237,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function handleClaim() {
     setActionLoading(true);
     try {
-      const updated = await claimListing(id);
+      const updated = await claimListing(id, overrideOpts);
       setListing(updated);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to claim listing");
@@ -242,7 +249,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function handleAssign() {
     setActionLoading(true);
     try {
-      const updated = await assignListing(id, assignAgentId || null);
+      const updated = await assignListing(id, assignAgentId || null, overrideOpts);
       setListing(updated);
       setShowAssign(false);
     } catch (err) {
@@ -257,7 +264,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   async function handleSaveDetails() {
     setSaving(true);
     try {
-      const updated = await updateListing(id, editForm as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const updated = await updateListing(id, editForm as any, overrideOpts); // eslint-disable-line @typescript-eslint/no-explicit-any
       setListing(updated);
       setEditingDetails(false);
     } catch (err) {
@@ -301,7 +308,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
   if (error || !listing) {
     return (
       <div className="p-6">
-        <Link href="/brokerage/listings" className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4">
+        <Link href={`/brokerage/listings${detailQs}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Listings
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
@@ -320,7 +327,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
     <div className="min-h-screen bg-slate-50/40">
       {/* Header */}
       <div className="px-6 pt-6 pb-4">
-        <Link href="/brokerage/listings" className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-3">
+        <Link href={`/brokerage/listings${detailQs}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to Listings
         </Link>
 
@@ -653,7 +660,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div className="px-5 py-4">
                 <Link
-                  href={`/brokerage/listings/properties/${listing.property.id}`}
+                  href={`/brokerage/listings/properties/${listing.property.id}${detailQs}`}
                   className="text-sm font-medium text-blue-600 hover:underline"
                 >
                   {listing.property.name}
@@ -767,7 +774,7 @@ export default function ListingDetailPage({ params }: { params: Promise<{ id: st
               </div>
               <div className="px-5 py-4">
                 <Link
-                  href={`/brokerage/transactions/${listing.transaction.id}`}
+                  href={`/brokerage/transactions/${listing.transaction.id}${detailQs}`}
                   className="flex items-center gap-2 text-sm text-blue-600 hover:underline"
                 >
                   <FolderOpen className="w-4 h-4" />
