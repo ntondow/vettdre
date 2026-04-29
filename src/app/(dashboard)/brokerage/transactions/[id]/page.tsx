@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Check,
@@ -123,6 +124,14 @@ export default function TransactionDetailPage({
 }) {
   const { id } = use(params);
 
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
+
   const [tx, setTx] = useState<TransactionWithTasks | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState("");
@@ -200,7 +209,7 @@ export default function TransactionDetailPage({
 
   async function loadData() {
     try {
-      const data = await getTransaction(id);
+      const data = await getTransaction(id, overrideOpts);
       setTx(data);
       setNotesValue(data.notes || "");
     } catch (err) {
@@ -212,10 +221,10 @@ export default function TransactionDetailPage({
 
   useEffect(() => {
     loadData();
-    getAgents({ status: "active", limit: 100 })
+    getAgents({ status: "active", limit: 100 }, overrideOpts)
       .then((res) => { if (res?.agents) setOrgAgents(res.agents as AgentOption[]); })
       .catch(() => {});
-  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, overrideOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Actions ───────────────────────────────────────────────
 
@@ -391,7 +400,7 @@ export default function TransactionDetailPage({
   async function loadTimeline() {
     setTimelineLoading(true);
     try {
-      const events = await getDealTimeline(id);
+      const events = await getDealTimeline(id, overrideOpts);
       setTimeline(events);
     } catch (err) {
       console.error("Failed to load timeline:", err);
@@ -650,7 +659,7 @@ export default function TransactionDetailPage({
     return (
       <div className="max-w-6xl mx-auto px-4 py-16 text-center">
         <p className="text-slate-500">Transaction not found</p>
-        <Link href="/brokerage/transactions" className="text-blue-600 text-sm hover:underline mt-2 inline-block">
+        <Link href={`/brokerage/transactions${detailQs}`} className="text-blue-600 text-sm hover:underline mt-2 inline-block">
           Back to Transactions
         </Link>
       </div>
@@ -694,7 +703,7 @@ export default function TransactionDetailPage({
     <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Back link */}
       <Link
-        href="/brokerage/transactions"
+        href={`/brokerage/transactions${detailQs}`}
         className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4"
       >
         <ArrowLeft className="w-4 h-4" />
@@ -792,7 +801,7 @@ export default function TransactionDetailPage({
           )}
           {tx.dealSubmission && (
             <Link
-              href="/brokerage/deal-submissions"
+              href={`/brokerage/deal-submissions${detailQs}`}
               className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-slate-600 bg-white border border-slate-200 rounded-lg hover:bg-slate-50 transition-colors"
             >
               <ExternalLink className="w-3.5 h-3.5" />
@@ -1347,7 +1356,7 @@ export default function TransactionDetailPage({
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-slate-500">Submission</span>
                   <Link
-                    href="/brokerage/deal-submissions"
+                    href={`/brokerage/deal-submissions${detailQs}`}
                     className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
                   >
                     <FileText className="w-3 h-3" />

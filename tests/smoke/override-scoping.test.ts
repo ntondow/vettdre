@@ -38,6 +38,9 @@ const FILES_UNDER_TEST = [
   "src/app/(dashboard)/brokerage/payments/actions.ts",
   "src/app/(dashboard)/brokerage/leaderboard/actions.ts",
   "src/app/(dashboard)/brokerage/reports/revenue/actions.ts",
+  // Slice 0c3: detail-route surfaces.
+  "src/app/(dashboard)/brokerage/client-onboarding/actions.ts",
+  "src/app/(dashboard)/brokerage/listings/actions.ts",
 ];
 
 // Exports that intentionally do NOT take the override (agent-self-service
@@ -70,14 +73,38 @@ const EXEMPT_EXPORTS: Record<string, string[]> = {
     "getAgentSplitForDeal",
   ],
 
-  // TODO-0c-followup: transactions/actions.ts has 27 un-threaded exports.
-  // The file was partially threaded in PATCH B (commit b264a45) but most
-  // exports still rely on the local helper without forwarding options. Defer
-  // to a follow-up commit in this same Phase 0; tracked in SLICES.md.
+  // Public token-flow (signing page). No logged-in user, no ?as_org concept.
+  "src/app/(dashboard)/brokerage/client-onboarding/actions.ts": [
+    "getOnboardingPublic", // public via /sign/[token]
+    // TODO-0c3-followup: createOnboarding ties the onboarding document to the
+    // calling agent's identity — overriding org while keeping the agent record
+    // has legal/audit implications. Defer until product clarifies whether
+    // super_admin can create on behalf of another org's agent.
+    "createOnboarding",
+  ],
+
+  // Slice 0c3 deferred:
+  //  - bulkCreateListings is an admin import path that uses ctx.orgId only;
+  //    threading is a follow-up cleanup, not blocking the detail-route fix.
+  //  - getPropertySummaries / fuzzyMatchProperties / fuzzyMatchAgents are
+  //    typeahead helpers consumed by the create flows; thread when those flows
+  //    are revisited.
+  "src/app/(dashboard)/brokerage/listings/actions.ts": [
+    "bulkCreateListings",
+    "getPropertySummaries",
+    "fuzzyMatchProperties",
+    "fuzzyMatchAgents",
+  ],
+
+  // TODO-0c-followup: transactions/actions.ts has 25 un-threaded exports.
+  // The file was partially threaded in PATCH B (commit b264a45) and slice 0c3
+  // threaded the read paths (getTransaction, getDealTimeline) used by the
+  // transaction detail page. Most write exports still rely on the local helper
+  // without forwarding options. Defer to a follow-up commit; tracked in
+  // SLICES.md.
   "src/app/(dashboard)/brokerage/transactions/actions.ts": [
     "ensureDefaultTemplates",
     "createTransactionFromSubmission",
-    "getTransaction",
     "updateTransaction",
     "advanceStage",
     "revertStage",
@@ -100,7 +127,6 @@ const EXEMPT_EXPORTS: Record<string, string[]> = {
     "getTransactionAgents",
     "markCommissionReceived",
     "syncTransactionFromInvoice",
-    "getDealTimeline",
     "getAgentPayoutSummary",
   ],
 };
@@ -164,6 +190,51 @@ describe("Slice 0c — override threading on BMS action surfaces", () => {
           `Exports without overrideAsOrg in ${file}: ${missing.join(", ")}. ` +
             `Add the param or list the export in EXEMPT_EXPORTS with a reason.`,
         ).toEqual([]);
+      });
+    });
+  }
+});
+
+// ── Slice 0c3: detail-route page-level threading ─────────────
+//
+// Each BMS detail page reachable via row-click from a list page that supports
+// `?as_org=X` must thread the override into its action calls so that the page
+// loads the correct org's record. We assert this statically:
+//
+//   1. The page imports `useSearchParams` from next/navigation.
+//   2. The page reads `as_org` and computes an `overrideOpts` value.
+//   3. The page passes `overrideOpts` to at least one action call.
+//
+// If a detail page legitimately doesn't take override (e.g. the list page that
+// owns it doesn't support override either), don't add it here.
+const DETAIL_PAGES_UNDER_TEST = [
+  "src/app/(dashboard)/brokerage/agents/[id]/page.tsx",
+  "src/app/(dashboard)/brokerage/transactions/[id]/page.tsx",
+  "src/app/(dashboard)/brokerage/client-onboarding/[id]/page.tsx",
+  "src/app/(dashboard)/brokerage/listings/[id]/page.tsx",
+  "src/app/(dashboard)/brokerage/listings/properties/[id]/page.tsx",
+];
+
+describe("Slice 0c3 — detail-page override threading", () => {
+  for (const file of DETAIL_PAGES_UNDER_TEST) {
+    describe(file, () => {
+      const src = readSource(file);
+
+      it("imports useSearchParams from next/navigation", () => {
+        expect(src).toMatch(
+          /import\s*\{[^}]*useSearchParams[^}]*\}\s*from\s*["']next\/navigation["']/,
+        );
+      });
+
+      it("reads as_org from search params and computes overrideOpts", () => {
+        expect(src).toMatch(/as_org/);
+        expect(src).toMatch(/overrideOpts/);
+      });
+
+      it("passes overrideOpts to at least one action call", () => {
+        // Match `someAction(arg1, ..., overrideOpts)` — the override must
+        // appear inside an actual call, not just as a declaration.
+        expect(src).toMatch(/[a-zA-Z]\w*\([^)]*\boverrideOpts\b[^)]*\)/);
       });
     });
   }

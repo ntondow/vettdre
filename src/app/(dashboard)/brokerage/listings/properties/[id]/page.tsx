@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Edit3,
@@ -38,6 +38,13 @@ const fmt = (n: number) =>
 export default function PropertyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
   const [property, setProperty] = useState<BmsPropertyRecord | null>(null);
   const [listings, setListings] = useState<BmsListingRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,8 +58,8 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   async function loadData() {
     try {
       const [p, l] = await Promise.all([
-        getProperty(id),
-        getListings({ propertyId: id }),
+        getProperty(id, overrideOpts),
+        getListings({ propertyId: id }, overrideOpts),
       ]);
       setProperty(p);
       setListings(l);
@@ -63,7 +70,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  useEffect(() => { loadData(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadData(); }, [id, overrideOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function startEditing() {
     if (!property) return;
@@ -86,7 +93,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   async function handleSave() {
     setSaving(true);
     try {
-      const updated = await updateProperty(id, editForm as any); // eslint-disable-line @typescript-eslint/no-explicit-any
+      const updated = await updateProperty(id, editForm as any, overrideOpts); // eslint-disable-line @typescript-eslint/no-explicit-any
       setProperty(updated);
       setEditing(false);
     } catch (err) {
@@ -108,7 +115,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   if (error || !property) {
     return (
       <div className="p-6">
-        <Link href="/brokerage/listings/properties" className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4">
+        <Link href={`/brokerage/listings/properties${detailQs}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-4">
           <ArrowLeft className="w-4 h-4" /> Back to Properties
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
@@ -137,7 +144,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
   return (
     <div className="min-h-screen bg-slate-50/40">
       <div className="px-6 pt-6 pb-4">
-        <Link href="/brokerage/listings/properties" className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-3">
+        <Link href={`/brokerage/listings/properties${detailQs}`} className="flex items-center gap-1 text-sm text-blue-600 hover:underline mb-3">
           <ArrowLeft className="w-4 h-4" /> Back to Properties
         </Link>
 
@@ -148,7 +155,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href={`/brokerage/listings?propertyId=${property.id}`}
+              href={`/brokerage/listings?propertyId=${property.id}${asOrg ? `&as_org=${encodeURIComponent(asOrg)}` : ""}`}
               className="px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100"
             >
               View All Listings
@@ -250,7 +257,7 @@ export default function PropertyDetailPage({ params }: { params: Promise<{ id: s
                   {listings.map((l) => (
                     <tr
                       key={l.id}
-                      onClick={() => router.push(`/brokerage/listings/${l.id}`)}
+                      onClick={() => router.push(`/brokerage/listings/${l.id}${detailQs}`)}
                       className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer"
                     >
                       <td className="px-4 py-2.5 text-sm font-medium text-slate-800">

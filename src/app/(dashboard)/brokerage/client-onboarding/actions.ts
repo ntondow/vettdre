@@ -146,9 +146,10 @@ export async function getOnboardings(filters?: {
 
 export async function getOnboarding(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; data?: Record<string, unknown>; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const canViewAll = hasPermission(ctx.role, "client_onboarding_view_all");
@@ -740,9 +741,10 @@ export async function generateInvoiceFromOnboarding(
     monthlyRent?: number;
     closingDate?: string;
   },
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; invoiceId?: string; transactionId?: string; submissionId?: string; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "create_invoice")) {
       return { success: false, error: "Not authorized" };
