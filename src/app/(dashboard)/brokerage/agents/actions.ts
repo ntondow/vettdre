@@ -83,9 +83,12 @@ export async function getAgents(
   }
 }
 
-export async function getAgentById(agentId: string) {
+export async function getAgentById(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -162,9 +165,9 @@ export async function createAgent(input: {
   w9OnFile?: boolean;
   photoUrl?: string;
   notes?: string;
-}) {
+}, options: { overrideAsOrg?: string } = {}) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     // Duplicate email check within org
     const existing = await prisma.brokerAgent.findFirst({
@@ -240,9 +243,9 @@ export async function updateAgent(agentId: string, input: {
   w9OnFile?: boolean;
   photoUrl?: string;
   notes?: string;
-}) {
+}, options: { overrideAsOrg?: string } = {}) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     // Verify ownership
     const current = await prisma.brokerAgent.findFirst({
@@ -300,9 +303,13 @@ export async function updateAgent(agentId: string, input: {
 
 // ── Role Management ──────────────────────────────────────────
 
-export async function updateAgentRole(agentId: string, brokerageRole: string) {
+export async function updateAgentRole(
+  agentId: string,
+  brokerageRole: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -334,9 +341,12 @@ export async function updateAgentRole(agentId: string, brokerageRole: string) {
 
 // ── Status Management ─────────────────────────────────────────
 
-export async function deactivateAgent(agentId: string) {
+export async function deactivateAgent(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     await prisma.brokerAgent.updateMany({
       where: { id: agentId, orgId },
@@ -352,9 +362,12 @@ export async function deactivateAgent(agentId: string) {
   }
 }
 
-export async function reactivateAgent(agentId: string) {
+export async function reactivateAgent(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     // If agent has a linked user, set to active; otherwise set to pending
     const agent = await prisma.brokerAgent.findFirst({
@@ -377,9 +390,12 @@ export async function reactivateAgent(agentId: string) {
   }
 }
 
-export async function deleteAgent(agentId: string) {
+export async function deleteAgent(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -412,16 +428,19 @@ export async function deleteAgent(agentId: string) {
 
 // ── Bulk Operations ───────────────────────────────────────────
 
-export async function bulkCreateAgents(agents: Array<{
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  licenseNumber?: string;
-  defaultSplitPct?: number;
-}>) {
+export async function bulkCreateAgents(
+  agents: Array<{
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    licenseNumber?: string;
+    defaultSplitPct?: number;
+  }>,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     // Fetch existing emails in org for dedup
     const existingAgents = await prisma.brokerAgent.findMany({
@@ -473,9 +492,12 @@ export async function bulkCreateAgents(agents: Array<{
 
 // ── Stats ─────────────────────────────────────────────────────
 
-export async function getAgentStats(agentId: string) {
+export async function getAgentStats(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -555,9 +577,13 @@ export async function getAgentStats(agentId: string) {
 
 // ── User Linking ──────────────────────────────────────────────
 
-export async function linkAgentToUser(agentId: string, userId: string) {
+export async function linkAgentToUser(
+  agentId: string,
+  userId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     // Verify agent belongs to org
     const agent = await prisma.brokerAgent.findFirst({

@@ -8,20 +8,23 @@ import { logAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
 
 // ── Commission Plans ──────────────────────────────────────────
 
-export async function getCommissionPlans(filters?: {
-  status?: string;
-  search?: string;
-}): Promise<{ plans: CommissionPlanRecord[]; total: number }> {
+export async function getCommissionPlans(
+  filters?: {
+    status?: string;
+    search?: string;
+  },
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ plans: CommissionPlanRecord[]; total: number }> {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const status = filters?.status || "all";
     const search = filters?.search?.trim() || "";
 
@@ -80,9 +83,12 @@ export async function getCommissionPlans(filters?: {
   }
 }
 
-export async function getCommissionPlanById(planId: string) {
+export async function getCommissionPlanById(
+  planId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const plan = await prisma.commissionPlan.findFirst({
       where: { id: planId, orgId },
@@ -137,9 +143,12 @@ export async function getCommissionPlanById(planId: string) {
   }
 }
 
-export async function createCommissionPlan(input: CommissionPlanInput) {
+export async function createCommissionPlan(
+  input: CommissionPlanInput,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const plan = await prisma.$transaction(async (tx) => {
       // If this plan is default, unset others first
@@ -192,9 +201,13 @@ export async function createCommissionPlan(input: CommissionPlanInput) {
   }
 }
 
-export async function updateCommissionPlan(planId: string, input: CommissionPlanInput) {
+export async function updateCommissionPlan(
+  planId: string,
+  input: CommissionPlanInput,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const plan = await prisma.$transaction(async (tx) => {
       // Verify ownership
@@ -256,9 +269,12 @@ export async function updateCommissionPlan(planId: string, input: CommissionPlan
   }
 }
 
-export async function deleteCommissionPlan(planId: string) {
+export async function deleteCommissionPlan(
+  planId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     await prisma.$transaction(async (tx) => {
       // Verify ownership
@@ -292,9 +308,12 @@ export async function deleteCommissionPlan(planId: string) {
   }
 }
 
-export async function archiveCommissionPlan(planId: string) {
+export async function archiveCommissionPlan(
+  planId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     await prisma.commissionPlan.update({
       where: { id: planId, orgId },
@@ -310,9 +329,13 @@ export async function archiveCommissionPlan(planId: string) {
 
 // ── Agent Assignment ──────────────────────────────────────────
 
-export async function assignPlanToAgents(planId: string, agentIds: string[]) {
+export async function assignPlanToAgents(
+  planId: string,
+  agentIds: string[],
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     // Verify plan belongs to org
     const plan = await prisma.commissionPlan.findFirst({
@@ -341,9 +364,12 @@ export async function assignPlanToAgents(planId: string, agentIds: string[]) {
   }
 }
 
-export async function unassignPlanFromAgent(agentId: string) {
+export async function unassignPlanFromAgent(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     await prisma.brokerAgent.updateMany({
       where: { id: agentId, orgId },
@@ -363,6 +389,7 @@ export async function getAgentEffectiveSplit(
   agentId: string,
   transactionValue?: number,
   dealCount?: number,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{
   agentSplitPct: number;
   houseSplitPct: number;
@@ -370,7 +397,7 @@ export async function getAgentEffectiveSplit(
   planName: string | null;
 }> {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },

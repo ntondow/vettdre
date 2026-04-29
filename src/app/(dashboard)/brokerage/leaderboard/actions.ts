@@ -172,8 +172,9 @@ export async function getAgentGoals(
   agentId: string,
   year: number,
   month: number,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<AgentGoalRecord | null> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const goal = await prisma.agentGoal.findUnique({
     where: {

@@ -7,8 +7,8 @@ import { logComplianceAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
@@ -32,9 +32,11 @@ function dateStatus(d: Date | string | null): "active" | "expired" | "expiring_s
 
 // ── 1. Compliance Overview ────────────────────────────────────
 
-export async function getComplianceOverview() {
+export async function getComplianceOverview(
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const agents = await prisma.brokerAgent.findMany({
       where: { orgId, status: "active" },
@@ -109,9 +111,12 @@ export async function getComplianceOverview() {
 
 // ── 2. Agent Compliance Docs ──────────────────────────────────
 
-export async function getAgentComplianceDocs(agentId: string) {
+export async function getAgentComplianceDocs(
+  agentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const docs = await prisma.complianceDocument.findMany({
       where: { orgId, agentId },
@@ -133,9 +138,12 @@ export async function getAgentComplianceDocs(agentId: string) {
 
 // ── 3. Create Compliance Doc ──────────────────────────────────
 
-export async function createComplianceDoc(input: ComplianceDocInput) {
+export async function createComplianceDoc(
+  input: ComplianceDocInput,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     // Verify agent belongs to org
     const agent = await prisma.brokerAgent.findFirst({
@@ -178,9 +186,13 @@ export async function createComplianceDoc(input: ComplianceDocInput) {
 
 // ── 4. Update Compliance Doc ──────────────────────────────────
 
-export async function updateComplianceDoc(docId: string, input: Partial<ComplianceDocInput>) {
+export async function updateComplianceDoc(
+  docId: string,
+  input: Partial<ComplianceDocInput>,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     // Verify doc belongs to org
     const existing = await prisma.complianceDocument.findFirst({
@@ -218,9 +230,12 @@ export async function updateComplianceDoc(docId: string, input: Partial<Complian
 
 // ── 5. Delete Compliance Doc ──────────────────────────────────
 
-export async function deleteComplianceDoc(docId: string) {
+export async function deleteComplianceDoc(
+  docId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const existing = await prisma.complianceDocument.findFirst({
       where: { id: docId, orgId },
@@ -243,9 +258,12 @@ export async function deleteComplianceDoc(docId: string) {
 
 // ── 6. Get Expiring Items ─────────────────────────────────────
 
-export async function getExpiringItems(daysAhead: number = 30) {
+export async function getExpiringItems(
+  daysAhead: number = 30,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const now = new Date();
     const cutoff = new Date();
@@ -354,9 +372,11 @@ export async function getExpiringItems(daysAhead: number = 30) {
 
 // ── 7. Refresh Compliance Statuses ────────────────────────────
 
-export async function refreshComplianceStatuses() {
+export async function refreshComplianceStatuses(
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const now = new Date();
     const thirtyDaysFromNow = new Date();
