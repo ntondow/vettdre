@@ -33,7 +33,10 @@ export default function SuperAdminBanner({ orgsById, realOrgId, realOrgName }: P
   }
 
   return (
-    <div className="bg-amber-500 text-amber-950 text-sm font-medium shadow-sm border-b border-amber-600">
+    // Banner must stack above the fixed Sidebar (z-40) — without z-50, the
+    // sidebar logo column covers the leftmost ~60px of the banner and clips
+    // the "Super-admin override:" prefix (B-001).
+    <div className="relative z-50 bg-amber-500 text-amber-950 text-sm font-medium shadow-sm border-b border-amber-600">
       <div className="px-4 md:px-6 py-2 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span aria-hidden className="flex-shrink-0 w-2 h-2 rounded-full bg-amber-900 animate-pulse" />
