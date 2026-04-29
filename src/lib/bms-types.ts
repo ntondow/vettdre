@@ -444,6 +444,9 @@ export interface BrokerageSettings {
   defaultDealType?: string;
   invoiceDueDays?: number;
   autoApproveDealSubmissions?: boolean;
+  // Slice 2: when true and `companyEmail` is set, CC the brokerage on
+  // invoice send / resend. Defaults off.
+  ccBrokerageOnInvoiceSend?: boolean;
 }
 
 export interface CommissionTierInput {
