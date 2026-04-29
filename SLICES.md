@@ -262,6 +262,16 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Slice 1 (uses the same status/count source).
 - **Requires approval:** No.
 
+### 2a — Defaults tab skeleton-hang fix (slice 2 follow-up)
+- **Status:** `awaiting_review`
+- **Goal:** Stop the Brokerage Settings → Defaults tab from hanging on its skeleton when a manager navigates straight there (without first clicking "Brokerage Settings"). Pre-existing latent bug in `page.tsx` — the `useEffect` that calls `getBrokerageSettings` only fired for `activeTab === "settings"`, so `settingsLoaded` stayed false when Defaults was the first tab clicked. Slice 2's new "CC the brokerage on invoice send" toggle made Defaults the natural verification target and surfaced it.
+- **Closes:** slice 2 verification regression. Not a bug slice 2 introduced (guard predates commit `a889a3e`), but slice 2 is the reason it became user-visible.
+- **Files:** `src/app/(dashboard)/brokerage/settings/page.tsx` (single useEffect guard change).
+- **Fix:** extend the load guard to fire on either `activeTab === "settings"` OR `activeTab === "defaults"`, since both branches render `settingsForm` from the same `getBrokerageSettings` payload.
+- **Gates:** lint 0 errors on changed file (3 preexisting warnings, unchanged); typecheck 113 (held); 66 / 66 tests; build clean.
+- **Stack:** committed onto `feat/bms-overhaul-2-invoice-tab` (PR #12); no separate PR.
+- **Requires approval:** No.
+
 ### 2 — Invoice tab in-context (Invoice creation + send)
 - **Status:** `awaiting_review`
 - **Goal:** Wire the Invoice tab inside the inline-expanded card. Lazy fetch on tab activation; populated state shows invoice number, status badge, dates strip (Issued/Due/Sent/Paid), amounts grid (Total Commission/Agent Payout/House Split/Processing Fee), Send/Resend CTA with "Email agent" toggle and idempotent resend; empty states for rejected and pre-invoiced submissions; "Push this submission to an invoice" CTA in the empty-pre-invoiced state. Per-org "CC the brokerage on invoice send" toggle in Defaults tab.
