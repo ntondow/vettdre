@@ -99,13 +99,27 @@ export default function OnboardingListPage() {
   const fetchData = useCallback(async (p: number, status: string) => {
     setLoading(true);
     try {
-      const result = await getOnboardings({ page: p, limit, status: status || undefined });
-      if (result.success) {
-        setOnboardings((result.data ?? []) as unknown as OnboardingRow[]);
-        setTotal(result.total ?? 0);
+      // Cloud Run cold-starts and Supabase pooler reconnects produce intermittent
+      // 503s on this surface; retry once after a short delay to absorb the most
+      // common transient failure mode without surfacing a flicker to the user.
+      let result = await getOnboardings({ page: p, limit, status: status || undefined }).catch((e: unknown) => ({
+        success: false as const,
+        error: e instanceof Error ? e.message : "Network error",
+      }));
+      if (!result.success) {
+        await new Promise((r) => setTimeout(r, 1500));
+        result = await getOnboardings({ page: p, limit, status: status || undefined }).catch((e: unknown) => ({
+          success: false as const,
+          error: e instanceof Error ? e.message : "Network error",
+        }));
       }
-    } catch {
-      setError("Failed to load onboardings");
+      if (result.success) {
+        setOnboardings(((result as { data?: unknown }).data ?? []) as unknown as OnboardingRow[]);
+        setTotal((result as { total?: number }).total ?? 0);
+        setError(null);
+      } else {
+        setError((result as { error?: string }).error ?? "Failed to load onboardings");
+      }
     } finally {
       setLoading(false);
     }
@@ -238,6 +252,12 @@ export default function OnboardingListPage() {
         {error && (
           <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-3 sm:px-4 py-3">
             <AlertTriangle className="w-4 h-4 flex-shrink-0" /> <span className="flex-1">{error}</span>
+            <button
+              onClick={() => fetchData(page, statusFilter)}
+              className="px-2 py-1 rounded border border-red-300 hover:bg-red-100 font-medium"
+            >
+              Try again
+            </button>
             <button onClick={() => setError(null)} className="p-1"><X className="w-4 h-4" /></button>
           </div>
         )}

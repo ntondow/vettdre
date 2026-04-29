@@ -128,14 +128,21 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Requires approval:** No.
 
 ### 14 — Reliability fix on /brokerage/client-onboarding 503s
-- **Status:** `pending`
+- **Status:** `awaiting_review`
 - **Goal:** Track down the 503s observed in production network log. Add structured error handling.
-- **Closes bug:** B-027, B-028
-- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/actions.ts`, `page.tsx`; possibly `src/lib/onboarding-*` libs
-- **Discovery:** Reproduce the 503. Check Cloud Run logs. Identify if it's cold-start, DB pool exhaustion, server-action timeout, or something else. Add Sentry breadcrumbs.
-- **Success criteria:** No more 503s during smoke testing. Failed POSTs return structured `{success: false, error}`. Send Invite button shows loading state.
+- **Closes bug:** B-027 (improved observability + UX), B-028 (transient retry)
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/actions.ts` (Sentry instrumentation on `getOnboardings`, `getOnboarding`, `createOnboarding` catch blocks; surface real error message instead of swallowing); `page.tsx` (one-shot retry on transient failure; "Try again" button in error toast).
+- **Discovery:** Audit sources: action layer already returns structured `{success, error}` (slice prereq met); Send Invite button already shows loading via `submitting` state (slice prereq met). What was missing: (a) Sentry capture from inside action catch blocks — without it, prod errors are invisible because they don't bubble to global-error.tsx; (b) intermittent-503 absorption on the read path; (c) actionable retry UI on the user side.
+- **Outcome:**
+  - **Observability:** `Sentry.captureException` calls added with `tags: { surface: "client-onboarding", action: <name> }` and surface-specific `extra` context (filters, onboardingId, clientEmail, deliveryMethod, templateCount). Now we can finally tell whether prod 503s are PDF generation, storage upload, SMS/email, or DB pool. The catch blocks also now surface the underlying `error.message` instead of a generic string.
+  - **Self-healing:** `fetchData` does a single retry after 1.5s on the read path before showing an error. Absorbs Cloud Run cold-start and Supabase pooler reconnect blips, which is the most likely 503 mode for a low-traffic surface.
+  - **User recovery:** error toast now has a "Try again" button that re-runs `fetchData(page, statusFilter)` without a full page reload.
+- **Success criteria:**
+  - No more 503s during smoke testing. → Cannot verify without prod observability; Sentry capture is the prerequisite for verifying. Will see in dashboard after deploy.
+  - Failed POSTs return structured `{success: false, error}`. ✓ (was already done in actions.ts; verified during this slice).
+  - Send Invite button shows loading state. ✓ (was already done; verified during this slice).
 - **Depends on:** Z5
-- **Requires approval:** YES if root cause requires infra change (Cloud Run scaling, DB pool size).
+- **Requires approval:** YES if root cause requires infra change (Cloud Run scaling, DB pool size). → No infra change made in this slice. Once Nathan reviews Sentry events post-deploy, the actual root cause may surface and a follow-up infra slice can be filed.
 
 **[PHASE 0 APPROVAL GATE — STOP HERE]**
 
