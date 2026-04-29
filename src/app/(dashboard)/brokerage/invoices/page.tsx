@@ -93,6 +93,9 @@ export default function InvoicesPage() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentError, setPaymentError] = useState("");
 
+  // Inline detail expand (row click)
+  const [expandedDetailId, setExpandedDetailId] = useState<string | null>(null);
+
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(null);
 
   // ── Data Loading ────────────────────────────────────────────
@@ -514,11 +517,25 @@ export default function InvoicesPage() {
                 const hasPartialPayment = paidAmount > 0 && paidAmount < agentPayoutNum * 0.995;
                 const paidPct = agentPayoutNum > 0 ? Math.min(100, Math.round((paidAmount / agentPayoutNum) * 100)) : 0;
                 const balanceRemaining = agentPayoutNum - paidAmount;
+                const isExpanded = expandedDetailId === inv.id;
                 return (
                   <Fragment key={inv.id}>
-                  <tr className="hover:bg-slate-50/50 transition-colors">
+                  <tr
+                    tabIndex={0}
+                    onClick={() => setExpandedDetailId(isExpanded ? null : inv.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setExpandedDetailId(isExpanded ? null : inv.id);
+                      }
+                    }}
+                    aria-expanded={isExpanded}
+                    className={`hover:bg-slate-50/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors ${
+                      isExpanded ? "bg-slate-50/70" : ""
+                    }`}
+                  >
                     {/* Checkbox */}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <input
                         type="checkbox"
                         checked={selected.has(inv.id)}
@@ -617,7 +634,7 @@ export default function InvoicesPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="px-3 py-3">
+                    <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => downloadPDF(inv)}
@@ -673,6 +690,52 @@ export default function InvoicesPage() {
                       </div>
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr className="bg-slate-50/70">
+                      <td colSpan={9} className="px-6 py-3 border-t border-slate-100">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-2 text-xs">
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Issued</div>
+                            <div className="text-slate-700">{inv.issuedDate ? fmtDate(inv.issuedDate) : inv.createdAt ? fmtDate(inv.createdAt) : "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Sent</div>
+                            <div className="text-slate-700">{inv.sentDate ? fmtDate(inv.sentDate) : "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Due</div>
+                            <div className="text-slate-700">{inv.dueDate ? fmtDate(inv.dueDate) : "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Paid</div>
+                            <div className="text-slate-700">{inv.paidDate ? fmtDate(inv.paidDate) : "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Total Commission</div>
+                            <div className="text-slate-700">{fmt(Number(inv.totalCommission ?? 0))}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Processing Fee</div>
+                            <div className="text-slate-700">{Number(inv.processingFeeAmt ?? 0) > 0 ? `${fmt(Number(inv.processingFeeAmt))} (${Number(inv.processingFeePct ?? 0).toFixed(2)}%)` : "—"}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Agent Payout</div>
+                            <div className="text-green-700 font-medium">{fmt(Number(inv.agentPayout ?? 0))}</div>
+                          </div>
+                          <div>
+                            <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">House Split</div>
+                            <div className="text-slate-700">{fmt(Number(inv.housePayout ?? 0))}</div>
+                          </div>
+                          {inv.notes && (
+                            <div className="col-span-2 md:col-span-4">
+                              <div className="text-slate-400 uppercase tracking-wide font-medium mb-0.5">Notes</div>
+                              <div className="text-slate-700 whitespace-pre-wrap">{inv.notes}</div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                   {paymentFormId === inv.id && (
                     <tr className="bg-green-50/50">
                       <td colSpan={9} className="px-4 py-3">
