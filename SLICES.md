@@ -144,7 +144,16 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Depends on:** Z5
 - **Requires approval:** YES if root cause requires infra change (Cloud Run scaling, DB pool size). → No infra change made in this slice. Once Nathan reviews Sentry events post-deploy, the actual root cause may surface and a follow-up infra slice can be filed.
 
-**[PHASE 0 APPROVAL GATE — STOP HERE]**
+**[PHASE 0 APPROVAL GATE — `awaiting_review` 2026-04-29]**
+
+Phase 0 status as of 2026-04-29:
+- 0a discovery committed in PR #2 (data sources map, canonical-store decision)
+- 0b backfill applied: 18 Gulino payment rows, $20,110.83 total, full DS→TX→INV→PAY chain restored (PR #3, commit `1e2d3cb`)
+- 0c override threading swept across 9 BMS action files + smoke test (PR #4)
+- 0d banner z-index fix (PR #5)
+- 14 client-onboarding observability + 503 retry (PR #6)
+- Phase 0 gates: typecheck 295 (= baseline 295), test 33/33, lint 4530 (= baseline 4530), build ✓
+- Awaiting Nathan's approval to start Phase 1
 
 ---
 
