@@ -1,5 +1,6 @@
 "use server";
 
+import * as Sentry from "@sentry/nextjs";
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/bms-permissions";
@@ -130,7 +131,12 @@ export async function getOnboardings(filters?: {
     return { success: true, data: data as unknown as Record<string, unknown>[], total };
   } catch (error: unknown) {
     console.error("getOnboardings error:", error);
-    return { success: false, error: "Failed to fetch onboardings" };
+    Sentry.captureException(error, {
+      tags: { surface: "client-onboarding", action: "getOnboardings" },
+      extra: { filters },
+    });
+    const message = error instanceof Error ? error.message : "Failed to fetch onboardings";
+    return { success: false, error: message };
   }
 }
 
@@ -173,7 +179,12 @@ export async function getOnboarding(
     return { success: true, data: serialize(onboarding) as unknown as Record<string, unknown> };
   } catch (error: unknown) {
     console.error("getOnboarding error:", error);
-    return { success: false, error: "Failed to fetch onboarding" };
+    Sentry.captureException(error, {
+      tags: { surface: "client-onboarding", action: "getOnboarding" },
+      extra: { onboardingId: id },
+    });
+    const message = error instanceof Error ? error.message : "Failed to fetch onboarding";
+    return { success: false, error: message };
   }
 }
 
@@ -476,6 +487,17 @@ export async function createOnboarding(
     return { success: true, data: serialize(onboarding) as unknown as Record<string, unknown> };
   } catch (error: unknown) {
     console.error("createOnboarding error:", error);
+    // Highest-volume failure path on this surface — capture rich context so
+    // we can finally tell whether prod 503s are PDF generation, storage upload,
+    // SMS/email, or something else.
+    Sentry.captureException(error, {
+      tags: { surface: "client-onboarding", action: "createOnboarding" },
+      extra: {
+        clientEmail: input.clientEmail,
+        deliveryMethod: input.deliveryMethod,
+        templateCount: input.selectedTemplateIds?.length ?? 0,
+      },
+    });
     return { success: false, error: error instanceof Error ? error.message : "Failed to create onboarding" };
   }
 }
