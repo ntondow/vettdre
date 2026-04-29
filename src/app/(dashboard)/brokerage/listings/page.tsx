@@ -348,8 +348,15 @@ export default function ListingsPage() {
                 {listings.map((l) => (
                   <tr
                     key={l.id}
+                    tabIndex={0}
                     onClick={() => setSelectedListing(l)}
-                    className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer transition-colors"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedListing(l);
+                      }
+                    }}
+                    className="border-b border-slate-50 hover:bg-slate-50/60 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors"
                   >
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-slate-800">
