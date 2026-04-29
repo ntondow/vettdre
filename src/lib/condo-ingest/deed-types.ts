@@ -65,11 +65,29 @@ const MORTGAGE_CLASS_PATTERNS = [
 // ── Public API ───────────────────────────────────────────────
 
 /**
- * Initialize doc-type whitelists by fetching ACRIS Document Control Codes.
- * Safe to call multiple times — caches after first successful load.
+ * Initialize doc-type whitelists.
+ *
+ * NOTE: The original Phase 2 design tried to dynamically build whitelists
+ * by fetching the ACRIS Document Control Codes dataset (7isb-wh4c) and
+ * pattern-matching against class_code_description. That approach is broken:
+ * the dataset has 126 rows but all `doc__type` values are NULL — the field
+ * is just empty in production. Verified 2026-04-27 via:
+ *   curl 'https://data.cityofnewyork.us/resource/7isb-wh4c.json
+ *         ?$select=count(*)&$where=doc__type IS NOT NULL'
+ *   → [{"count":"0"}]
+ *
+ * Fix: use the hardcoded SEED lists unconditionally. We still try the API
+ * fetch as a forward-compatibility hedge — if NYC ever populates doc__type
+ * we'll merge any new codes in — but the seeds are always the primary source.
+ *
+ * Safe to call multiple times — caches after first call.
  */
 export async function initDocTypeWhitelists(): Promise<void> {
   if (_deedTypes && _mortgageTypes) return;
+
+  // Start with seeds as the baseline — these are always populated.
+  const deedSet = new Set<string>(DEED_SEED);
+  const mortgageSet = new Set<string>(MORTGAGE_SEED);
 
   const appToken = process.env.NYC_OPEN_DATA_APP_TOKEN || "";
   const isValid = appToken.length > 0 && !appToken.startsWith("YOUR_");
@@ -84,74 +102,47 @@ export async function initDocTypeWhitelists(): Promise<void> {
     const res = await fetch(url, { headers, signal: controller.signal });
     clearTimeout(timer);
 
-    if (!res.ok) {
-      console.warn(`[DeedTypes] HTTP ${res.status} fetching ACRIS codes — using seed lists`);
-      fallbackToSeeds();
-      return;
-    }
+    if (res.ok) {
+      const records: Array<{
+        doc__type?: string;
+        doc__type_description?: string;
+        class_code_description?: string;
+      }> = await res.json();
 
-    const records: Array<{
-      doc__type: string;
-      doc__type_description?: string;
-      class_code_description?: string;
-    }> = await res.json();
+      if (Array.isArray(records) && records.length > 0) {
+        _allCodes = new Map();
+        for (const r of records) {
+          const code = (r.doc__type || "").trim().toUpperCase();
+          if (!code) continue; // dataset currently has all-NULL doc__type
+          _allCodes.set(code, {
+            description: r.doc__type_description || "",
+            classCodeDescription: r.class_code_description || "",
+          });
+        }
 
-    if (!Array.isArray(records) || records.length === 0) {
-      console.warn("[DeedTypes] Empty ACRIS codes response — using seed lists");
-      fallbackToSeeds();
-      return;
-    }
-
-    // Build lookup map
-    _allCodes = new Map();
-    for (const r of records) {
-      const code = (r.doc__type || "").trim().toUpperCase();
-      if (!code) continue;
-      _allCodes.set(code, {
-        description: r.doc__type_description || "",
-        classCodeDescription: r.class_code_description || "",
-      });
-    }
-
-    // Build deed whitelist: seed + dynamic matches
-    const deedSet = new Set<string>();
-    for (const code of DEED_SEED) {
-      if (_allCodes.has(code)) deedSet.add(code);
-    }
-    for (const [code, meta] of _allCodes) {
-      const combined = `${meta.description} ${meta.classCodeDescription}`;
-      if (DEED_CLASS_PATTERNS.some(p => p.test(combined))) {
-        deedSet.add(code);
+        // If the API ever starts returning doc__type values, merge dynamic matches.
+        for (const [code, meta] of _allCodes) {
+          const combined = `${meta.description} ${meta.classCodeDescription}`;
+          if (DEED_CLASS_PATTERNS.some(p => p.test(combined))) deedSet.add(code);
+          if (MORTGAGE_CLASS_PATTERNS.some(p => p.test(combined))) mortgageSet.add(code);
+        }
       }
+    } else {
+      console.warn(`[DeedTypes] HTTP ${res.status} fetching ACRIS codes — proceeding with seeds only`);
     }
-    _deedTypes = deedSet;
-
-    // Build mortgage whitelist: seed + dynamic matches
-    const mortgageSet = new Set<string>();
-    for (const code of MORTGAGE_SEED) {
-      if (_allCodes.has(code)) mortgageSet.add(code);
-    }
-    for (const [code, meta] of _allCodes) {
-      const combined = `${meta.description} ${meta.classCodeDescription}`;
-      if (MORTGAGE_CLASS_PATTERNS.some(p => p.test(combined))) {
-        mortgageSet.add(code);
-      }
-    }
-    _mortgageTypes = mortgageSet;
-
-    console.log(
-      `[DeedTypes] Loaded ${_allCodes.size} ACRIS codes. ` +
-      `Deed whitelist: ${_deedTypes.size} types. Mortgage whitelist: ${_mortgageTypes.size} types.`
-    );
   } catch (err) {
-    console.error("[DeedTypes] Failed to fetch ACRIS codes:", err);
-    fallbackToSeeds();
+    console.warn("[DeedTypes] Could not fetch ACRIS codes (proceeding with seeds):", err);
   }
-}
 
-function fallbackToSeeds(): void {
-  _deedTypes = DEED_SEED;
-  _mortgageTypes = MORTGAGE_SEED;
+  _deedTypes = deedSet;
+  _mortgageTypes = mortgageSet;
+  const apiCount = _allCodes ? _allCodes.size : 0;
+  console.log(
+    `[DeedTypes] Initialized. Deed whitelist: ${_deedTypes.size} types ` +
+    `(seed=${DEED_SEED.size}, dynamic-from-api=${apiCount}). ` +
+    `Mortgage whitelist: ${_mortgageTypes.size} types ` +
+    `(seed=${MORTGAGE_SEED.size}).`
+  );
 }
 
 /** Get the deed-category doc-type whitelist. Call initDocTypeWhitelists() first. */
