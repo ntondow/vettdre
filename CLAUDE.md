@@ -985,10 +985,13 @@ Stop and ask Nathan when:
 
 After completing all slices in a phase:
 1. Run typecheck + test + build once more to confirm clean state.
-2. Update `SLICES.md` phase status to `awaiting_review`.
-3. Summarize the phase in chat: PR links, what changed, what to verify.
-4. Ask Nathan: "Phase N complete. Approve to start Phase N+1?"
-5. Wait. Don't start the next phase until told.
+2. **Run the lint baseline check.** `npm run lint 2>&1 | grep -cE "^\s+\d+:\d+\s+error"`. Compare to the recorded baseline (see below). If the count grew, identify which slice introduced new lint errors and fix them in that slice before declaring the phase done. The number must equal or be below baseline at every phase gate.
+3. Update `SLICES.md` phase status to `awaiting_review`.
+4. Summarize the phase in chat: PR links, what changed, lint count delta, what to verify.
+5. Ask Nathan: "Phase N complete. Approve to start Phase N+1?"
+6. Wait. Don't start the next phase until told.
+
+**Lint baseline (end of Phase Z, 2026-04-28):** 4530 errors. Update this number when Phase 3 polish reduces the baseline; never let an in-flight phase silently increase it.
 
 ### What you have permission to do without asking
 
