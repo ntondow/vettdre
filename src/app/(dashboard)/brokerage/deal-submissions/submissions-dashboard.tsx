@@ -19,14 +19,12 @@ import {
 } from "../reports/revenue/actions";
 import { getSignedUrl } from "@/lib/bms-files";
 import {
-  SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_COLORS,
   EXCLUSIVE_TYPE_LABELS,
   EXCLUSIVE_TYPE_COLORS,
   DEAL_TYPE_LABELS,
   PAYMENT_METHOD_LABELS,
 } from "@/lib/bms-types";
-import type { ExclusiveType } from "@/lib/bms-types";
 import {
   CheckCircle,
   XCircle,
@@ -38,10 +36,7 @@ import {
   X,
   Eye,
   DollarSign,
-  Clock,
-  BarChart3,
   Ban,
-  Receipt,
   CreditCard,
   Banknote,
   Calendar,
@@ -55,6 +50,21 @@ import {
   Check,
   Loader2,
 } from "lucide-react";
+import {
+  SubmissionCard,
+  CardActionLink,
+  type SubmissionCardData,
+} from "./components/submission-card";
+import { DetailTabs, type DetailTabKey } from "./components/detail-tabs";
+import { EmptyState } from "./components/empty-state";
+import {
+  RecentlyApprovedRail,
+  type RecentlyApprovedItem,
+} from "./components/recently-approved-rail";
+import {
+  StatusFilter,
+  type StatusFilterValue,
+} from "./components/status-filter";
 
 // ── Helpers ────────────────────────────────────────────────────
 
@@ -69,7 +79,7 @@ const fmt = (n: number | string | null | undefined) => {
 };
 
 const fmtDate = (d: string | null | undefined) => {
-  if (!d) return "\u2014";
+  if (!d) return "—";
   try {
     return new Date(d).toLocaleDateString("en-US", {
       month: "short",
@@ -77,7 +87,7 @@ const fmtDate = (d: string | null | undefined) => {
       year: "numeric",
     });
   } catch {
-    return "\u2014";
+    return "—";
   }
 };
 
@@ -85,17 +95,6 @@ const fmtPct = (n: number | string | null | undefined) => {
   const val = Number(n) || 0;
   return `${val.toFixed(1)}%`;
 };
-
-const STATUS_TABS = [
-  "all",
-  "submitted",
-  "approved",
-  "invoiced",
-  "paid",
-  "rejected",
-] as const;
-
-type StatusTab = (typeof STATUS_TABS)[number];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Submission = Record<string, any>;
@@ -125,7 +124,7 @@ export default function SubmissionsDashboard({
   initialStats,
 }: SubmissionsDashboardProps) {
   // Forwarded to every server action so the super_admin override target survives
-  // client-side refetches (filter changes, pagination, panel open). Without this,
+  // client-side refetches (filter changes, pagination, expand). Without this,
   // SSR shows the override target's data but the first client-side `loadData()`
   // replaces it with the real org's data — server actions don't see searchParams,
   // and the referer fallback is unreliable across Next.js 16 runtimes.
@@ -133,6 +132,8 @@ export default function SubmissionsDashboard({
     () => (asOrg ? { overrideAsOrg: asOrg } : {}),
     [asOrg],
   );
+  const overrideQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
+
   // ── State ────────────────────────────────────────────────────
   const [submissions, setSubmissions] = useState<Submission[]>(
     initialSubmissions as Submission[]
@@ -142,9 +143,9 @@ export default function SubmissionsDashboard({
   const [loading, setLoading] = useState(false);
 
   // Filters
-  // Slice 1: default landing is the "Submitted" pending-approval queue —
+  // Slice 1c: default landing is the "Submitted" pending-approval queue —
   // managers open this page to triage new submissions, not to browse history.
-  const [statusFilter, setStatusFilter] = useState<StatusTab>("submitted");
+  const [statusFilter, setStatusFilter] = useState<StatusFilterValue>("submitted");
   const [exclusiveFilter, setExclusiveFilter] = useState<string>("all");
   const [dealTypeFilter, setDealTypeFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
@@ -157,11 +158,15 @@ export default function SubmissionsDashboard({
   // Agents list
   const [agents, setAgents] = useState<Agent[]>([]);
 
-  // Detail panel
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [panelData, setPanelData] = useState<Submission | null>(null);
-  const [panelLoading, setPanelLoading] = useState(false);
-  const [panelEntered, setPanelEntered] = useState(false);
+  // Inline expand (replaces the slide-over panel from slice 1).
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedSubmission, setExpandedSubmission] = useState<Submission | null>(null);
+  const [expandedLoading, setExpandedLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<DetailTabKey>("details");
+
+  // Slice 1c: session-scoped Recently Approved rail. Populated when
+  // approve / approve-and-invoice resolves. Resets on full reload.
+  const [recentlyApproved, setRecentlyApproved] = useState<RecentlyApprovedItem[]>([]);
 
   // Rejection modal
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -191,12 +196,10 @@ export default function SubmissionsDashboard({
   // Action state
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  // Toast
-  // `action` (Slice 1) lets handlers attach an inline link — e.g. "View invoice"
-  // after Approve & Push to Invoice — so the manager can jump straight to the
-  // newly-created record without scanning the list. `durationMs` extends the
-  // timeout for actionable toasts so the link doesn't disappear before they
-  // can click it.
+  // Toast — `action` (Slice 1) lets handlers attach an inline link, e.g.
+  // "View invoice" after Approve & Push to Invoice. `durationMs` extends the
+  // timeout for actionable toasts so the link stays around long enough to
+  // click.
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
@@ -302,35 +305,64 @@ export default function SubmissionsDashboard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
-  // ── Open detail panel ────────────────────────────────────────
-  const openPanel = useCallback(
+  // ── Expand / collapse ────────────────────────────────────────
+  const loadExpandedDetail = useCallback(
     async (id: string) => {
-      setPanelOpen(true);
-      setPanelLoading(true);
-      setTimeout(() => setPanelEntered(true), 10);
+      setExpandedLoading(true);
       try {
         const sub = await getSubmissionById(id, overrideOpts);
         if (sub?.success && sub.data) {
-          setPanelData(sub.data as Submission);
+          setExpandedSubmission(sub.data as Submission);
         } else {
-          setPanelData(null);
+          setExpandedSubmission(null);
         }
       } catch {
-        setPanelData(null);
+        setExpandedSubmission(null);
       } finally {
-        setPanelLoading(false);
+        setExpandedLoading(false);
       }
     },
     [overrideOpts],
   );
 
-  const closePanel = useCallback(() => {
-    setPanelEntered(false);
-    setTimeout(() => {
-      setPanelOpen(false);
-      setPanelData(null);
-    }, 300);
-  }, []);
+  const toggleExpand = useCallback(
+    async (id: string) => {
+      // Same id → collapse.
+      if (expandedId === id) {
+        setExpandedId(null);
+        setExpandedSubmission(null);
+        return;
+      }
+      setExpandedId(id);
+      setActiveTab("details");
+      setExpandedSubmission(null);
+      await loadExpandedDetail(id);
+    },
+    [expandedId, loadExpandedDetail],
+  );
+
+  // ── Recently Approved tracking (session-scoped) ─────────────
+  const pushRecentlyApproved = useCallback(
+    (entry: Omit<RecentlyApprovedItem, "approvedAt">) => {
+      setRecentlyApproved((prev) => {
+        const filtered = prev.filter((p) => p.id !== entry.id);
+        return [{ ...entry, approvedAt: Date.now() }, ...filtered].slice(0, 10);
+      });
+    },
+    [],
+  );
+
+  const railEntryFromSubmission = useCallback(
+    (s: Submission, invoice?: { id: string; invoiceNumber?: string }): Omit<RecentlyApprovedItem, "approvedAt"> => ({
+      id: String(s.id),
+      agentName: [s.agentFirstName, s.agentLastName].filter(Boolean).join(" ") || s.agentEmail || "Agent",
+      propertyAddress: String(s.propertyAddress ?? ""),
+      totalCommission: s.totalCommission,
+      invoiceId: invoice?.id ?? null,
+      invoiceNumber: invoice?.invoiceNumber ?? null,
+    }),
+    [],
+  );
 
   // ── Action handlers ──────────────────────────────────────────
 
@@ -340,8 +372,10 @@ export default function SubmissionsDashboard({
       const result = await approveSubmission(id, undefined, overrideOpts);
       if (result?.success) {
         showToast("success", "Submission approved");
+        const local = submissions.find((s) => s.id === id);
+        if (local) pushRecentlyApproved(railEntryFromSubmission(local));
         loadData();
-        if (panelData?.id === id) openPanel(id);
+        if (expandedId === id) loadExpandedDetail(id);
       } else {
         showToast("error", result?.error || "Failed to approve");
       }
@@ -384,7 +418,7 @@ export default function SubmissionsDashboard({
         showToast("success", "Submission rejected");
         closeRejectModal();
         loadData();
-        if (panelData?.id === rejectTargetId) openPanel(rejectTargetId);
+        if (expandedId === rejectTargetId) loadExpandedDetail(rejectTargetId);
       } else {
         showToast("error", result?.error || "Failed to reject");
       }
@@ -406,7 +440,7 @@ export default function SubmissionsDashboard({
       if (result.success) {
         showToast("success", mode === "reset" ? "Reset to brokerage default" : "Processing fee updated");
         setEditingFeeId(null);
-        if (panelData?.id === submissionId) await openPanel(submissionId);
+        if (expandedId === submissionId) await loadExpandedDetail(submissionId);
         loadData();
       } else {
         showToast("error", result.error || "Failed to update fee");
@@ -429,7 +463,7 @@ export default function SubmissionsDashboard({
       const result = await approveAndCreateInvoice(id, undefined, overrideOpts);
       if (result?.success) {
         const invoiceHref = result.invoiceId
-          ? `/brokerage/invoices/${result.invoiceId}${asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : ""}`
+          ? `/brokerage/invoices/${result.invoiceId}${overrideQs}`
           : null;
         showToast(
           "success",
@@ -438,8 +472,14 @@ export default function SubmissionsDashboard({
             ? { action: { label: "View invoice", href: invoiceHref }, durationMs: 8000 }
             : undefined,
         );
+        const local = submissions.find((s) => s.id === id);
+        if (local) {
+          pushRecentlyApproved(
+            railEntryFromSubmission(local, result.invoiceId ? { id: result.invoiceId, invoiceNumber: result.invoiceNumber } : undefined),
+          );
+        }
         loadData();
-        if (panelData?.id === id) openPanel(id);
+        if (expandedId === id) loadExpandedDetail(id);
       } else {
         showToast("error", result?.error || "Failed to approve & create invoice");
       }
@@ -457,7 +497,7 @@ export default function SubmissionsDashboard({
       if (result?.success) {
         showToast("success", "Invoice created successfully");
         loadData();
-        if (panelData?.id === id) openPanel(id);
+        if (expandedId === id) loadExpandedDetail(id);
       } else {
         showToast("error", result?.error || "Failed to create invoice");
       }
@@ -470,8 +510,8 @@ export default function SubmissionsDashboard({
 
   function openPayoutModal(id: string) {
     setPayoutTargetId(id);
-    setPayoutMethod("check");
     setPayoutDate(new Date().toISOString().split("T")[0]);
+    setPayoutMethod("check");
     setPayoutRef("");
     setPayoutNotes("");
     setPayoutModalOpen(true);
@@ -490,17 +530,18 @@ export default function SubmissionsDashboard({
     if (!payoutTargetId) return;
     setActionLoading(payoutTargetId);
     try {
-      const result = await recordPayout(payoutTargetId, {
-        method: payoutMethod,
-        paidAt: payoutDate,
-        reference: payoutRef || undefined,
+      const result = await recordPayout({
+        submissionId: payoutTargetId,
+        paymentMethod: payoutMethod,
+        paymentDate: payoutDate || undefined,
+        referenceNumber: payoutRef || undefined,
         notes: payoutNotes || undefined,
       });
       if (result?.success) {
-        showToast("success", "Payout recorded successfully");
+        showToast("success", "Payout recorded");
         closePayoutModal();
         loadData();
-        if (panelData?.id === payoutTargetId) openPanel(payoutTargetId);
+        if (expandedId === payoutTargetId) loadExpandedDetail(payoutTargetId);
       } else {
         showToast("error", result?.error || "Failed to record payout");
       }
@@ -514,43 +555,57 @@ export default function SubmissionsDashboard({
   async function handleMarkPaid(id: string) {
     setActionLoading(id);
     try {
-      const result = await markSubmissionPaid(id, overrideOpts);
+      const result = await markSubmissionPaid(id);
       if (result?.success) {
         showToast("success", "Marked as paid");
         loadData();
-        if (panelData?.id === id) openPanel(id);
+        if (expandedId === id) loadExpandedDetail(id);
       } else {
-        showToast("error", result?.error || "Failed to mark as paid");
+        showToast("error", result?.error || "Failed to mark paid");
       }
     } catch {
-      showToast("error", "Failed to mark as paid");
+      showToast("error", "Failed to mark paid");
     } finally {
       setActionLoading(null);
     }
   }
 
-  async function handleViewDoc(attachmentId: string) {
+  async function handleViewDoc(fileId: string) {
     try {
-      const result = await getSignedUrl(attachmentId);
+      const result = await getSignedUrl(fileId);
       if (result?.url) {
         window.open(result.url, "_blank");
       } else {
-        showToast("error", result?.error || "Failed to get file URL");
+        showToast("error", "Failed to open document");
       }
     } catch {
       showToast("error", "Failed to open document");
     }
   }
 
+  function resetFilters() {
+    setStatusFilter("submitted");
+    setExclusiveFilter("all");
+    setDealTypeFilter("all");
+    setAgentFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setSearch("");
+    setPage(1);
+  }
+
   // ── Derived values ───────────────────────────────────────────
 
   const totalPages = Math.ceil(total / pageSize);
-
   const statusCounts = stats.byStatus || {};
-  const allCount = Object.values(statusCounts).reduce(
-    (s, c) => s + (Number(c) || 0),
-    0
-  );
+  const isFiltered =
+    statusFilter !== "submitted" ||
+    exclusiveFilter !== "all" ||
+    dealTypeFilter !== "all" ||
+    agentFilter !== "all" ||
+    !!dateFrom ||
+    !!dateTo ||
+    !!search;
 
   // ── Render ───────────────────────────────────────────────────
 
@@ -594,79 +649,20 @@ export default function SubmissionsDashboard({
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">
-          Deal Submission Approvals
+          Pending Approval
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Review, approve, and manage agent deal submissions
+          Review, approve, and push deal submissions to invoice.
         </p>
       </div>
 
-      {/* ── Stats Bar ───────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Total Submissions"
-          value={stats.total}
-          icon={<BarChart3 className="h-5 w-5 text-blue-500" />}
-        />
-        <StatCard
-          label="Pending Review"
-          value={statusCounts["submitted"] || 0}
-          icon={<Clock className="h-5 w-5 text-amber-500" />}
-          highlight="amber"
-        />
-        <StatCard
-          label="Commission Pending"
-          value={fmt(stats.totalCommissionPending)}
-          icon={<Receipt className="h-5 w-5 text-purple-500" />}
-          isCurrency
-        />
-        <StatCard
-          label="Paid Out"
-          value={fmt(stats.totalCommissionPaid)}
-          icon={<DollarSign className="h-5 w-5 text-emerald-500" />}
-          isCurrency
-        />
-      </div>
+      {/* Slice 1c removed the KPI strip (TOTAL SUBMISSIONS / PENDING REVIEW
+          / COMMISSION PENDING / PAID OUT). Audit U-021 — the dashboard
+          already shows these. */}
 
-      {/* ── Filter Bar ──────────────────────────────────────────── */}
-
-      {/* Status pills */}
-      <div className="flex gap-1 mb-4 overflow-x-auto no-scrollbar">
-        {STATUS_TABS.map((tab) => {
-          const count =
-            tab === "all" ? allCount : Number(statusCounts[tab]) || 0;
-          const active = statusFilter === tab;
-          return (
-            <button
-              key={tab}
-              onClick={() => {
-                setStatusFilter(tab);
-                setPage(1);
-              }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg whitespace-nowrap transition-colors ${
-                active
-                  ? "bg-blue-100 text-blue-700"
-                  : "text-slate-500 hover:bg-slate-100"
-              }`}
-            >
-              {tab === "all"
-                ? "All"
-                : SUBMISSION_STATUS_LABELS[tab] || tab}
-              <span
-                className={`text-xs ${
-                  active ? "text-blue-500" : "text-slate-400"
-                }`}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Dropdowns + date + search row */}
+      {/* TopBar — quick filters that survive the layout change. Status moves
+          to the right column (StatusFilter component). */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
-        {/* Exclusive type dropdown */}
         <div className="relative">
           <select
             value={exclusiveFilter}
@@ -686,7 +682,6 @@ export default function SubmissionsDashboard({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
 
-        {/* Deal type dropdown */}
         <div className="relative">
           <select
             value={dealTypeFilter}
@@ -706,7 +701,6 @@ export default function SubmissionsDashboard({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
 
-        {/* Agent dropdown */}
         <div className="relative">
           <select
             value={agentFilter}
@@ -728,7 +722,6 @@ export default function SubmissionsDashboard({
           <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
         </div>
 
-        {/* Date from */}
         <input
           type="date"
           value={dateFrom}
@@ -737,11 +730,9 @@ export default function SubmissionsDashboard({
             setPage(1);
           }}
           className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="From"
           title="From date"
         />
 
-        {/* Date to */}
         <input
           type="date"
           value={dateTo}
@@ -750,11 +741,9 @@ export default function SubmissionsDashboard({
             setPage(1);
           }}
           className="border border-slate-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="To"
           title="To date"
         />
 
-        {/* Search */}
         <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
           <input
@@ -767,248 +756,231 @@ export default function SubmissionsDashboard({
         </div>
       </div>
 
-      {/* ── Submissions Table ───────────────────────────────────── */}
+      {/* Two-column shell: card grid (left, col-span-3) + filters & rail
+          (right, col-span-1). Right column collapses below the cards on
+          narrow viewports. */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        {/* ── Left: card grid ─────────────────────────────────── */}
+        <div className="lg:col-span-3 space-y-3">
+          {loading && (
+            <div className="space-y-3">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <div
+                  key={i}
+                  className="h-20 bg-slate-100 animate-pulse rounded-xl"
+                />
+              ))}
+            </div>
+          )}
 
-      {loading && (
-        <div className="space-y-2">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="h-14 bg-slate-100 animate-pulse rounded-lg"
+          {!loading && submissions.length === 0 && (
+            <EmptyState
+              variant={isFiltered ? "no-matches" : "caught-up"}
+              onReset={isFiltered ? resetFilters : undefined}
             />
-          ))}
-        </div>
-      )}
+          )}
 
-      {!loading && submissions.length === 0 && (
-        <div className="text-center py-16">
-          <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No submissions found</p>
-          <p className="text-sm text-slate-400 mt-1">
-            {search
-              ? "Try a different search term"
-              : "No deal submissions match the current filters"}
-          </p>
-        </div>
-      )}
+          {!loading &&
+            submissions.length > 0 &&
+            submissions.map((s) => {
+              const isExpanded = expandedId === s.id;
+              const cardData: SubmissionCardData = {
+                id: s.id,
+                status: s.status,
+                createdAt: s.createdAt,
+                agentFirstName: s.agentFirstName,
+                agentLastName: s.agentLastName,
+                agentEmail: s.agentEmail,
+                propertyAddress: s.propertyAddress,
+                unit: s.unit,
+                dealType: s.dealType,
+                exclusiveType: s.exclusiveType,
+                totalCommission: s.totalCommission,
+                agentPayout: s.agentPayout,
+              };
 
-      {!loading && submissions.length > 0 && (
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50/50">
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Status
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Date
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Agent
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Property
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Type
-                  </th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Exclusive
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Commission
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Payout
-                  </th>
-                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {submissions.map((s) => {
-                  const isActing = actionLoading === s.id;
-                  return (
-                    <tr
-                      key={s.id}
-                      tabIndex={0}
-                      onClick={() => openPanel(s.id)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          openPanel(s.id);
-                        }
-                      }}
-                      className="hover:bg-slate-50/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors"
-                    >
-                      {/* Status badge */}
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                            SUBMISSION_STATUS_COLORS[s.status] ||
-                            "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {SUBMISSION_STATUS_LABELS[s.status] || s.status}
-                        </span>
-                      </td>
+              const cardActions = s.invoice ? (
+                <CardActionLink
+                  href={`/brokerage/invoices/${s.invoice.id}${overrideQs}`}
+                  label={s.invoice.invoiceNumber || "View invoice"}
+                />
+              ) : null;
 
-                      {/* Date */}
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {fmtDate(s.createdAt)}
-                      </td>
-
-                      {/* Agent */}
-                      <td className="px-4 py-3">
-                        <div className="text-slate-900 font-medium truncate max-w-[160px]">
-                          {s.agentFirstName} {s.agentLastName}
-                        </div>
-                        <div className="text-xs text-slate-400 truncate max-w-[160px]">
-                          {s.agentEmail}
-                        </div>
-                      </td>
-
-                      {/* Property */}
-                      <td className="px-4 py-3">
-                        <div className="text-slate-900 truncate max-w-[200px]">
-                          {s.propertyAddress}
-                        </div>
-                        {s.unit && (
-                          <div className="text-xs text-slate-400">
-                            Unit {s.unit}
-                          </div>
-                        )}
-                      </td>
-
-                      {/* Type */}
-                      <td className="px-4 py-3 text-slate-600 whitespace-nowrap">
-                        {DEAL_TYPE_LABELS[s.dealType] || s.dealType}
-                      </td>
-
-                      {/* Exclusive badge */}
-                      <td className="px-4 py-3">
-                        {s.exclusiveType ? (
-                          <span
-                            className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                              EXCLUSIVE_TYPE_COLORS[s.exclusiveType] ||
-                              "bg-slate-100 text-slate-600"
-                            }`}
-                          >
-                            {EXCLUSIVE_TYPE_LABELS[s.exclusiveType] ||
-                              s.exclusiveType}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">\u2014</span>
-                        )}
-                      </td>
-
-                      {/* Commission */}
-                      <td className="px-4 py-3 text-right text-slate-700 font-medium whitespace-nowrap">
-                        {fmt(s.totalCommission)}
-                      </td>
-
-                      {/* Payout */}
-                      <td className="px-4 py-3 text-right whitespace-nowrap">
-                        <span className="text-green-600 font-medium">
-                          {fmt(s.agentPayout)}
-                        </span>
-                      </td>
-
-                      {/* Actions */}
-                      <td
-                        className="px-4 py-3 text-right"
-                        onClick={(e) => e.stopPropagation()}
+              return (
+                <SubmissionCard
+                  key={s.id}
+                  s={cardData}
+                  expanded={isExpanded}
+                  onToggle={() => toggleExpand(s.id)}
+                  actions={cardActions}
+                >
+                  {/* ── Inline expand: tabs + detail body + footer ── */}
+                  <DetailTabs active={activeTab} onChange={setActiveTab} />
+                  <div className="px-6 py-5 space-y-6 bg-white rounded-b-xl">
+                    {expandedLoading ? (
+                      <div className="space-y-4">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className="h-20 bg-slate-100 animate-pulse rounded-lg"
+                          />
+                        ))}
+                      </div>
+                    ) : !expandedSubmission ? (
+                      <div className="text-center py-10">
+                        <AlertTriangle className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                        <p className="text-slate-500 text-sm">
+                          Submission not found
+                        </p>
+                      </div>
+                    ) : activeTab !== "details" ? (
+                      <div
+                        data-testid="detail-tab-placeholder"
+                        className="text-center py-10"
                       >
-                        <div className="flex items-center justify-end gap-1.5">
-                          {s.status === "submitted" && (
-                            <button
-                              onClick={() => openPanel(s.id)}
-                              disabled={isActing}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition-colors"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              Review
-                            </button>
-                          )}
-
-                          {s.status === "approved" && (
-                            <button
-                              onClick={() => handlePushToInvoice(s.id)}
-                              disabled={isActing}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
-                            >
-                              {isActing ? (
-                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                              ) : (
-                                <FileText className="h-3.5 w-3.5" />
-                              )}
-                              Create Invoice
-                            </button>
-                          )}
-
-                          {s.status === "invoiced" && (
-                            <>
-                              <button
-                                onClick={() => openPayoutModal(s.id)}
-                                disabled={isActing}
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100 disabled:opacity-50 transition-colors"
-                              >
-                                {isActing ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <Banknote className="h-3.5 w-3.5" />
-                                )}
-                                Record Payout
-                              </button>
-                              <button
-                                onClick={() => handleMarkPaid(s.id)}
-                                disabled={isActing}
-                                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-green-700 bg-green-50 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
-                                title="Quick mark as paid"
-                              >
-                                {isActing ? (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                ) : (
-                                  <DollarSign className="h-3.5 w-3.5" />
-                                )}
-                                Mark Paid
-                              </button>
-                            </>
-                          )}
-
-                          {s.status === "paid" && (
-                            <span className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-600">
-                              <CheckCircle className="h-3.5 w-3.5" />
-                              Paid
-                            </span>
-                          )}
-
-                          {s.status === "rejected" && (
-                            <button
-                              onClick={() => openPanel(s.id)}
-                              className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
-                            >
-                              <Eye className="h-3.5 w-3.5" />
-                              View
-                            </button>
-                          )}
+                        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 mb-2">
+                          <FileText className="h-5 w-5 text-slate-400" />
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <p className="text-slate-500 font-medium">
+                          {activeTab === "invoice"
+                            ? "Invoice tab coming soon"
+                            : "Payment tab coming soon"}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Available after Slice {activeTab === "invoice" ? "2" : "3"}
+                        </p>
+                      </div>
+                    ) : (
+                      <DetailBody
+                        panelData={expandedSubmission}
+                        editingSplitId={editingSplitId}
+                        editAgentSplit={editAgentSplit}
+                        editHouseSplit={editHouseSplit}
+                        editingFeeId={editingFeeId}
+                        editFeePct={editFeePct}
+                        feeSaving={feeSaving}
+                        setEditingSplitId={setEditingSplitId}
+                        setEditAgentSplit={setEditAgentSplit}
+                        setEditHouseSplit={setEditHouseSplit}
+                        setEditingFeeId={setEditingFeeId}
+                        setEditFeePct={setEditFeePct}
+                        setExpandedSubmission={setExpandedSubmission}
+                        handleSaveFee={handleSaveFee}
+                        handleViewDoc={handleViewDoc}
+                      />
+                    )}
+                  </div>
+
+                  {/* Expand footer — relocated from slide-over panel. */}
+                  {expandedSubmission && !expandedLoading && activeTab === "details" && (
+                    <div className="border-t border-slate-200 px-6 py-4 flex items-center gap-2 flex-wrap bg-white rounded-b-xl">
+                      {expandedSubmission.status === "submitted" && (
+                        <>
+                          {/* Slice 1: primary CTA — atomic approve + invoice. */}
+                          <button
+                            onClick={() => handleApproveAndInvoice(expandedSubmission.id)}
+                            disabled={actionLoading === expandedSubmission.id}
+                            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                          >
+                            {actionLoading === expandedSubmission.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <FileText className="h-4 w-4" />
+                            )}
+                            Approve &amp; Push to Invoice
+                          </button>
+                          {/* Secondary: approve without creating an invoice yet. */}
+                          <button
+                            onClick={() => handleApprove(expandedSubmission.id)}
+                            disabled={actionLoading === expandedSubmission.id}
+                            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
+                          >
+                            <CheckCircle className="h-4 w-4" />
+                            Approve only
+                          </button>
+                          <button
+                            onClick={() => openRejectModal(expandedSubmission.id)}
+                            disabled={actionLoading === expandedSubmission.id}
+                            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            <XCircle className="h-4 w-4" />
+                            Reject
+                          </button>
+                        </>
+                      )}
+
+                      {expandedSubmission.status === "approved" && (
+                        <button
+                          onClick={() => handlePushToInvoice(expandedSubmission.id)}
+                          disabled={actionLoading === expandedSubmission.id}
+                          className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                        >
+                          {actionLoading === expandedSubmission.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <FileText className="h-4 w-4" />
+                          )}
+                          Create Invoice
+                        </button>
+                      )}
+
+                      {expandedSubmission.status === "invoiced" && (
+                        <>
+                          <button
+                            onClick={() => openPayoutModal(expandedSubmission.id)}
+                            disabled={actionLoading === expandedSubmission.id}
+                            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                          >
+                            {actionLoading === expandedSubmission.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Banknote className="h-4 w-4" />
+                            )}
+                            Record Payout
+                          </button>
+                          <button
+                            onClick={() => handleMarkPaid(expandedSubmission.id)}
+                            disabled={actionLoading === expandedSubmission.id}
+                            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 disabled:opacity-50 transition-colors"
+                          >
+                            {actionLoading === expandedSubmission.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <DollarSign className="h-4 w-4" />
+                            )}
+                            Mark Paid
+                          </button>
+                        </>
+                      )}
+
+                      {expandedSubmission.status === "paid" && (
+                        <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
+                          <CheckCircle className="h-4 w-4" />
+                          Payment Complete
+                        </span>
+                      )}
+
+                      {expandedSubmission.invoice && (
+                        <a
+                          href={`/brokerage/invoices/${expandedSubmission.invoice.id}${overrideQs}`}
+                          className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 ml-auto transition-colors"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          {expandedSubmission.invoice.invoiceNumber || "View Invoice"}
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </SubmissionCard>
+              );
+            })}
 
           {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+          {!loading && submissions.length > 0 && totalPages > 1 && (
+            <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 mt-4">
               <p className="text-sm text-slate-500">
                 Showing {(page - 1) * pageSize + 1}
-                {"\u2013"}
+                {"–"}
                 {Math.min(page * pageSize, total)} of {total}
               </p>
               <div className="flex items-center gap-2">
@@ -1024,9 +996,7 @@ export default function SubmissionsDashboard({
                   Page {page} of {totalPages}
                 </span>
                 <button
-                  onClick={() =>
-                    setPage((p) => Math.min(totalPages, p + 1))
-                  }
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                   disabled={page >= totalPages}
                   className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-slate-600 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
@@ -1037,756 +1007,20 @@ export default function SubmissionsDashboard({
             </div>
           )}
         </div>
-      )}
 
-      {/* ── Detail Slide-Over Panel ─────────────────────────────── */}
-      {panelOpen && (
-        <div className="fixed inset-0 z-50 flex justify-end">
-          {/* Backdrop */}
-          <div
-            className={`absolute inset-0 bg-black/30 transition-opacity duration-300 ${
-              panelEntered ? "opacity-100" : "opacity-0"
-            }`}
-            onClick={closePanel}
+        {/* ── Right: filters + rail ─────────────────────────── */}
+        <aside className="lg:col-span-1 space-y-4">
+          <StatusFilter
+            value={statusFilter}
+            counts={statusCounts}
+            onChange={(next) => {
+              setStatusFilter(next);
+              setPage(1);
+            }}
           />
-
-          {/* Panel */}
-          <div
-            className={`relative w-full max-w-[480px] bg-white shadow-xl flex flex-col transition-transform duration-300 ease-out ${
-              panelEntered ? "translate-x-0" : "translate-x-full"
-            }`}
-          >
-            {/* Panel header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
-              <h2 className="text-lg font-semibold text-slate-900">
-                Submission Details
-              </h2>
-              <button
-                onClick={closePanel}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            {/* Panel body */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
-              {panelLoading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3, 4].map((i) => (
-                    <div
-                      key={i}
-                      className="h-20 bg-slate-100 animate-pulse rounded-lg"
-                    />
-                  ))}
-                </div>
-              ) : panelData ? (
-                <>
-                  {/* Status badge at top */}
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`px-3 py-1 text-sm font-medium rounded-full ${
-                        SUBMISSION_STATUS_COLORS[panelData.status] ||
-                        "bg-slate-100 text-slate-600"
-                      }`}
-                    >
-                      {SUBMISSION_STATUS_LABELS[panelData.status] ||
-                        panelData.status}
-                    </span>
-                    {panelData.exclusiveType && (
-                      <span
-                        className={`px-3 py-1 text-sm font-medium rounded-full ${
-                          EXCLUSIVE_TYPE_COLORS[panelData.exclusiveType] ||
-                          "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {EXCLUSIVE_TYPE_LABELS[panelData.exclusiveType] ||
-                          panelData.exclusiveType}
-                      </span>
-                    )}
-                    {panelData.submissionSource === "external" && (
-                      <span className="px-3 py-1 text-sm font-medium rounded-full bg-orange-100 text-orange-700">
-                        External
-                      </span>
-                    )}
-                  </div>
-
-                  {/* 1. Agent Info */}
-                  <PanelSection
-                    title="Agent Info"
-                    icon={<User className="h-4 w-4" />}
-                  >
-                    <InfoRow
-                      label="Name"
-                      value={`${panelData.agentFirstName || ""} ${panelData.agentLastName || ""}`.trim()}
-                    />
-                    <InfoRow label="Email" value={panelData.agentEmail} />
-                    <InfoRow label="Phone" value={panelData.agentPhone} />
-                    <InfoRow
-                      label="License"
-                      value={panelData.agentLicense}
-                    />
-                    {panelData.agent && (
-                      <InfoRow
-                        label="Matched Agent"
-                        value={
-                          <span className="text-blue-600 text-xs font-medium">
-                            Linked to roster
-                          </span>
-                        }
-                      />
-                    )}
-                  </PanelSection>
-
-                  {/* 2. Deal Overview */}
-                  <PanelSection
-                    title="Deal Overview"
-                    icon={<Building className="h-4 w-4" />}
-                  >
-                    <InfoRow
-                      label="Property"
-                      value={panelData.propertyAddress}
-                    />
-                    {panelData.unit && (
-                      <InfoRow label="Unit" value={panelData.unit} />
-                    )}
-                    {panelData.city && (
-                      <InfoRow
-                        label="City / State"
-                        value={`${panelData.city}, ${panelData.state || "NY"}`}
-                      />
-                    )}
-                    <InfoRow
-                      label="Deal Type"
-                      value={
-                        DEAL_TYPE_LABELS[panelData.dealType] ||
-                        panelData.dealType
-                      }
-                    />
-                    <InfoRow
-                      label="Transaction Value"
-                      value={fmt(panelData.transactionValue)}
-                    />
-                    <InfoRow
-                      label="Closing Date"
-                      value={fmtDate(panelData.closingDate)}
-                    />
-
-                    {/* Lease-specific fields */}
-                    {(panelData.dealType === "lease" ||
-                      panelData.dealType === "rental" ||
-                      panelData.dealType === "commercial_lease") && (
-                      <>
-                        {panelData.leaseTermMonths && (
-                          <InfoRow
-                            label="Lease Term"
-                            value={`${panelData.leaseTermMonths} months`}
-                          />
-                        )}
-                        {panelData.monthlyRent && (
-                          <InfoRow
-                            label="Monthly Rent"
-                            value={fmt(panelData.monthlyRent)}
-                          />
-                        )}
-                        {panelData.moveInDate && (
-                          <InfoRow
-                            label="Move-In Date"
-                            value={fmtDate(panelData.moveInDate)}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    {/* Sale-specific fields */}
-                    {(panelData.dealType === "sale" ||
-                      panelData.dealType === "commercial_sale" ||
-                      panelData.dealType === "new_construction" ||
-                      panelData.dealType === "land") && (
-                      <>
-                        {panelData.contractDate && (
-                          <InfoRow
-                            label="Contract Date"
-                            value={fmtDate(panelData.contractDate)}
-                          />
-                        )}
-                        {panelData.listPrice != null && (
-                          <InfoRow
-                            label="List Price"
-                            value={fmt(panelData.listPrice)}
-                          />
-                        )}
-                      </>
-                    )}
-
-                    {panelData.representedSide && (
-                      <InfoRow
-                        label="Represented Side"
-                        value={
-                          panelData.representedSide.charAt(0).toUpperCase() +
-                          panelData.representedSide.slice(1)
-                        }
-                      />
-                    )}
-                  </PanelSection>
-
-                  {/* 3. Landlord / Billing */}
-                  {(panelData.clientName ||
-                    panelData.clientEmail ||
-                    panelData.clientPhone) && (
-                    <PanelSection
-                      title="Landlord / Billing"
-                      icon={<MapPin className="h-4 w-4" />}
-                    >
-                      <InfoRow
-                        label="Client Name"
-                        value={panelData.clientName}
-                      />
-                      <InfoRow
-                        label="Client Email"
-                        value={panelData.clientEmail}
-                      />
-                      <InfoRow
-                        label="Client Phone"
-                        value={panelData.clientPhone}
-                      />
-                    </PanelSection>
-                  )}
-
-                  {/* 4. Commission Breakdown */}
-                  <PanelSection
-                    title="Commission Breakdown"
-                    icon={<DollarSign className="h-4 w-4" />}
-                  >
-                    <div className="bg-slate-50 rounded-lg p-3 font-mono text-sm space-y-1.5">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">
-                          Commission Type
-                        </span>
-                        <span className="text-slate-700">
-                          {panelData.commissionType === "percentage"
-                            ? "Percentage"
-                            : "Flat"}
-                        </span>
-                      </div>
-                      {panelData.commissionPct != null && (
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">
-                            Commission Rate
-                          </span>
-                          <span className="text-slate-700">
-                            {fmtPct(panelData.commissionPct)}
-                          </span>
-                        </div>
-                      )}
-                      {panelData.commissionFlat != null && (
-                        <div className="flex justify-between">
-                          <span className="text-slate-500">
-                            Flat Commission
-                          </span>
-                          <span className="text-slate-700">
-                            {fmt(panelData.commissionFlat)}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-between border-t border-slate-200 pt-1.5">
-                        <span className="text-slate-500 font-semibold">
-                          Total Commission
-                        </span>
-                        <span className="text-slate-900 font-semibold">
-                          {fmt(panelData.totalCommission)}
-                        </span>
-                      </div>
-
-                      {/* Split — inline edit */}
-                      <div className="border-t border-slate-200 pt-1.5">
-                        {editingSplitId === panelData.id ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs text-slate-500 w-20">
-                                Agent %
-                              </label>
-                              <input
-                                type="number"
-                                value={editAgentSplit}
-                                onChange={(e) => {
-                                  setEditAgentSplit(e.target.value);
-                                  const agent = parseFloat(e.target.value);
-                                  if (!isNaN(agent)) {
-                                    setEditHouseSplit(
-                                      (100 - agent).toFixed(1)
-                                    );
-                                  }
-                                }}
-                                className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="0.1"
-                                min="0"
-                                max="100"
-                              />
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs text-slate-500 w-20">
-                                House %
-                              </label>
-                              <input
-                                type="number"
-                                value={editHouseSplit}
-                                onChange={(e) => {
-                                  setEditHouseSplit(e.target.value);
-                                  const house = parseFloat(e.target.value);
-                                  if (!isNaN(house)) {
-                                    setEditAgentSplit(
-                                      (100 - house).toFixed(1)
-                                    );
-                                  }
-                                }}
-                                className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="0.1"
-                                min="0"
-                                max="100"
-                              />
-                            </div>
-                            <div className="flex gap-2 mt-1">
-                              <button
-                                onClick={() => {
-                                  // Save is informational in the panel; actual persistence is handled via the approve flow
-                                  setEditingSplitId(null);
-                                  const agentPct =
-                                    parseFloat(editAgentSplit) || 0;
-                                  const housePct =
-                                    parseFloat(editHouseSplit) || 0;
-                                  const totalComm =
-                                    Number(panelData.totalCommission) || 0;
-                                  setPanelData({
-                                    ...panelData,
-                                    agentSplitPct: agentPct,
-                                    houseSplitPct: housePct,
-                                    agentPayout:
-                                      (totalComm * agentPct) / 100,
-                                    housePayout:
-                                      (totalComm * housePct) / 100,
-                                  });
-                                }}
-                                className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100 transition-colors"
-                              >
-                                <Check className="h-3 w-3" />
-                                Save
-                              </button>
-                              <button
-                                onClick={() => setEditingSplitId(null)}
-                                className="px-2 py-1 text-xs text-slate-500 hover:text-slate-700"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500">
-                                Agent Split
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className="text-green-600">
-                                  {fmtPct(panelData.agentSplitPct)} (
-                                  {fmt(panelData.agentPayout)})
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    setEditingSplitId(panelData.id);
-                                    setEditAgentSplit(
-                                      String(
-                                        Number(
-                                          panelData.agentSplitPct
-                                        ).toFixed(1)
-                                      )
-                                    );
-                                    setEditHouseSplit(
-                                      String(
-                                        Number(
-                                          panelData.houseSplitPct
-                                        ).toFixed(1)
-                                      )
-                                    );
-                                  }}
-                                  className="p-0.5 text-slate-400 hover:text-blue-600 transition-colors"
-                                  title="Edit split"
-                                >
-                                  <Edit3 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-slate-500">
-                                House Split
-                              </span>
-                              <span className="text-blue-600">
-                                {fmtPct(panelData.houseSplitPct)} (
-                                {fmt(panelData.housePayout)})
-                              </span>
-                            </div>
-                          </>
-                        )}
-                      </div>
-
-                      {/* Processing Fee — editable while approved, read-only post-invoice */}
-                      {(() => {
-                        const status = panelData.status as string;
-                        const isLocked = status === "invoiced" || status === "paid";
-                        const isApproved = status === "approved";
-                        if (!isApproved && !isLocked) return null;
-
-                        const inv = panelData.invoice as
-                          | { processingFeePct?: number | string | null; processingFeeAmt?: number | string | null }
-                          | null
-                          | undefined;
-
-                        if (isLocked) {
-                          const feeAmt = Number(inv?.processingFeeAmt ?? 0);
-                          const feePct = Number(inv?.processingFeePct ?? 0);
-                          if (!feeAmt) return null;
-                          return (
-                            <div className="border-t border-slate-200 pt-1.5">
-                              <div className="flex justify-between">
-                                <span className="text-slate-500">
-                                  Processing Fee ({feePct.toFixed(2)}%)
-                                </span>
-                                <span className="text-rose-600">
-                                  &minus;{fmt(feeAmt)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        const defaultPct = Number(panelData.organizationDefaultFeePct ?? 0);
-                        const override = !!panelData.processingFeeOverride;
-                        const totalComm = Number(panelData.totalCommission ?? 0);
-                        const agentSplit = Number(panelData.agentSplitPct ?? 0);
-                        const currentPct = override
-                          ? Number(panelData.processingFeePct ?? 0)
-                          : defaultPct;
-                        const currentAmt = Math.round((totalComm * currentPct) / 100 * 100) / 100;
-                        const isEditing = editingFeeId === panelData.id;
-
-                        if (isEditing) {
-                          const previewPct = Math.max(0, Math.min(100, parseFloat(editFeePct) || 0));
-                          const previewFee = Math.round((totalComm * previewPct) / 100 * 100) / 100;
-                          const previewGross = Math.round((totalComm * agentSplit) / 100 * 100) / 100;
-                          const previewNet = Math.round((previewGross - previewFee) * 100) / 100;
-                          return (
-                            <div className="border-t border-slate-200 pt-1.5 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <label className="text-xs text-slate-500 flex-1">
-                                  Processing Fee
-                                </label>
-                                <input
-                                  type="number"
-                                  value={editFeePct}
-                                  onChange={(e) => setEditFeePct(e.target.value)}
-                                  onBlur={() => {
-                                    const pct = parseFloat(editFeePct);
-                                    if (Number.isFinite(pct) && pct >= 0 && pct <= 100) {
-                                      handleSaveFee(panelData.id, "override", pct);
-                                    }
-                                  }}
-                                  className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                  step="0.01"
-                                  min="0"
-                                  max="100"
-                                  autoFocus
-                                  disabled={feeSaving}
-                                />
-                                <span className="text-xs text-slate-500">%</span>
-                                <span className="text-rose-600 text-sm w-24 text-right">
-                                  &minus;{fmt(previewFee)}
-                                </span>
-                              </div>
-                              <div className="flex flex-wrap gap-1.5">
-                                <button
-                                  onClick={() => handleSaveFee(panelData.id, "override", 0)}
-                                  disabled={feeSaving}
-                                  className="px-2 py-1 text-[11px] font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100 disabled:opacity-50 transition-colors"
-                                >
-                                  Set to 0% &mdash; exempt this deal
-                                </button>
-                                <button
-                                  onClick={() => handleSaveFee(panelData.id, "reset")}
-                                  disabled={feeSaving}
-                                  className="px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-100 rounded hover:bg-slate-200 disabled:opacity-50 transition-colors"
-                                >
-                                  Reset to brokerage default
-                                </button>
-                                <button
-                                  onClick={() => setEditingFeeId(null)}
-                                  disabled={feeSaving}
-                                  className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-700 disabled:opacity-50"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                              <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
-                                <span className="text-slate-500">
-                                  Net agent payout (preview)
-                                </span>
-                                <span className="text-green-600 font-semibold">
-                                  {fmt(previewNet)}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        return (
-                          <div className="border-t border-slate-200 pt-1.5">
-                            <div className="flex justify-between items-center">
-                              <span className="text-slate-500">
-                                {override ? "Processing Fee" : "Brokerage Processing Fee"}{" "}
-                                ({currentPct.toFixed(2)}%)
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <span className={currentAmt > 0 ? "text-rose-600" : "text-slate-400"}>
-                                  {currentAmt > 0 ? `−${fmt(currentAmt)}` : fmt(0)}
-                                </span>
-                                <button
-                                  onClick={() => {
-                                    setEditingFeeId(panelData.id);
-                                    setEditFeePct(currentPct.toFixed(2));
-                                  }}
-                                  className="p-0.5 text-slate-400 hover:text-blue-600 transition-colors"
-                                  title={override ? "Edit fee" : "Customize"}
-                                >
-                                  <Edit3 className="h-3 w-3" />
-                                </button>
-                              </div>
-                            </div>
-                            {override && (
-                              <div className="text-[10px] text-amber-600 mt-0.5">
-                                Custom override (brokerage default: {defaultPct.toFixed(2)}%)
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })()}
-                    </div>
-                  </PanelSection>
-
-                  {/* 5. Co-Broker */}
-                  {(panelData.coBrokeAgent ||
-                    panelData.coBrokeBrokerage ||
-                    (Array.isArray(panelData.coAgents) &&
-                      panelData.coAgents.length > 0)) && (
-                    <PanelSection
-                      title="Co-Broker"
-                      icon={<User className="h-4 w-4" />}
-                    >
-                      <InfoRow
-                        label="Co-Broke Agent"
-                        value={panelData.coBrokeAgent}
-                      />
-                      <InfoRow
-                        label="Co-Broke Brokerage"
-                        value={panelData.coBrokeBrokerage}
-                      />
-                      {Array.isArray(panelData.coAgents) &&
-                        panelData.coAgents.length > 0 && (
-                          <div className="mt-2 space-y-1">
-                            <span className="text-xs text-slate-400 font-medium">
-                              Additional Agents
-                            </span>
-                            {panelData.coAgents.map(
-                              (
-                                ca: { name?: string; splitPct?: number },
-                                idx: number
-                              ) => (
-                                <div
-                                  key={idx}
-                                  className="text-sm text-slate-600 flex justify-between"
-                                >
-                                  <span>{ca.name || "Agent"}</span>
-                                  {ca.splitPct != null && (
-                                    <span className="text-slate-400">
-                                      {ca.splitPct}%
-                                    </span>
-                                  )}
-                                </div>
-                              )
-                            )}
-                          </div>
-                        )}
-                    </PanelSection>
-                  )}
-
-                  {/* 6. Documents */}
-                  {Array.isArray(panelData.files) &&
-                    panelData.files.length > 0 && (
-                      <PanelSection
-                        title="Documents"
-                        icon={<FileCheck className="h-4 w-4" />}
-                      >
-                        <div className="space-y-2">
-                          {panelData.files.map(
-                            (
-                              file: {
-                                id: string;
-                                fileName: string;
-                                createdAt?: string;
-                              },
-                              idx: number
-                            ) => (
-                              <DocCheck
-                                key={file.id || idx}
-                                fileName={file.fileName}
-                                date={file.createdAt}
-                                onView={() => handleViewDoc(file.id)}
-                              />
-                            )
-                          )}
-                        </div>
-                      </PanelSection>
-                    )}
-
-                  {/* 7. Notes */}
-                  {panelData.notes && (
-                    <PanelSection
-                      title="Notes"
-                      icon={<FileText className="h-4 w-4" />}
-                    >
-                      <p className="text-sm text-slate-600 whitespace-pre-wrap">
-                        {panelData.notes}
-                      </p>
-                    </PanelSection>
-                  )}
-
-                  {/* Rejection reason */}
-                  {panelData.status === "rejected" &&
-                    panelData.rejectionReason && (
-                      <div className="bg-red-50 border border-red-100 rounded-lg p-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Ban className="h-4 w-4 text-red-500" />
-                          <span className="text-sm font-medium text-red-700">
-                            Rejection Reason
-                          </span>
-                        </div>
-                        <p className="text-sm text-red-600">
-                          {panelData.rejectionReason}
-                        </p>
-                      </div>
-                    )}
-                </>
-              ) : (
-                <div className="text-center py-12">
-                  <AlertTriangle className="h-8 w-8 text-slate-300 mx-auto mb-2" />
-                  <p className="text-slate-500 text-sm">
-                    Submission not found
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* Panel footer actions */}
-            {panelData && !panelLoading && (
-              <div className="border-t border-slate-200 px-6 py-4 flex items-center gap-2 flex-wrap">
-                {panelData.status === "submitted" && (
-                  <>
-                    {/* Slice 1: primary CTA — atomic approve + invoice. */}
-                    <button
-                      onClick={() => handleApproveAndInvoice(panelData.id)}
-                      disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                      {actionLoading === panelData.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <FileText className="h-4 w-4" />
-                      )}
-                      Approve &amp; Push to Invoice
-                    </button>
-                    {/* Secondary: approve without creating an invoice yet. */}
-                    <button
-                      onClick={() => handleApprove(panelData.id)}
-                      disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                      Approve only
-                    </button>
-                    <button
-                      onClick={() => openRejectModal(panelData.id)}
-                      disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Reject
-                    </button>
-                  </>
-                )}
-
-                {panelData.status === "approved" && (
-                  <button
-                    onClick={() => handlePushToInvoice(panelData.id)}
-                    disabled={actionLoading === panelData.id}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors"
-                  >
-                    {actionLoading === panelData.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <FileText className="h-4 w-4" />
-                    )}
-                    Create Invoice
-                  </button>
-                )}
-
-                {panelData.status === "invoiced" && (
-                  <>
-                    <button
-                      onClick={() => openPayoutModal(panelData.id)}
-                      disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                    >
-                      {actionLoading === panelData.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Banknote className="h-4 w-4" />
-                      )}
-                      Record Payout
-                    </button>
-                    <button
-                      onClick={() => handleMarkPaid(panelData.id)}
-                      disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-600 border border-green-200 rounded-lg hover:bg-green-50 disabled:opacity-50 transition-colors"
-                    >
-                      {actionLoading === panelData.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <DollarSign className="h-4 w-4" />
-                      )}
-                      Mark Paid
-                    </button>
-                  </>
-                )}
-
-                {panelData.status === "paid" && (
-                  <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-600">
-                    <CheckCircle className="h-4 w-4" />
-                    Payment Complete
-                  </span>
-                )}
-
-                {panelData.invoice && (
-                  <a
-                    href={`/brokerage/invoices/${panelData.invoice.id}`}
-                    className="flex items-center gap-1.5 px-3 py-2 text-sm font-medium text-purple-700 border border-purple-200 rounded-lg hover:bg-purple-50 ml-auto transition-colors"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                    {panelData.invoice.invoiceNumber || "View Invoice"}
-                  </a>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+          <RecentlyApprovedRail items={recentlyApproved} asOrg={asOrg} />
+        </aside>
+      </div>
 
       {/* ── Rejection Modal ─────────────────────────────────────── */}
       {rejectModalOpen && (
@@ -1889,7 +1123,6 @@ export default function SubmissionsDashboard({
             </div>
 
             <div className="space-y-4">
-              {/* Payment method */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Payment Method
@@ -1912,7 +1145,6 @@ export default function SubmissionsDashboard({
                 </div>
               </div>
 
-              {/* Payment date */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Payment Date
@@ -1928,7 +1160,6 @@ export default function SubmissionsDashboard({
                 </div>
               </div>
 
-              {/* Reference # */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Reference #
@@ -1942,7 +1173,6 @@ export default function SubmissionsDashboard({
                 />
               </div>
 
-              {/* Notes */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Notes
@@ -1986,59 +1216,561 @@ export default function SubmissionsDashboard({
   );
 }
 
-// ── Sub-Components ─────────────────────────────────────────────
+// ── Detail Body (the inline-expand "Details" tab content) ────────────
+//
+// Extracted from the previous slide-over panel body. Receives all editing
+// state from the parent so split / processing-fee inline edits keep working
+// the same way they did in slice 1. The JSX mirrors the prior panel almost
+// verbatim — only the wrapping container and prop names changed. If anything
+// looks unusual (e.g. setPanelData → setExpandedSubmission), it's because
+// the panel was renamed; the math and render conditions are unchanged.
 
-function StatCard({
-  label,
-  value,
-  icon,
-  highlight,
-  isCurrency,
-}: {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  highlight?: "amber" | "green" | "red";
-  isCurrency?: boolean;
-}) {
-  const borderClass =
-    highlight === "amber"
-      ? "border-amber-200 bg-amber-50/50"
-      : highlight === "green"
-        ? "border-green-200 bg-green-50/50"
-        : highlight === "red"
-          ? "border-red-200 bg-red-50/50"
-          : "border-slate-200 bg-white";
+interface DetailBodyProps {
+  panelData: Submission;
+  editingSplitId: string | null;
+  editAgentSplit: string;
+  editHouseSplit: string;
+  editingFeeId: string | null;
+  editFeePct: string;
+  feeSaving: boolean;
+  setEditingSplitId: (id: string | null) => void;
+  setEditAgentSplit: (s: string) => void;
+  setEditHouseSplit: (s: string) => void;
+  setEditingFeeId: (id: string | null) => void;
+  setEditFeePct: (s: string) => void;
+  setExpandedSubmission: (s: Submission | null) => void;
+  handleSaveFee: (id: string, mode: "reset" | "override", pct?: number) => void;
+  handleViewDoc: (fileId: string) => void;
+}
 
+function DetailBody({
+  panelData,
+  editingSplitId,
+  editAgentSplit,
+  editHouseSplit,
+  editingFeeId,
+  editFeePct,
+  feeSaving,
+  setEditingSplitId,
+  setEditAgentSplit,
+  setEditHouseSplit,
+  setEditingFeeId,
+  setEditFeePct,
+  setExpandedSubmission,
+  handleSaveFee,
+  handleViewDoc,
+}: DetailBodyProps) {
   return (
-    <div
-      className={`border rounded-xl p-4 ${borderClass} transition-shadow hover:shadow-sm`}
-    >
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-          {label}
+    <>
+      {/* Status badges row */}
+      <div className="flex items-center gap-3">
+        <span
+          className={`px-3 py-1 text-sm font-medium rounded-full ${
+            SUBMISSION_STATUS_COLORS[panelData.status] ||
+            "bg-slate-100 text-slate-600"
+          }`}
+        >
+          {panelData.status}
         </span>
-        {icon}
+        {panelData.exclusiveType && (
+          <span
+            className={`px-3 py-1 text-sm font-medium rounded-full ${
+              EXCLUSIVE_TYPE_COLORS[panelData.exclusiveType] ||
+              "bg-slate-100 text-slate-600"
+            }`}
+          >
+            {EXCLUSIVE_TYPE_LABELS[panelData.exclusiveType] ||
+              panelData.exclusiveType}
+          </span>
+        )}
+        {panelData.submissionSource === "external" && (
+          <span className="px-3 py-1 text-sm font-medium rounded-full bg-orange-100 text-orange-700">
+            External
+          </span>
+        )}
       </div>
-      <div
-        className={`text-2xl font-bold ${
-          highlight === "amber"
-            ? "text-amber-700"
-            : isCurrency
-              ? "text-slate-900"
-              : "text-slate-900"
-        }`}
+
+      {/* 1. Agent Info */}
+      <PanelSection title="Agent Info" icon={<User className="h-4 w-4" />}>
+        <InfoRow
+          label="Name"
+          value={`${panelData.agentFirstName || ""} ${panelData.agentLastName || ""}`.trim()}
+        />
+        <InfoRow label="Email" value={panelData.agentEmail} />
+        <InfoRow label="Phone" value={panelData.agentPhone} />
+        <InfoRow label="License" value={panelData.agentLicense} />
+        {panelData.agent && (
+          <InfoRow
+            label="Matched Agent"
+            value={
+              <span className="text-blue-600 text-xs font-medium">
+                Linked to roster
+              </span>
+            }
+          />
+        )}
+      </PanelSection>
+
+      {/* 2. Deal Overview */}
+      <PanelSection title="Deal Overview" icon={<Building className="h-4 w-4" />}>
+        <InfoRow label="Property" value={panelData.propertyAddress} />
+        {panelData.unit && <InfoRow label="Unit" value={panelData.unit} />}
+        {panelData.city && (
+          <InfoRow
+            label="City / State"
+            value={`${panelData.city}, ${panelData.state || "NY"}`}
+          />
+        )}
+        <InfoRow
+          label="Deal Type"
+          value={DEAL_TYPE_LABELS[panelData.dealType] || panelData.dealType}
+        />
+        <InfoRow
+          label="Transaction Value"
+          value={fmt(panelData.transactionValue)}
+        />
+        <InfoRow label="Closing Date" value={fmtDate(panelData.closingDate)} />
+
+        {(panelData.dealType === "lease" ||
+          panelData.dealType === "rental" ||
+          panelData.dealType === "commercial_lease") && (
+          <>
+            {panelData.leaseTermMonths && (
+              <InfoRow
+                label="Lease Term"
+                value={`${panelData.leaseTermMonths} months`}
+              />
+            )}
+            {panelData.monthlyRent && (
+              <InfoRow label="Monthly Rent" value={fmt(panelData.monthlyRent)} />
+            )}
+            {panelData.moveInDate && (
+              <InfoRow
+                label="Move-In Date"
+                value={fmtDate(panelData.moveInDate)}
+              />
+            )}
+          </>
+        )}
+
+        {(panelData.dealType === "sale" ||
+          panelData.dealType === "commercial_sale" ||
+          panelData.dealType === "new_construction" ||
+          panelData.dealType === "land") && (
+          <>
+            {panelData.contractDate && (
+              <InfoRow
+                label="Contract Date"
+                value={fmtDate(panelData.contractDate)}
+              />
+            )}
+            {panelData.listPrice != null && (
+              <InfoRow label="List Price" value={fmt(panelData.listPrice)} />
+            )}
+          </>
+        )}
+
+        {panelData.representedSide && (
+          <InfoRow
+            label="Represented Side"
+            value={
+              panelData.representedSide.charAt(0).toUpperCase() +
+              panelData.representedSide.slice(1)
+            }
+          />
+        )}
+      </PanelSection>
+
+      {/* 3. Landlord / Billing */}
+      {(panelData.clientName || panelData.clientEmail || panelData.clientPhone) && (
+        <PanelSection
+          title="Landlord / Billing"
+          icon={<MapPin className="h-4 w-4" />}
+        >
+          <InfoRow label="Client Name" value={panelData.clientName} />
+          <InfoRow label="Client Email" value={panelData.clientEmail} />
+          <InfoRow label="Client Phone" value={panelData.clientPhone} />
+        </PanelSection>
+      )}
+
+      {/* 4. Commission Breakdown */}
+      <PanelSection
+        title="Commission Breakdown"
+        icon={<DollarSign className="h-4 w-4" />}
       >
-        {value}
-      </div>
-    </div>
+        <div className="bg-slate-50 rounded-lg p-3 font-mono text-sm space-y-1.5">
+          <div className="flex justify-between">
+            <span className="text-slate-500">Commission Type</span>
+            <span className="text-slate-700">
+              {panelData.commissionType === "percentage"
+                ? "Percentage"
+                : "Flat"}
+            </span>
+          </div>
+          {panelData.commissionPct != null && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Commission Rate</span>
+              <span className="text-slate-700">
+                {fmtPct(panelData.commissionPct)}
+              </span>
+            </div>
+          )}
+          {panelData.commissionFlat != null && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Flat Commission</span>
+              <span className="text-slate-700">
+                {fmt(panelData.commissionFlat)}
+              </span>
+            </div>
+          )}
+          <div className="flex justify-between border-t border-slate-200 pt-1.5">
+            <span className="text-slate-500 font-semibold">Total Commission</span>
+            <span className="text-slate-900 font-semibold">
+              {fmt(panelData.totalCommission)}
+            </span>
+          </div>
+
+          {/* Split — inline edit */}
+          <div className="border-t border-slate-200 pt-1.5">
+            {editingSplitId === panelData.id ? (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-500 w-20">Agent %</label>
+                  <input
+                    type="number"
+                    value={editAgentSplit}
+                    onChange={(e) => {
+                      setEditAgentSplit(e.target.value);
+                      const agent = parseFloat(e.target.value);
+                      if (!isNaN(agent)) {
+                        setEditHouseSplit((100 - agent).toFixed(1));
+                      }
+                    }}
+                    className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-slate-500 w-20">House %</label>
+                  <input
+                    type="number"
+                    value={editHouseSplit}
+                    onChange={(e) => {
+                      setEditHouseSplit(e.target.value);
+                      const house = parseFloat(e.target.value);
+                      if (!isNaN(house)) {
+                        setEditAgentSplit((100 - house).toFixed(1));
+                      }
+                    }}
+                    className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                  />
+                </div>
+                <div className="flex gap-2 mt-1">
+                  <button
+                    onClick={() => {
+                      // Save is informational in the panel; actual persistence
+                      // is handled via the approve flow.
+                      setEditingSplitId(null);
+                      const agentPct = parseFloat(editAgentSplit) || 0;
+                      const housePct = parseFloat(editHouseSplit) || 0;
+                      const totalComm = Number(panelData.totalCommission) || 0;
+                      setExpandedSubmission({
+                        ...panelData,
+                        agentSplitPct: agentPct,
+                        houseSplitPct: housePct,
+                        agentPayout: (totalComm * agentPct) / 100,
+                        housePayout: (totalComm * housePct) / 100,
+                      });
+                    }}
+                    className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-700 bg-green-50 rounded hover:bg-green-100 transition-colors"
+                  >
+                    <Check className="h-3 w-3" />
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingSplitId(null)}
+                    className="px-2 py-1 text-xs text-slate-500 hover:text-slate-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">Agent Split</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-600">
+                      {fmtPct(panelData.agentSplitPct)} ({fmt(panelData.agentPayout)})
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingSplitId(panelData.id);
+                        setEditAgentSplit(
+                          String(Number(panelData.agentSplitPct).toFixed(1))
+                        );
+                        setEditHouseSplit(
+                          String(Number(panelData.houseSplitPct).toFixed(1))
+                        );
+                      }}
+                      className="p-0.5 text-slate-400 hover:text-blue-600 transition-colors"
+                      title="Edit split"
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-500">House Split</span>
+                  <span className="text-blue-600">
+                    {fmtPct(panelData.houseSplitPct)} ({fmt(panelData.housePayout)})
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Processing Fee — editable while approved, read-only post-invoice */}
+          {(() => {
+            const status = panelData.status as string;
+            const isLocked = status === "invoiced" || status === "paid";
+            const isApproved = status === "approved";
+            if (!isApproved && !isLocked) return null;
+
+            const inv = panelData.invoice as
+              | { processingFeePct?: number | string | null; processingFeeAmt?: number | string | null }
+              | null
+              | undefined;
+
+            if (isLocked) {
+              const feeAmt = Number(inv?.processingFeeAmt ?? 0);
+              const feePct = Number(inv?.processingFeePct ?? 0);
+              if (!feeAmt) return null;
+              return (
+                <div className="border-t border-slate-200 pt-1.5">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">
+                      Processing Fee ({feePct.toFixed(2)}%)
+                    </span>
+                    <span className="text-rose-600">
+                      &minus;{fmt(feeAmt)}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
+            const defaultPct = Number(panelData.organizationDefaultFeePct ?? 0);
+            const override = !!panelData.processingFeeOverride;
+            const totalComm = Number(panelData.totalCommission ?? 0);
+            const agentSplit = Number(panelData.agentSplitPct ?? 0);
+            const currentPct = override
+              ? Number(panelData.processingFeePct ?? 0)
+              : defaultPct;
+            const currentAmt =
+              Math.round(((totalComm * currentPct) / 100) * 100) / 100;
+            const isEditing = editingFeeId === panelData.id;
+
+            if (isEditing) {
+              const previewPct = Math.max(
+                0,
+                Math.min(100, parseFloat(editFeePct) || 0)
+              );
+              const previewFee =
+                Math.round(((totalComm * previewPct) / 100) * 100) / 100;
+              const previewGross =
+                Math.round(((totalComm * agentSplit) / 100) * 100) / 100;
+              const previewNet =
+                Math.round((previewGross - previewFee) * 100) / 100;
+              return (
+                <div className="border-t border-slate-200 pt-1.5 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-slate-500 flex-1">
+                      Processing Fee
+                    </label>
+                    <input
+                      type="number"
+                      value={editFeePct}
+                      onChange={(e) => setEditFeePct(e.target.value)}
+                      onBlur={() => {
+                        const pct = parseFloat(editFeePct);
+                        if (Number.isFinite(pct) && pct >= 0 && pct <= 100) {
+                          handleSaveFee(panelData.id, "override", pct);
+                        }
+                      }}
+                      className="w-20 border border-slate-300 rounded px-2 py-1 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      autoFocus
+                      disabled={feeSaving}
+                    />
+                    <span className="text-xs text-slate-500">%</span>
+                    <span className="text-rose-600 text-sm w-24 text-right">
+                      &minus;{fmt(previewFee)}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => handleSaveFee(panelData.id, "override", 0)}
+                      disabled={feeSaving}
+                      className="px-2 py-1 text-[11px] font-medium text-amber-700 bg-amber-50 rounded hover:bg-amber-100 disabled:opacity-50 transition-colors"
+                    >
+                      Set to 0% &mdash; exempt this deal
+                    </button>
+                    <button
+                      onClick={() => handleSaveFee(panelData.id, "reset")}
+                      disabled={feeSaving}
+                      className="px-2 py-1 text-[11px] font-medium text-slate-600 bg-slate-100 rounded hover:bg-slate-200 disabled:opacity-50 transition-colors"
+                    >
+                      Reset to brokerage default
+                    </button>
+                    <button
+                      onClick={() => setEditingFeeId(null)}
+                      disabled={feeSaving}
+                      className="px-2 py-1 text-[11px] text-slate-500 hover:text-slate-700 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <div className="flex justify-between text-xs pt-1 border-t border-slate-200">
+                    <span className="text-slate-500">
+                      Net agent payout (preview)
+                    </span>
+                    <span className="text-green-600 font-semibold">
+                      {fmt(previewNet)}
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <div className="border-t border-slate-200 pt-1.5">
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">
+                    {override ? "Processing Fee" : "Brokerage Processing Fee"}{" "}
+                    ({currentPct.toFixed(2)}%)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={
+                        currentAmt > 0 ? "text-rose-600" : "text-slate-400"
+                      }
+                    >
+                      {currentAmt > 0 ? `−${fmt(currentAmt)}` : fmt(0)}
+                    </span>
+                    <button
+                      onClick={() => {
+                        setEditingFeeId(panelData.id);
+                        setEditFeePct(currentPct.toFixed(2));
+                      }}
+                      className="p-0.5 text-slate-400 hover:text-blue-600 transition-colors"
+                      title={override ? "Edit fee" : "Customize"}
+                    >
+                      <Edit3 className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+                {override && (
+                  <div className="text-[10px] text-amber-600 mt-0.5">
+                    Custom override (brokerage default: {defaultPct.toFixed(2)}%)
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      </PanelSection>
+
+      {/* 5. Co-Broker */}
+      {(panelData.coBrokeAgent ||
+        panelData.coBrokeBrokerage ||
+        (Array.isArray(panelData.coAgents) && panelData.coAgents.length > 0)) && (
+        <PanelSection title="Co-Broker" icon={<User className="h-4 w-4" />}>
+          <InfoRow label="Co-Broke Agent" value={panelData.coBrokeAgent} />
+          <InfoRow
+            label="Co-Broke Brokerage"
+            value={panelData.coBrokeBrokerage}
+          />
+          {Array.isArray(panelData.coAgents) && panelData.coAgents.length > 0 && (
+            <div className="mt-2 space-y-1">
+              <span className="text-xs text-slate-400 font-medium">
+                Additional Agents
+              </span>
+              {panelData.coAgents.map(
+                (
+                  ca: { name?: string; splitPct?: number },
+                  idx: number
+                ) => (
+                  <div
+                    key={idx}
+                    className="text-sm text-slate-600 flex justify-between"
+                  >
+                    <span>{ca.name || "Agent"}</span>
+                    {ca.splitPct != null && (
+                      <span className="text-slate-400">{ca.splitPct}%</span>
+                    )}
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </PanelSection>
+      )}
+
+      {/* 6. Documents */}
+      {Array.isArray(panelData.files) && panelData.files.length > 0 && (
+        <PanelSection title="Documents" icon={<FileCheck className="h-4 w-4" />}>
+          <div className="space-y-2">
+            {panelData.files.map(
+              (
+                file: { id: string; fileName: string; createdAt?: string },
+                idx: number
+              ) => (
+                <DocCheck
+                  key={file.id || idx}
+                  fileName={file.fileName}
+                  date={file.createdAt}
+                  onView={() => handleViewDoc(file.id)}
+                />
+              )
+            )}
+          </div>
+        </PanelSection>
+      )}
+
+      {/* 7. Notes */}
+      {panelData.notes && (
+        <PanelSection title="Notes" icon={<FileText className="h-4 w-4" />}>
+          <p className="text-sm text-slate-600 whitespace-pre-wrap">
+            {panelData.notes}
+          </p>
+        </PanelSection>
+      )}
+
+      {/* Rejection reason */}
+      {panelData.status === "rejected" && panelData.rejectionReason && (
+        <div className="bg-red-50 border border-red-100 rounded-lg p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <Ban className="h-4 w-4 text-red-500" />
+            <span className="text-sm font-medium text-red-700">
+              Rejection Reason
+            </span>
+          </div>
+          <p className="text-sm text-red-600">{panelData.rejectionReason}</p>
+        </div>
+      )}
+    </>
   );
 }
 
-function DetailPanel() {
-  // Placeholder — detail panel is rendered inline above for state access
-  return null;
-}
+// ── Sub-Components ─────────────────────────────────────────────
 
 function PanelSection({
   title,
@@ -2069,7 +1801,7 @@ function InfoRow({
   label: string;
   value: React.ReactNode;
 }) {
-  if (value == null || value === "" || value === "\u2014") return null;
+  if (value == null || value === "" || value === "—") return null;
   return (
     <div className="flex items-start justify-between text-sm">
       <span className="text-slate-400 shrink-0 mr-3">{label}</span>
@@ -2093,9 +1825,7 @@ function DocCheck({
         <FileText className="h-4 w-4 text-slate-400 shrink-0" />
         <div className="min-w-0">
           <p className="text-sm text-slate-700 truncate">{fileName}</p>
-          {date && (
-            <p className="text-xs text-slate-400">{fmtDate(date)}</p>
-          )}
+          {date && <p className="text-xs text-slate-400">{fmtDate(date)}</p>}
         </div>
       </div>
       <button
@@ -2106,33 +1836,5 @@ function DocCheck({
         View
       </button>
     </div>
-  );
-}
-
-function SortableHeader({
-  label,
-  active,
-  direction,
-  onClick,
-}: {
-  label: string;
-  active?: boolean;
-  direction?: "asc" | "desc";
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-1 text-xs font-semibold text-slate-500 uppercase tracking-wide hover:text-slate-700 transition-colors"
-    >
-      {label}
-      {active && (
-        <ChevronDown
-          className={`h-3 w-3 transition-transform ${
-            direction === "asc" ? "rotate-180" : ""
-          }`}
-        />
-      )}
-    </button>
   );
 }

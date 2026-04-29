@@ -289,6 +289,82 @@ describe("Slice 1 — Pending Approval queue", () => {
   });
 });
 
+// ── Slice 1c: card-grid + inline-expand UI restructure ───────
+//
+// 1c is purely visual restructure but the visual contract has structural
+// implications that are easy to regress later: cards, inline-expand body,
+// the three-button footer attached to the expand (not the slide-over),
+// the placeholder Invoice/Payment tabs (so 2/3 know where to plug in),
+// and the absence of the deleted KPI strip.
+//
+// Source-level assertions only. Rendering the dashboard requires Prisma +
+// Supabase + cookies — same justification as the 0c block above.
+
+describe("Slice 1c — card-grid layout", () => {
+  const dashSrc = readSource(
+    "src/app/(dashboard)/brokerage/deal-submissions/submissions-dashboard.tsx",
+  );
+
+  it("uses SubmissionCard from the components dir (not a <table>)", () => {
+    expect(dashSrc).toMatch(
+      /import\s*\{[^}]*SubmissionCard[^}]*\}\s*from\s*["']\.\/components\/submission-card["']/,
+    );
+    // The slice 1 implementation rendered a real <table>. Make sure the
+    // rewrite removed it so future drift back to a table fails this guard.
+    expect(dashSrc).not.toMatch(/<table\b/);
+    expect(dashSrc).not.toMatch(/<tbody\b/);
+  });
+
+  it("renders DetailTabs with placeholder Invoice/Payment tabs for slices 2 + 3", () => {
+    const tabsSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx",
+    );
+    expect(tabsSrc).toMatch(/Available after Slice 2/);
+    expect(tabsSrc).toMatch(/Available after Slice 3/);
+    // The Details tab is the only enabled one in 1c. If 2/3 are wired in
+    // later slices, they'll flip these `enabled: false` flags — this guard
+    // makes that change visible.
+    // [\s\S]* avoids the regex `s` (dotAll) flag, which the project's tsconfig
+    // target doesn't allow but matches across newlines just the same.
+    expect(tabsSrc).toMatch(/key:\s*"invoice"[\s\S]*?enabled:\s*false/);
+    expect(tabsSrc).toMatch(/key:\s*"payment"[\s\S]*?enabled:\s*false/);
+  });
+
+  it("relocates the three-button footer onto the inline-expanded card", () => {
+    // The buttons live in the parent dashboard (state lives there) but they
+    // must render inside the inline-expand block, not inside a slide-over
+    // panel. The slide-over wrapper from slice 1 is gone in 1c.
+    expect(dashSrc).toMatch(/Approve\s*&amp;\s*Push to Invoice/);
+    expect(dashSrc).toMatch(/Approve only/);
+    // Slide-over panel chrome that 1c removed.
+    expect(dashSrc).not.toMatch(/translate-x-full/);
+    expect(dashSrc).not.toMatch(/Detail Slide-Over Panel/);
+  });
+
+  it("drops the redundant KPI strip (audit U-021)", () => {
+    // The four StatCard cards in the previous header strip would each
+    // reference these labels. None should remain.
+    expect(dashSrc).not.toMatch(/Total Submissions/);
+    expect(dashSrc).not.toMatch(/Pending Review/);
+    expect(dashSrc).not.toMatch(/Commission Pending/);
+    // "Paid Out" was the rightmost StatCard label.
+    expect(dashSrc).not.toMatch(/label="Paid Out"/);
+  });
+
+  it("provides EmptyState ('All caught up') and RecentlyApprovedRail components", () => {
+    const emptySrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/components/empty-state.tsx",
+    );
+    expect(emptySrc).toMatch(/All caught up/);
+    expect(dashSrc).toMatch(
+      /import\s*\{[^}]*EmptyState[^}]*\}\s*from\s*["']\.\/components\/empty-state["']/,
+    );
+    expect(dashSrc).toMatch(
+      /import\s*\{[^}]*RecentlyApprovedRail[^}]*\}\s*from\s*["']\.\/components\/recently-approved-rail["']/,
+    );
+  });
+});
+
 describe("Slice 0c — auth-context priority", () => {
   it("getCurrentOrgContext consumes options.overrideAsOrg before referer fallback", () => {
     // Source-level guard: the priority comment + code line must coexist. If
