@@ -335,6 +335,19 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 2
 - **Requires approval:** No.
 
+### 3.Y — Structural fix for override-context propagation
+- **Status:** `pending`
+- **Goal:** Replace per-callsite override threading with a single OrgContext wrapper that every Prisma query must use. Make it impossible to forget threading without a typecheck error.
+- **Why:** 0c covered ~50 action exports + threading; 0c2 found another ~22 server actions + 12 read-side pages that 0c missed. Pattern will keep recurring as new code is added. Architectural fix collapses this into one place.
+- **Approach (agent proposes details when slice begins):**
+  - QueryClient wrapper takes OrgContext at construction.
+  - Lint rule or TypeScript constraint blocking direct `prisma.*` calls from `app/(dashboard)/brokerage/*` — must go through OrgContext.
+  - Migration plan: progressive — new code uses the wrapper; existing code migrates slice-by-slice as it gets touched.
+- **Files:** `lib/prisma.ts`, `lib/team-context.ts`, all of `src/app/(dashboard)/brokerage/**`.
+- **Success criteria:** `tests/smoke/override-scoping.test.ts` becomes obsolete because the type system enforces it.
+- **Depends on:** Phase 1, 2 (don't refactor while major surfaces are in flux).
+- **Requires approval:** YES — architectural change.
+
 ### 3.X — Parent branch cleanup
 - **Status:** `pending`
 - **Goal:** Merge `feat/super-admin-cross-tenant-view` to main as 3 batched PRs (PR-A condo_ownership pipeline, PR-B processing-fee + hotfixes, PR-C auth super-admin override).
