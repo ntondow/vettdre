@@ -433,6 +433,13 @@ export async function rejectSubmission(
   options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Slice 1: rejection reason is required. The agent timeline shows the
+    // reason verbatim — letting it be empty produces a useless audit trail.
+    const trimmedReason = reason?.trim();
+    if (!trimmedReason) {
+      return { success: false, error: "A rejection reason is required" };
+    }
+
     const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "reject_deal")) {
@@ -446,10 +453,10 @@ export async function rejectSubmission(
 
     await prisma.dealSubmission.update({
       where: { id },
-      data: { status: "rejected", rejectionReason: reason },
+      data: { status: "rejected", rejectionReason: trimmedReason },
     });
 
-    logSubmissionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "rejected", id, { reason });
+    logSubmissionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "rejected", id, { reason: trimmedReason });
 
     // Notify the agent (fire-and-forget)
     notifyAgentOfStatusChange({
@@ -459,7 +466,7 @@ export async function rejectSubmission(
       propertyAddress: submission.propertyAddress,
       status: "rejected",
       reviewerName: ctx.fullName,
-      rejectionReason: reason,
+      rejectionReason: trimmedReason,
     }).catch(() => {});
 
     return { success: true };
@@ -678,6 +685,275 @@ export async function pushToInvoice(
   } catch (error: unknown) {
     console.error("pushToInvoice error:", error);
     return { success: false, error: error instanceof Error ? error.message : "Failed to create invoice" };
+  }
+}
+
+// ── 7a. approveAndCreateInvoice (Slice 1) ───────────────────
+//
+// Atomic version of approveSubmission + pushToInvoice for the manager's
+// "Approve & Push to Invoice" CTA. Wraps the status flip + invoice + transaction
+// inserts in a single prisma.$transaction so a partial failure rolls back
+// cleanly. Writes ONE consolidated submission audit row ("approved_and_invoiced")
+// instead of two — the submission timeline should reflect one logical action,
+// not the individual sub-steps. Invoice and Transaction get their own creation
+// audit rows in their own timelines, as before.
+
+export async function approveAndCreateInvoice(
+  submissionId: string,
+  overrides?: { exclusiveType?: ExclusiveType; agentSplitPct?: number; notes?: string },
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
+  success: boolean;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  transactionId?: string;
+  error?: string;
+}> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "approve_deal") || !hasPermission(ctx.role, "create_invoice")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const submission = await prisma.dealSubmission.findFirst({
+      where: { id: submissionId, orgId: ctx.orgId },
+      include: {
+        agent: { select: { id: true, firstName: true, lastName: true, email: true, licenseNumber: true } },
+        bmsProperty: true,
+      },
+    });
+    if (!submission) return { success: false, error: "Submission not found" };
+    if (submission.status === "invoiced" || submission.status === "paid") {
+      return { success: false, error: `Submission is already ${submission.status}` };
+    }
+    if (submission.status === "rejected") {
+      return { success: false, error: "Cannot invoice a rejected submission" };
+    }
+
+    // Symmetric guards mirror pushToInvoice — if a previous attempt crashed
+    // mid-$transaction we want a clean error, not P2002 noise.
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true },
+    });
+    if (existingInvoice) {
+      return { success: false, error: "An invoice already exists for this submission.", invoiceId: existingInvoice.id };
+    }
+    const existingTransaction = await prisma.transaction.findUnique({
+      where: { dealSubmissionId: submissionId },
+      select: { id: true },
+    });
+    if (existingTransaction) {
+      return { success: false, error: "A transaction already exists for this submission.", transactionId: existingTransaction.id };
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: ctx.orgId },
+      select: { name: true, address: true, phone: true, settings: true, bmsSettings: true, processingFeePct: true },
+    });
+    if (!org) return { success: false, error: "Organization not found" };
+
+    // Apply approval overrides (split / exclusive type / notes) before the
+    // invoice computation reads back from the submission record.
+    const approvalUpdate: Record<string, unknown> = {
+      approvedBy: ctx.userId,
+      approvedAt: new Date(),
+    };
+    let effectiveAgentSplitPct = num(submission.agentSplitPct);
+    const effectiveTotalCommission = num(submission.totalCommission);
+    if (overrides?.exclusiveType) {
+      approvalUpdate.managerOverrideExclusiveType = overrides.exclusiveType;
+    }
+    if (overrides?.agentSplitPct != null) {
+      effectiveAgentSplitPct = overrides.agentSplitPct;
+      approvalUpdate.managerOverrideSplitPct = effectiveAgentSplitPct;
+      approvalUpdate.agentSplitPct = effectiveAgentSplitPct;
+      approvalUpdate.houseSplitPct = 100 - effectiveAgentSplitPct;
+      approvalUpdate.agentPayout = effectiveTotalCommission * (effectiveAgentSplitPct / 100);
+      approvalUpdate.housePayout = effectiveTotalCommission * ((100 - effectiveAgentSplitPct) / 100);
+    }
+    if (overrides?.notes) {
+      approvalUpdate.notes = overrides.notes;
+    }
+
+    const fee = computeProcessingFee({
+      totalCommission: effectiveTotalCommission,
+      agentSplitPct: effectiveAgentSplitPct,
+      organizationDefaultPct: org.processingFeePct,
+      override: submission.processingFeeOverride,
+      overridePct: submission.processingFeePct,
+    });
+
+    const submissionAgentPayout = submission.processingFeeOverride
+      ? num(approvalUpdate.agentPayout ?? submission.agentPayout)
+      : fee.agentPayout;
+    const submissionHousePayout = submission.processingFeeOverride
+      ? num(approvalUpdate.housePayout ?? submission.housePayout)
+      : fee.housePayout;
+    const invoiceFeePct = submission.processingFeeOverride
+      ? Number(submission.processingFeePct ?? 0)
+      : fee.feePct;
+    const invoiceFeeAmt = submission.processingFeeOverride
+      ? Number(submission.processingFeeAmt ?? 0)
+      : fee.feeAmt;
+
+    const bmsSettings = (org.bmsSettings as Record<string, unknown>) ?? {};
+    const defaultPaymentTerms = (bmsSettings.defaultPaymentTerms as string) || "Net 30";
+
+    const invoiceNumber = buildInvoiceNumber({
+      propertyAddress: submission.propertyAddress,
+      unit: submission.unit || undefined,
+      moveInDate: submission.leaseStartDate || submission.closingDate || undefined,
+      tenantName: submission.tenantName || submission.clientName || undefined,
+      createdAt: new Date(),
+    });
+
+    const daysMatch = defaultPaymentTerms.match(/(\d+)/);
+    const netDays = daysMatch ? parseInt(daysMatch[1], 10) : 30;
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + netDays);
+
+    const agentName = submission.agent
+      ? `${submission.agent.firstName} ${submission.agent.lastName}`
+      : `${submission.agentFirstName} ${submission.agentLastName}`;
+
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const submissionUpdate: Record<string, unknown> = {
+          ...approvalUpdate,
+          status: "invoiced",
+        };
+        if (!submission.processingFeeOverride) {
+          submissionUpdate.processingFeePct = invoiceFeePct;
+          submissionUpdate.processingFeeAmt = invoiceFeeAmt;
+          submissionUpdate.agentPayout = submissionAgentPayout;
+          submissionUpdate.housePayout = submissionHousePayout;
+        }
+
+        const invoice = await tx.invoice.create({
+          data: {
+            orgId: ctx.orgId,
+            invoiceNumber,
+            dealSubmissionId: submissionId,
+            agentId: submission.agentId || null,
+            brokerageName: org.name,
+            brokerageAddress: org.address || null,
+            brokeragePhone: org.phone || null,
+            brokerageEmail: (bmsSettings.companyEmail as string) || null,
+            brokerageLicense: (bmsSettings.companyLicenseNumber as string) || null,
+            agentName,
+            agentEmail: submission.agentEmail || null,
+            agentLicense: submission.agent?.licenseNumber || submission.agentLicense || null,
+            propertyAddress: submission.propertyAddress,
+            dealType: submission.dealType,
+            transactionValue: submission.transactionValue,
+            closingDate: submission.closingDate || null,
+            clientName: submission.tenantName || submission.clientName || null,
+            representedSide: submission.representedSide || null,
+            totalCommission: effectiveTotalCommission,
+            agentSplitPct: effectiveAgentSplitPct,
+            houseSplitPct: 100 - effectiveAgentSplitPct,
+            agentPayout: submissionAgentPayout,
+            housePayout: submissionHousePayout,
+            processingFeePct: invoiceFeePct,
+            processingFeeAmt: invoiceFeeAmt,
+            paymentTerms: defaultPaymentTerms,
+            dueDate,
+            status: "draft",
+          },
+        });
+
+        const isLeaseDeal = ["lease", "rental", "commercial_lease"].includes(submission.dealType);
+
+        const transaction = await tx.transaction.create({
+          data: {
+            orgId: ctx.orgId,
+            dealSubmissionId: submissionId,
+            agentId: submission.agentId || null,
+            invoiceId: invoice.id,
+            type: isLeaseDeal ? "rental" : "sale",
+            stage: "invoice_sent",
+            propertyAddress: submission.propertyAddress,
+            propertyUnit: submission.unit || null,
+            propertyCity: submission.city || null,
+            propertyState: submission.state || "NY",
+            transactionValue: submission.transactionValue,
+            commissionAmount: effectiveTotalCommission,
+            clientName: submission.tenantName || submission.clientName || null,
+            clientEmail: submission.tenantEmail || submission.clientEmail || null,
+            clientPhone: submission.tenantPhone || submission.clientPhone || null,
+            closingDate: submission.closingDate || null,
+            leaseStartDate: submission.leaseStartDate || null,
+            leaseEndDate: submission.leaseEndDate || null,
+            agentSplitPct: effectiveAgentSplitPct,
+            agentPayoutAmount: submissionAgentPayout,
+            housePayoutAmount: submissionHousePayout,
+            agentPayoutStatus: "pending",
+            invoiceCreatedAt: new Date(),
+          },
+        });
+
+        await tx.dealSubmission.update({
+          where: { id: submissionId },
+          data: submissionUpdate,
+        });
+
+        return { invoice, transaction };
+      },
+      { timeout: 15000, maxWait: 5000 },
+    );
+
+    // ONE submission audit row for this logical action — not two. Invoice and
+    // transaction still get their own creation rows in their own timelines.
+    logSubmissionAction(
+      ctx.orgId,
+      { id: ctx.userId, name: ctx.fullName, role: ctx.role },
+      "approved_and_invoiced",
+      submissionId,
+      {
+        previousStatus: submission.status,
+        invoiceId: result.invoice.id,
+        invoiceNumber,
+        transactionId: result.transaction.id,
+        agentSplitPctOverride: overrides?.agentSplitPct ?? null,
+        exclusiveTypeOverride: overrides?.exclusiveType ?? null,
+      },
+    );
+    logInvoiceAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "created", result.invoice.id, {
+      fromSubmission: submissionId,
+      feePct: invoiceFeePct,
+      feeAmt: invoiceFeeAmt,
+      override: submission.processingFeeOverride,
+      totalCommission: effectiveTotalCommission,
+      agentPayout: submissionAgentPayout,
+    });
+    logTransactionAction(ctx.orgId, { id: ctx.userId, name: ctx.fullName, role: ctx.role }, "created", result.transaction.id, {
+      fromSubmission: submissionId,
+    });
+
+    notifyAgentOfStatusChange({
+      submissionId,
+      orgId: ctx.orgId,
+      agentId: submission.agentId,
+      propertyAddress: submission.propertyAddress,
+      status: "approved",
+      reviewerName: ctx.fullName,
+    }).catch(() => {});
+
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/my-deals");
+    revalidatePath("/brokerage/invoices");
+
+    return {
+      success: true,
+      invoiceId: result.invoice.id,
+      invoiceNumber,
+      transactionId: result.transaction.id,
+    };
+  } catch (error: unknown) {
+    console.error("approveAndCreateInvoice error:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Failed to approve and create invoice" };
   }
 }
 
