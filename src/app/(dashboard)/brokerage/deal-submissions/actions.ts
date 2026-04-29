@@ -1596,6 +1596,36 @@ export async function sendInvoiceToAgent(
   }
 }
 
+// ── Slice 1.5: Sidebar count badge ──────────────────────────
+//
+// Lightweight count of `status === "submitted"` for the current org —
+// fed to the brokerage sidebar's "Submissions" item to surface the
+// pending-approval queue without forcing managers to navigate first.
+// Override-threaded so super_admins viewing another tenant see the
+// target org's number, not their own.
+
+export async function getSubmittedCount(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ count: number }> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { count: 0 };
+    // Only managers/admins/brokers see the badge — agents land on the
+    // queue with a self-scoped view, so an org-wide count would be
+    // misleading. Returning 0 here also keeps the badge hidden client-side.
+    if (!hasPermission(ctx.role, "view_all_submissions")) {
+      return { count: 0 };
+    }
+    const count = await prisma.dealSubmission.count({
+      where: { orgId: ctx.orgId, status: "submitted" },
+    });
+    return { count };
+  } catch (error) {
+    console.error("getSubmittedCount error:", error);
+    return { count: 0 };
+  }
+}
+
 // ── Slice 3: Payment tab — recordPaymentForInvoice ──────────
 //
 // Wraps the existing /brokerage/payments `recordPayment` action so the

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect, useMemo } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { getSubmittedCount } from "./deal-submissions/actions";
 import {
   BarChart3,
   FileText,
@@ -138,8 +139,15 @@ function getVisibleNav(role: BrokerageRoleType | null | undefined): NavGroup[] {
 
 export default function BrokerageLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const asOrg = searchParams.get("as_org");
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
   const { role: orgRole } = useUserPlan();
   const [role, setRole] = useState<BrokerageRoleType | null | undefined>(undefined);
+  const [submittedCount, setSubmittedCount] = useState<number>(0);
 
   useEffect(() => {
     // Org owners/admins always get brokerage_admin — use context role directly
@@ -157,9 +165,39 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
       });
   }, [orgRole]);
 
+  // Slice 1.5: refetch the Submissions badge count on mount + every
+  // pathname change. Cheap COUNT query; refetching on navigation means
+  // approving/rejecting in /brokerage/deal-submissions naturally
+  // updates the badge when the manager moves to another section. Only
+  // fires once role is admin-tier — agents see count 0 by default
+  // (initial state, never overwritten because the effect is skipped).
+  const shouldFetchCount = !!role && role !== "agent";
+  useEffect(() => {
+    if (!shouldFetchCount) return;
+    let cancelled = false;
+    getSubmittedCount(overrideOpts)
+      .then((result) => {
+        if (!cancelled) setSubmittedCount(result.count ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setSubmittedCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shouldFetchCount, pathname, overrideOpts]);
+
   const loading = role === undefined;
   const nav = loading ? [] : getVisibleNav(role);
   const allItems = nav.flatMap((g) => g.items);
+
+  // Slice 1.5: per-href badge values. Hidden when zero. Today only the
+  // Submissions item ships a badge — the map keeps the surface ready for
+  // future items (Invoices unpaid, Compliance expiring, etc.) without
+  // touching the render branches again.
+  const badges: Record<string, number> = {
+    "/brokerage/deal-submissions": submittedCount,
+  };
 
   // Active link: exact match, or startsWith for sub-routes (but not /invoices matching /invoices/bulk)
   function isActive(href: string) {
@@ -188,6 +226,7 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
             : allItems.map((item) => {
                 const active = isActive(item.href);
                 const Icon = item.icon;
+                const badge = badges[item.href];
                 return (
                   <Link
                     key={item.href}
@@ -201,6 +240,16 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
                   >
                     <Icon className="w-3.5 h-3.5" />
                     {item.label}
+                    {badge && badge > 0 ? (
+                      <span
+                        data-testid={`brokerage-nav-badge-${item.href}`}
+                        className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full text-[10px] font-semibold ${
+                          active ? "bg-white text-blue-600" : "bg-blue-600 text-white"
+                        }`}
+                      >
+                        {badge > 99 ? "99+" : badge}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -229,6 +278,7 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
                 {group.items.map((item) => {
                   const active = isActive(item.href);
                   const Icon = item.icon;
+                  const badge = badges[item.href];
                   return (
                     <Link
                       key={item.href}
@@ -241,7 +291,19 @@ export default function BrokerageLayout({ children }: { children: React.ReactNod
                       }`}
                     >
                       <Icon className="w-4 h-4 flex-shrink-0" />
-                      {item.label}
+                      <span className="flex-1">{item.label}</span>
+                      {badge && badge > 0 ? (
+                        <span
+                          data-testid={`brokerage-nav-badge-${item.href}`}
+                          className={`inline-flex items-center justify-center min-w-[20px] h-[20px] px-1.5 rounded-full text-[11px] font-semibold ${
+                            active
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-blue-600 text-white"
+                          }`}
+                        >
+                          {badge > 99 ? "99+" : badge}
+                        </span>
+                      ) : null}
                     </Link>
                   );
                 })}
