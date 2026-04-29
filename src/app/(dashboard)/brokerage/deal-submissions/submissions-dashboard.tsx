@@ -769,7 +769,15 @@ export default function SubmissionsDashboard({
                   return (
                     <tr
                       key={s.id}
-                      className="hover:bg-slate-50/50 transition-colors"
+                      tabIndex={0}
+                      onClick={() => openPanel(s.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          openPanel(s.id);
+                        }
+                      }}
+                      className="hover:bg-slate-50/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors"
                     >
                       {/* Status badge */}
                       <td className="px-4 py-3">
@@ -845,7 +853,10 @@ export default function SubmissionsDashboard({
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3 text-right">
+                      <td
+                        className="px-4 py-3 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div className="flex items-center justify-end gap-1.5">
                           {s.status === "submitted" && (
                             <button

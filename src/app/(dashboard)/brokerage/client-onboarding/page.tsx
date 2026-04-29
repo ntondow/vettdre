@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   UserPlus,
   Search,
@@ -71,12 +71,14 @@ function fmtDateShort(iso: string | null): string {
 // ── Component ────────────────────────────────────────────────
 
 export default function OnboardingListPage() {
+  const router = useRouter();
   const sp = useSearchParams();
   const asOrg = sp.get("as_org") ?? undefined;
   const overrideOpts = useMemo(
     () => (asOrg ? { overrideAsOrg: asOrg } : {}),
     [asOrg],
   );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
 
   const [onboardings, setOnboardings] = useState<OnboardingRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -205,7 +207,7 @@ export default function OnboardingListPage() {
   // Action menu items for a given onboarding
   const renderActionItems = (o: OnboardingRow) => (
     <>
-      <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
+      <Link href={`/brokerage/client-onboarding/${o.id}${detailQs}`} className="flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
         <FileText className="w-4 h-4" /> View Details
       </Link>
       <button onClick={() => handleCopyLink(o.token)} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50 active:bg-slate-100">
@@ -318,7 +320,7 @@ export default function OnboardingListPage() {
                 <div key={o.id} className="bg-white rounded-lg border border-slate-200 p-4">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0 flex-1">
-                      <Link href={`/brokerage/client-onboarding/${o.id}`} className="font-medium text-slate-900 hover:text-blue-600 text-sm block truncate">
+                      <Link href={`/brokerage/client-onboarding/${o.id}${detailQs}`} className="font-medium text-slate-900 hover:text-blue-600 text-sm block truncate">
                         {o.clientFirstName} {o.clientLastName}
                       </Link>
                       <div className="text-xs text-slate-500 truncate">{o.clientEmail}</div>
@@ -338,7 +340,7 @@ export default function OnboardingListPage() {
 
                   {/* Quick actions */}
                   <div className="flex items-center gap-2">
-                    <Link href={`/brokerage/client-onboarding/${o.id}`} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 active:bg-slate-300">
+                    <Link href={`/brokerage/client-onboarding/${o.id}${detailQs}`} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 active:bg-slate-300">
                       <FileText className="w-3.5 h-3.5" /> View
                     </Link>
                     <button onClick={() => handleCopyLink(o.token)} className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 active:bg-slate-300">
@@ -379,11 +381,22 @@ export default function OnboardingListPage() {
                 </thead>
                 <tbody>
                   {onboardings.map((o) => (
-                    <tr key={o.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <tr
+                      key={o.id}
+                      tabIndex={0}
+                      onClick={() => router.push(`/brokerage/client-onboarding/${o.id}${detailQs}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          router.push(`/brokerage/client-onboarding/${o.id}${detailQs}`);
+                        }
+                      }}
+                      className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors"
+                    >
                       <td className="px-4 py-3">
-                        <Link href={`/brokerage/client-onboarding/${o.id}`} className="font-medium text-slate-900 hover:text-blue-600">
+                        <div className="font-medium text-slate-900 hover:text-blue-600">
                           {o.clientFirstName} {o.clientLastName}
-                        </Link>
+                        </div>
                         <div className="text-xs text-slate-500">{o.clientEmail}</div>
                       </td>
                       <td className="px-4 py-3 text-slate-600 hidden md:table-cell">
@@ -408,7 +421,10 @@ export default function OnboardingListPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-right relative">
+                      <td
+                        className="px-4 py-3 text-right relative"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <div ref={actionMenu === o.id ? menuRef : undefined} className="relative inline-block">
                           <button
                             onClick={() => setActionMenu(actionMenu === o.id ? null : o.id)}
