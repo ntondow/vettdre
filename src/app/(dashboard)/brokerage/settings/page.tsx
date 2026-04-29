@@ -255,9 +255,15 @@ export default function BrokerageSettingsPage() {
     init();
   }, [overrideOpts]);
 
-  // Load settings when tab switches to settings
+  // Load settings when the user activates either tab that renders settingsForm.
+  // Both Brokerage Settings and Defaults read from the same getBrokerageSettings
+  // payload — the original guard only fired for "settings", which left the
+  // Defaults skeleton hanging forever when a manager clicked Defaults without
+  // first visiting Brokerage Settings. Slice 2's new CC-brokerage toggle made
+  // this the natural landing for verification and surfaced the latent bug.
   useEffect(() => {
-    if (activeTab !== "settings" || settingsLoaded || !authorized) return;
+    const needsSettings = activeTab === "settings" || activeTab === "defaults";
+    if (!needsSettings || settingsLoaded || !authorized) return;
     async function load() {
       const [s, tokenResult] = await Promise.all([
         getBrokerageSettings(overrideOpts),
