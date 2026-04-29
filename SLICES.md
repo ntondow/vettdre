@@ -293,13 +293,28 @@ Phase 0 status as of 2026-04-29:
 - **Stack:** `feat/bms-overhaul-2-invoice-tab` → base `feat/bms-overhaul-1c-card-grid-redesign` (PR #11).
 - **Requires approval:** No — directly approved by Nathan after slice 1c verification.
 
-### 3 — Payment recording in-context
-- **Status:** `pending`
-- **Goal:** Manager can record payment on the deal-detail panel. Invoice status updates to Paid.
-- **Files:** deal-detail panel + Payment server action.
-- **Success criteria:** Payment recorded; Invoice marked paid; audit log entry.
-- **Depends on:** 2
-- **Requires approval:** No.
+### 3 — Payment tab in-context (Payment recording)
+- **Status:** `awaiting_review`
+- **Goal:** Wire the Payment tab inside the inline-expanded card. Lazy fetch on tab activation; four states (pre-invoiced empty with push-to-invoice CTA, status=invoiced auto-shown record-payment form, populated history with outstanding balance + "Record additional", voided). Auto-flip invoice → "paid" when sum closes the balance, with toast confirmation.
+- **Closes:** original slice 3 success criteria. The Invoice marked-paid cascade was already in the existing `recordPayment` action; slice 3 wraps it for the tab + adds the audit row.
+- **Files:** `src/app/(dashboard)/brokerage/deal-submissions/components/payment-tab.tsx` (new), `src/app/(dashboard)/brokerage/deal-submissions/actions.ts` (`recordPaymentForInvoice`), `src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx` (flip), `src/app/(dashboard)/brokerage/deal-submissions/submissions-dashboard.tsx` (wire).
+- **Server action added:**
+  - `recordPaymentForInvoice(invoiceId, input, options?: { overrideAsOrg? })` — wraps existing `/brokerage/payments` `recordPayment` (validation, balance math, auto-flip-to-paid, deal-submission cascade, transaction sync all live there). Wrapper adds `record_payment` permission check, voided-invoice guard, and an invoice audit row tagged `"payment_recorded"` or `"payment_recorded_paid_in_full"` so the audit trail distinguishes balance-closing payments. Override-threaded.
+- **UX answers:**
+  - **Q1 (auto-flip):** `recordPayment` already promotes invoice → "paid" + cascades deal submission when sum hits `agentPayout` (with 0.5% rounding tolerance). Surfaced via `paidInFull` flag → toast "✓ Marked invoice as Paid".
+  - **Q2 (partial UX):** Outstanding balance shown in the populated-state balance summary, not in the form. Color flips emerald (zero) ↔ rose (positive). Form field defaults to current balance.
+  - **Pre-invoiced empty state:** reuses the Invoice tab's "Push this submission to an invoice" CTA so users don't bounce between tabs.
+- **Success criteria:**
+  - Payment tab opens lazy: no fetch until clicked.
+  - status < invoiced → empty state with push-to-invoice CTA.
+  - status === invoiced → record-payment form auto-shown (Amount default = balance, Method, Date default today, Reference, Notes).
+  - status === paid → balance summary + payment history list + "Record additional payment" affordance.
+  - status === void → terminal "Voided — no payment activity expected".
+  - Submitting a payment that closes the balance fires "✓ Marked invoice as Paid" toast and refreshes the dashboard.
+- **Gates:** lint baseline 4530 unchanged on changed files (verified 0 errors); typecheck no regression below 113 errors (held); 71 / 66 tests (+5 new contracts: wrapper-not-rewrite, balance-aware audit kind, dashboard wiring, four states, no tabs disabled). Build ✓.
+- **Depends on:** Slice 2 (PR #12).
+- **Stack:** `feat/bms-overhaul-3-payment-tab` → base `feat/bms-overhaul-2-invoice-tab` (PR #12).
+- **Requires approval:** No — directly approved by Nathan after slice 2/2a verification.
 
 ### 1b — Default landing per role
 - **Status:** `pending`

@@ -57,6 +57,7 @@ import {
 } from "./components/submission-card";
 import { DetailTabs, type DetailTabKey } from "./components/detail-tabs";
 import { InvoiceTab } from "./components/invoice-tab";
+import { PaymentTab } from "./components/payment-tab";
 import { EmptyState } from "./components/empty-state";
 import {
   RecentlyApprovedRail,
@@ -844,20 +845,17 @@ export default function SubmissionsDashboard({
                         onInvoiceSent={loadData}
                       />
                     ) : activeTab === "payment" ? (
-                      <div
-                        data-testid="detail-tab-placeholder"
-                        className="text-center py-10"
-                      >
-                        <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-slate-100 mb-2">
-                          <FileText className="h-5 w-5 text-slate-400" />
-                        </div>
-                        <p className="text-slate-500 font-medium">
-                          Payment tab coming soon
-                        </p>
-                        <p className="text-xs text-slate-400 mt-1">
-                          Available after Slice 3
-                        </p>
-                      </div>
+                      <PaymentTab
+                        submissionId={expandedSubmission.id}
+                        submissionStatus={expandedSubmission.status}
+                        invoiceId={
+                          (expandedSubmission as { invoice?: { id?: string } | null })
+                            .invoice?.id ?? null
+                        }
+                        asOrg={asOrg}
+                        onShowToast={showToast}
+                        onPaymentRecorded={() => loadData()}
+                      />
                     ) : (
                       <DetailBody
                         panelData={expandedSubmission}
