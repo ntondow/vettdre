@@ -362,8 +362,11 @@ export async function getTransactions(
 
 // ── Get Single Transaction with Tasks ───────────────────────
 
-export async function getTransaction(id: string): Promise<TransactionWithTasks> {
-  const ctx = await getCurrentOrg();
+export async function getTransaction(
+  id: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<TransactionWithTasks> {
+  const ctx = await getCurrentOrg(options);
 
   const transaction = await prisma.transaction.findFirst({
     where: { id, orgId: ctx.orgId },
@@ -1517,8 +1520,9 @@ export async function syncTransactionFromInvoice(
 
 export async function getDealTimeline(
   transactionId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<TimelineEvent[]> {
-  const ctx = await getCurrentOrg();
+  const ctx = await getCurrentOrg(options);
 
   const transaction = await prisma.transaction.findFirst({
     where: { id: transactionId, orgId: ctx.orgId },

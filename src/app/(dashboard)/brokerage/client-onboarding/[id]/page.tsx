@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useMemo, use } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   CheckCircle,
@@ -85,6 +85,14 @@ const STATUS_ICON: Record<string, React.ReactNode> = {
 export default function OnboardingDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
+
   const [data, setData] = useState<OnboardingDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +106,7 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
 
   useEffect(() => {
     async function load() {
-      const result = await getOnboarding(id);
+      const result = await getOnboarding(id, overrideOpts);
       if (result.success && result.data) {
         setData(result.data as unknown as OnboardingDetail);
       } else {
@@ -107,7 +115,7 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
       setLoading(false);
     }
     load();
-  }, [id]);
+  }, [id, overrideOpts]);
 
   const handleCopyLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/sign/${data?.token}`);
@@ -117,10 +125,10 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
 
   const handleResend = async () => {
     setProcessing(true);
-    const result = await resendOnboarding(id);
+    const result = await resendOnboarding(id, overrideOpts);
     if (result.success) {
       setSuccess("Invite resent");
-      const refresh = await getOnboarding(id);
+      const refresh = await getOnboarding(id, overrideOpts);
       if (refresh.success && refresh.data) setData(refresh.data as unknown as OnboardingDetail);
     } else setError(result.error ?? "Failed");
     setProcessing(false);
@@ -129,11 +137,11 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
 
   const handleVoid = async () => {
     setProcessing(true);
-    const result = await voidOnboarding(id, voidReason || undefined);
+    const result = await voidOnboarding(id, voidReason || undefined, overrideOpts);
     if (result.success) {
       setSuccess("Onboarding voided");
       setShowVoidConfirm(false);
-      const refresh = await getOnboarding(id);
+      const refresh = await getOnboarding(id, overrideOpts);
       if (refresh.success && refresh.data) setData(refresh.data as unknown as OnboardingDetail);
     } else setError(result.error ?? "Failed");
     setProcessing(false);
@@ -168,7 +176,7 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
     <div className="min-h-dvh bg-slate-50">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-5">
-          <button onClick={() => router.push("/brokerage/client-onboarding")} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-3">
+          <button onClick={() => router.push(`/brokerage/client-onboarding${detailQs}`)} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-3">
             <ArrowLeft className="w-4 h-4" /> Client Onboarding
           </button>
           <div className="flex items-center justify-between">
@@ -425,10 +433,10 @@ export default function OnboardingDetailPage({ params }: { params: Promise<{ id:
                     leaseStartDate: invoiceForm.leaseStartDate || undefined,
                     leaseEndDate: invoiceForm.leaseEndDate || undefined,
                     closingDate: invoiceForm.closingDate || undefined,
-                  });
+                  }, overrideOpts);
                   setInvoiceSubmitting(false);
                   if (result.success) {
-                    router.push("/brokerage/invoices?created=1");
+                    router.push(`/brokerage/invoices?created=1${asOrg ? `&as_org=${encodeURIComponent(asOrg)}` : ""}`);
                   } else {
                     setError(result.error ?? "Failed to generate invoice");
                     setShowInvoiceModal(false);
