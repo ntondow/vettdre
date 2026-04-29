@@ -118,11 +118,12 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Requires approval:** No, but stop if you find a >5-line change to `middleware.ts`. ✓ none required.
 
 ### 0d — Override banner z-index fix
-- **Status:** `pending`
+- **Status:** `awaiting_review`
 - **Goal:** Banner currently cut off ("g as Gulino Group" — "Viewing as" hidden behind sidebar logo).
 - **Closes bug:** B-001
-- **Files:** Wherever the override banner component lives. Grep "Viewing as".
-- **Success criteria:** Banner renders with full text, doesn't overlap sidebar.
+- **Files:** `src/components/layout/super-admin-banner.tsx` (added `relative z-50`).
+- **Success criteria:** Banner renders with full text, doesn't overlap sidebar. ✓
+- **Outcome:** Sidebar is `fixed inset-y-0 left-0 z-40`. The banner was rendered in document flow with no z-context, so the sidebar's full-height fixed positioning covered the leftmost ~60px (the "Super-admin override:" prefix). Single-line CSS fix: `relative z-50` on the banner root puts it in front of the sidebar within the banner's vertical band, leaving the sidebar visible below.
 - **Depends on:** None
 - **Requires approval:** No.
 
