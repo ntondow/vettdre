@@ -72,3 +72,12 @@ __pycache__/
 
 # Stale temp artifacts
 .write-test
+
+# docs/handoff — keep local-only by default. The audit + bootstrap doc are
+# whitelisted because they're agent-reference materials referenced by SLICES.md.
+# Other files in this folder may contain customer data or shared credentials
+# (e.g. handoff-2026-04-28.md mentions a shared bcrypt password) — review and
+# redact before whitelisting any new ones.
+docs/handoff/*
+!docs/handoff/bms-audit-2026-04-28.md
+!docs/handoff/bms-overhaul-bootstrap.md
