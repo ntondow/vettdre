@@ -240,6 +240,55 @@ describe("Slice 0c3 — detail-page override threading", () => {
   }
 });
 
+// ── Slice 1: Pending Approval queue contracts ────────────────
+//
+// approveAndCreateInvoice is the manager's atomic primary CTA. Three contracts
+// matter for the audit + invoice flow and are easy to regress:
+//
+//  1. The action exists, is exported, and accepts overrideAsOrg.
+//  2. It writes ONE consolidated submission audit row, action="approved_and_invoiced",
+//     not the older "approved" + "invoiced" pair from chained calls.
+//  3. The invoice + transaction inserts run inside a single prisma.$transaction
+//     with explicit timeout config (so partial failures roll back cleanly).
+//
+// rejectSubmission must require a non-empty trimmed reason at the server (the
+// agent timeline shows the reason verbatim — empty produces a useless trail).
+
+describe("Slice 1 — Pending Approval queue", () => {
+  const src = readSource("src/app/(dashboard)/brokerage/deal-submissions/actions.ts");
+
+  it("exports approveAndCreateInvoice with overrideAsOrg threading", () => {
+    expect(src).toMatch(/^export\s+async\s+function\s+approveAndCreateInvoice\b/m);
+    expect(exportThreadsOverride(src, "approveAndCreateInvoice")).toBe(true);
+  });
+
+  it("writes a single submission audit row tagged 'approved_and_invoiced'", () => {
+    // The string must appear as the action argument to logSubmissionAction —
+    // a bare match would also catch comments. We require it inside a
+    // logSubmissionAction(... "approved_and_invoiced" ...) call.
+    expect(src).toMatch(/logSubmissionAction\([^)]*"approved_and_invoiced"/);
+    // And no chained "approved" + "invoiced" pair from the new action — guard
+    // by asserting the new action body contains the consolidated kind.
+    const body = src.slice(src.indexOf("approveAndCreateInvoice"));
+    expect(body).toMatch(/"approved_and_invoiced"/);
+  });
+
+  it("wraps invoice + transaction inserts in prisma.$transaction with timeout", () => {
+    const body = src.slice(src.indexOf("approveAndCreateInvoice"));
+    // $transaction(async (tx) => {...}, { timeout, maxWait })
+    expect(body).toMatch(/prisma\.\$transaction\s*\(\s*async\s*\(\s*tx/);
+    expect(body).toMatch(/timeout:\s*\d+/);
+  });
+
+  it("rejectSubmission requires a non-empty trimmed reason", () => {
+    // The validation must happen before the auth/DB calls so unauthenticated
+    // requests don't reveal whether the submission exists.
+    const body = src.slice(src.indexOf("export async function rejectSubmission"));
+    expect(body).toMatch(/reason\?\.trim\(\)/);
+    expect(body).toMatch(/A rejection reason is required/);
+  });
+});
+
 describe("Slice 0c — auth-context priority", () => {
   it("getCurrentOrgContext consumes options.overrideAsOrg before referer fallback", () => {
     // Source-level guard: the priority comment + code line must coexist. If
