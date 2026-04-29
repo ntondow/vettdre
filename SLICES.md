@@ -210,13 +210,28 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 1 — Unified Pending Approval queue
-- **Status:** `pending`
+- **Status:** `awaiting_review`
 - **Goal:** /brokerage/deal-submissions becomes the manager's primary inbox. Card layout. Inline expand-to-detail. "Approve & Push to Invoice" primary CTA.
 - **Closes bug:** B-006 (alongside 1a). Major UX uplift.
 - **Files:** `src/app/(dashboard)/brokerage/deal-submissions/*` and components.
-- **Success criteria:** Manager can approve a submission and create an Invoice in one click.
+- **Wireframe-approved scope (Nathan, 2026-04-29):**
+  1. **Default tab:** "Submitted" only. Newest first.
+  2. **Stub:** "+ Add" button (placeholder; hooks to existing create flow). _(deferred — existing list page already provides creation entry; no separate stub needed for v1.)_
+  3. **Two primary CTAs visible in v1:** "Approve only" (no invoice side-effect) AND "Approve & Push to Invoice" (atomic).
+  4. **Reject:** reason is **required**. Empty reason → block submit.
+  5. **Toast on Approve & Push to Invoice:** must include inline "View invoice" action that links to `/brokerage/invoices/[id]?as_org=...` (preserves override).
+  6. **Audit log:** ONE row per **logical action**. Approve+Invoice is a single logical event, not two rows. Use a `kind` field (or consolidate the audit-action enum) so the timeline doesn't double-count.
+- **Implementation notes (this PR — v1 scope on top of existing dashboard):**
+  - **(1)** Default `statusFilter` flipped from `"all"` to `"submitted"` in `submissions-dashboard.tsx`. Existing query already orders by `createdAt desc`, so newest-first is preserved.
+  - **(3)** Detail-panel footer now shows three buttons when status=`submitted`: **Approve & Push to Invoice** (primary, blue), **Approve only** (secondary, green-outline → existing `approveSubmission`), **Reject** (red-outline → existing reject modal).
+  - **(4)** Reject modal: `<textarea required>`, "_Required — the reason shows on the agent's timeline_" hint, **Reject Submission** button disabled until trimmed reason is non-empty. Server-side `rejectSubmission` also rejects empty trimmed reasons (defense-in-depth; previously accepted blanks).
+  - **(5)** `toast` state extended to `{ type, message, action?: { label, href } }` with optional `durationMs` (default 4 s, 8 s for actionable toasts). `showToast` accepts an `opts` arg. The toast renders an inline `<Link>` button (preserves `?as_org`) → `/brokerage/invoices/{invoiceId}?as_org=...`.
+  - **(6)** New atomic server action `approveAndCreateInvoice(submissionId, overrides?, options?)` in `deal-submissions/actions.ts`. Wraps approval flip + Invoice insert + Transaction insert + DealSubmission status update inside one `prisma.$transaction({ timeout: 15000, maxWait: 5000 })`. Writes ONE submission audit row tagged `action="approved_and_invoiced"` with full details (`previousStatus`, `invoiceId`, `invoiceNumber`, `transactionId`, `agentSplitPctOverride`, `exclusiveTypeOverride`). Invoice and Transaction get their own `action="created"` rows in their own audit timelines (those are first-existence rows, not duplicates of the submission action). Override-threaded; overrides param matches `approveSubmission` for parity. Symmetric idempotency guards (existingInvoice / existingTransaction lookups) mirror `pushToInvoice`.
+  - **Smoke test:** `tests/smoke/override-scoping.test.ts` adds a `Slice 1 — Pending Approval queue` describe with four contracts: action exported with override threading, audit row tagged `"approved_and_invoiced"`, `prisma.$transaction({ timeout })` wrapper present, and `rejectSubmission` requires trimmed reason at the server.
+- **Out of scope (later slices):** All-status tabs (Approved / Rejected views), bulk approve, sidebar badge (filed as 1.5), invoice draft preview before commit, full card-layout redesign with inline expand (current dashboard keeps the table+slide-over panel; cards land in a follow-up Phase 3 polish slice).
+- **Gates:** typecheck 286 (≤ baseline 294), test 56/56 (was 52), lint 0 errors in changed files (3 pre-existing unused warnings), build ✓.
 - **Depends on:** 1a, Phase 0
-- **Requires approval:** YES — show wireframe / progress to Nathan before final styling.
+- **Requires approval:** Wireframe approved 2026-04-29. Implementation proceeds.
 
 ### 1.5 — Sidebar count badge for Submissions
 - **Status:** `pending`

@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import {
   getAllSubmissions,
   getSubmissionById,
   approveSubmission,
+  approveAndCreateInvoice,
   rejectSubmission,
   pushToInvoice,
   getSubmissionStats,
@@ -140,7 +142,9 @@ export default function SubmissionsDashboard({
   const [loading, setLoading] = useState(false);
 
   // Filters
-  const [statusFilter, setStatusFilter] = useState<StatusTab>("all");
+  // Slice 1: default landing is the "Submitted" pending-approval queue —
+  // managers open this page to triage new submissions, not to browse history.
+  const [statusFilter, setStatusFilter] = useState<StatusTab>("submitted");
   const [exclusiveFilter, setExclusiveFilter] = useState<string>("all");
   const [dealTypeFilter, setDealTypeFilter] = useState<string>("all");
   const [agentFilter, setAgentFilter] = useState<string>("all");
@@ -188,9 +192,15 @@ export default function SubmissionsDashboard({
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Toast
+  // `action` (Slice 1) lets handlers attach an inline link — e.g. "View invoice"
+  // after Approve & Push to Invoice — so the manager can jump straight to the
+  // newly-created record without scanning the list. `durationMs` extends the
+  // timeout for actionable toasts so the link doesn't disappear before they
+  // can click it.
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
+    action?: { label: string; href: string };
   } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -198,10 +208,14 @@ export default function SubmissionsDashboard({
 
   // ── Toast helper ─────────────────────────────────────────────
   const showToast = useCallback(
-    (type: "success" | "error", message: string) => {
-      setToast({ type, message });
+    (
+      type: "success" | "error",
+      message: string,
+      opts?: { action?: { label: string; href: string }; durationMs?: number },
+    ) => {
+      setToast({ type, message, action: opts?.action });
       if (toastTimer.current) clearTimeout(toastTimer.current);
-      toastTimer.current = setTimeout(() => setToast(null), 4000);
+      toastTimer.current = setTimeout(() => setToast(null), opts?.durationMs ?? 4000);
     },
     []
   );
@@ -356,9 +370,16 @@ export default function SubmissionsDashboard({
 
   async function handleRejectConfirm() {
     if (!rejectTargetId) return;
+    // Slice 1: rejection reason is required. The agent timeline shows the
+    // reason verbatim — reject silently if the textarea is empty.
+    const trimmed = rejectReason.trim();
+    if (!trimmed) {
+      showToast("error", "A rejection reason is required");
+      return;
+    }
     setActionLoading(rejectTargetId);
     try {
-      const result = await rejectSubmission(rejectTargetId, rejectReason || undefined, overrideOpts);
+      const result = await rejectSubmission(rejectTargetId, trimmed, overrideOpts);
       if (result?.success) {
         showToast("success", "Submission rejected");
         closeRejectModal();
@@ -394,6 +415,38 @@ export default function SubmissionsDashboard({
       showToast("error", "Failed to update fee");
     } finally {
       setFeeSaving(false);
+    }
+  }
+
+  // Slice 1: atomic Approve & Push to Invoice — combines status flip,
+  // invoice + transaction insert, and the submission audit row in a single
+  // server-side $transaction. On success the toast surfaces a "View invoice"
+  // link so the manager can jump straight to the new invoice (preserves
+  // ?as_org if the super_admin override is active).
+  async function handleApproveAndInvoice(id: string) {
+    setActionLoading(id);
+    try {
+      const result = await approveAndCreateInvoice(id, undefined, overrideOpts);
+      if (result?.success) {
+        const invoiceHref = result.invoiceId
+          ? `/brokerage/invoices/${result.invoiceId}${asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : ""}`
+          : null;
+        showToast(
+          "success",
+          result.invoiceNumber ? `Invoice ${result.invoiceNumber} created` : "Invoice created",
+          invoiceHref
+            ? { action: { label: "View invoice", href: invoiceHref }, durationMs: 8000 }
+            : undefined,
+        );
+        loadData();
+        if (panelData?.id === id) openPanel(id);
+      } else {
+        showToast("error", result?.error || "Failed to approve & create invoice");
+      }
+    } catch {
+      showToast("error", "Failed to approve & create invoice");
+    } finally {
+      setActionLoading(null);
     }
   }
 
@@ -517,10 +570,21 @@ export default function SubmissionsDashboard({
           ) : (
             <AlertTriangle className="h-4 w-4" />
           )}
-          {toast.message}
+          <span>{toast.message}</span>
+          {toast.action && (
+            <Link
+              href={toast.action.href}
+              onClick={() => setToast(null)}
+              className="ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/15 hover:bg-white/25 text-xs font-semibold underline-offset-2"
+            >
+              {toast.action.label}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )}
           <button
             onClick={() => setToast(null)}
             className="ml-2 p-0.5 hover:bg-white/20 rounded"
+            aria-label="Dismiss"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -1625,17 +1689,27 @@ export default function SubmissionsDashboard({
               <div className="border-t border-slate-200 px-6 py-4 flex items-center gap-2 flex-wrap">
                 {panelData.status === "submitted" && (
                   <>
+                    {/* Slice 1: primary CTA — atomic approve + invoice. */}
                     <button
-                      onClick={() => handleApprove(panelData.id)}
+                      onClick={() => handleApproveAndInvoice(panelData.id)}
                       disabled={actionLoading === panelData.id}
-                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
                     >
                       {actionLoading === panelData.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
-                        <CheckCircle className="h-4 w-4" />
+                        <FileText className="h-4 w-4" />
                       )}
-                      Approve
+                      Approve &amp; Push to Invoice
+                    </button>
+                    {/* Secondary: approve without creating an invoice yet. */}
+                    <button
+                      onClick={() => handleApprove(panelData.id)}
+                      disabled={actionLoading === panelData.id}
+                      className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 disabled:opacity-50 transition-colors"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                      Approve only
                     </button>
                     <button
                       onClick={() => openRejectModal(panelData.id)}
@@ -1742,15 +1816,21 @@ export default function SubmissionsDashboard({
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <p className="text-sm text-slate-500 mb-4">
+            <p className="text-sm text-slate-500 mb-1">
               Provide a reason for rejecting this deal submission. The agent
               will be notified.
+            </p>
+            <p className="text-xs text-slate-400 mb-3">
+              <span className="text-red-600">*</span> Required — the reason
+              shows on the agent&apos;s timeline.
             </p>
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="Reason for rejection..."
               rows={4}
+              required
+              aria-required="true"
               className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
               autoFocus
             />
@@ -1763,8 +1843,9 @@ export default function SubmissionsDashboard({
               </button>
               <button
                 onClick={handleRejectConfirm}
-                disabled={actionLoading === rejectTargetId}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition-colors"
+                disabled={actionLoading === rejectTargetId || !rejectReason.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                title={!rejectReason.trim() ? "A rejection reason is required" : undefined}
               >
                 {actionLoading === rejectTargetId ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
