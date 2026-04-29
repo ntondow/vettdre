@@ -993,6 +993,20 @@ After completing all slices in a phase:
 
 **Lint baseline (end of Phase Z, 2026-04-28):** 4530 errors. Update this number when Phase 3 polish reduces the baseline; never let an in-flight phase silently increase it.
 
+**Typecheck baseline (end of Slice 2, 2026-04-29):** 113 errors (down from a 285 anchor at end of slice 1c — 170-error reduction landed incidentally during slice 1c's submissions-dashboard rewrite, not flagged at the time). Future slices must hold typecheck ≤ 113 or improve. Same rule as lint: never let an in-flight phase silently increase the count, and any reduction should be flagged in the slice's gate report.
+
+### Measurement discipline
+
+Before claiming a baseline number ("typecheck holds at N", "lint at M"), the measurement must be both **clean** and **cross-checked**.
+
+**Clean:**
+- `git stash` does NOT stash untracked files by default. When you've created new files for the slice and want to measure the pre-slice baseline, use `git stash --include-untracked` (or `-u`). Otherwise an untracked file referencing not-yet-existent exports will produce phantom errors that contaminate the reading. (This bug landed in slice 2's gate report — the "115 → 113" delta was real but the 115 was contaminated; the true pre-slice number was lower. Don't repeat.)
+- Run typecheck/lint from a clean working tree when anchoring a new baseline, not mid-edit.
+
+**Cross-checked:**
+- If your measurement doesn't match the previously-tracked baseline — even when the direction is improvement — surface the gap in chat **before** moving past it. Don't anchor silently to your own number. The clarification cost is a single message; the debugging cost when the gap is discovered later (e.g. someone asks "where did 170 errors go?") is much larger.
+- The same rule applies in the other direction: if a measurement looks suspiciously clean (lower than expected), assume contamination first, real cleanup second. Verify before claiming credit.
+
 ### What you have permission to do without asking
 
 - Read any file in the repo.
