@@ -923,3 +923,91 @@ Digital document signing workflow for onboarding new clients. Agents create onbo
 - BMS permissions: always check via `bms-permissions.ts` matrix before operations
 - Feature gating: use `hasPermission(feature, plan)` for plan-locked features
 - Leasing tier checks: use `leasing-limits.ts` for metering before AI responses
+
+
+## Agent operating principles for the BMS overhaul loop (added 2026-04-28)
+
+This section governs Claude Code agents working on the BMS overhaul. The slice-list
+is in SLICES.md. The audit + redesign rationale is in `docs/handoff/bms-audit-2026-04-28.md`.
+
+### Core rules
+
+1. **Never skip `npm run check`.** Before every commit. If it fails, fix or revert —
+   never `git commit --no-verify`.
+   - **Baseline carve-out (added Z3):** the codebase has ~4530 pre-existing lint
+     errors and a pre-existing tsc error backlog. `npm run check` will fail on
+     baseline until Phase 3 cleanup runs. Until then, agents must:
+     - Not *increase* the baseline error count. Run lint on changed files only:
+       `npx eslint <changed files>` should report zero new errors before commit.
+     - Run `npm run typecheck` and `npm run test` end-to-end every commit. Both
+       must pass. If typecheck regressed (i.e. errors in files you touched),
+       fix or revert.
+     - Run `npm run build` end-to-end every commit. Must pass.
+2. **Never merge to main.** PRs only. Nathan reviews and merges.
+3. **Never deploy to production.** No `gcloud builds submit`. No `gcloud run deploy`.
+   Nathan owns deploys.
+4. **Never modify infrastructure files** (`cloudbuild.yaml`, `Dockerfile`, secrets,
+   GCP config) without explicit approval in chat.
+5. **Never modify another slice's work.** If your slice exposes a bug in a previous
+   slice, file a follow-up slice in `SLICES.md` and finish your current one.
+6. **Update SLICES.md as you go.** Mark slice status (`pending` → `in_progress` →
+   `awaiting_review` → `done`). Add notes if you encountered surprises.
+
+### Workflow per slice
+
+1. Read the slice in `SLICES.md`.
+2. Read the audit doc section it references.
+3. Read the files listed in "files likely involved."
+4. **Propose a plan in chat to Nathan before writing code** if the slice is
+   tagged `requires-approval` or you're touching the data layer (`prisma/`,
+   migrations, server actions in `lib/team-context.ts` or similar).
+5. Implement. Run typecheck/test periodically as you go.
+6. Add 1-3 tests for the change (where reasonable — not all changes need tests).
+7. Run `npm run typecheck && npm run test && npm run build` once more. Lint
+   only the changed files (see baseline carve-out above).
+8. Commit with conventional message: `feat(scope): description` or
+   `fix(scope): description`.
+9. Push. Open PR with body referencing the slice ID and the audit bug IDs it closes.
+10. Mark slice `awaiting_review` in `SLICES.md`.
+11. Pick up the next pending slice and repeat.
+
+### Stop conditions
+
+Stop and ask Nathan when:
+- A slice is tagged `requires-approval` and you've finished discovery.
+- You hit a 503 or unexplained server error in production while testing.
+- A test is failing and you can't determine if it's flaky or a real regression.
+- A slice's scope has grown beyond ~300 lines of changes; offer to split.
+- The data layer change is risky enough to warrant a backup / migration dry-run.
+- End of phase reached. Always stop between phases.
+
+### Phase boundaries
+
+After completing all slices in a phase:
+1. Run typecheck + test + build once more to confirm clean state.
+2. Update `SLICES.md` phase status to `awaiting_review`.
+3. Summarize the phase in chat: PR links, what changed, what to verify.
+4. Ask Nathan: "Phase N complete. Approve to start Phase N+1?"
+5. Wait. Don't start the next phase until told.
+
+### What you have permission to do without asking
+
+- Read any file in the repo.
+- Write/edit any file outside `prisma/`, `cloudbuild.yaml`, `Dockerfile`,
+  `next.config.ts`, `.env*`, `package.json` (you can add scripts; don't remove
+  or rename existing ones without approval).
+- Run any `npm run` script.
+- Run any `git` command except `git push --force`, `git push origin main`,
+  `merge to main`.
+- Run any `gh` command except `gh pr merge` (PR creation OK; merge is Nathan's).
+- Open and read URLs on app.vettdre.com for testing (read-only).
+
+### What requires explicit approval
+
+- Modify `prisma/schema.prisma` or any migration.
+- Touch authentication / authorization logic in `middleware.ts` or
+  `lib/supabase/middleware.ts`.
+- Modify `lib/team-context.ts` (the org-context choke point).
+- Touch any `cloudbuild*`, `Dockerfile*`, `.env*`, or GCP secret config.
+- Force-push, merge to main, deploy.
+- Reorder or remove slices from `SLICES.md`.
