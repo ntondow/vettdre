@@ -319,6 +319,15 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 2
 - **Requires approval:** No.
 
+### 3.X — Parent branch cleanup
+- **Status:** `pending`
+- **Goal:** Merge `feat/super-admin-cross-tenant-view` to main as 3 batched PRs (PR-A condo_ownership pipeline, PR-B processing-fee + hotfixes, PR-C auth super-admin override).
+- **When:** After Phase 0 merges to `feat/super-admin-cross-tenant-view`, BEFORE Phase 1 branches. The stack is flat at that exact moment — only safe window.
+- **Files:** parent branch only (no overhaul-branch touches).
+- **Success criteria:** main commit graph reflects production reality; new Phase 1 branch off clean main; no overhaul rebases needed.
+- **Depends on:** Phase 0 merge to parent.
+- **Requires approval:** YES on PR-A (12 migrations + ingestion pipeline); PR-B and PR-C are small and reviewable but should be inspected.
+
 **[PHASE 3 APPROVAL GATE — STOP HERE]**
 
 ---
