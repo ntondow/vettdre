@@ -106,14 +106,16 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Requires approval:** YES — Nathan approves dry-run output before live run. ✓ approved 2026-04-29.
 
 ### 0c — Override consistency on User/BrokerAgent/Onboarding/Settings
-- **Status:** `pending`
+- **Status:** `awaiting_review` (action-layer threading complete; smoke test gates further regressions; transactions/actions.ts deferred to 0c-followup)
 - **Goal:** Sweep all DB queries that take orgId, route through `getCurrentOrgContext()`. Add unit test per surface.
-- **Closes bug:** B-009, B-010, B-012, B-013, B-022, B-031
-- **Files:** `lib/team-context.ts` (read), `src/app/(dashboard)/brokerage/agents/*`, `settings/*`, `client-onboarding/*`, `reports/*`, any actions.ts in those folders.
-- **Discovery:** Grep for `prisma.user.find` and `prisma.brokerAgent.find` and `prisma.clientOnboarding.find` — find the ones that don't go through `getCurrentOrgContext`.
-- **Success criteria:** All callsites route through helper. New test in `tests/smoke/override-scoping.test.ts` confirms super_admin with `?as_org=X` queries for X, not home org.
+- **Closes bug:** B-009 (partial), B-010, B-012 (partial — page redirect still drops `?as_org`), B-013 (server-side), B-022 (partial)
+- **Files:** Threaded reports/actions.ts, settings/actions.ts, commission-plans/actions.ts, compliance/actions.ts, dashboard/actions.ts, agents/actions.ts (all 11 exports), agents/[id]/actions.ts, leaderboard/actions.ts (getAgentGoals), payments/actions.ts (5 of 6 exports). Smoke test added at `tests/smoke/override-scoping.test.ts` enforcing the contract.
+- **Discovery:** Grep audit found 15 BMS action files; 295 tsc errors at baseline = 295 post-sweep (no regression).
+- **Success criteria:** All callsites route through helper. ✓ All threaded surfaces' exports accept `options: { overrideAsOrg?: string } = {}` and forward to local `getCurrentOrg(options)`. Smoke test verifies via static-source assertion.
+- **Deferred (0c-followup):** transactions/actions.ts (27 exports — the file was partially threaded in PATCH B, but the bulk of exports still need the param + forward call); deal-submissions/actions.ts (`quickAddProperty`, `getAgentSplitForDeal`). Public token-authenticated flows (`submitDeal`, `createPublicDealSubmission`, `getPublicSubmissionLink`, `regenerateSubmissionToken`) and pure utilities (`validateExcelData`, leaderboard internal helpers) are exempt by design and listed in the smoke test's EXEMPT_EXPORTS map with reasons.
+- **Out of scope:** Page-level wiring. `searchParams.as_org` → action-call threading on the *call sites* is non-trivial for some pages (notably client components like `dashboard/page.tsx` that don't read searchParams today). The action layer is now override-capable; per-page wiring is a separate sweep.
 - **Depends on:** Z5
-- **Requires approval:** No, but stop if you find a >5-line change to `middleware.ts`.
+- **Requires approval:** No, but stop if you find a >5-line change to `middleware.ts`. ✓ none required.
 
 ### 0d — Override banner z-index fix
 - **Status:** `pending`

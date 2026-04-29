@@ -105,9 +105,12 @@ export async function recordPayment(
 
 // ── Get Invoice Payments ─────────────────────────────────────
 
-export async function getInvoicePayments(invoiceId: string) {
+export async function getInvoicePayments(
+  invoiceId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const invoice = await prisma.invoice.findFirst({
       where: { id: invoiceId, orgId },
@@ -151,16 +154,19 @@ export async function getInvoicePayments(invoiceId: string) {
 
 // ── Get Payment History ──────────────────────────────────────
 
-export async function getPaymentHistory(filters?: {
-  agentId?: string;
-  startDate?: string;
-  endDate?: string;
-  method?: string;
-  page?: number;
-  limit?: number;
-}) {
+export async function getPaymentHistory(
+  filters?: {
+    agentId?: string;
+    startDate?: string;
+    endDate?: string;
+    method?: string;
+    page?: number;
+    limit?: number;
+  },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const page = filters?.page || 1;
     const limit = filters?.limit || 25;
     const skip = (page - 1) * limit;
@@ -234,9 +240,12 @@ export async function getPaymentHistory(filters?: {
 
 // ── Delete Payment ───────────────────────────────────────────
 
-export async function deletePayment(paymentId: string) {
+export async function deletePayment(
+  paymentId: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const payment = await prisma.payment.findFirst({
       where: { id: paymentId, orgId },
@@ -312,9 +321,12 @@ export async function deletePayment(paymentId: string) {
 
 // ── Get Payment Summary ──────────────────────────────────────
 
-export async function getPaymentSummary(period?: { startDate?: string; endDate?: string }) {
+export async function getPaymentSummary(
+  period?: { startDate?: string; endDate?: string },
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const dateFilter: Record<string, unknown> = {};
     if (period?.startDate || period?.endDate) {
@@ -393,9 +405,13 @@ export async function getPaymentSummary(period?: { startDate?: string; endDate?:
 
 // ── Export Payment History (CSV) ─────────────────────────────
 
-export async function exportPaymentHistory(startDate: string, endDate: string) {
+export async function exportPaymentHistory(
+  startDate: string,
+  endDate: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const payments = await prisma.payment.findMany({
       where: {

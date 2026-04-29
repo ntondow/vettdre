@@ -5,21 +5,23 @@ import { getCurrentOrgContext } from "@/lib/auth-context";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   return ctx?.orgId || null;
 }
 
 // ── Screening Dashboard Stats ──────────────────────────────────
 
-export async function getScreeningDashboardStats(): Promise<{
+export async function getScreeningDashboardStats(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   totalScreenings: number;
   approvalRate: number | null;
   avgRiskScore: number | null;
   pendingReview: number;
 } | null> {
   try {
-    const orgId = await getCurrentOrg();
+    const orgId = await getCurrentOrg(options);
     if (!orgId) return null;
 
     const { getScreeningBmsStats } = await import("@/lib/screening/integration");
