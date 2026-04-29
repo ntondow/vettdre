@@ -228,10 +228,32 @@ Phase 0 status as of 2026-04-29:
   - **(5)** `toast` state extended to `{ type, message, action?: { label, href } }` with optional `durationMs` (default 4 s, 8 s for actionable toasts). `showToast` accepts an `opts` arg. The toast renders an inline `<Link>` button (preserves `?as_org`) → `/brokerage/invoices/{invoiceId}?as_org=...`.
   - **(6)** New atomic server action `approveAndCreateInvoice(submissionId, overrides?, options?)` in `deal-submissions/actions.ts`. Wraps approval flip + Invoice insert + Transaction insert + DealSubmission status update inside one `prisma.$transaction({ timeout: 15000, maxWait: 5000 })`. Writes ONE submission audit row tagged `action="approved_and_invoiced"` with full details (`previousStatus`, `invoiceId`, `invoiceNumber`, `transactionId`, `agentSplitPctOverride`, `exclusiveTypeOverride`). Invoice and Transaction get their own `action="created"` rows in their own audit timelines (those are first-existence rows, not duplicates of the submission action). Override-threaded; overrides param matches `approveSubmission` for parity. Symmetric idempotency guards (existingInvoice / existingTransaction lookups) mirror `pushToInvoice`.
   - **Smoke test:** `tests/smoke/override-scoping.test.ts` adds a `Slice 1 — Pending Approval queue` describe with four contracts: action exported with override threading, audit row tagged `"approved_and_invoiced"`, `prisma.$transaction({ timeout })` wrapper present, and `rejectSubmission` requires trimmed reason at the server.
-- **Out of scope (later slices):** All-status tabs (Approved / Rejected views), bulk approve, sidebar badge (filed as 1.5), invoice draft preview before commit, full card-layout redesign with inline expand (current dashboard keeps the table+slide-over panel; cards land in a follow-up Phase 3 polish slice).
+- **Out of scope of this PR (relocated, not deferred):** Card-grid + inline-expand UI restructure — moved into slice 1c per Nathan's correction 2026-04-29. The functional changes (atomic action, required reject, toast action, default tab, three buttons) ship in PR #10 on the existing table + slide-over panel; the visual redesign follows in PR #11. Other deferrals stand: all-status tabs, bulk approve, sidebar badge (1.5), invoice draft preview.
 - **Gates:** typecheck 286 (≤ baseline 294), test 56/56 (was 52), lint 0 errors in changed files (3 pre-existing unused warnings), build ✓.
 - **Depends on:** 1a, Phase 0
 - **Requires approval:** Wireframe approved 2026-04-29. Implementation proceeds.
+
+### 1c — UI restructure for Pending Approval queue
+- **Status:** `pending`
+- **Goal:** Convert the existing dashboard to the wireframe layout. Table → card grid (one card per submission). Detail panel → inline expand-to-detail. Three buttons (Approve & Push to Invoice / Approve only / Reject) and the reject modal relocate from the slide-over footer to the expanded-card footer.
+- **Closes (UX):** U-024 (rows scan-identically), U-027 (green PAYOUT looks like link), B-006 fully (1a partially closed it). Resolves the John-and-Kristin "can't tell where to click" demo issue that the layout change was meant to solve in slice 1.
+- **Why this is its own slice:** Originally part of slice 1's wireframe. Deferred unilaterally (without chat surfacing) during the 1 v1 build; Nathan course-corrected and pulled it into a stacked PR. Saved feedback memory `feedback_surface_scope_cuts_before_pr.md` so this doesn't recur.
+- **Files:** `src/app/(dashboard)/brokerage/deal-submissions/*` — `submissions-dashboard.tsx` plus new components (`SubmissionCard`, `SubmissionDetailExpand`, `RecentlyApprovedRail`, `EmptyState`, `TopBar`) per the wireframe component breakdown.
+- **Discovery:** Re-read the wireframe ASCII layout from the slice 1 wireframe proposed earlier in the conversation. Reuse the named components rather than inventing new ones.
+- **Out of scope:** Invoice tab + Payment tab inside the inline expand (slices 2 + 3). For 1c, expand renders **placeholder tabs** that are visible but disabled with copy "Available after Slice 2/3" so the tab structure is in place when 2/3 land.
+- **Success criteria:**
+  - Default load shows card grid for Submitted submissions.
+  - Empty state ("Caught up" / similar copy) renders when no Submitted submissions.
+  - Click card → expand inline (other cards stay in the grid below the expanded card; not a modal, not a drawer).
+  - Three buttons in expanded-card footer; reject modal still requires a non-empty trimmed reason.
+  - Toast with "View invoice" still works after Approve & Push (preserves `?as_org`).
+  - Recently Approved rail in the right column showing the last 5–10 from the current session.
+  - Filter checkboxes in the right column replace the status tabs.
+  - Search + Agent filter survive the restructure.
+- **Gates:** lint baseline 4530 unchanged in changed files; typecheck no regression below 286 (hold or improve); tests grow by ≥ 4 new contracts (card render, expand toggle, three-buttons-clickable, reject-modal validation). Build ✓.
+- **Depends on:** Slice 1 (PR #10).
+- **Stack:** `feat/bms-overhaul-1c-card-grid-redesign` → base `feat/bms-overhaul-1-pending-approval-queue` (PR #10).
+- **Requires approval:** No — originally-approved wireframe being completed.
 
 ### 1.5 — Sidebar count badge for Submissions
 - **Status:** `pending`
