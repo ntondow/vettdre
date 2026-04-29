@@ -80,14 +80,15 @@ status fields as they go. Nathan approves at phase boundaries.
 ## Phase 0 — Data + override consistency (Week 1)
 
 ### 0a — Single deal data model
-- **Status:** `pending`
+- **Status:** `awaiting_review` (discovery committed; canonical-store decision pending)
 - **Goal:** Decide canonical store for "deals." Recommend: `DealSubmission` for inbound, `Transaction` for closed. Deprecate CRM `Deal` for BMS use cases.
 - **Closes bug:** B-002, B-004 (root cause)
 - **Files:** prisma/schema.prisma (read-only at first), lib/bms-types.ts, src/app/(dashboard)/brokerage/dashboard/page.tsx, plus any server actions querying deals
-- **Discovery:** Map every BMS surface to its DB query. Document in `docs/bms-data-sources.md`.
+- **Discovery:** Mapped every BMS surface to its DB query. Documented in `docs/bms-data-sources.md` (commit `ba9e63c`).
 - **Success criteria:** Document committed; Nathan approves the canonical-store choice.
 - **Depends on:** Z5
 - **Requires approval:** YES — Nathan picks the canonical store before code.
+- **Outcome (discovery):** CRM `Deal` is not used by any BMS surface. Within BMS, `DealSubmission` and `Transaction` are sequential (1:1 link), not parallel. Audit's "$0 paid out" symptom traces to incomplete insert chain (Gulino's import skipped past Invoice + Payment), not to a fragmented data model. **Recommendation: reaffirm the existing schema; backfill the chain in 0b; thread override in 0c.** Awaiting Nathan's call.
 
 ### 0b — Backfill Gulino's missing Invoice + Payment records
 - **Status:** `pending`
