@@ -54,6 +54,8 @@ interface BmsSettingsJson {
   defaultDealType?: string;
   invoiceDueDays?: number;
   autoApproveDealSubmissions?: boolean;
+  // Slice 2: CC the brokerage's companyEmail on invoice send / resend.
+  ccBrokerageOnInvoiceSend?: boolean;
 }
 
 const DEFAULT_PAYMENT_INSTRUCTIONS: PaymentInstructionsJson = { enabled: true };
@@ -75,6 +77,7 @@ const BMS_DEFAULTS: BmsSettingsJson = {
   defaultDealType: "sale",
   invoiceDueDays: 30,
   autoApproveDealSubmissions: false,
+  ccBrokerageOnInvoiceSend: false,
 };
 
 function parseBmsSettings(raw: unknown): BmsSettingsJson {
@@ -101,6 +104,7 @@ function parseBmsSettings(raw: unknown): BmsSettingsJson {
     defaultDealType: typeof obj.defaultDealType === "string" ? obj.defaultDealType : BMS_DEFAULTS.defaultDealType,
     invoiceDueDays: typeof obj.invoiceDueDays === "number" ? obj.invoiceDueDays : BMS_DEFAULTS.invoiceDueDays,
     autoApproveDealSubmissions: typeof obj.autoApproveDealSubmissions === "boolean" ? obj.autoApproveDealSubmissions : BMS_DEFAULTS.autoApproveDealSubmissions,
+    ccBrokerageOnInvoiceSend: typeof obj.ccBrokerageOnInvoiceSend === "boolean" ? obj.ccBrokerageOnInvoiceSend : BMS_DEFAULTS.ccBrokerageOnInvoiceSend,
   };
 }
 
@@ -210,6 +214,7 @@ export async function updateBrokerageSettings(input: {
   defaultDealType?: string;
   invoiceDueDays?: number;
   autoApproveDealSubmissions?: boolean;
+  ccBrokerageOnInvoiceSend?: boolean;
 }, options: { overrideAsOrg?: string } = {}): Promise<{ success: boolean; error?: string }> {
   try {
     const { userId, orgId, role } = await getCurrentOrgAsAdmin(options);
@@ -242,7 +247,8 @@ export async function updateBrokerageSettings(input: {
       input.defaultCommissionPlanId !== undefined ||
       input.defaultDealType !== undefined ||
       input.invoiceDueDays !== undefined ||
-      input.autoApproveDealSubmissions !== undefined;
+      input.autoApproveDealSubmissions !== undefined ||
+      input.ccBrokerageOnInvoiceSend !== undefined;
 
     if (hasBmsFields) {
       const org = await prisma.organization.findUnique({
@@ -266,6 +272,7 @@ export async function updateBrokerageSettings(input: {
         defaultDealType: input.defaultDealType ?? current.defaultDealType,
         invoiceDueDays: input.invoiceDueDays ?? current.invoiceDueDays,
         autoApproveDealSubmissions: input.autoApproveDealSubmissions ?? current.autoApproveDealSubmissions,
+        ccBrokerageOnInvoiceSend: input.ccBrokerageOnInvoiceSend ?? current.ccBrokerageOnInvoiceSend,
       };
       orgUpdate.bmsSettings = merged;
     }

@@ -8,6 +8,7 @@ import { notifyAgentOfStatusChange } from "@/lib/deal-notifications";
 import { buildInvoiceNumber } from "@/lib/bms-types";
 import type { DealSubmissionInput, ExclusiveType, BrokerageRoleType } from "@/lib/bms-types";
 import { computeProcessingFee } from "@/lib/processing-fee";
+import { sendTransactionalEmail } from "@/lib/resend";
 import { revalidatePath } from "next/cache";
 
 // ── Auth Helper ─────────────────────────────────────────────
@@ -1356,5 +1357,241 @@ export async function regenerateSubmissionToken(
   } catch (error) {
     console.error("regenerateSubmissionToken error:", error);
     return { success: false, token: null };
+  }
+}
+
+// ── Slice 2: Invoice tab — getInvoiceForSubmission ──────────
+//
+// Lazy fetch on Invoice tab activation. Returns the full Invoice plus the
+// linked Transaction's `invoiceSentAt` (the schema's "when sent" timestamp
+// lives on Transaction, not Invoice — see slice 2 prep doc). Returns
+// `data: null` when no invoice exists, success: true. Empty-state and
+// pre-invoiced statuses both surface that null without an error.
+
+export async function getInvoiceForSubmission(
+  submissionId: string,
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
+  success: boolean;
+  data?: {
+    id: string;
+    invoiceNumber: string;
+    status: string;
+    issueDate: string;
+    dueDate: string;
+    paidDate: string | null;
+    sentAt: string | null;
+    totalCommission: number;
+    agentSplitPct: number;
+    houseSplitPct: number;
+    agentPayout: number;
+    housePayout: number;
+    processingFeePct: number;
+    processingFeeAmt: number;
+    paymentTerms: string;
+    agentEmail: string | null;
+    agentName: string;
+  } | null;
+  error?: string;
+}> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { success: false, error: "Not authenticated" };
+
+    const submission = await prisma.dealSubmission.findFirst({
+      where: { id: submissionId, orgId: ctx.orgId },
+      select: { id: true, agentId: true },
+    });
+    if (!submission) return { success: false, error: "Submission not found" };
+    // Same agent visibility guard as getSubmissionById.
+    if (ctx.role === "agent" && submission.agentId !== ctx.agentId) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const invoice = await prisma.invoice.findUnique({
+      where: { dealSubmissionId: submissionId },
+      include: {
+        transaction: { select: { invoiceSentAt: true } },
+      },
+    });
+
+    if (!invoice) return { success: true, data: null };
+
+    return {
+      success: true,
+      data: {
+        id: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        status: invoice.status,
+        issueDate: invoice.issueDate.toISOString(),
+        dueDate: invoice.dueDate.toISOString(),
+        paidDate: invoice.paidDate?.toISOString() ?? null,
+        sentAt: invoice.transaction?.invoiceSentAt?.toISOString() ?? null,
+        totalCommission: Number(invoice.totalCommission),
+        agentSplitPct: Number(invoice.agentSplitPct),
+        houseSplitPct: Number(invoice.houseSplitPct),
+        agentPayout: Number(invoice.agentPayout),
+        housePayout: Number(invoice.housePayout),
+        processingFeePct: Number(invoice.processingFeePct ?? 0),
+        processingFeeAmt: Number(invoice.processingFeeAmt ?? 0),
+        paymentTerms: invoice.paymentTerms,
+        agentEmail: invoice.agentEmail,
+        agentName: invoice.agentName,
+      },
+    };
+  } catch (error) {
+    console.error("getInvoiceForSubmission error:", error);
+    return { success: false, error: "Failed to fetch invoice" };
+  }
+}
+
+// ── Slice 2: Invoice tab — sendInvoiceToAgent ───────────────
+//
+// Wraps the existing updateInvoiceStatus(→"sent") flow + a Resend email to
+// the agent. Idempotent for resend: when the invoice is already "sent" we
+// re-fire the email and write a new audit row tagged "resent" without
+// flipping status. Skips the email on `skipEmail: true` (offline-delivery
+// case from Q4 of the slice 2 prep). CCs the brokerage's `companyEmail`
+// when `bmsSettings.ccBrokerageOnInvoiceSend === true`.
+
+export async function sendInvoiceToAgent(
+  invoiceId: string,
+  options: { skipEmail?: boolean; overrideAsOrg?: string } = {},
+): Promise<{
+  success: boolean;
+  status?: string;
+  emailed?: boolean;
+  ccBrokerage?: boolean;
+  resent?: boolean;
+  error?: string;
+}> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { success: false, error: "Not authenticated" };
+    if (!hasPermission(ctx.role, "create_invoice")) {
+      return { success: false, error: "Not authorized" };
+    }
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { id: invoiceId, orgId: ctx.orgId },
+      select: {
+        id: true,
+        invoiceNumber: true,
+        status: true,
+        agentEmail: true,
+        agentName: true,
+        brokerageName: true,
+        dealSubmissionId: true,
+      },
+    });
+    if (!invoice) return { success: false, error: "Invoice not found" };
+    if (invoice.status === "void") {
+      return { success: false, error: "Cannot send a voided invoice" };
+    }
+    if (invoice.status === "paid") {
+      return { success: false, error: "Invoice is already paid" };
+    }
+
+    const isResend = invoice.status === "sent";
+    const skipEmail = options.skipEmail === true;
+
+    // 1. Status flip — only on first send. Re-call when already "sent"
+    //    skips the flip (idempotent) and just re-fires the email. Reuses
+    //    the existing flow so Transaction.invoiceSentAt + transaction-stage
+    //    sync stay in lockstep.
+    if (!isResend) {
+      const { updateInvoiceStatus } = await import("../invoices/actions");
+      const flipResult = await updateInvoiceStatus(invoice.id, "sent", undefined, options);
+      if (!flipResult || flipResult.success === false) {
+        return { success: false, error: flipResult?.error || "Failed to mark invoice sent" };
+      }
+    }
+
+    // 2. Email — fire-and-forget Resend, mirrors notifyAgentOfStatusChange.
+    let emailed = false;
+    let ccBrokerage = false;
+    if (!skipEmail && invoice.agentEmail) {
+      const org = await prisma.organization.findUnique({
+        where: { id: ctx.orgId },
+        select: { bmsSettings: true },
+      });
+      const bms = (org?.bmsSettings as Record<string, unknown> | null) ?? {};
+      const ccBrokerageSetting = bms.ccBrokerageOnInvoiceSend === true;
+      const companyEmail = typeof bms.companyEmail === "string" ? bms.companyEmail.trim() : "";
+      const cc = ccBrokerageSetting && companyEmail ? companyEmail : undefined;
+
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.vettdre.com";
+      const invoiceUrl = `${appUrl}/brokerage/invoices/${invoice.id}`;
+      const subject = isResend
+        ? `Reminder: invoice ${invoice.invoiceNumber} is ready`
+        : `Invoice ${invoice.invoiceNumber} is ready`;
+      const html = `
+        <p>Hi ${invoice.agentName.split(" ")[0] || invoice.agentName},</p>
+        <p>${invoice.brokerageName} has ${isResend ? "re-sent" : "issued"} invoice
+        <strong>${invoice.invoiceNumber}</strong> for your records.</p>
+        <p><a href="${invoiceUrl}">View the invoice</a></p>
+        <p style="color:#94a3b8;font-size:12px">This is an automated message from VettdRE on behalf of ${invoice.brokerageName}.</p>
+      `;
+
+      // Fire-and-forget — a Resend outage shouldn't block the status flip
+      // or the audit row. Mirrors the deal-notifications.ts pattern.
+      sendTransactionalEmail({
+        to: invoice.agentEmail,
+        subject,
+        html,
+        cc,
+      }).catch((err) => console.error("[sendInvoiceToAgent] Resend failed:", err));
+
+      emailed = true;
+      ccBrokerage = !!cc;
+    }
+
+    // 3. Audit row — "sent" on first send, "resent" on subsequent calls.
+    //    The existing updateInvoiceStatus flow logs "sent" for first send
+    //    via its own audit call; we add the resent row here.
+    if (isResend) {
+      logInvoiceAction(
+        ctx.orgId,
+        { id: ctx.userId, name: ctx.fullName, role: ctx.role },
+        "resent",
+        invoice.id,
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          emailed,
+          ccBrokerage,
+          skipEmail,
+        },
+      );
+    } else if (skipEmail) {
+      // First-send-without-email — capture the offline-delivery context so
+      // the audit trail explains why no Resend hit the agent's inbox.
+      logInvoiceAction(
+        ctx.orgId,
+        { id: ctx.userId, name: ctx.fullName, role: ctx.role },
+        "sent_offline",
+        invoice.id,
+        {
+          invoiceNumber: invoice.invoiceNumber,
+          note: "Status marked sent without email (manager handled delivery offline)",
+        },
+      );
+    }
+
+    revalidatePath("/brokerage/deal-submissions");
+    revalidatePath("/brokerage/invoices");
+
+    return {
+      success: true,
+      status: "sent",
+      emailed,
+      ccBrokerage,
+      resent: isResend,
+    };
+  } catch (error) {
+    console.error("sendInvoiceToAgent error:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to send invoice",
+    };
   }
 }

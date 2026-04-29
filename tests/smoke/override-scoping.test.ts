@@ -315,18 +315,14 @@ describe("Slice 1c — card-grid layout", () => {
     expect(dashSrc).not.toMatch(/<tbody\b/);
   });
 
-  it("renders DetailTabs with placeholder Invoice/Payment tabs for slices 2 + 3", () => {
+  it("renders DetailTabs with the Payment tab still placeholdered for slice 3", () => {
     const tabsSrc = readSource(
       "src/app/(dashboard)/brokerage/deal-submissions/components/detail-tabs.tsx",
     );
-    expect(tabsSrc).toMatch(/Available after Slice 2/);
+    // Slice 2 flipped Invoice from enabled:false → enabled:true, so we no
+    // longer assert "Available after Slice 2" copy. Payment must still be
+    // placeholdered — flipping it requires slice 3 to also wire the tab body.
     expect(tabsSrc).toMatch(/Available after Slice 3/);
-    // The Details tab is the only enabled one in 1c. If 2/3 are wired in
-    // later slices, they'll flip these `enabled: false` flags — this guard
-    // makes that change visible.
-    // [\s\S]* avoids the regex `s` (dotAll) flag, which the project's tsconfig
-    // target doesn't allow but matches across newlines just the same.
-    expect(tabsSrc).toMatch(/key:\s*"invoice"[\s\S]*?enabled:\s*false/);
     expect(tabsSrc).toMatch(/key:\s*"payment"[\s\S]*?enabled:\s*false/);
   });
 
@@ -362,6 +358,94 @@ describe("Slice 1c — card-grid layout", () => {
     expect(dashSrc).toMatch(
       /import\s*\{[^}]*RecentlyApprovedRail[^}]*\}\s*from\s*["']\.\/components\/recently-approved-rail["']/,
     );
+  });
+});
+
+// ── Slice 2: Invoice tab inside inline-expanded card ─────────
+//
+// Slice 2 contracts:
+//   1. getInvoiceForSubmission is exported and threads overrideAsOrg.
+//      Without override threading, super_admin viewing org A would silently
+//      see org B's invoice on click — same regression class as 0c3.
+//   2. sendInvoiceToAgent is exported and threads overrideAsOrg, AND has the
+//      idempotent "resent" path: re-call when status === "sent" must skip the
+//      status flip but still write a "resent" audit row + re-fire email.
+//   3. InvoiceTab is wired into submissions-dashboard for activeTab==="invoice"
+//      (replaces the "Invoice tab coming soon" placeholder from 1c).
+//   4. The Resend lib's SendParams accepts an optional cc field — the per-org
+//      "CC the brokerage on invoice send" toggle depends on it.
+//   5. Org bms settings include ccBrokerageOnInvoiceSend and the settings UI
+//      surfaces a toggle for it under the Defaults tab.
+describe("Slice 2 — Invoice tab", () => {
+  const src = readSource(
+    "src/app/(dashboard)/brokerage/deal-submissions/actions.ts",
+  );
+
+  it("exports getInvoiceForSubmission with overrideAsOrg threading", () => {
+    expect(src).toMatch(/^export\s+async\s+function\s+getInvoiceForSubmission\b/m);
+    expect(exportThreadsOverride(src, "getInvoiceForSubmission")).toBe(true);
+    // It joins through Transaction so the "sent" timestamp (Transaction.invoiceSentAt)
+    // surfaces — the schema doesn't have Invoice.sentAt directly.
+    const body = src.slice(src.indexOf("export async function getInvoiceForSubmission"));
+    expect(body).toMatch(/transaction:\s*\{\s*select:\s*\{\s*invoiceSentAt:\s*true/);
+  });
+
+  it("exports sendInvoiceToAgent with idempotent resend contract", () => {
+    expect(src).toMatch(/^export\s+async\s+function\s+sendInvoiceToAgent\b/m);
+    expect(exportThreadsOverride(src, "sendInvoiceToAgent")).toBe(true);
+    const body = src.slice(src.indexOf("export async function sendInvoiceToAgent"));
+    // Resend writes the "resent" audit kind (so it shows up in invoice history).
+    expect(body).toMatch(/logInvoiceAction\([^)]*"resent"/);
+    // Detection of the resend path — must read invoice.status === "sent" before
+    // deciding whether to flip status.
+    expect(body).toMatch(/invoice\.status\s*===\s*"sent"/);
+    // The first-send case must call updateInvoiceStatus to keep
+    // Transaction.invoiceSentAt + transaction-stage sync in lockstep.
+    expect(body).toMatch(/updateInvoiceStatus/);
+  });
+
+  it("wires InvoiceTab into the dashboard for activeTab='invoice'", () => {
+    const dashSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/submissions-dashboard.tsx",
+    );
+    expect(dashSrc).toMatch(
+      /import\s*\{[^}]*InvoiceTab[^}]*\}\s*from\s*["']\.\/components\/invoice-tab["']/,
+    );
+    // The placeholder that 1c shipped under activeTab !== "details" is gone —
+    // the invoice branch must render <InvoiceTab>, not the "coming soon" copy.
+    expect(dashSrc).not.toMatch(/Invoice tab coming soon/);
+    expect(dashSrc).toMatch(/activeTab\s*===\s*"invoice"[\s\S]*?<InvoiceTab\b/);
+  });
+
+  it("InvoiceTab renders the documented empty + populated states", () => {
+    const tabSrc = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/components/invoice-tab.tsx",
+    );
+    // Three states from the prep doc: rejected → red empty, pre-invoiced → no-yet,
+    // populated → header + dates + amounts.
+    expect(tabSrc).toMatch(/data-testid="invoice-tab-empty-rejected"/);
+    expect(tabSrc).toMatch(/data-testid="invoice-tab-empty"/);
+    expect(tabSrc).toMatch(/data-testid="invoice-tab-populated"/);
+    // Send button is the resend-aware CTA — flips label based on status.
+    expect(tabSrc).toMatch(/data-testid="invoice-tab-send-button"/);
+    expect(tabSrc).toMatch(/getInvoiceForSubmission\b/);
+    expect(tabSrc).toMatch(/sendInvoiceToAgent\b/);
+  });
+
+  it("Resend lib's SendParams accepts cc + bms settings expose ccBrokerageOnInvoiceSend", () => {
+    const resendSrc = readSource("src/lib/resend.ts");
+    expect(resendSrc).toMatch(/cc\?:\s*string\s*\|\s*string\[\]/);
+    const bmsTypesSrc = readSource("src/lib/bms-types.ts");
+    expect(bmsTypesSrc).toMatch(/ccBrokerageOnInvoiceSend\?:\s*boolean/);
+    const settingsSrc = readSource(
+      "src/app/(dashboard)/brokerage/settings/actions.ts",
+    );
+    expect(settingsSrc).toMatch(/ccBrokerageOnInvoiceSend/);
+    const settingsPageSrc = readSource(
+      "src/app/(dashboard)/brokerage/settings/page.tsx",
+    );
+    // UI control exists under the Defaults tab.
+    expect(settingsPageSrc).toMatch(/id="ccBrokerageOnInvoiceSend"/);
   });
 });
 
