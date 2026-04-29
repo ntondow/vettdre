@@ -843,8 +843,11 @@ export async function getTransactionStats(
 
 // ── Recent Active Transactions (for dashboard) ──────────────
 
-export async function getRecentActiveTransactions(limit = 5): Promise<TransactionRecord[]> {
-  const ctx = await getCurrentOrg();
+export async function getRecentActiveTransactions(
+  limit = 5,
+  options: { overrideAsOrg?: string } = {},
+): Promise<TransactionRecord[]> {
+  const ctx = await getCurrentOrg(options);
 
   const transactions = await prisma.transaction.findMany({
     where: {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef, Fragment, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment, lazy, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { getCurrentAgentInfo } from "@/lib/bms-auth";
 import { getAgents, updateAgentRole } from "../agents/actions";
 import { getBrokerageSettings, updateBrokerageSettings, saveBrokerageLogo, getOrgTeamMembers, updateUserRole } from "./actions";
@@ -187,6 +188,13 @@ const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 // ── Page ─────────────────────────────────────────────────────
 
 export default function BrokerageSettingsPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   // Shared state
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
@@ -219,7 +227,7 @@ export default function BrokerageSettingsPage() {
   // Init — auth + roles data
   useEffect(() => {
     async function init() {
-      const info = await getCurrentAgentInfo();
+      const info = await getCurrentAgentInfo(overrideOpts);
       if (!info || info.role !== "brokerage_admin") {
         setAuthorized(false);
         setLoading(false);
@@ -229,7 +237,7 @@ export default function BrokerageSettingsPage() {
       setAuthorized(true);
       setMyAgentId(info.agentId);
 
-      const result = await getAgents({ limit: 200 });
+      const result = await getAgents({ limit: 200 }, overrideOpts);
       const rows: AgentRow[] = (result.agents || []).map(
         (a: Record<string, unknown>) => ({
           id: a.id as string,
@@ -244,15 +252,15 @@ export default function BrokerageSettingsPage() {
       setLoading(false);
     }
     init();
-  }, []);
+  }, [overrideOpts]);
 
   // Load settings when tab switches to settings
   useEffect(() => {
     if (activeTab !== "settings" || settingsLoaded || !authorized) return;
     async function load() {
       const [s, tokenResult] = await Promise.all([
-        getBrokerageSettings(),
-        getPublicSubmissionLink(),
+        getBrokerageSettings(overrideOpts),
+        getPublicSubmissionLink(overrideOpts),
       ]);
       setSettings(s);
       setSettingsForm({ ...s });
@@ -262,18 +270,18 @@ export default function BrokerageSettingsPage() {
       setSettingsLoaded(true);
     }
     load();
-  }, [activeTab, settingsLoaded, authorized]);
+  }, [activeTab, settingsLoaded, authorized, overrideOpts]);
 
   // Load team members when tab switches to team
   useEffect(() => {
     if (activeTab !== "team" || teamLoaded || !authorized) return;
     async function load() {
-      const result = await getOrgTeamMembers();
+      const result = await getOrgTeamMembers(overrideOpts);
       setTeamMembers(result.members);
       setTeamLoaded(true);
     }
     load();
-  }, [activeTab, teamLoaded, authorized]);
+  }, [activeTab, teamLoaded, authorized, overrideOpts]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -286,7 +294,7 @@ export default function BrokerageSettingsPage() {
 
   async function handleRoleChange(agentId: string, newRole: BrokerageRoleType) {
     setSavingId(agentId);
-    const result = await updateAgentRole(agentId, newRole);
+    const result = await updateAgentRole(agentId, newRole, overrideOpts);
     if (result.success) {
       setAgents((prev) =>
         prev.map((a) =>
@@ -339,7 +347,7 @@ export default function BrokerageSettingsPage() {
       defaultDealType: settingsForm.defaultDealType,
       invoiceDueDays: settingsForm.invoiceDueDays,
       autoApproveDealSubmissions: settingsForm.autoApproveDealSubmissions,
-    });
+    }, overrideOpts);
     if (result.success) {
       setSettings({ ...settingsForm });
       setToast({ message: "Settings saved successfully", type: "success" });
@@ -385,7 +393,7 @@ export default function BrokerageSettingsPage() {
 
       const logoUrl = urlData.publicUrl;
 
-      const result = await saveBrokerageLogo(logoUrl);
+      const result = await saveBrokerageLogo(logoUrl, overrideOpts);
       if (result.success) {
         setField("logoUrl", logoUrl);
         setToast({ message: "Logo saved — will appear on all new invoices", type: "success" });
@@ -405,7 +413,7 @@ export default function BrokerageSettingsPage() {
   async function handleRemoveLogo() {
     setUploadingLogo(true);
     try {
-      const result = await saveBrokerageLogo(null);
+      const result = await saveBrokerageLogo(null, overrideOpts);
       if (result.success) {
         setField("logoUrl", null);
         setToast({ message: "Logo removed", type: "success" });
@@ -421,7 +429,7 @@ export default function BrokerageSettingsPage() {
 
   async function handleRegenerateToken() {
     setRegenerating(true);
-    const result = await regenerateSubmissionToken();
+    const result = await regenerateSubmissionToken(overrideOpts);
     if (result.token) {
       setSubmissionUrl(`${window.location.origin}/submit-deal/${result.token}`);
       setToast({ message: "Submission link regenerated", type: "success" });
@@ -1636,7 +1644,7 @@ export default function BrokerageSettingsPage() {
                                 const newRole = e.target.value;
                                 if (newRole === m.role) return;
                                 setTeamSavingId(m.id);
-                                const result = await updateUserRole(m.id, newRole);
+                                const result = await updateUserRole(m.id, newRole, overrideOpts);
                                 if (result.success) {
                                   setTeamMembers((prev) =>
                                     prev.map((u) => (u.id === m.id ? { ...u, role: newRole } : u))

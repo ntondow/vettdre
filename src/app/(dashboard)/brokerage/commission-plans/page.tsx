@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   getCommissionPlans,
   createCommissionPlan,
@@ -38,6 +39,13 @@ const PLAN_TYPE_PILL: Record<string, string> = {
 // ── Component ─────────────────────────────────────────────────
 
 export default function CommissionPlansPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [plans, setPlans] = useState<CommissionPlanRecord[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,7 +63,7 @@ export default function CommissionPlansPage() {
     try {
       const result = await getCommissionPlans({
         search: search || undefined,
-      });
+      }, overrideOpts);
       setPlans(result.plans || []);
       setTotal(result.total || 0);
     } catch {
@@ -68,19 +76,19 @@ export default function CommissionPlansPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [overrideOpts]);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => loadData(), 400);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
+  }, [search, overrideOpts]);
 
   // ── Actions ───────────────────────────────────────────────
 
   async function handleCreate(input: CommissionPlanInput) {
-    const result = await createCommissionPlan(input);
+    const result = await createCommissionPlan(input, overrideOpts);
     if (!result.success) {
       alert(result.error || "Failed to create plan");
       return;
@@ -92,7 +100,7 @@ export default function CommissionPlansPage() {
 
   async function handleUpdate(input: CommissionPlanInput) {
     if (typeof showBuilder !== "string" || showBuilder === "new") return;
-    const result = await updateCommissionPlan(showBuilder, input);
+    const result = await updateCommissionPlan(showBuilder, input, overrideOpts);
     if (!result.success) {
       alert(result.error || "Failed to update plan");
       return;
@@ -123,7 +131,7 @@ export default function CommissionPlansPage() {
   async function handleDelete(planId: string) {
     if (!confirm("Delete this commission plan? Agents will be unlinked. This cannot be undone.")) return;
     setActionLoading(planId);
-    await deleteCommissionPlan(planId);
+    await deleteCommissionPlan(planId, overrideOpts);
     setActionLoading(null);
     if (showBuilder === planId) {
       setShowBuilder(false);
@@ -134,7 +142,7 @@ export default function CommissionPlansPage() {
 
   async function handleArchive(planId: string) {
     setActionLoading(planId);
-    await archiveCommissionPlan(planId);
+    await archiveCommissionPlan(planId, overrideOpts);
     setActionLoading(null);
     loadData();
   }
