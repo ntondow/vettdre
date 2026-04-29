@@ -153,6 +153,8 @@ async function main() {
   }
 
   console.log("[4/4] Applying backfill in a single transaction...");
+  // 18 × (payment.create + auditLog.create) = 36 round-trips through the
+  // Supabase Session Pooler; Prisma's default 5s tx timeout is too tight.
   const result = await prisma.$transaction(async (tx) => {
     let inserted = 0;
     let skipped = 0;
@@ -216,7 +218,7 @@ async function main() {
       inserted += 1;
     }
     return { inserted, skipped };
-  });
+  }, { timeout: 60_000, maxWait: 10_000 });
 
   console.log(
     `      → inserted=${result.inserted} skipped=${result.skipped} total_planned=${plan.length}`,
