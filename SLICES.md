@@ -91,16 +91,19 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Outcome (discovery):** CRM `Deal` is not used by any BMS surface. Within BMS, `DealSubmission` and `Transaction` are sequential (1:1 link), not parallel. Audit's "$0 paid out" symptom traces to incomplete insert chain (Gulino's import skipped past Invoice + Payment), not to a fragmented data model. **Recommendation: reaffirm the existing schema; backfill the chain in 0b; thread override in 0c.** Awaiting Nathan's call.
 
 ### 0b — Backfill Gulino's missing Invoice + Payment records
-- **Status:** `awaiting_review` (audit + dry-run produced; awaiting Nathan's approval before live run)
+- **Status:** `awaiting_review` (live --apply complete; verification clean; PR awaiting merge)
 - **Goal:** 18 paid DealSubmissions in Gulino's tenant have no corresponding Invoice/Payment rows. Backfill them so financial surfaces reconcile.
 - **Closes bug:** B-007, B-008
 - **Files:** `scripts/2026-04-28_audit_gulino_chain.ts` (read-only audit), `scripts/2026-04-28_backfill_gulino_payments.ts` (idempotent backfill, dry-run default)
 - **Discovery (audit, read-only):** Resolved: of the 18 DealSubmissions, **all 18 have Transaction rows** (stage=`payment_received`) and **all 18 have Invoice rows** (status=`paid`, paid_date populated, GG-IMPORT-001..018). What is missing is the **Payment** rows — 0 of 18 invoices have any payment row. The `$0 paid out` symptom traces to Reports/Leaderboard summing from `payments`, not `invoices.agent_payout`. Audit output: `docs/handoff/gulino-chain-audit.md` + `.csv` (gitignored).
 - **Plan:** insert one Payment per missing invoice with `amount=invoice.agent_payout`, `payment_date=invoice.paid_date`, `payment_method=check`, `reference_number=BACKFILL-2026-04-28`. One audit_log row per payment. Idempotency via skip-if-any-payment-exists per invoice.
 - **Dry-run output (2026-04-28):** 18 payments planned, total $20,110.83. Matches Σ DS.agent_payout snapshot ($20,110.83) one-to-one. Saved at `docs/handoff/gulino-payment-backfill-dryrun.txt` (gitignored).
-- **Success criteria:** Script idempotent (re-runnable). Dry-run is the default mode (`--apply` required to write). Nathan reconciles dry-run vs `gulino-payout-reconciliation.xlsx` and approves before live run.
+- **Apply (2026-04-29):** Nathan reconciled dry-run vs `gulino-payout-reconciliation.xlsx` (per-agent + 3 spot-checks); approved. First `--apply` hit Prisma's default 5s tx timeout (36 round-trips × Session Pooler latency). Bumped to `{ timeout: 60_000, maxWait: 10_000 }`; second `--apply` succeeded: 18 inserted / 0 skipped.
+- **Verification (2026-04-29):** 18 Payment rows with ref=`BACKFILL-2026-04-28`, Σ amount=$20,110.83, 18 audit_log rows with `metadata.source='2026-04-28_backfill_gulino_payments.ts'`. Re-audit: full DS→TX→INV→PAY chain present 18/18. `/brokerage/payments` simulator shows TOTAL PAID flipped from $0 → $20,110.83. Idempotency confirmed: 3rd `--apply` inserted 0. Logs saved to `docs/handoff/gulino-payment-backfill-{apply,verify}.txt` (gitignored).
+- **Out of scope:** Kristin's $175 recruiting override + John/Nathan $437.50 each on Alejandra's 2684 West Street deal. Not in this backfill — `payments.amount` is primary-agent net payout per schema convention. Override-share splits live elsewhere; future slice if needed.
+- **Success criteria:** Script idempotent (re-runnable). Dry-run is the default mode (`--apply` required to write). Nathan reconciles dry-run vs `gulino-payout-reconciliation.xlsx` and approves before live run. ✓ all met.
 - **Depends on:** 0a
-- **Requires approval:** YES — Nathan approves dry-run output before live run.
+- **Requires approval:** YES — Nathan approves dry-run output before live run. ✓ approved 2026-04-29.
 
 ### 0c — Override consistency on User/BrokerAgent/Onboarding/Settings
 - **Status:** `pending`
