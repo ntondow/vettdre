@@ -23,8 +23,10 @@ interface AuthContext {
   fullName: string;
 }
 
-async function getAuthContext(): Promise<AuthContext | null> {
-  const ctx = await getCurrentOrgContext();
+async function getAuthContext(
+  options: { overrideAsOrg?: string } = {},
+): Promise<AuthContext | null> {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) return null;
 
   const user = await prisma.user.findUnique({
@@ -81,9 +83,9 @@ export async function getOnboardings(filters?: {
   status?: string;
   page?: number;
   limit?: number;
-}): Promise<{ success: boolean; data?: Record<string, unknown>[]; total?: number; error?: string }> {
+}, options: { overrideAsOrg?: string } = {}): Promise<{ success: boolean; data?: Record<string, unknown>[]; total?: number; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
     const canViewAll = hasPermission(ctx.role, "client_onboarding_view_all");
@@ -507,9 +509,10 @@ export async function createOnboarding(
 export async function voidOnboarding(
   id: string,
   reason?: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "client_onboarding_void")) {
       return { success: false, error: "Not authorized" };
@@ -563,9 +566,10 @@ export async function voidOnboarding(
 
 export async function resendOnboarding(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "client_onboarding_resend")) {
       return { success: false, error: "Not authorized" };
@@ -960,9 +964,10 @@ export async function generateInvoiceFromOnboarding(
 
 export async function deleteOnboarding(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "client_onboarding_void")) {
       return { success: false, error: "Not authorized" };
@@ -1002,9 +1007,10 @@ export async function deleteOnboarding(
 
 export async function archiveOnboarding(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
     if (!hasPermission(ctx.role, "client_onboarding_void")) {
       return { success: false, error: "Not authorized" };

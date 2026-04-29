@@ -3,8 +3,8 @@
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
@@ -18,8 +18,10 @@ export interface SetupProgress {
   hasSettings: boolean;
 }
 
-export async function getSetupProgress(): Promise<SetupProgress> {
-  const { orgId } = await getCurrentOrg();
+export async function getSetupProgress(
+  options: { overrideAsOrg?: string } = {},
+): Promise<SetupProgress> {
+  const { orgId } = await getCurrentOrg(options);
 
   const [
     agentCount,

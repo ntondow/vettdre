@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getAgentProductionReport, exportReportCSV } from "../actions";
 import type { AgentProductionReport } from "@/lib/bms-types";
 import {
@@ -51,6 +52,13 @@ type SortBy = "volume" | "deals" | "earnings";
 // ── Component ─────────────────────────────────────────────────
 
 export default function AgentProductionPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [report, setReport] = useState<AgentProductionReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(defaultStartDate);
@@ -61,7 +69,7 @@ export default function AgentProductionPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const data = await getAgentProductionReport(startDate, endDate, sortBy);
+      const data = await getAgentProductionReport(startDate, endDate, sortBy, overrideOpts);
       setReport(data);
     } catch {
       setReport(null);
@@ -78,7 +86,7 @@ export default function AgentProductionPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const result = await exportReportCSV("agent_production", { startDate, endDate, sortBy });
+      const result = await exportReportCSV("agent_production", { startDate, endDate, sortBy }, overrideOpts);
       if (result.csv) {
         const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);

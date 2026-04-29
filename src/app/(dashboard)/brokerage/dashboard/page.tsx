@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getDashboardSummary } from "../reports/actions";
 import { getTransactionStats, getRecentActiveTransactions } from "../transactions/actions";
 import { getLeaderboard } from "../leaderboard/actions";
@@ -63,6 +64,13 @@ const INVOICE_STATUS_ORDER = ["draft", "sent", "paid", "void"];
 // ── Component ─────────────────────────────────────────────────
 
 export default function BrokerageDashboardPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [txStats, setTxStats] = useState<TransactionStats | null>(null);
   const [screeningStats, setScreeningStats] = useState<{
@@ -80,13 +88,13 @@ export default function BrokerageDashboardPage() {
     setLoading(true);
     try {
       const [data, txs, recent, lb, screening] = await Promise.all([
-        getDashboardSummary(period),
-        getTransactionStats(),
-        getRecentActiveTransactions(5),
-        getLeaderboard("current_month").catch(() => [] as LeaderboardEntry[]),
+        getDashboardSummary(period, overrideOpts),
+        getTransactionStats(overrideOpts),
+        getRecentActiveTransactions(5, overrideOpts),
+        getLeaderboard("current_month", overrideOpts).catch(() => [] as LeaderboardEntry[]),
         (async () => {
           const { getScreeningDashboardStats } = await import("./actions");
-          return getScreeningDashboardStats().catch(() => null);
+          return getScreeningDashboardStats(overrideOpts).catch(() => null);
         })(),
       ]);
       setSummary(data);
@@ -104,7 +112,7 @@ export default function BrokerageDashboardPage() {
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period]);
+  }, [period, overrideOpts]);
 
   // ── Loading ──────────────────────────────────────────────────
 

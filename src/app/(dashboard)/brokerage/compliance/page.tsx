@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   getComplianceOverview,
   getAgentComplianceDocs,
@@ -104,6 +105,13 @@ interface ExpiringGroup {
 // ── Component ─────────────────────────────────────────────────
 
 export default function CompliancePage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [overview, setOverview] = useState<Overview | null>(null);
   const [expiringData, setExpiringData] = useState<{ expiringItems: ExpiringGroup[]; totalItems: number }>({ expiringItems: [], totalItems: 0 });
   const [loading, setLoading] = useState(true);
@@ -125,10 +133,10 @@ export default function CompliancePage() {
     setLoading(true);
     try {
       // Refresh statuses first, then load data
-      await refreshComplianceStatuses();
+      await refreshComplianceStatuses(overrideOpts);
       const [overviewData, expiring] = await Promise.all([
-        getComplianceOverview(),
-        getExpiringItems(30),
+        getComplianceOverview(overrideOpts),
+        getExpiringItems(30, overrideOpts),
       ]);
       setOverview(overviewData);
       setExpiringData(expiring);
@@ -141,12 +149,13 @@ export default function CompliancePage() {
 
   useEffect(() => {
     loadOverview();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideOpts]);
 
   async function loadAgentDocs(agentId: string) {
     setDocsLoading(true);
     try {
-      const docs = await getAgentComplianceDocs(agentId);
+      const docs = await getAgentComplianceDocs(agentId, overrideOpts);
       setAgentDocs(docs);
     } catch {
       setAgentDocs([]);
@@ -190,7 +199,7 @@ export default function CompliancePage() {
         fileUrl: docForm.fileUrl.trim() || undefined,
         fileName: docForm.fileName.trim() || undefined,
         notes: docForm.notes.trim() || undefined,
-      });
+      }, overrideOpts);
 
       if (!result.success) {
         setFormError(result.error || "Failed to create document");
@@ -212,7 +221,7 @@ export default function CompliancePage() {
     if (!confirm("Delete this compliance document?")) return;
     setActionLoading(docId);
     try {
-      const result = await deleteComplianceDoc(docId);
+      const result = await deleteComplianceDoc(docId, overrideOpts);
       if (!result.success) {
         alert(result.error || "Failed to delete document");
       }

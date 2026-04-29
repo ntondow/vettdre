@@ -1036,9 +1036,11 @@ export async function createPublicDealSubmission(
 
 // ── Public Submission Link ────────────────────────────────────
 
-export async function getPublicSubmissionLink(): Promise<{ token: string | null }> {
+export async function getPublicSubmissionLink(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ token: string | null }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { token: null };
 
     const org = await prisma.organization.findUnique({
@@ -1061,9 +1063,11 @@ export async function getPublicSubmissionLink(): Promise<{ token: string | null 
   }
 }
 
-export async function regenerateSubmissionToken(): Promise<{ success: boolean; token: string | null }> {
+export async function regenerateSubmissionToken(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{ success: boolean; token: string | null }> {
   try {
-    const ctx = await getAuthContext();
+    const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, token: null };
 
     const token = crypto.randomUUID().replace(/-/g, "").slice(0, 16);
