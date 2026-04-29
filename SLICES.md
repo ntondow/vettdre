@@ -159,6 +159,23 @@ status fields as they go. Nathan approves at phase boundaries.
 - **Depends on:** 0c, 0b
 - **Requires approval:** No (but stops Phase 0 verification gate from passing until merged + deployed).
 
+### 0c3 — Override threading on detail-route pages (follow-up to 0c2)
+- **Status:** `awaiting_review`
+- **Goal:** Detail pages (e.g. `/brokerage/agents/[id]`) read the `?as_org` override correctly. Slice 1a verification surfaced the gap: clicking an agent row navigates with `?as_org` preserved, but the detail page returns "Agent not found" because its server-side query doesn't thread the override.
+- **Closes bug:** Extends B-009 / B-022 family. Specifically the agent-detail "Agent not found" reported in slice 1a verification.
+- **Implementation notes:**
+  - Wired client detail pages (`useSearchParams` + `useMemo(overrideOpts)` + `detailQs`) and threaded `overrideOpts` into all action calls and internal navigation: `agents/[id]/page.tsx`, `transactions/[id]/page.tsx`, `client-onboarding/[id]/page.tsx`, `listings/[id]/page.tsx`, `listings/properties/[id]/page.tsx`.
+  - Threaded read paths used by detail pages: `getTransaction`, `getDealTimeline` (transactions/actions.ts), `getOnboarding`, `generateInvoiceFromOnboarding` (client-onboarding/actions.ts), `getListing`, `getProperty` plus all listing-detail write actions (`updateListing`, `advanceListingStatus`, `revertListingStatus`, `takeOffMarket`, `putBackOnMarket`, `claimListing`, `assignListing`, `createTransactionFromListing`, `deleteListing`) and `updateProperty`/`deleteProperty` (listings/actions.ts).
+  - Smoke test extended (`tests/smoke/override-scoping.test.ts`): added `client-onboarding/actions.ts` + `listings/actions.ts` to the action-file matrix, plus a new `Slice 0c3 — detail-page override threading` describe block that asserts each detail page imports `useSearchParams`, reads `as_org`, computes `overrideOpts`, and passes it to at least one action call. 46 tests pass (was 33).
+- **Deferred (TODO-0c3-followup, tracked in EXEMPT_EXPORTS):**
+  - `transactions/actions.ts` write surface (25 exports — `updateTransaction`, `advanceStage`, `toggleTask`, etc.) — large surface; threading deferred to a future cleanup slice.
+  - `client-onboarding/actions.ts:createOnboarding` — ties the document to the calling agent's identity; product needs to clarify whether super_admin can author onboardings on behalf of another org's agent.
+  - `client-onboarding/vault/[id]/page.tsx` — template editor. The vault list page itself doesn't support override (tied to org-scoped templates), so detail-page override is moot until the list page changes. Filed as a future slice.
+  - `listings/actions.ts:bulkCreateListings`, `getPropertySummaries`, `fuzzyMatchProperties`, `fuzzyMatchAgents` — typeahead/import helpers, not on the detail-render path.
+- **Gates:** typecheck 287 (≤ baseline 294), test 52/52 (was 33), lint 4530 (= baseline 4530), build ✓.
+- **Depends on:** 0c2 (action-layer baseline), 1a (uncovered the gap).
+- **Requires approval:** No (same shape as 0c2).
+
 **[PHASE 0 APPROVAL GATE — `awaiting_review` 2026-04-29 (re-verification needed after 0c2 deploy)]**
 
 Phase 0 status as of 2026-04-29:
@@ -200,6 +217,13 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** Manager can approve a submission and create an Invoice in one click.
 - **Depends on:** 1a, Phase 0
 - **Requires approval:** YES — show wireframe / progress to Nathan before final styling.
+
+### 1.5 — Sidebar count badge for Submissions
+- **Status:** `pending`
+- **Goal:** Brokerage sub-sidebar "Submissions" item shows `[N]` where N is count of `status='submitted'` for current tenant. Updates on submission state changes.
+- **Files:** brokerage layout sub-sidebar component (`src/app/(dashboard)/brokerage/layout.tsx` or whatever component renders the brokerage sub-nav).
+- **Depends on:** Slice 1 (uses the same status/count source).
+- **Requires approval:** No.
 
 ### 2 — Invoice creation in-context
 - **Status:** `pending`
