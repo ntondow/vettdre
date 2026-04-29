@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   UserPlus,
   Search,
@@ -70,6 +71,13 @@ function fmtDateShort(iso: string | null): string {
 // ── Component ────────────────────────────────────────────────
 
 export default function OnboardingListPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [onboardings, setOnboardings] = useState<OnboardingRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -102,13 +110,13 @@ export default function OnboardingListPage() {
       // Cloud Run cold-starts and Supabase pooler reconnects produce intermittent
       // 503s on this surface; retry once after a short delay to absorb the most
       // common transient failure mode without surfacing a flicker to the user.
-      let result = await getOnboardings({ page: p, limit, status: status || undefined }).catch((e: unknown) => ({
+      let result = await getOnboardings({ page: p, limit, status: status || undefined }, overrideOpts).catch((e: unknown) => ({
         success: false as const,
         error: e instanceof Error ? e.message : "Network error",
       }));
       if (!result.success) {
         await new Promise((r) => setTimeout(r, 1500));
-        result = await getOnboardings({ page: p, limit, status: status || undefined }).catch((e: unknown) => ({
+        result = await getOnboardings({ page: p, limit, status: status || undefined }, overrideOpts).catch((e: unknown) => ({
           success: false as const,
           error: e instanceof Error ? e.message : "Network error",
         }));
@@ -123,7 +131,7 @@ export default function OnboardingListPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [overrideOpts]);
 
   useEffect(() => { fetchData(1, statusFilter); }, [statusFilter, fetchData]);
 
@@ -138,7 +146,7 @@ export default function OnboardingListPage() {
   const handleResend = async (id: string) => {
     setProcessing(id);
     setActionMenu(null);
-    const result = await resendOnboarding(id);
+    const result = await resendOnboarding(id, overrideOpts);
     if (result.success) {
       setSuccess("Invite resent");
       await fetchData(page, statusFilter);
@@ -153,7 +161,7 @@ export default function OnboardingListPage() {
     if (!confirm("Are you sure you want to void this onboarding?")) return;
     setProcessing(id);
     setActionMenu(null);
-    const result = await voidOnboarding(id);
+    const result = await voidOnboarding(id, undefined, overrideOpts);
     if (result.success) {
       setSuccess("Onboarding voided");
       await fetchData(page, statusFilter);
@@ -168,7 +176,7 @@ export default function OnboardingListPage() {
     if (!confirm("Are you sure you want to permanently delete this onboarding? This cannot be undone.")) return;
     setProcessing(id);
     setActionMenu(null);
-    const result = await deleteOnboarding(id);
+    const result = await deleteOnboarding(id, overrideOpts);
     if (result.success) {
       setSuccess("Onboarding deleted");
       await fetchData(page, statusFilter);
@@ -183,7 +191,7 @@ export default function OnboardingListPage() {
     if (!confirm("Archive this onboarding?")) return;
     setProcessing(id);
     setActionMenu(null);
-    const result = await archiveOnboarding(id);
+    const result = await archiveOnboarding(id, overrideOpts);
     if (result.success) {
       setSuccess("Onboarding archived");
       await fetchData(page, statusFilter);

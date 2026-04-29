@@ -7,8 +7,8 @@ import { logAgentAction } from "@/lib/bms-audit";
 
 // ── Auth Helper ──────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
@@ -17,9 +17,10 @@ async function getCurrentOrg() {
 
 export async function inviteAgent(
   agentId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ inviteUrl?: string; error?: string }> {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -58,11 +59,12 @@ export async function inviteAgent(
 
 export async function bulkInviteAgents(
   agentIds: string[],
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ invited: number; alreadyLinked: number; errors: string[] }> {
   const result = { invited: 0, alreadyLinked: 0, errors: [] as string[] };
 
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const agents = await prisma.brokerAgent.findMany({
       where: { id: { in: agentIds }, orgId },
@@ -303,9 +305,10 @@ export async function tryAutoLinkByEmail(
 
 export async function revokeInvite(
   agentId: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { userId, orgId } = await getCurrentOrg();
+    const { userId, orgId } = await getCurrentOrg(options);
 
     const agent = await prisma.brokerAgent.findFirst({
       where: { id: agentId, orgId },
@@ -338,14 +341,16 @@ export async function revokeInvite(
 
 // ── Get Pending Invites ──────────────────────────────────────
 
-export async function getPendingInvites(): Promise<Array<{
+export async function getPendingInvites(
+  options: { overrideAsOrg?: string } = {},
+): Promise<Array<{
   agentId: string;
   agentName: string;
   email: string;
   invitedAt: string;
 }>> {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
 
     const agents = await prisma.brokerAgent.findMany({
       where: {

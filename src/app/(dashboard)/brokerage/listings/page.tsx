@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus,
   Search,
@@ -105,6 +105,13 @@ function StatusDots({ status }: { status: string }) {
 
 export default function ListingsPage() {
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [listings, setListings] = useState<BmsListingRecord[]>([]);
   const [stats, setStats] = useState<ListingStats | null>(null);
   const [properties, setProperties] = useState<BmsPropertyRecord[]>([]);
@@ -153,10 +160,10 @@ export default function ListingsPage() {
       if (search) filters.search = search;
 
       const [l, s, p, a] = await Promise.all([
-        getListings(filters as any), // eslint-disable-line @typescript-eslint/no-explicit-any
-        getListingStats(),
-        getProperties(),
-        getAgentsForDropdown(),
+        getListings(filters as any, overrideOpts), // eslint-disable-line @typescript-eslint/no-explicit-any
+        getListingStats(overrideOpts),
+        getProperties(overrideOpts),
+        getAgentsForDropdown(overrideOpts),
       ]);
       setListings(l);
       setStats(s);
@@ -169,13 +176,13 @@ export default function ListingsPage() {
 
   useEffect(() => {
     loadData();
-  }, [filterType, filterStatus, filterProperty, filterAgent, filterBedrooms]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filterType, filterStatus, filterProperty, filterAgent, filterBedrooms, overrideOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
     searchTimer.current = setTimeout(() => loadData(), 400);
     return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
-  }, [search]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [search, overrideOpts]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Create Listing ──────────────────────────────────────────
 
@@ -190,7 +197,7 @@ export default function ListingsPage() {
         const prop = await createProperty({
           name: newPropertyName,
           landlordName: newPropertyLandlord || undefined,
-        });
+        }, overrideOpts);
         propertyId = prop.id;
       }
 
@@ -206,7 +213,7 @@ export default function ListingsPage() {
         ...newForm,
         propertyId,
         commissionAmount,
-      });
+      }, overrideOpts);
 
       setShowNew(false);
       setNewForm({ address: "", type: "rental" });
@@ -656,11 +663,11 @@ export default function ListingsPage() {
           agents={agents}
           onClose={() => setSelectedListing(null)}
           onUpdate={async (id, data) => {
-            await updateListing(id, data);
+            await updateListing(id, data, overrideOpts);
             await loadData();
           }}
           onStatusChange={async (id, newStatus) => {
-            await updateListingStatus(id, newStatus);
+            await updateListingStatus(id, newStatus, overrideOpts);
             await loadData();
           }}
         />

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import { getAuditLogs } from "./actions";
 import {
   Search,
@@ -223,6 +224,13 @@ function buildDescription(log: AuditLogEntry): string {
 // ── Component ────────────────────────────────────────────────
 
 export default function AuditLog() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -247,12 +255,12 @@ export default function AuditLog() {
       endDate: endDate || undefined,
       page,
       limit: 50,
-    });
+    }, overrideOpts);
     setLogs(result.logs || []);
     setTotal(result.total || 0);
     setTotalPages(result.totalPages || 0);
     setLoading(false);
-  }, [entityType, actionSearch, startDate, endDate, page]);
+  }, [entityType, actionSearch, startDate, endDate, page, overrideOpts]);
 
   useEffect(() => {
     fetchLogs();

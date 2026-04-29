@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getPnlReport, exportReportCSV } from "../actions";
 import type { PnlReport, ReportGroupBy } from "@/lib/bms-types";
 import {
@@ -54,6 +55,13 @@ const INPUT = "border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outlin
 // ── Component ─────────────────────────────────────────────────
 
 export default function PnlReportPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [report, setReport] = useState<PnlReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [startDate, setStartDate] = useState(defaultStartDate);
@@ -64,7 +72,7 @@ export default function PnlReportPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const data = await getPnlReport(startDate, endDate, groupBy);
+      const data = await getPnlReport(startDate, endDate, groupBy, overrideOpts);
       setReport(data);
     } catch {
       setReport(null);
@@ -81,7 +89,7 @@ export default function PnlReportPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const result = await exportReportCSV("pnl", { startDate, endDate, groupBy });
+      const result = await exportReportCSV("pnl", { startDate, endDate, groupBy }, overrideOpts);
       if (result.csv) {
         const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);

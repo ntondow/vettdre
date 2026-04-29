@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { get1099PrepData, exportReportCSV } from "../actions";
 import type { Report1099Data } from "@/lib/bms-types";
 import {
@@ -40,6 +41,13 @@ const INPUT = "border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outlin
 // ── Component ─────────────────────────────────────────────────
 
 export default function TaxPrepPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+
   const [data, setData] = useState<Report1099Data | null>(null);
   const [loading, setLoading] = useState(true);
   const [taxYear, setTaxYear] = useState(new Date().getFullYear() - 1);
@@ -48,7 +56,7 @@ export default function TaxPrepPage() {
   async function loadData() {
     setLoading(true);
     try {
-      const result = await get1099PrepData(taxYear);
+      const result = await get1099PrepData(taxYear, overrideOpts);
       setData(result);
     } catch {
       setData(null);
@@ -65,7 +73,7 @@ export default function TaxPrepPage() {
   async function handleExport() {
     setExporting(true);
     try {
-      const result = await exportReportCSV("1099", { taxYear: taxYear.toString() });
+      const result = await exportReportCSV("1099", { taxYear: taxYear.toString() }, overrideOpts);
       if (result.csv) {
         const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8;" });
         const url = URL.createObjectURL(blob);
