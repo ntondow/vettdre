@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   getAgents,
   createAgent,
@@ -117,12 +117,14 @@ const STATE_OPTIONS = ["NY", "NJ", "CT", "PA"] as const;
 // ── Component ─────────────────────────────────────────────────
 
 export default function AgentsPage() {
+  const router = useRouter();
   const sp = useSearchParams();
   const asOrg = sp.get("as_org") ?? undefined;
   const overrideOpts = useMemo(
     () => (asOrg ? { overrideAsOrg: asOrg } : {}),
     [asOrg],
   );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
 
   const [agents, setAgents] = useState<any[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -875,7 +877,7 @@ export default function AgentsPage() {
                 key={agent.id}
                 className="bg-white border border-slate-200 rounded-xl p-4"
               >
-                <Link href={`/brokerage/agents/${agent.id}`} className="active:bg-slate-50 transition-colors">
+                <Link href={`/brokerage/agents/${agent.id}${detailQs}`} className="active:bg-slate-50 transition-colors">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-slate-800 truncate">{agent.firstName} {agent.lastName}</p>
@@ -942,18 +944,24 @@ export default function AgentsPage() {
                 const canDelete = dealCount === 0 && (agent._count?.invoices || 0) === 0;
 
                 return (
-                  <tr key={agent.id} className="hover:bg-slate-50/50 transition-colors">
+                  <tr
+                    key={agent.id}
+                    tabIndex={0}
+                    onClick={() => router.push(`/brokerage/agents/${agent.id}${detailQs}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        router.push(`/brokerage/agents/${agent.id}${detailQs}`);
+                      }
+                    }}
+                    className="hover:bg-slate-50/50 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset transition-colors"
+                  >
                     {/* Agent name + email */}
                     <td className="px-3 py-3">
-                      <Link
-                        href={`/brokerage/agents/${agent.id}`}
-                        className="group"
-                      >
-                        <div className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">
-                          {agent.firstName} {agent.lastName}
-                        </div>
-                        <div className="text-xs text-slate-500">{agent.email}</div>
-                      </Link>
+                      <div className="text-sm font-medium text-slate-800 group-hover:text-blue-600 transition-colors">
+                        {agent.firstName} {agent.lastName}
+                      </div>
+                      <div className="text-xs text-slate-500">{agent.email}</div>
                     </td>
 
                     {/* Phone */}
@@ -1018,7 +1026,10 @@ export default function AgentsPage() {
                     </td>
 
                     {/* Account status */}
-                    <td className="px-3 py-3 text-center">
+                    <td
+                      className="px-3 py-3 text-center"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       {agent.userId ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">
                           <Link2 className="h-3 w-3" />
@@ -1057,10 +1068,13 @@ export default function AgentsPage() {
                     </td>
 
                     {/* Actions */}
-                    <td className="px-3 py-3">
+                    <td
+                      className="px-3 py-3"
+                      onClick={(e) => e.stopPropagation()}
+                    >
                       <div className="flex items-center justify-end gap-0.5">
                         <Link
-                          href={`/brokerage/agents/${agent.id}`}
+                          href={`/brokerage/agents/${agent.id}${detailQs}`}
                           className="p-1.5 text-slate-400 hover:text-blue-600 transition-colors"
                           title="View details"
                         >
