@@ -5,8 +5,8 @@ import { getCurrentOrgContext } from "@/lib/auth-context";
 
 // ── Auth Helper ───────────────────────────────────────────────
 
-async function getCurrentOrg() {
-  const ctx = await getCurrentOrgContext();
+async function getCurrentOrg(options: { overrideAsOrg?: string } = {}) {
+  const ctx = await getCurrentOrgContext(options);
   if (!ctx) throw new Error("Not authenticated");
   return { userId: ctx.userId, orgId: ctx.orgId };
 }
@@ -37,9 +37,12 @@ function formatCurrency(n: number): string {
 
 // ── 1. Dashboard Summary ──────────────────────────────────────
 
-export async function getDashboardSummary(period: "month" | "quarter" | "year" = "month") {
+export async function getDashboardSummary(
+  period: "month" | "quarter" | "year" = "month",
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const { start, end } = getPeriodDates(period);
 
     const approvedStatuses = ["approved", "invoiced", "paid"];
@@ -162,9 +165,10 @@ export async function getPnlReport(
   startDate: string,
   endDate: string,
   groupBy: "month" | "week" = "month",
+  options: { overrideAsOrg?: string } = {},
 ) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -258,9 +262,10 @@ export async function getAgentProductionReport(
   startDate: string,
   endDate: string,
   sortBy: "volume" | "deals" | "earnings" = "volume",
+  options: { overrideAsOrg?: string } = {},
 ) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -371,9 +376,12 @@ export async function getAgentProductionReport(
 
 // ── 4. 1099 Prep Data ─────────────────────────────────────────
 
-export async function get1099PrepData(taxYear: number) {
+export async function get1099PrepData(
+  taxYear: number,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const yearStart = new Date(taxYear, 0, 1);
     const yearEnd = new Date(taxYear + 1, 0, 1);
 
@@ -454,9 +462,13 @@ export async function get1099PrepData(taxYear: number) {
 
 // ── 5. Deal Pipeline Report ───────────────────────────────────
 
-export async function getDealPipelineReport(startDate: string, endDate: string) {
+export async function getDealPipelineReport(
+  startDate: string,
+  endDate: string,
+  options: { overrideAsOrg?: string } = {},
+) {
   try {
-    const { orgId } = await getCurrentOrg();
+    const { orgId } = await getCurrentOrg(options);
     const start = new Date(startDate);
     const end = new Date(endDate);
 
@@ -605,11 +617,12 @@ export async function getDealPipelineReport(startDate: string, endDate: string) 
 export async function exportReportCSV(
   reportType: "1099" | "agent_production" | "pnl",
   params: Record<string, string>,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ csv: string; filename: string }> {
   try {
     if (reportType === "1099") {
       const taxYear = parseInt(params.taxYear || String(new Date().getFullYear()), 10);
-      const data = await get1099PrepData(taxYear);
+      const data = await get1099PrepData(taxYear, options);
 
       const header = ["Agent Name", "Email", "License #", "Total Earnings", "Invoice Count", "Above $600 Threshold"];
       const rows = data.agents.map((a: {
@@ -632,7 +645,7 @@ export async function exportReportCSV(
       const startDate = params.startDate || new Date(new Date().getFullYear(), 0, 1).toISOString();
       const endDate = params.endDate || new Date().toISOString();
       const sortBy = (params.sortBy as "volume" | "deals" | "earnings") || "volume";
-      const data = await getAgentProductionReport(startDate, endDate, sortBy);
+      const data = await getAgentProductionReport(startDate, endDate, sortBy, options);
 
       const header = ["Rank", "Agent Name", "Email", "Deals", "Volume", "Commission", "Agent Earnings", "House Earnings", "Avg Deal Size"];
       const rows = data.agents.map((a: {
