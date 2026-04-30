@@ -341,6 +341,19 @@ Phase 0 status as of 2026-04-29:
 - **Stack:** `feat/bms-overhaul-1b-default-landing` → base `feat/bms-overhaul-1.5-sidebar-badge` (PR #14).
 - **Requires approval:** approved 2026-04-29 (middleware diff scope was constrained to a single line; both decisions and edge cases approved in chat before code).
 
+### 1b2 — Auth-flow file class fix (slice 1b follow-up)
+- **Status:** `awaiting_review`
+- **Goal:** Three additional auth-flow entry points hardcoded `/market-intel` as the post-auth landing and bypassed the role-aware redirect from slice 1b. Verification surfaced the login form's `router.push` after fresh sign-in still landing on `/market-intel`. Same bug class lived in two more places. Each fix is a single-line flip from `"/market-intel"` → `"/"` so the bounce hits the role-aware redirect in `app/page.tsx`.
+- **Closes:** slice 1b verification gap. Bug class, not a single-instance bug — guarded with a class-level scan contract so future code can use `/market-intel` as a destination elsewhere (it's a legitimate page) but auth-flow files can never re-introduce it as a landing.
+- **Files:**
+  - `src/app/(auth)/login/page.tsx` (line 37 — login form success router.push fallback).
+  - `src/app/(auth)/pending-approval/page.tsx` (line 25 — "I've been approved, check again" button).
+  - `src/app/auth/callback/route.ts` (line 6 — magic-link / OAuth callback fallback when `?next=` is missing; the `?next=` deep-link path is preserved).
+- **Smoke contract added to `tests/smoke/role-landing.test.ts`:** scans the three auth-flow files for any string literal `"/market-intel"` (single OR double quoted). Guards the *class*, not just one instance.
+- **Gates:** lint 4530 (held — verified at full-project level after a pre-existing `react-hooks/set-state-in-effect` warning on `login/page.tsx:30` from commit `84cf82bb` surfaced under file-scoped lint); typecheck 113 (held); 82 / 79 tests (+3 — one per auth-flow file in the scan); build clean.
+- **Stack:** committed onto `feat/bms-overhaul-1b-default-landing` (PR #15) — 1b's spec was always "role-based landing, all entry points"; this completes it. No separate PR.
+- **Requires approval:** approved 2026-04-29 (option (b) from chat: fix all 3 + class-level scan).
+
 ### 4 — Manager dashboard rebuild
 - **Status:** `pending`
 - **Goal:** Replace 11-KPI grid with role-specific dashboard. 4 KPIs, "Pending review (n) →", today's tasks, top-3 leaderboard, this-month financials.

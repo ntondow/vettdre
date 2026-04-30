@@ -21,8 +21,10 @@ export default function PendingApprovalPage() {
     try {
       // Refresh the session to pick up any changes
       await supabase.auth.refreshSession();
-      // Navigate to dashboard — middleware will redirect back here if still not approved
-      router.push("/market-intel");
+      // Bounce through "/" so the role-aware redirect in app/page.tsx
+      // picks the landing. Middleware sends still-unapproved users
+      // back here on its own.
+      router.push("/");
       router.refresh();
     } catch {
       setChecking(false);

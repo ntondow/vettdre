@@ -72,4 +72,33 @@ describe("Slice 1b — Role-aware default landing", () => {
       expect(middlewareSrc).not.toMatch(/url\.pathname\s*=\s*["']\/market-intel["']/);
     });
   });
+
+  // Slice 1b2: class-level scan. The original 1b shipped only the root
+  // `/` redirect + the middleware auth-page bounce — three other auth
+  // entry points still hardcoded `/market-intel` as the post-auth
+  // landing and bypassed the role-aware redirect:
+  //   - login form's success router.push
+  //   - pending-approval's "check again" button
+  //   - magic-link / OAuth callback fallback when ?next= is missing
+  // Each fix is a single-line flip from "/market-intel" → "/". This
+  // contract guards the *class*: any auth-flow file that re-introduces
+  // a hardcoded "/market-intel" landing fails.
+  //
+  // /market-intel is a legitimate destination elsewhere in the app —
+  // this scan is scoped to auth-flow files only.
+  describe("Slice 1b2 — auth-flow files have no hardcoded /market-intel", () => {
+    const AUTH_FLOW_FILES = [
+      "src/app/(auth)/login/page.tsx",
+      "src/app/(auth)/pending-approval/page.tsx",
+      "src/app/auth/callback/route.ts",
+    ];
+
+    for (const file of AUTH_FLOW_FILES) {
+      it(`${file} does not hardcode "/market-intel" as a post-auth landing`, () => {
+        const src = readSource(file);
+        // Match the exact string literal — both single and double quoted.
+        expect(src).not.toMatch(/["']\/market-intel["']/);
+      });
+    }
+  });
 });
