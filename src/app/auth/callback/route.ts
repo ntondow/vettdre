@@ -3,7 +3,10 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/market-intel";
+  // ?next= deep-link wins; the fallback bounces through "/" so the
+  // role-aware redirect in app/page.tsx picks the landing instead of
+  // hardcoding /market-intel.
+  const next = searchParams.get("next") ?? "/";
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
