@@ -146,7 +146,11 @@ export async function updateSession(request: NextRequest) {
       url.pathname = redirectTo;
       url.search = "";
     } else {
-      url.pathname = "/market-intel";
+      // Slice 1b: bounce through "/" so the role-aware redirect in
+      // app/page.tsx picks the landing. Centralizes the role-to-landing
+      // map in one place — middleware doesn't need (or want) Prisma at
+      // the edge.
+      url.pathname = "/";
     }
     return NextResponse.redirect(url);
   }
