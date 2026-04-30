@@ -418,7 +418,7 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 7a (picker live + 24h soak so the new code path is the canonical one before historical fix).
 
 ### 17 — Onboarding form UX cleanup
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` (PR #20)
 - **Goal:** Fix placeholder-as-prefill (B-025), currency formatting on blur (B-026), retry affordance on transient submit failure (B-023), conditional Personal Note based on delivery method (B-029).
 - **Closes bug:** B-023, B-025, B-026, B-029
 - **Dropped from initial scope:** B-028 (Send Invite loading state). Verified during slice 14 review that the existing `disabled={submitting}` + spinner already flips BEFORE the await — fix was already in place from a prior slice. Documented in the PR for traceability.
