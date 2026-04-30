@@ -418,12 +418,22 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 7a (picker live + 24h soak so the new code path is the canonical one before historical fix).
 
 ### 17 — Onboarding form UX cleanup
-- **Status:** `pending`
-- **Goal:** Fix placeholder-as-prefill (B-025/B-026), currency formatting on blur, Send Invite loading state, conditional Personal Note based on delivery method.
+- **Status:** `awaiting_review` (PR #TBD)
+- **Goal:** Fix placeholder-as-prefill (B-025), currency formatting on blur (B-026), retry affordance on transient submit failure (B-023), conditional Personal Note based on delivery method (B-029).
 - **Closes bug:** B-023, B-025, B-026, B-029
-- **Files:** `new/page.tsx` + components.
-- **Success criteria:** Manual smoke test — form behaves correctly through full submit cycle.
-- **Depends on:** 14, 7a
+- **Dropped from initial scope:** B-028 (Send Invite loading state). Verified during slice 14 review that the existing `disabled={submitting}` + spinner already flips BEFORE the await — fix was already in place from a prior slice. Documented in the PR for traceability.
+- **Files:** `new/page.tsx` (+90 lines for state, helper, retry button, conditional render); `tests/smoke/onboarding-form-ux.test.ts` (new, 9 source-level contracts).
+- **Success criteria:**
+  - Italic + lighter-weight placeholders visually distinct from filled values (B-025).
+  - Fee + Monthly Rent inputs format as `4,500` on blur, revert to bare digits on focus (B-026).
+  - Thrown errors from `createOnboarding` show "Try again" inline button; action-returned errors do NOT (B-023).
+  - Personal Note section hides when delivery is SMS-only or link-only; submit payload omits `notes` for those channels even if state holds typed text (B-029).
+- **Verification gates:**
+  - `npm run test`: 105/105 pass (was 96; 9 new for slice 17).
+  - `npm run build`: exit 0.
+  - `npx tsc --noEmit` filtered: 288 (vs main baseline 292; -4 from inference narrowing). Slice 17 tracked files contribute zero TS errors.
+  - `npx eslint <changed files>`: exit 0.
+- **Depends on:** 14, 7a (both merged).
 - **Requires approval:** No.
 
 ### 18 — Onboarding empty state + list reliability
