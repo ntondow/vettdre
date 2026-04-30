@@ -40,8 +40,25 @@ interface AgentRosterEntry {
   email: string;
 }
 
-const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
+// Placeholder styling (B-025): italic + lighter weight + slate-400 so a hint
+// like "4,500" can't be mistaken for a filled value (which renders default
+// non-italic, slate-900). Without this, managers were submitting the form
+// thinking the fee was prefilled — then bouncing on validation.
+const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-base sm:text-sm placeholder:italic placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
+
+// Currency display helper (B-026). Format on blur, not live, so the cursor
+// stays put while the user is typing. Internal state is digits-only; the
+// formatted string is computed for display only.
+function formatCurrency(val: string): string {
+  if (!val) return "";
+  const num = parseFloat(val);
+  if (isNaN(num)) return val;
+  return num.toLocaleString("en-US", {
+    minimumFractionDigits: num % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+}
 
 // ── Component ────────────────────────────────────────────────
 
@@ -83,6 +100,15 @@ export default function NewOnboardingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  // B-023: retryable flag distinguishes thrown framework errors (transient,
+  // typically 503/cold-start/pool blip) from action-returned errors (validation,
+  // permission, business state — not retryable by hammering Send Invite).
+  const [submitRetryable, setSubmitRetryable] = useState(false);
+
+  // B-026: focus state per currency input. While focused, value reverts to
+  // raw digits so editing is natural; on blur it formats with commas.
+  const [feeAmountFocused, setFeeAmountFocused] = useState(false);
+  const [monthlyRentFocused, setMonthlyRentFocused] = useState(false);
 
   // Load brokerage info + templates + agent roster
   useEffect(() => {
@@ -149,6 +175,12 @@ export default function NewOnboardingPage() {
 
     setSubmitting(true);
     setSubmitError("");
+    setSubmitRetryable(false);
+
+    // B-029: only forward the personal note when the delivery actually carries
+    // it (email channel). SMS-only and link-only deliveries discard the note
+    // server-side, so don't send it from the client either.
+    const includePersonalNote = !linkOnly && deliveryChannels.has("email");
 
     try {
       const result = await createOnboarding({
@@ -164,7 +196,7 @@ export default function NewOnboardingPage() {
         effectiveThrough: effectiveThrough || undefined,
         selectedTemplateIds: templates.length > 0 ? Array.from(selectedTemplateIds) : undefined,
         deliveryMethod: linkOnly ? "link" : Array.from(deliveryChannels).join("+") as "email" | "sms" | "email+sms",
-        notes: notes.trim() || undefined,
+        notes: includePersonalNote ? (notes.trim() || undefined) : undefined,
         agentId: selectedAgentId || undefined,
       });
 
@@ -172,10 +204,17 @@ export default function NewOnboardingPage() {
         const id = (result.data as { id: string }).id;
         router.push(`/brokerage/client-onboarding/${id}`);
       } else {
+        // Action returned a structured error (validation / permission / state).
+        // Not retryable — same submit will yield the same error.
         setSubmitError(result.error ?? "Failed to create onboarding");
+        setSubmitRetryable(false);
       }
     } catch {
-      setSubmitError("An unexpected error occurred");
+      // B-023: thrown errors from the action call are typically transient
+      // (Cloud Run cold-start, Supabase pooler reconnect, gateway 503).
+      // Surface a recovery affordance instead of a dead-end "unexpected error."
+      setSubmitError("Service is busy. Please try again in a few seconds.");
+      setSubmitRetryable(true);
     } finally {
       setSubmitting(false);
     }
@@ -198,8 +237,23 @@ export default function NewOnboardingPage() {
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 space-y-6">
         {submitError && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3">
-            <AlertCircle className="w-4 h-4 flex-shrink-0" /> {submitError}
+          <div
+            data-testid="onboarding-submit-error"
+            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-3"
+          >
+            <AlertCircle className="w-4 h-4 flex-shrink-0" />
+            <span className="flex-1">{submitError}</span>
+            {submitRetryable && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={submitting}
+                data-testid="onboarding-submit-retry"
+                className="font-medium underline hover:text-red-800 disabled:opacity-50 disabled:no-underline"
+              >
+                Try again
+              </button>
+            )}
           </div>
         )}
 
@@ -348,7 +402,16 @@ export default function NewOnboardingPage() {
               <label className={LABEL}>Monthly Rent</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
-                <input type="text" inputMode="decimal" value={monthlyRent} onChange={(e) => setMonthlyRent(e.target.value.replace(/[^0-9.]/g, ""))} className={INPUT + " pl-7"} placeholder="3,500" />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={monthlyRentFocused ? monthlyRent : formatCurrency(monthlyRent)}
+                  onFocus={() => setMonthlyRentFocused(true)}
+                  onBlur={() => setMonthlyRentFocused(false)}
+                  onChange={(e) => setMonthlyRent(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className={INPUT + " pl-7"}
+                  placeholder="3,500"
+                />
               </div>
             </div>
             <div>
@@ -369,7 +432,16 @@ export default function NewOnboardingPage() {
               <label className={LABEL}>Fee Due at Signing *</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">$</span>
-                <input type="text" inputMode="decimal" value={feeAmount} onChange={(e) => setFeeAmount(e.target.value.replace(/[^0-9.]/g, ""))} className={INPUT + " pl-7"} placeholder="4,500" />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={feeAmountFocused ? feeAmount : formatCurrency(feeAmount)}
+                  onFocus={() => setFeeAmountFocused(true)}
+                  onBlur={() => setFeeAmountFocused(false)}
+                  onChange={(e) => setFeeAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                  className={INPUT + " pl-7"}
+                  placeholder="4,500"
+                />
               </div>
               {errors.feeAmount && <p className="mt-1 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.feeAmount}</p>}
             </div>
@@ -439,11 +511,20 @@ export default function NewOnboardingPage() {
           )}
         </section>
 
-        {/* Notes */}
-        <section className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-          <h2 className="text-base font-semibold text-slate-800 mb-3">Personal Note</h2>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Include a personal note in the invite email (optional)" className={INPUT + " resize-none"} />
-        </section>
+        {/* Notes (B-029): only render when delivery includes email. SMS-only
+            and link-only deliveries discard the note server-side, so showing
+            the field at all just wastes manager input. The state variable
+            persists if delivery toggles back to email — no data loss on
+            accidental clicks. */}
+        {!linkOnly && deliveryChannels.has("email") && (
+          <section
+            data-testid="onboarding-personal-note"
+            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm"
+          >
+            <h2 className="text-base font-semibold text-slate-800 mb-3">Personal Note</h2>
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Include a personal note in the invite email (optional)" className={INPUT + " resize-none"} />
+          </section>
+        )}
 
         {/* Actions */}
         <div className="flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 sm:gap-3 pt-2 pb-safe">
