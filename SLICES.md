@@ -387,7 +387,7 @@ Phase 0 status as of 2026-04-29:
 ## Phase 2 — Agent + Client Onboarding (Week 3)
 
 ### 7a — Agent picker on Onboarding form
-- **Status:** `in_progress` (2026-04-30)
+- **Status:** `awaiting_review` (PR #19, 2026-04-30)
 - **Goal:** Form has agent dropdown. Defaults to current user; users with `view_agents` (admin/broker/manager) can pick.
 - **Closes bug:** B-024
 - **Roster scope:** include BrokerAgent rows with `status IN ('active', 'pending', 'invited')`. Exclude `suspended` and `terminated`. Rationale: brokerage admins need to file onboardings on behalf of newly-hired agents BEFORE that agent has finished their first login (otherwise we re-create the friction we're trying to remove).
