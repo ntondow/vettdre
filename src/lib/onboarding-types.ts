@@ -78,6 +78,12 @@ export interface ClientOnboardingInput {
   expiresInDays?: number;       // legacy — days from now
   effectiveThrough?: string;    // ISO date string for agreement expiry
 
+  // Agent assignment (slice 7a / B-024).
+  // When omitted, server falls back to ctx.agentId (the current user). When
+  // provided, server validates the caller has view_agents AND the agent
+  // belongs to the same org before honoring it.
+  agentId?: string;
+
   // Optional
   notes?: string;
 }
