@@ -993,7 +993,7 @@ After completing all slices in a phase:
 
 **Lint baseline (end of Phase Z, 2026-04-28):** 4530 errors. Update this number when Phase 3 polish reduces the baseline; never let an in-flight phase silently increase it.
 
-**Typecheck baseline (end of Slice 2, 2026-04-29):** 113 errors (down from a 285 anchor at end of slice 1c — 170-error reduction landed incidentally during slice 1c's submissions-dashboard rewrite, not flagged at the time). Future slices must hold typecheck ≤ 113 or improve. Same rule as lint: never let an in-flight phase silently increase the count, and any reduction should be flagged in the slice's gate report.
+**Typecheck baseline (corrected 2026-04-30):** 292 errors. The previous 113 anchor was contaminated — the slice 2 gate report measurement was bad (same git-stash-untracked class of bug we caught later). The real number on every relevant branch (main/cf6e1cf/feat-bms-overhaul-2026-q2) has been 292-298. Future slices must hold ≤292 or improve.
 
 ### Measurement discipline
 

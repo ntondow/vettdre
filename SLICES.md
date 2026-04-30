@@ -511,13 +511,24 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** YES — architectural change.
 
 ### 3.X — Parent branch cleanup
+- **Status:** `in_progress` (PR-A merged 2026-04-30; PR-D superseding planned PR-B/PR-C, awaiting_review)
+- **Goal:** Merge `feat/super-admin-cross-tenant-view` + 15 BMS overhaul slice branches to main.
+- **Plan revision (2026-04-30):** Original A → B → C plan replaced after P0: deploying from main rolled back all 15 slice branches because they weren't on main yet. New plan is PR-A (already merged) + PR-D (single integration PR collapsing planned PR-B + PR-C + the 15 slice branches via rebase of `cf6e1cf` onto main). c05e952 R6 cleanup handled inline in PR-D's rebase.
+- **PRs:** PR-A #17 (merged); PR-D awaiting_review.
+- **Success criteria:** main reflects production reality; deploy from main = current prod; no orphan slice branches.
+- **Requires approval:** PR-D collapses ~43 commits and is the single point where parent branch + Phase 1 slices land together.
+
+### 3.W — Clean Finder-duplicate files from main
 - **Status:** `pending`
-- **Goal:** Merge `feat/super-admin-cross-tenant-view` to main as 3 batched PRs (PR-A condo_ownership pipeline, PR-B processing-fee + hotfixes, PR-C auth super-admin override).
-- **When:** After Phase 0 merges to `feat/super-admin-cross-tenant-view`, BEFORE Phase 1 branches. The stack is flat at that exact moment — only safe window.
-- **Files:** parent branch only (no overhaul-branch touches).
-- **Success criteria:** main commit graph reflects production reality; new Phase 1 branch off clean main; no overhaul rebases needed.
-- **Depends on:** Phase 0 merge to parent.
-- **Requires approval:** YES on PR-A (12 migrations + ingestion pipeline); PR-B and PR-C are small and reviewable but should be inspected.
+- **Priority:** low (Phase 3 polish)
+- **Goal:** Remove four ` 2.tsx` Finder-duplicate files that landed on main via commit `53d7751 chore: in-flight work — terminal realtime, screening IDV, market-intel updates, building-intel docs`. Surfaced during PR-D rebase (not in PR-D's scope to fix — they predate PR-D).
+- **Files:**
+  - `src/components/layout/sidebar 2.tsx`
+  - `src/app/screen/[token]/client 2.tsx`
+  - `src/app/(dashboard)/screening/[id]/page 2.tsx`
+  - `src/app/(dashboard)/brokerage/client-onboarding/page 2.tsx`
+- **Success criteria:** `find . -name '* 2.tsx' -o -name '* 2.ts'` (excluding node_modules, .next, venvs) returns zero tracked files. One-line PR.
+- **Depends on:** none (independent).
 
 **[PHASE 3 APPROVAL GATE — STOP HERE]**
 
