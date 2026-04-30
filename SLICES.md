@@ -325,13 +325,21 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No — directly approved by Nathan after slice 2/2a verification.
 
 ### 1b — Default landing per role
-- **Status:** `pending`
-- **Goal:** Manager logs in → /brokerage/dashboard. Agent → /brokerage/my-deals. Super_admin → admin home.
+- **Status:** `awaiting_review`
+- **Goal:** Role-aware default landing — replace the hardcoded `/market-intel` fallback so each role lands on a sensible default.
 - **Closes bug:** B-018
-- **Files:** `middleware.ts`, `src/app/page.tsx`, possibly `src/lib/supabase/middleware.ts`
-- **Success criteria:** Each role lands correctly. Test as Anthony, as Nathan, as a manager-role user.
-- **Depends on:** None blocking
-- **Requires approval:** YES — middleware change.
+- **Approved role-to-landing map:**
+  - `super_admin` → `/dashboard` (interim — see slice 3.Z below)
+  - `owner` / `admin` / `manager` → `/brokerage/dashboard`
+  - `agent` → `/brokerage/my-deals`
+  - null / orphan / unknown → `/market-intel` (safe fallback)
+- **Approved placement:** logic lives in `src/app/page.tsx` (server component, runs once per session). Middleware NOT extended with Prisma — kept edge-safe. Single change in `lib/supabase/middleware.ts`: the auth-page bounce fallback flips from `/market-intel` → `/` so the bounce hits the role-aware redirect in `page.tsx` and the role-to-landing map lives in exactly one place.
+- **Deep-link handling:** unchanged — `/login?redirect=/path` still wins. Role-based landing only fires when entering via root `/`.
+- **Auth-flow impact:** none. Pending-approval redirect, auto-provision, and `?as_org=` cross-tenant override paths all unchanged.
+- **Smoke contracts (+4):** `landingForRole` table for super_admin / owner+admin+manager / agent / fallback; source-level guard that `page.tsx` threads role through the helper + redirects unauth → `/login`; source-level guard that middleware does NOT import Prisma or `landingForRole` (edge-safe contract); pinned the unauth `/` → `/login` redirect.
+- **Files:** `src/app/page.tsx`, `src/lib/supabase/middleware.ts` (one-line fallback change), `tests/smoke/role-landing.test.ts` (new file).
+- **Stack:** `feat/bms-overhaul-1b-default-landing` → base `feat/bms-overhaul-1.5-sidebar-badge` (PR #14).
+- **Requires approval:** approved 2026-04-29 (middleware diff scope was constrained to a single line; both decisions and edge cases approved in chat before code).
 
 ### 4 — Manager dashboard rebuild
 - **Status:** `pending`
@@ -413,6 +421,15 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** Manager nav matches consulting proposal in audit doc.
 - **Depends on:** 7
 - **Requires approval:** No.
+
+### 3.Z — Admin Home for super_admin (slice 1b follow-up)
+- **Status:** `pending`
+- **Goal:** Replace `/dashboard` as the super_admin landing with a real admin home — tenant switcher, cross-tenant activity feed, team management entry, audit log shortcut.
+- **Why:** super_admin currently inherits the investor-shaped `/dashboard` (per slice 1b) which has nothing administratively useful for Vettdre staff. Slice 1b parks them there as an interim; this slice replaces it with a purpose-built surface.
+- **Files:** new `src/app/(dashboard)/admin/page.tsx` + supporting components. Update `landingForRole("super_admin")` in `src/app/page.tsx` to point to the new path.
+- **Smoke contract delta:** the slice 1b smoke test pinning `super_admin → /dashboard` will need updating in this slice — flag in the PR description so the reviewer knows the change is intentional, not a regression.
+- **Depends on:** Phase 1 + 3 work first; this is platform polish.
+- **Requires approval:** YES — new admin surface, wireframe gated.
 
 ### 9 — Replace mixed icons + ALL CAPS labels
 - **Status:** `pending`
