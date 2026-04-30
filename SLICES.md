@@ -387,13 +387,35 @@ Phase 0 status as of 2026-04-29:
 ## Phase 2 — Agent + Client Onboarding (Week 3)
 
 ### 7a — Agent picker on Onboarding form
-- **Status:** `pending`
-- **Goal:** Form has agent dropdown. Defaults to current user; admin/owner can pick.
+- **Status:** `in_progress` (2026-04-30)
+- **Goal:** Form has agent dropdown. Defaults to current user; users with `view_agents` (admin/broker/manager) can pick.
 - **Closes bug:** B-024
-- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx` + actions.
-- **Success criteria:** Picker only shows agents in current tenant. Onboarding assigned to picked agent.
-- **Depends on:** Phase 1
+- **Roster scope:** include BrokerAgent rows with `status IN ('active', 'pending', 'invited')`. Exclude `suspended` and `terminated`. Rationale: brokerage admins need to file onboardings on behalf of newly-hired agents BEFORE that agent has finished their first login (otherwise we re-create the friction we're trying to remove).
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx`, `src/app/(dashboard)/brokerage/client-onboarding/actions.ts`, `src/lib/onboarding-types.ts`, `tests/smoke/onboarding-agent-picker.test.ts` (new).
+- **Success criteria:** Picker only shows agents in current tenant. Onboarding assigned to picked agent. Plain `agent` role sees read-only "Agent: {Self Name}" label, no `<select>` in DOM. Cross-org `agentId` is rejected server-side via re-fetch with `where: { id, orgId: ctx.orgId }`. PDF prefill, audit log (`logAgentAction` with `targetAgentId`), and `OnboardingDocument.agentId` all use the resolved agent (not `ctx.agentId`).
+- **Depends on:** Phase 1.
 - **Requires approval:** No.
+
+### 7a-fixup — Re-attribute existing pre-picker onboarding records
+- **Status:** `pending`
+- **Priority:** low (Phase 2 polish)
+- **Type:** Manual SQL update (no code change). Run after 7a ships and the new picker is in active use.
+- **Goal:** For the 9 onboarding records that predate the agent picker (all currently attributed to "Nathan Tondow" because no picker existed), re-attribute each to the BrokerAgent that the deal was actually for. Decision per-record is Nathan's — most are voided/expired/test or family-of-Nathan and may be left as-is; only the 2 Gulino-client records may need re-attribution if those onboardings should belong to a Gulino-org agent.
+- **Records (captured 2026-04-30 from prod):**
+  | onboarding_id | client | status | created |
+  |---|---|---|---|
+  | `f2109513-98bb-4ef1-8b4a-8cdd63ff7f4a` | Kristin Gulino | voided | 2026-03-30 |
+  | `d9341885-a543-491b-9cb5-1705342daa60` | Nathan Tondow (self) | voided | 2026-03-30 |
+  | `8fe135bb-c727-4def-96a4-9806cad3711b` | Nathan Test | voided | 2026-03-30 |
+  | `6c8dab01-4e87-40c7-87cf-16582ed3bfa8` | Nathan Test | expired | 2026-03-31 |
+  | `0fc2da04-a99e-4206-8ff6-94df3a11926c` | Rachel Tondow | completed | 2026-03-31 |
+  | `fb5532d9-96bc-42ca-a413-2e26506352b2` | John Gulino | completed | 2026-03-31 |
+  | `e412faf5-7a90-44f4-991e-03fef7a72854` | Kristin Gulino | completed | 2026-03-31 |
+  | `dde681de-550d-4b67-959a-dd1eeb7638ef` | Linda Tondow | completed | 2026-04-01 |
+  | `2e335658-96ac-4fad-964b-caa5f57856b3` | Jon Klomp | completed | 2026-04-05 |
+- **Note:** All 9 records live in `org_id = 5ecba9ba-...` ("Nathan Tondow's Organization"), NOT in "Gulino Group" — they were created before the 2026-04-27 org split. Re-attribution may need to also move records cross-org if the intent is to associate them with Gulino agents. Confirm with Nathan before any UPDATE.
+- **Success criteria:** Each of the 9 records is either (a) confirmed to remain attributed to Nathan, or (b) re-attributed to the correct BrokerAgent (and possibly correct org).
+- **Depends on:** 7a (picker live + 24h soak so the new code path is the canonical one before historical fix).
 
 ### 17 — Onboarding form UX cleanup
 - **Status:** `pending`

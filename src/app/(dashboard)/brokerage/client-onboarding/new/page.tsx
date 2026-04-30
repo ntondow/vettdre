@@ -18,7 +18,7 @@ import {
   Lock,
   MapPin,
 } from "lucide-react";
-import { createOnboarding } from "../actions";
+import { createOnboarding, getAgentRosterForOnboarding } from "../actions";
 import { getDocumentTemplates } from "../vault-actions";
 import { getBrokerageSettings } from "../../settings/actions";
 
@@ -33,6 +33,13 @@ interface TemplateOption {
   fields: unknown[];
 }
 
+interface AgentRosterEntry {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 const INPUT = "w-full rounded-lg border border-slate-300 px-3 py-2.5 sm:py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500";
 const LABEL = "block text-sm font-medium text-slate-700 mb-1";
 
@@ -43,6 +50,12 @@ export default function NewOnboardingPage() {
 
   const [brokerageName, setBrokerageName] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Agent roster (slice 7a / B-024). Roster empty for plain agents → form
+  // shows read-only self label. currentAgent always present for self label.
+  const [agentRoster, setAgentRoster] = useState<AgentRosterEntry[]>([]);
+  const [currentAgent, setCurrentAgent] = useState<AgentRosterEntry | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
 
   // Templates
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
@@ -71,13 +84,14 @@ export default function NewOnboardingPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
-  // Load brokerage info + templates
+  // Load brokerage info + templates + agent roster
   useEffect(() => {
     async function load() {
       try {
-        const [settings, tmplResult] = await Promise.all([
+        const [settings, tmplResult, rosterResult] = await Promise.all([
           getBrokerageSettings(),
           getDocumentTemplates(),
+          getAgentRosterForOnboarding(),
         ]);
         setBrokerageName(settings.name || "Your Brokerage");
 
@@ -87,6 +101,15 @@ export default function NewOnboardingPage() {
           // Pre-check default templates
           const defaults = new Set(tmps.filter((t) => t.isDefault).map((t) => t.id));
           setSelectedTemplateIds(defaults);
+        }
+
+        if (rosterResult.success && rosterResult.data) {
+          setAgentRoster(rosterResult.data.roster);
+          setCurrentAgent(rosterResult.data.currentAgent);
+          // Default the picker to the current user.
+          if (rosterResult.data.currentAgent) {
+            setSelectedAgentId(rosterResult.data.currentAgent.id);
+          }
         }
       } catch {
         // Non-critical
@@ -142,6 +165,7 @@ export default function NewOnboardingPage() {
         selectedTemplateIds: templates.length > 0 ? Array.from(selectedTemplateIds) : undefined,
         deliveryMethod: linkOnly ? "link" : Array.from(deliveryChannels).join("+") as "email" | "sms" | "email+sms",
         notes: notes.trim() || undefined,
+        agentId: selectedAgentId || undefined,
       });
 
       if (result.success && result.data) {
@@ -188,6 +212,51 @@ export default function NewOnboardingPage() {
             </div>
           </div>
         )}
+
+        {/* Agent assignment (slice 7a / B-024).
+            Roster present (admin/broker/manager) → dropdown. Otherwise → read-only self label. */}
+        {agentRoster.length > 0 ? (
+          <section
+            data-testid="onboarding-agent-picker"
+            className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm"
+          >
+            <h2 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-slate-400" /> Filing Agent
+            </h2>
+            <label className={LABEL}>
+              Agent this onboarding is for
+            </label>
+            <select
+              className={INPUT}
+              value={selectedAgentId}
+              onChange={(e) => setSelectedAgentId(e.target.value)}
+            >
+              {agentRoster.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.firstName} {a.lastName} ({a.email})
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-slate-500">
+              Defaults to you. Pick another agent in your brokerage to file this onboarding on their behalf.
+            </p>
+          </section>
+        ) : currentAgent ? (
+          <div
+            data-testid="onboarding-agent-self-label"
+            className="bg-slate-50 rounded-xl border border-slate-200 p-4"
+          >
+            <div className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-slate-400" />
+              <span className="text-sm text-slate-600">
+                Agent:{" "}
+                <span className="font-medium text-slate-800">
+                  {currentAgent.firstName} {currentAgent.lastName}
+                </span>
+              </span>
+            </div>
+          </div>
+        ) : null}
 
         {/* Client Info */}
         <section className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">

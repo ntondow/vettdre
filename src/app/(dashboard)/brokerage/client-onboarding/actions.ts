@@ -191,6 +191,58 @@ export async function getOnboarding(
   }
 }
 
+// ── 2.5. getAgentRosterForOnboarding ────────────────────────
+// Roster for the slice 7a agent picker on /brokerage/client-onboarding/new.
+// Gated by view_agents (admin / broker / manager); plain agents get an empty
+// roster and the form falls back to a read-only self label.
+//
+// Roster scope: status IN ('active', 'pending', 'invited'). We deliberately
+// include pending/invited so a brokerage admin can file an onboarding for a
+// newly-hired agent BEFORE that agent has finished their first login —
+// otherwise we'd recreate the friction this slice exists to remove. Only
+// suspended/terminated agents are excluded.
+
+type AgentRosterEntry = { id: string; firstName: string; lastName: string; email: string };
+
+export async function getAgentRosterForOnboarding(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
+  success: boolean;
+  data?: { roster: AgentRosterEntry[]; currentAgent: AgentRosterEntry | null };
+  error?: string;
+}> {
+  try {
+    const ctx = await getAuthContext(options);
+    if (!ctx) return { success: false, error: "Not authenticated" };
+
+    // Always fetch current user's agent record — needed for the self-label
+    // fallback when the caller can't see the full roster.
+    const currentAgent = await prisma.brokerAgent.findFirst({
+      where: { id: ctx.agentId, orgId: ctx.orgId },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+
+    if (!hasPermission(ctx.role, "view_agents")) {
+      // Plain agent role — empty roster, form falls back to self label.
+      return { success: true, data: { roster: [], currentAgent } };
+    }
+
+    const roster = await prisma.brokerAgent.findMany({
+      where: {
+        orgId: ctx.orgId,
+        status: { in: ["active", "pending", "invited"] },
+      },
+      select: { id: true, firstName: true, lastName: true, email: true },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
+
+    return { success: true, data: { roster, currentAgent } };
+  } catch (error) {
+    console.error("getAgentRosterForOnboarding error:", error);
+    return { success: false, error: "Failed to load agent roster" };
+  }
+}
+
 // ── 3. createOnboarding ─────────────────────────────────────
 
 export async function createOnboarding(
@@ -207,9 +259,17 @@ export async function createOnboarding(
     if (!input.clientLastName?.trim()) return { success: false, error: "Client last name is required" };
     if (!input.clientEmail?.trim()) return { success: false, error: "Client email is required" };
 
-    // Get agent + org info for PDF generation
+    // Resolve which BrokerAgent the onboarding is filed for (slice 7a / B-024).
+    // If the caller passed input.agentId AND has view_agents permission, honor
+    // it (after re-fetching with same-org guard to reject cross-org). Otherwise
+    // fall back to the caller's own agent record.
+    const requestedAgentId =
+      input.agentId && hasPermission(ctx.role, "view_agents")
+        ? input.agentId
+        : ctx.agentId;
+
     const agent = await prisma.brokerAgent.findFirst({
-      where: { id: ctx.agentId, orgId: ctx.orgId },
+      where: { id: requestedAgentId, orgId: ctx.orgId },
       select: { id: true, firstName: true, lastName: true, email: true, licenseNumber: true },
     });
     if (!agent) return { success: false, error: "Agent record not found" };
@@ -444,6 +504,10 @@ export async function createOnboarding(
           actorType: "agent",
           actorId: ctx.userId,
           actorName: ctx.fullName,
+          // Slice 7a: capture who the onboarding was filed *for*. Differs
+          // from actorId when an admin/manager creates on behalf of another
+          // agent.
+          metadata: { targetAgentId: agent.id },
         },
       });
 
