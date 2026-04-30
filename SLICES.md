@@ -437,7 +437,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 18 — Onboarding empty state + list reliability
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` (PR #21)
 - **Goal:** Filter-aware empty state on `/client-onboarding` (Payments-style differentiation between slate-zero and filter-narrowed empty). Lock in B-019 closure with regression guards on the LIST page's override threading.
 - **Closes bug:** U-071
 - **B-019 verified out of scope:** Already closed by slice 0c2 (commit `772c897` threaded `?as_org` through 12 BMS client pages including `/client-onboarding`). Reading current main: `useSearchParams` → `overrideOpts` → memoized → passed to `getOnboardings` (both initial + slice-14 retry) AND all four mutation handlers (resend/void/delete/archive). The "9 records on first load, 0 on reload" symptom from the 2026-04-28 audit was the pre-0c2 state. Slice 18 adds source-level smoke contracts to prevent silent regression — the existing `override-scoping.test.ts` covers ACTION layer + DETAIL pages but not LIST pages.
