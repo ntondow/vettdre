@@ -955,21 +955,38 @@ is in SLICES.md. The audit + redesign rationale is in `docs/handoff/bms-audit-20
 
 ### Workflow per slice
 
+**Branching pattern (Phase 2 onward):** every slice branches off `origin/main`,
+PRs back to `main`, and **its branch is deleted after merge**. No long-lived
+integration branches. The `feat/bms-overhaul-2026-q2` style of stacking 16
+slice branches before integration is abandoned — it caused the 2026-04-30 P0
+where a deploy from `main` rolled back all 15 unmerged slices.
+
 1. Read the slice in `SLICES.md`.
 2. Read the audit doc section it references.
 3. Read the files listed in "files likely involved."
-4. **Propose a plan in chat to Nathan before writing code** if the slice is
-   tagged `requires-approval` or you're touching the data layer (`prisma/`,
-   migrations, server actions in `lib/team-context.ts` or similar).
-5. Implement. Run typecheck/test periodically as you go.
-6. Add 1-3 tests for the change (where reasonable — not all changes need tests).
-7. Run `npm run typecheck && npm run test && npm run build` once more. Lint
+4. **Propose a plan in chat to Nathan before writing code** if any of these apply:
+   - Slice is tagged `requires-approval`
+   - Touches the data layer (`prisma/`, migrations, `lib/team-context.ts`,
+     `middleware.ts`, `lib/supabase/middleware.ts`)
+   - Expected to be >300 lines of changes
+   - First slice of a phase (kickoff slice gets a proposal regardless)
+5. **Branch off `origin/main`** — `git fetch origin && git checkout -b
+   feat/<slice-id>-<short-name> origin/main`. Do NOT branch off another slice
+   branch.
+6. Implement. Run typecheck/test periodically as you go.
+7. Add 1-3 tests for the change (where reasonable — not all changes need tests).
+8. Run `npm run typecheck && npm run test && npm run build` once more. Lint
    only the changed files (see baseline carve-out above).
-8. Commit with conventional message: `feat(scope): description` or
+9. Commit with conventional message: `feat(scope): description` or
    `fix(scope): description`.
-9. Push. Open PR with body referencing the slice ID and the audit bug IDs it closes.
-10. Mark slice `awaiting_review` in `SLICES.md`.
-11. Pick up the next pending slice and repeat.
+10. Push. Open PR against `main` with body referencing the slice ID and the
+    audit bug IDs it closes.
+11. Mark slice `awaiting_review` in `SLICES.md`.
+12. STOP. Ping Nathan with the PR link. Do not merge. Do not start the next
+    slice until the current one is merged.
+13. After merge: locally `git checkout main && git pull` and `git branch -d
+    feat/<slice-id>-<short-name>`. Push delete on origin too.
+14. Pick up the next pending slice and repeat from step 1.
 
 ### Stop conditions
 
@@ -991,9 +1008,9 @@ After completing all slices in a phase:
 5. Ask Nathan: "Phase N complete. Approve to start Phase N+1?"
 6. Wait. Don't start the next phase until told.
 
-**Lint baseline (end of Phase Z, 2026-04-28):** 4530 errors. Update this number when Phase 3 polish reduces the baseline; never let an in-flight phase silently increase it.
+**Lint baseline (Phase 1 close, 2026-04-30):** 4520 errors (measured on `main` post-PR-D merge; was 4530 at end of Phase Z). Future slices must hold ≤4520 or improve; never let an in-flight phase silently increase it.
 
-**Typecheck baseline (corrected 2026-04-30):** 292 errors. The previous 113 anchor was contaminated — the slice 2 gate report measurement was bad (same git-stash-untracked class of bug we caught later). The real number on every relevant branch (main/cf6e1cf/feat-bms-overhaul-2026-q2) has been 292-298. Future slices must hold ≤292 or improve.
+**Typecheck baseline (Phase 1 close, 2026-04-30):** 292 errors (measured on `main` post-PR-D merge; the previous 113 anchor was contaminated — the slice 2 gate report measurement was bad due to a git-stash-untracked class of bug). Future slices must hold ≤292 or improve.
 
 ### Measurement discipline
 
