@@ -34,7 +34,7 @@ function LoginForm() {
     e.preventDefault(); setLoading(true); setError(null);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) { setError(error.message); setLoading(false); }
-    else { router.push(redirectTo && redirectTo.startsWith("/") ? redirectTo : "/market-intel"); router.refresh(); }
+    else { router.push(redirectTo && redirectTo.startsWith("/") ? redirectTo : "/"); router.refresh(); }
   };
 
   const handleMagicLink = async (e: React.FormEvent) => {
