@@ -355,13 +355,30 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** approved 2026-04-29 (option (b) from chat: fix all 3 + class-level scan).
 
 ### 4 — Manager dashboard rebuild
-- **Status:** `pending`
-- **Goal:** Replace 11-KPI grid with role-specific dashboard. 4 KPIs, "Pending review (n) →", today's tasks, top-3 leaderboard, this-month financials.
-- **Closes bug:** B-002, B-003 (now that data reconciles), addresses U-006, U-007, U-011
-- **Files:** `src/app/(dashboard)/brokerage/dashboard/page.tsx`, `components/bms/*`
-- **Success criteria:** Dashboard shows correct numbers (matches Submissions/Transactions). One primary CTA visible.
-- **Depends on:** 0a, 0b
-- **Requires approval:** YES — show progress before final layout.
+- **Status:** `awaiting_review`
+- **Goal:** Replace the 11-KPI grid with the approved wireframe — 4 KPIs with vs-prior delta, primary CTA strip, today's tasks panel (TransactionTask source), top-3 leaderboard, active transactions list. Each panel manages its own loading/error/retry state. Greeting uses the real logged-in user's name even under `?as_org=`. Slice 5 (drop screening KPIs) rolled in.
+- **Closes bug:** addresses U-006 (KPI overload), U-007 (duplicated finance panel removed), U-009 (period selector now shows explicit date range), U-010 (screening KPIs removed — slice 5 closure), U-011 (primary CTA added).
+- **Approved decisions:** 4 KPIs = House Revenue / Agent Payouts / Pending Invoices / Closed Deals (each with vs-prior delta); TransactionTask source for the tasks panel; org-wide data scope for both manager and owner; CTA copy when n=0 = "All caught up. View pipeline →" linking to `/brokerage/transactions`; period selector keeps month/quarter/year toggle + adds explicit date-range subtitle; new test file `tests/smoke/dashboard-rebuild.test.ts`; slice 5 rolled in.
+- **Implementation additions (per chat approval):** (A) per-panel loading/error/retry — `PanelShell` shared shell + each panel owns its own status state; (B) `getDashboardHeader` returns `ctx.userName` from `getCurrentOrgContext` so the greeting stays personal to the actual user even when an override is active.
+- **Server actions added:**
+  - `getKpiComparison(period, opts)` — returns `{ current, previous }` snapshots of the 4 KPIs so each card renders a delta without two client fetches.
+  - `getTodaysTasksForManager(opts)` — TransactionTask rows due ≤ end-of-today, not completed, scoped to org. Capped at 5.
+  - `getDashboardHeader(opts)` — first-name + override flags for the greeting.
+- **Server action removed:** `getScreeningDashboardStats` deleted from `dashboard/actions.ts` (slice 5 closure — only consumer was the dashboard page).
+- **Files:**
+  - `src/app/(dashboard)/brokerage/dashboard/page.tsx` (rewrite — 785 lines → ~120 lines).
+  - `src/app/(dashboard)/brokerage/dashboard/actions.ts` (rewrite — replaces screening action with the 3 new ones).
+  - `src/app/(dashboard)/brokerage/dashboard/loading.tsx` (replaced — matches the new shape).
+  - `src/app/(dashboard)/brokerage/dashboard/components/` (new): `panel-shell.tsx`, `kpi-strip.tsx`, `primary-cta-strip.tsx`, `tasks-panel.tsx`, `top-performers-panel.tsx`, `active-transactions-panel.tsx`.
+  - `tests/smoke/dashboard-rebuild.test.ts` (new — 5 contracts beyond the 4 originally proposed).
+- **Smoke contracts (+5):** (a) PrimaryCtaStrip imports slice 1.5's `getSubmittedCount`; page wires the strip in. (b) Page does NOT import `getScreeningDashboardStats`; action is gone from `dashboard/actions.ts`. (c) No `<StatCard>` instances; no "Financial Overview" heading; `<KpiStrip>` mounts exactly once. (d) Page wires all four required panels + uses `getDashboardHeader` + `periodSubtitle()`. Plus: each new server action is exported with `overrideAsOrg` threading; each panel component owns its own status state machine + retry tick.
+- **Gates:** typecheck 113 (held); lint 4530 (held — 0 errors on changed files); 88 / 79 tests (+9: 5 in this slice's smoke file plus auto-loaded existing-file contracts); build clean.
+- **Stack:** `feat/bms-overhaul-4-dashboard-rebuild` → base `feat/bms-overhaul-1b-default-landing` (PR #15).
+- **Requires approval:** approved 2026-04-29 (full discovery + wireframe + 7 decisions in chat before code, plus 2 implementation additions).
+
+### 5 — Hide screening KPIs from BMS dashboard
+- **Status:** `deleted` (rolled into slice 4 — see PR #16 description for U-010 closure).
+- **Note:** Preserved as an audit-trail marker. The screening KPI strip and supporting `getScreeningDashboardStats` action were removed as part of the slice 4 dashboard rewrite. The action's only consumer was the BMS dashboard page; slice 4 deleted both. The standalone `lib/screening/integration.getScreeningBmsStats` function (which the deleted dashboard action wrapped) is still in place and remains usable from `/screening` if/when that surface needs it.
 
 **[PHASE 1 APPROVAL GATE — STOP HERE]**
 
