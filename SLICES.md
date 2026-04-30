@@ -437,12 +437,21 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 18 — Onboarding empty state + list reliability
-- **Status:** `pending`
-- **Goal:** Payments-style empty state on /client-onboarding. Investigate B-019 (same URL → different data).
-- **Closes bug:** B-019, U-071
-- **Files:** /client-onboarding/page.tsx; data fetch.
-- **Success criteria:** Empty state with illustration + CTA when 0 records. Same URL produces same data on multiple loads.
-- **Depends on:** 0c (override fix should resolve B-019 root cause)
+- **Status:** `awaiting_review` (PR #TBD)
+- **Goal:** Filter-aware empty state on `/client-onboarding` (Payments-style differentiation between slate-zero and filter-narrowed empty). Lock in B-019 closure with regression guards on the LIST page's override threading.
+- **Closes bug:** U-071
+- **B-019 verified out of scope:** Already closed by slice 0c2 (commit `772c897` threaded `?as_org` through 12 BMS client pages including `/client-onboarding`). Reading current main: `useSearchParams` → `overrideOpts` → memoized → passed to `getOnboardings` (both initial + slice-14 retry) AND all four mutation handlers (resend/void/delete/archive). The "9 records on first load, 0 on reload" symptom from the 2026-04-28 audit was the pre-0c2 state. Slice 18 adds source-level smoke contracts to prevent silent regression — the existing `override-scoping.test.ts` covers ACTION layer + DETAIL pages but not LIST pages.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/page.tsx` (~30 lines: split empty-state branch into filter-narrowed + slate-zero); `tests/smoke/onboarding-list-empty-state.test.ts` (new, 8 source-level contracts).
+- **Success criteria:**
+  - Empty state on a status tab with 0 records reads "No [status] onboardings yet. Try the All tab to see everything." (no CTA — records exist on other tabs).
+  - Empty state on All tab with 0 records reads "No client onboardings yet. Invite your first client to get started." + "New Client Onboarding" CTA (slate-zero state).
+  - 5 regression guards on the LIST page's override threading lock in slice 0c2's invariants.
+- **Verification gates:**
+  - `npm run test`: 113/113 pass (was 105; +8 new for slice 18).
+  - `npm run build`: exit 0.
+  - `npx tsc --noEmit` clean tree: 292 (matches baseline; slice 18 tracked files contribute zero new TS errors).
+  - `npx eslint <changed files>`: zero new errors (3 pre-existing warnings on unused imports `ExternalLink`, `Clock`).
+- **Depends on:** 0c2 (already merged).
 - **Requires approval:** No.
 
 ### 13 — Profile-completion banner for agents

@@ -300,18 +300,38 @@ export default function OnboardingListPage() {
 
         {/* Content */}
         {!loading && onboardings.length === 0 ? (
-          <div className="bg-white rounded-lg border border-slate-200 py-12 sm:py-16 text-center">
-            <UserPlus className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-            <h3 className="text-sm font-medium text-slate-900 mb-1">No client onboardings yet</h3>
-            <p className="text-sm text-slate-500 mb-4">Invite your first client to get started.</p>
-            <Link
-              href="/brokerage/client-onboarding/new"
-              className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+          // U-071: differentiate "no records at all" (slate-zero state — show
+          // illustration + CTA) from "no records on this filter tab" (records
+          // exist on other tabs — point the user to All instead of pushing
+          // them to invite a new client). Mirrors Payments empty state.
+          statusFilter !== "" ? (
+            <div
+              data-testid="onboarding-empty-filtered"
+              className="bg-white rounded-lg border border-slate-200 py-12 sm:py-16 text-center"
             >
-              <UserPlus className="w-4 h-4" />
-              New Client Onboarding
-            </Link>
-          </div>
+              <UserPlus className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-medium text-slate-900 mb-1">
+                No {(STATUS_TABS.find((t) => t.value === statusFilter)?.label ?? statusFilter).toLowerCase()} onboardings yet
+              </h3>
+              <p className="text-sm text-slate-500">Try the All tab to see everything.</p>
+            </div>
+          ) : (
+            <div
+              data-testid="onboarding-empty-zero"
+              className="bg-white rounded-lg border border-slate-200 py-12 sm:py-16 text-center"
+            >
+              <UserPlus className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+              <h3 className="text-sm font-medium text-slate-900 mb-1">No client onboardings yet</h3>
+              <p className="text-sm text-slate-500 mb-4">Invite your first client to get started.</p>
+              <Link
+                href="/brokerage/client-onboarding/new"
+                className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
+              >
+                <UserPlus className="w-4 h-4" />
+                New Client Onboarding
+              </Link>
+            </div>
+          )
         ) : (
           <>
             {/* Mobile: Card layout */}
