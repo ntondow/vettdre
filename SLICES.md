@@ -499,7 +499,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 6-ext — Cross-role landing permission contract
-- **Status:** `awaiting_review` (PR #25)
+- **Status:** `awaiting_review` ([PR #25](https://github.com/ntondow/vettdre/pull/25))
 - **Priority:** low (Phase 3 polish)
 - **Goal:** Extend slice 6's permission-compat contract from "agent" (role-string identity) to owner / admin / manager via the *pure* User.role → BrokerageRole translation path.
 - **Why:** slice 6 was scoped to agent only because that's the one role string that appears in both `User.role` and `BrokerageRoleType` vocabularies. Other roles flow through a translation layer that can drift silently — bms-auth had two near-identical inline `ROLE_MAP` literals (in `getCurrentBrokerageRole` + `getCurrentAgentInfo`) duplicating the manager/admin/owner mapping.
