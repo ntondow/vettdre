@@ -595,7 +595,7 @@ Phase 0 status as of 2026-04-29:
 - **Goal (closed):** Merge `feat/super-admin-cross-tenant-view` + 15 BMS overhaul slice branches to main.
 - **Plan revision (2026-04-30):** Original A → B → C plan replaced after P0 — deploying from main rolled back all 15 slice branches because they weren't on main yet. Final plan was PR-A + PR-D (single integration PR collapsing planned PR-B + PR-C + the 15 slice branches via rebase of `cf6e1cf` onto main). c05e952 R6 cleanup handled inline in PR-D's rebase.
 - **PRs:** PR-A #17 (merged); PR-D (merged 2026-04-30, restoring all 15 BMS overhaul slices to main).
-- **Outcome:** main reflects production reality; deploy from main = current prod; no orphan slice branches. Status flipped to `done` in Phase 3 slice 1 (PR #TBD).
+- **Outcome:** main reflects production reality; deploy from main = current prod; no orphan slice branches. Status flipped to `done` in Phase 3 slice 1 (PR #24).
 
 ### 13-cross-cut — Manager-side profile-completeness warning at filing time
 - **Status:** `pending`
@@ -607,7 +607,7 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 7a + 13 (both merged).
 
 ### 3.W — Clean Finder-duplicate files from main
-- **Status:** `awaiting_review` (PR #TBD — bundled with 3.X status flip as Phase 3 slice 1).
+- **Status:** `awaiting_review` (PR #24 — bundled with 3.X status flip as Phase 3 slice 1).
 - **Priority:** low (Phase 3 polish).
 - **Goal:** Remove four ` 2.tsx` Finder-duplicate files that landed on main via commit `53d7751 chore: in-flight work — terminal realtime, screening IDV, market-intel updates, building-intel docs`. Surfaced during PR-D rebase (predate PR-D).
 - **Files removed (4):**
