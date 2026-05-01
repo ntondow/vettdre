@@ -291,11 +291,27 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
           </tbody>
         </table>
 
-        {/* Empty filter state */}
+        {/* Empty filter state — slice 10 / U-071 differentiation. This branch
+            only fires when contacts exist but the typeFilter pill narrows them
+            to zero; the slate-zero counterpart lives in page.tsx. No CTA — the
+            "Try the All filter" hint points the user back to seeing everything.
+            typeFilter === "all" guard keeps the testid emission scoped to the
+            actual filter-narrowed case (parent page.tsx covers the no-contacts-
+            at-all case, so a "all + 0 filtered" combination is a defensive
+            fallback only). */}
         {filtered.length === 0 && (
-          <div className="py-12 text-center">
-            <p className="text-slate-400 text-sm">No {typeFilter === "all" ? "" : TYPE_FILTERS.find(f => f.key === typeFilter)?.label.toLowerCase() + " "}contacts found.</p>
-          </div>
+          typeFilter !== "all" ? (
+            <div data-testid="contacts-empty-filtered" className="py-12 text-center">
+              <p className="text-slate-400 text-sm">
+                No {TYPE_FILTERS.find(f => f.key === typeFilter)?.label.toLowerCase()} contacts match.
+              </p>
+              <p className="text-slate-400 text-xs mt-1">Try the All filter to see everything.</p>
+            </div>
+          ) : (
+            <div className="py-12 text-center">
+              <p className="text-slate-400 text-sm">No contacts found.</p>
+            </div>
+          )
         )}
       </div>
     </div>

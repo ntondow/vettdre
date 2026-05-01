@@ -845,24 +845,30 @@ export default function AgentsPage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — slice 10 / U-071 differentiation. agents uses tab-
+          canonical statusFilter (search is supplementary). Locked in by
+          tests/smoke/empty-state-pattern.test.ts. */}
       {!loading && agents.length === 0 && (
-        <div className="text-center py-16">
-          <Users className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No agents yet</p>
-          <p className="text-sm text-slate-400 mt-1">
-            {search ? "Try a different search term" : "Add your first agent to start managing commissions"}
-          </p>
-          {!search && (
+        statusFilter !== "all" || search ? (
+          <div data-testid="agents-empty-filtered" className="text-center py-16">
+            <Users className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No agents match your filters</p>
+            <p className="text-sm text-slate-400 mt-1">Try the All tab to see everything.</p>
+          </div>
+        ) : (
+          <div data-testid="agents-empty-zero" className="text-center py-16">
+            <Users className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No agents yet</p>
+            <p className="text-sm text-slate-400 mt-1 mb-4">Add your first agent to start managing commissions.</p>
             <button
               onClick={openNewForm}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Add Agent
             </button>
-          )}
-        </div>
+          </div>
+        )
       )}
 
       {/* Agent cards — mobile */}

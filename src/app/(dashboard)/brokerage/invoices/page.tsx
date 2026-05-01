@@ -472,15 +472,30 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — slice 10 / U-071 differentiation. invoices uses tab-
+          canonical statusFilter as the dominant filter axis (search is
+          supplementary). Locked in by tests/smoke/empty-state-pattern.test.ts. */}
       {!loading && invoices.length === 0 && (
-        <div className="text-center py-16">
-          <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No invoices found</p>
-          <p className="text-sm text-slate-400 mt-1">
-            {search ? "Try a different search term" : "Generate invoices from approved deal submissions or upload an Excel file"}
-          </p>
-        </div>
+        statusFilter !== "all" || search ? (
+          <div data-testid="invoices-empty-filtered" className="text-center py-16">
+            <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No invoices match your filters</p>
+            <p className="text-sm text-slate-400 mt-1">Try the All tab to see everything.</p>
+          </div>
+        ) : (
+          <div data-testid="invoices-empty-zero" className="text-center py-16">
+            <FileText className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No invoices yet</p>
+            <p className="text-sm text-slate-400 mt-1 mb-4">Generate invoices from approved deal submissions or upload an Excel file.</p>
+            <button
+              onClick={() => router.push("/brokerage/invoices/new")}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              New Invoice
+            </button>
+          </div>
+        )
       )}
 
       {/* Invoice table — desktop */}
