@@ -62,10 +62,5 @@ export function canAccessPage(role: BrokerageRoleType, page: string): boolean {
   const permission = PAGE_PERMISSION_MAP[page];
   if (!permission) return false;
 
-  // Special case: agents can access deal-submissions via view_own_submissions
-  if (page === "/brokerage/deal-submissions" && role === "agent") {
-    return hasPermission(role, "view_own_submissions");
-  }
-
   return hasPermission(role, permission);
 }
