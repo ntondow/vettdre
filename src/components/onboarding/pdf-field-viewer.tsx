@@ -62,12 +62,11 @@ export default function PdfFieldViewer({
 
     try {
       const pdfjsLib = await import("pdfjs-dist");
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs";
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
 
       const loadingTask = pdfjsLib.getDocument({
         url: pdfUrl,
-        cMapUrl: "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/cmaps/",
+        cMapUrl: "/pdfjs/cmaps/",
         cMapPacked: true,
       });
 

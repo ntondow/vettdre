@@ -29,13 +29,14 @@ export async function GET(
       return NextResponse.json({ error: "Onboarding not found" }, { status: 404 });
     }
 
-    // Check voided or completed
+    // Check voided
     if (onboarding.status === "voided") {
       return NextResponse.json({ error: "This signing request has been cancelled" }, { status: 410 });
     }
-    if (onboarding.status === "completed") {
-      return NextResponse.json({ error: "All documents have already been signed" }, { status: 410 });
-    }
+
+    // Completed onboardings still return 200 — the signing UI routes them to
+    // the "already complete" branch where the client can download their copies.
+    // Returning 410 here was misclassifying success as error.
 
     // Check expired
     if (onboarding.expiresAt && new Date(onboarding.expiresAt) < new Date()) {

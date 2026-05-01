@@ -592,13 +592,30 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** YES — biggest new feature, scope check.
 
 ### 20 — Signing flow end-to-end audit + fixes
-- **Status:** `pending`
+- **Status:** `in_progress` (Phase 1 audit complete 2026-05-01; fix slices in flight)
 - **Goal:** Walk /sign/[token] flow. Test mobile, multi-device, resume mid-signing. Fix what breaks.
 - **Closes bug:** Various deferred from initial audit
 - **Files:** `src/app/sign/[token]/*` + signing components.
 - **Success criteria:** Manual + smoke test pass on mobile + desktop.
 - **Depends on:** Phase 2
 - **Requires approval:** No.
+- **Phase 1 audit outcome (2026-05-01):** 24 defects across 9 surfaces. 5 P0s (sign-route signature crash, completion download returns JSON, completed onboardings 410'd as error, false "emailed to you" claim, jsdelivr CDN dependency for PDF preview), 8 P1s (mobile orientation wipes signature, refresh loses field state, double-click race creates duplicate Contact, etc.), 11 P2s. Fix order: A (P0 batch) → B (P1 batch) → C (P1 mobile UX) → D (P2 polish).
+
+### 20-fixes-A — Signing flow P0 fixes (Gulino-blocking)
+- **Status:** `awaiting_review`
+- **Goal:** Ship the 5 P0 fixes from slice 20's audit in one PR — eliminates 90% of weekend risk for Gulino's first signing clients.
+- **Closes bug:** 5 of 24 defects from slice 20 audit (the P0 batch).
+- **Defects fixed:**
+  1. `sign/route.ts:185` — guard `signatureImage.slice()` against undefined (no-signature templates were 500'ing).
+  2. `signing-complete.tsx` + `download` route — render per-doc download links with explicit `?docType=` (the single "Download Your Copies" button hit the no-docType path which returns JSON, not files).
+  3. `verify/route.ts` — return 200 (not 410) for `status === "completed"` so client routes to the `already_complete` branch with download UI instead of the red error screen.
+  4. `signing-complete.tsx` — remove the false "A copy of all signed documents has been emailed to you" claim. Replaced with honest "Your agent has been notified. They'll be in touch shortly with next steps." (Real client email is filed as Phase 5 follow-up; tonight is honest UX, not new infrastructure.)
+  5. `pdf-field-viewer.tsx` — self-host pdfjs worker + cmaps under `public/pdfjs/`. CDN dependency on `cdn.jsdelivr.net` removed; corp networks, CSP, and offline clients can now render the preview.
+- **Files:** `src/app/api/onboarding/[token]/{sign,verify}/route.ts`, `src/app/sign/[token]/client.tsx`, `src/components/onboarding/{signing-complete,pdf-field-viewer}.tsx`, `public/pdfjs/{pdf.worker.min.mjs,cmaps/*}`, `tests/smoke/signing-fixes-A.test.ts` (new — 7 contracts, one per defect).
+- **Success criteria:** typecheck holds within ±1 of baseline; lint changed-files only — zero new errors; build passes; full vitest suite passes; 5 smoke contracts green.
+- **Depends on:** slice 20 Phase 1 audit (this slice).
+- **Requires approval:** No (audit pre-approved by Nathan with scope adjustment on defect #4: remove + Phase 5 stub instead of wiring client email tonight).
+- **Outcome:** Smoke 7/7 green. Full test 252/252. Build clean. Typecheck post-edit measurement 287 vs tracked anchor 288 — see SLICES note + CLAUDE.md re-anchor (the +1 vs pre-edit measurement of 286 is Finder-dupe pollution in `src/lib/condo-ingest/building-signals.test.ts`, not from changed files; my changes net -1 by removing TS18048 'signatureImage is possibly undefined').
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -690,6 +707,22 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Stop conditions:** any emoji that's load-bearing in user-visible content (not decorative) — surface and skip; any DB-stored emoji (none currently in scope per slice 9-ext-audit, but re-verify before migration).
 - **Depends on:** 9-ext (merged).
 - **Requires approval:** No, but propose-then-implement per-file given the layout-shift risk.
+
+### 20-fix-followup-client-email — Wire client-facing completion email
+- **Status:** `pending` (Phase 5 polish — only ship if Gulino asks)
+- **Goal:** Send the signing client a transactional email after they complete signing, with secure download links to each signed PDF (the per-doc `?docType=` URLs already exposed).
+- **Why deferred from slice 20-fixes-A:** Slice 20-fixes-A removed the false claim "A copy of all signed documents has been emailed to you" from the completion screen and replaced it with honest copy ("Your agent has been notified. They'll be in touch shortly with next steps."). Wiring a real client email tonight would have meant: building a Resend template for the completion notification, deciding on email-vs-link-vs-attachment delivery (PDF attachments raise spam-filter risk + privacy considerations), error handling/retry, plus testing on the public-token download path. Honest UX shipped tonight beats false UX with potential legal/trust risk; the real feature can ship later when there's time to do it right.
+- **Approach (when picked up):**
+  - New helper in `src/lib/onboarding-notifications.ts`: `sendOnboardingClientCompletionEmail({ clientEmail, clientFirstName, agentFullName, brokerageName, downloadLinks })`.
+  - HTML template style matches the existing invite/reminder emails (brokerage header, blue CTA, "Powered by VettdRE" footer).
+  - Body lists each signed document with a per-doc download link `https://app.vettdre.com/api/onboarding/{token}/download?docType={docType}` (links survive past expiry because completed onboardings stay 200-readable per slice 20-fixes-A's verify route fix).
+  - Wire into `runPostCompletionWorkflow` in `src/app/api/onboarding/[token]/sign/route.ts` alongside the existing agent notification, fire-and-forget pattern.
+  - Restore the "A copy has been emailed to you" line on `signing-complete.tsx` ONLY after the email send is verified working in prod (not before — the contract was that the line stays gone until the email is real).
+- **Files:** `src/lib/onboarding-notifications.ts`, `src/app/api/onboarding/[token]/sign/route.ts`, `src/components/onboarding/signing-complete.tsx`, plus 1-2 smoke contracts (assert helper exists, assert sign-route invokes it on completion).
+- **Estimated diff:** ~80-120 lines + 1-2 smoke contracts.
+- **Stop conditions:** PDF attachment vs download-link decision — propose both, ask Nathan. Spam-filter testing — verify with a Gulino-domain test address before declaring done.
+- **Depends on:** 20-fixes-A (merged); ideally also 20-fixes-B (P1 idempotency fix on the post-completion workflow — duplicate Contact race) so we don't email twice on a double-click.
+- **Requires approval:** Yes if PDF attachment path chosen (new Resend feature scope); No if download-links-only.
 
 ### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)
