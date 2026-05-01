@@ -246,7 +246,7 @@ export default function Sidebar() {
               <div key={section.label}>
                 {/* Section header */}
                 {!collapsed && (
-                  <p className={`px-3 mb-1.5 text-[10px] font-semibold uppercase tracking-wider ${
+                  <p className={`px-3 mb-1.5 text-[10px] font-semibold tracking-wider ${
                     active ? "text-slate-300" : "text-slate-400"
                   }`}>
                     {section.label}

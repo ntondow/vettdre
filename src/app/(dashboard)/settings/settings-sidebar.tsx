@@ -170,7 +170,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
       <nav className="hidden md:block w-[220px] flex-shrink-0 bg-slate-50 border-r border-slate-200 overflow-y-auto py-4">
         {filteredNav.map((group) => (
           <div key={group.group} className="mb-4">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-4 py-1.5">
+            <p className="text-[10px] font-semibold text-slate-400 tracking-wider px-4 py-1.5">
               {group.group}
             </p>
             {group.items.map((item) => {

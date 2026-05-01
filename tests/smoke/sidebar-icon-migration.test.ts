@@ -26,6 +26,7 @@ function readSource(rel: string): string {
 const sidebarSrc = readSource("src/components/layout/sidebar.tsx");
 const mobileSrc = readSource("src/components/layout/mobile-nav.tsx");
 const settingsSrc = readSource("src/app/(dashboard)/settings/settings-sidebar.tsx");
+const brokerageSrc = readSource("src/app/(dashboard)/brokerage/layout.tsx");
 
 // Every emoji used as a UI icon in the three nav files pre-slice-9,
 // plus the « / » collapse arrows. If a single one survives a future
@@ -161,5 +162,69 @@ describe("Slice 9 — settings-sidebar.tsx is emoji-free", () => {
     // future swap can't sneak past.
     expect(imported).not.toMatch(/\bBarChart3\b/);
     expect(imported).not.toMatch(/\bBot\b/);
+  });
+});
+
+// ── Slice 9-typography — drop ALL CAPS on section labels ──────
+//
+// Slice 9's audit spec had two concerns: emoji icons (shipped in PR #29)
+// and "no ALL CAPS section headers." The typography half was deferred so
+// it could ship as an explicit, separately-reviewable visual change.
+//
+// All four nav surfaces previously wrapped the section-label <p> with
+// `uppercase tracking-wider`. Removing `uppercase` keeps the subtle
+// letterspacing (still useful for headers) but renders the labels in
+// their natural mixed case — matching the source-of-truth strings
+// ("My Work", "Operations", etc.).
+//
+// Each contract reads the section-label render line and asserts the
+// className string does not contain `uppercase`. Scoped to the section-
+// label render site only — not a blanket file-wide ban — so a future
+// legitimate use of `uppercase` elsewhere in the file (e.g. a status
+// pill) doesn't false-trigger.
+//
+// Why one regex per file: the four files use slightly different render
+// shapes (template literal vs static string, `section.label` vs
+// `group.group`), so a single shared regex would either miss one or
+// over-match. Per-file regexes keep failure messages readable.
+describe("Slice 9-typography — section labels are not ALL CAPS", () => {
+  it("sidebar.tsx section-label className does not include uppercase", () => {
+    // Template-literal className wrapping `${section.label}`.
+    const match = sidebarSrc.match(
+      /<p\s+className=\{`[^`]*`\}\s*>\s*\{section\.label\}\s*<\/p>/,
+    );
+    expect(match).not.toBeNull();
+    expect(match![0]).not.toMatch(/\buppercase\b/);
+    expect(match![0]).toMatch(/\btracking-wider\b/);
+  });
+
+  it("mobile-nav.tsx section-label className does not include uppercase", () => {
+    // Static string className wrapping {section.label}.
+    const match = mobileSrc.match(
+      /<p\s+className="[^"]*">\{section\.label\}<\/p>/,
+    );
+    expect(match).not.toBeNull();
+    expect(match![0]).not.toMatch(/\buppercase\b/);
+    expect(match![0]).toMatch(/\btracking-wider\b/);
+  });
+
+  it("brokerage/layout.tsx group-label className does not include uppercase", () => {
+    // Static string className wrapping {group.group}.
+    const match = brokerageSrc.match(
+      /<p\s+className="[^"]*">\s*\{group\.group\}\s*<\/p>/,
+    );
+    expect(match).not.toBeNull();
+    expect(match![0]).not.toMatch(/\buppercase\b/);
+    expect(match![0]).toMatch(/\btracking-wider\b/);
+  });
+
+  it("settings-sidebar.tsx group-label className does not include uppercase", () => {
+    // Static string className wrapping {group.group}.
+    const match = settingsSrc.match(
+      /<p\s+className="[^"]*">\s*\{group\.group\}\s*<\/p>/,
+    );
+    expect(match).not.toBeNull();
+    expect(match![0]).not.toMatch(/\buppercase\b/);
+    expect(match![0]).toMatch(/\btracking-wider\b/);
   });
 });
