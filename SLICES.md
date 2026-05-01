@@ -516,13 +516,15 @@ Phase 0 status as of 2026-04-29:
 ## Phase 3 — IA + polish (Week 4)
 
 ### 7 — Single sidebar per role
-- **Status:** `pending`
-- **Goal:** Brokerage admins → brokerage-shaped sidebar (no investor-shaped global sidebar). Agents → agent-shaped sidebar (existing MY WORK / COMMUNICATION / RESEARCH).
-- **Closes bug:** addresses U-001 through U-005, U-012
-- **Files:** `src/components/layout/sidebar.tsx`, `mobile-nav.tsx`, dashboard `layout.tsx`
-- **Success criteria:** Manual test as each role. No "Acquisitions / Closing" jargon for brokerage admins. No Brokerage section visible to pure agents.
-- **Depends on:** Phase 2
-- **Requires approval:** YES — show wireframe.
+- **Status:** `awaiting_review` (PR #TBD)
+- **Goal:** Brokerage admins → brokerage-shaped sidebar (Wireframe B: WORK / LISTINGS & DEALS / INTEL — three sections, ten items, down from nine sections / thirteen items). Agents → agent-focused sidebar (Wireframe A: WORK / RESEARCH — two sections, nine items, down from three sections / ten items).
+- **Closes bug:** addresses U-001 through U-005, U-012.
+- **Approach:** Replace `AGENT_NAV_SECTIONS` and `ADMIN_NAV_SECTIONS` constants in `sidebar.tsx` per the approved wireframes. Mirror in `mobile-nav.tsx` (5-tab bottom bar holds highest-frequency surfaces; More sheet holds the rest). Flip the role-branch polarity from `role === "agent" ? AGENT : ADMIN` (privilege-by-default) to `isAdminRole(role) ? ADMIN : AGENT` with a positive-match `ADMIN_USER_ROLES = {admin, owner, super_admin}` set — unknown roles fall through to agent. Add submitted-count badge to the global "Brokerage" item (override-aware via `useSearchParams`'s `?as_org=`). Delete `ComingSoonItem` function + all `comingSoon` code paths (Property Management section gone). Remove AUTOMATION top-level entry (still accessible via `/settings/automations`) and the duplicate "Client Onboarding" global entry (single source of truth in the brokerage sub-nav).
+- **Files:** `src/components/layout/sidebar.tsx`, `src/components/layout/mobile-nav.tsx`, `tests/smoke/sidebar-shape.test.ts` (NEW — 20 source-level contracts: Wireframe A item set, Wireframe B item set, removed surfaces, polarity flip, submitted-count badge wiring, mobile-desktop parity bidirectional).
+- **Bundled chore:** CLAUDE.md lint baseline 4520 → 4484 (re-anchored per surface-baseline-mismatches rule; 36-error improvement accumulated across Phase 2 + Phase 3 slices since the 4520 anchor was set).
+- **Out of scope:** BrokerageRoleType-based segmentation (manager-aware global sidebar). Today's User.role taxonomy doesn't include "manager" — adding manager-specific global surfaces would require `getCurrentBrokerageRole` from the global layout, a bigger lift. Brokerage sub-nav at `/brokerage/*` still segments by BrokerageRoleType independently. Slice 8 owns the sub-nav flatten; slice 9 owns the emoji → lucide migration.
+- **Success criteria:** 20/20 smoke contracts pass. Manual test as each role: agent on /dashboard sees Wireframe A; admin sees Wireframe B; super_admin under override sees admin sidebar with the override-scoped submitted badge. No "Acquisitions / Closing / Portfolio / Property Management" jargon anywhere.
+- **Depends on:** Phase 2 (done).
 
 ### 8 — Brokerage nav flatten
 - **Status:** `pending`
