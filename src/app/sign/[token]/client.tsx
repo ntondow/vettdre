@@ -98,7 +98,16 @@ export default function SigningClient({ token }: { token: string }) {
     verify();
   }, [token]);
 
-  // Init field values when doc changes — populate prefilled values for display
+  // Per-doc sessionStorage key for draft persistence (#7). Survives accidental
+  // refresh / iOS swipe-back. Cleared on successful sign.
+  const draftKey = useCallback(
+    (docId: string) => `vettdre:signing-draft:${token}:${docId}`,
+    [token],
+  );
+
+  // Init field values when doc changes — populate prefilled values, then layer
+  // in any sessionStorage draft for non-prefill fields. Prefill values are
+  // locked (lock icon UI) so we never let a stored draft overwrite them.
   useEffect(() => {
     if (!data) return;
     const doc = data.documents[docIndex];
@@ -132,13 +141,61 @@ export default function SigningClient({ token }: { token: string }) {
     prefillMap.tenantSignatureCheck = "true";
 
     const init: Record<string, string> = {};
+    const prefillFieldIds = new Set<string>();
     for (const field of doc.fields) {
       if (field.prefillKey && prefillMap[field.prefillKey]) {
         init[field.id] = prefillMap[field.prefillKey];
+        prefillFieldIds.add(field.id);
       }
     }
+
+    // Layer in sessionStorage draft for non-prefill fields. typeof guard
+    // because "use client" components still SSR during initial render.
+    if (typeof window !== "undefined") {
+      const key = draftKey(doc.id);
+      const stored = sessionStorage.getItem(key);
+      if (stored) {
+        try {
+          const draft = JSON.parse(stored) as Record<string, string>;
+          for (const [fieldId, value] of Object.entries(draft)) {
+            if (!prefillFieldIds.has(fieldId)) {
+              init[fieldId] = value;
+            }
+          }
+        } catch {
+          // Self-heal: corrupt draft would otherwise re-poison every refresh.
+          sessionStorage.removeItem(key);
+        }
+      }
+    }
+
     setFieldValues(init);
-  }, [data, docIndex]);
+  }, [data, docIndex, draftKey]);
+
+  // Debounced write of fieldValues to sessionStorage on every change (#7).
+  // Only persists non-prefill fields — prefill values are deterministically
+  // re-derived from `data` on every mount, so storing them is wasteful.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const doc = data?.documents[docIndex];
+    if (!doc) return;
+    const t = setTimeout(() => {
+      const prefillFieldIds = new Set(
+        (doc.fields || [])
+          .filter((f) => !!f.prefillKey)
+          .map((f) => f.id),
+      );
+      const draft = Object.fromEntries(
+        Object.entries(fieldValues).filter(([k]) => !prefillFieldIds.has(k)),
+      );
+      try {
+        sessionStorage.setItem(draftKey(doc.id), JSON.stringify(draft));
+      } catch {
+        // Storage quota exceeded or sandboxed iframe — silently degrade.
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [fieldValues, data, docIndex, draftKey]);
 
   // ── Helpers ───────────────────────────────────────────────
 
@@ -193,6 +250,12 @@ export default function SigningClient({ token }: { token: string }) {
       const body = await res.json();
       if (!res.ok) { setSignError(body.error || "Failed to sign"); setSigning(false); return; }
 
+      // Clear sessionStorage draft for this doc — successful sign means we
+      // never need to restore it.
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem(draftKey(currentDoc.id));
+      }
+
       if (body.allComplete) {
         setStep("complete");
       } else {
@@ -207,7 +270,7 @@ export default function SigningClient({ token }: { token: string }) {
     } finally {
       setSigning(false);
     }
-  }, [data, currentDoc, hasTemplateFields, fieldValues, signatureFields, token, pdfViewed]);
+  }, [data, currentDoc, hasTemplateFields, fieldValues, signatureFields, token, pdfViewed, draftKey]);
 
   // ── Render ────────────────────────────────────────────────
 

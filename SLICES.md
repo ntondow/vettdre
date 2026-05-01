@@ -615,7 +615,23 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** typecheck holds within ±1 of baseline; lint changed-files only — zero new errors; build passes; full vitest suite passes; 5 smoke contracts green.
 - **Depends on:** slice 20 Phase 1 audit (this slice).
 - **Requires approval:** No (audit pre-approved by Nathan with scope adjustment on defect #4: remove + Phase 5 stub instead of wiring client email tonight).
-- **Outcome:** Smoke 7/7 green. Full test 252/252. Build clean. Typecheck post-edit measurement 287 vs tracked anchor 288 — see SLICES note + CLAUDE.md re-anchor (the +1 vs pre-edit measurement of 286 is Finder-dupe pollution in `src/lib/condo-ingest/building-signals.test.ts`, not from changed files; my changes net -1 by removing TS18048 'signatureImage is possibly undefined').
+- **Outcome:** Smoke 7/7 green. Full test 252/252. Build clean. Typecheck post-edit measurement 287 vs tracked anchor 288 — see SLICES note + CLAUDE.md re-anchor (the +1 vs pre-edit measurement of 286 is Finder-dupe pollution in `src/lib/condo-ingest/building-signals.test.ts`, not from changed files; my changes net -1 by removing TS18048 'signatureImage is possibly undefined'). Merged as PR #34, commit `f05170a`.
+
+### 20-fixes-B — Signing flow P1 fixes (reliability + mobile UX)
+- **Status:** `awaiting_review`
+- **Goal:** Ship 4 of 5 P1 fixes from slice 20's audit (#11 dropped to Phase 5 — see `20-fix-followup-term-display`). Logic-only, no schema migrations. Targets the real reliability gaps that would surface as Gulino's volume grows: mobile UX failures, accidental input loss, double-submit races, and silent PDF generation failures.
+- **Closes bug:** 4 of 24 defects from slice 20 audit (the P1 batch minus #11).
+- **Defects fixed:**
+  - **#6 Signature snapshot/restore on resize.** `signature-pad.tsx` resize handler now snapshots `pad.toDataURL()` before clear and `fromDataURL()` after — orientation rotation no longer wipes in-progress signatures.
+  - **#7 sessionStorage draft persistence.** `client.tsx` persists non-prefill `fieldValues` to sessionStorage keyed `vettdre:signing-draft:${token}:${docId}`. Read on doc mount (with `typeof window` SSR guard); debounced write (300ms) on every fieldValues change; clear on successful sign. Corrupt drafts self-heal via `sessionStorage.removeItem` inside the JSON.parse catch — otherwise they'd re-poison every refresh forever.
+  - **#10 Idempotent sign via two-level CAS.** `sign/route.ts` now uses (1) document-level `updateMany({ where: { id, status: { not: "signed" } }})` so the second concurrent transaction's count is 0 and bails with kind: "already_signed" (clean 409 to client); (2) onboarding-completion atomic CAS `updateMany({ where: { id, allDocsSigned: false }})` so only the transaction whose count === 1 "wins the race" and is allowed to fire `runPostCompletionWorkflow`. The `wonRace` boolean prevents the duplicate-Contact race when a client double-clicks Sign on the last doc. Existing fields only — no schema migration. Fire-and-forget pattern preserved (`.catch`, never `await`) with explicit comment so future readers don't accidentally await.
+  - **#12 Fail-fast on PDF upload error.** `sign/route.ts` PDF processing block now tracks an explicit `pdfProcessingFailed` boolean (template download, embed, audit footer, or storage upload). On failure, returns 503 BEFORE the database transaction so no document state mutates — client retry lands cleanly. Replaces the pre-fix swallowed catch that was marking docs "signed" while pointing pdfUrl at the unsigned template.
+- **Defect dropped:** #11 termDays display drift. Re-verified during proposal: verify route always returns `effectiveThrough` (absolute date) when `termDays` is set, and client.tsx welcome panel uses `effectiveThrough || ${termDays} days` — the fallback is dead in practice because both derive from the same `expiresAt`. UI shows the correct absolute date. Filed as Phase 5 polish stub `20-fix-followup-term-display` to audit the *agent-side* display + reminder cron where stale term math could matter.
+- **Files:** `src/app/api/onboarding/[token]/sign/route.ts`, `src/app/sign/[token]/client.tsx`, `src/components/onboarding/signature-pad.tsx`, `tests/smoke/signing-fixes-B.test.ts` (new — 7 contracts), `CLAUDE.md` (re-anchor 288 → 285), `SLICES.md` (this entry + Phase 5 stub).
+- **Success criteria:** typecheck holds at 285 (clean tree); lint changed-files only — zero new errors; build passes; full vitest suite passes; 7 smoke contracts green.
+- **Depends on:** 20-fixes-A (merged, PR #34).
+- **Requires approval:** No (proposal pre-approved by Nathan with two notes incorporated: corrupt-draft self-heal in #7, fire-and-forget comment in #10).
+- **Outcome:** TBD — fill on PR open.
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -707,6 +723,20 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Stop conditions:** any emoji that's load-bearing in user-visible content (not decorative) — surface and skip; any DB-stored emoji (none currently in scope per slice 9-ext-audit, but re-verify before migration).
 - **Depends on:** 9-ext (merged).
 - **Requires approval:** No, but propose-then-implement per-file given the layout-shift risk.
+
+### 20-fix-followup-term-display — Audit agent-side term display + reminder cron for stale math
+- **Status:** `pending` (Phase 5 polish — only ship if Gulino flags drift)
+- **Goal:** Audit *agent-side* surfaces (`/brokerage/client-onboarding/*`) and the reminder cron (`onboarding-notifications.ts` + caller) for places that compute or display "X days remaining" from `(expiresAt - createdAt)` instead of `(expiresAt - now)`, which would show the original term length instead of remaining time.
+- **Why deferred from slice 20-fixes-B:** Slice 20's audit flagged termDays as a potential drift bug. On re-verification of the *public signing UI* (the slice 20-fixes-B scope), the verify route always returns both `effectiveThrough` (absolute date) and `termDays` (original term length) derived from the same `expiresAt`. The client.tsx welcome panel uses `effectiveThrough || ${termDays} days` — and since `effectiveThrough` is always set when `termDays` is, the fallback is dead in practice. The user sees the correct absolute date "Effective Through April 19, 2026". So the public flow is fine. But the audit's concern could legitimately apply to surfaces outside that scope: the agent dashboard onboarding list might show "expires in 14 days" for an onboarding created 13 days ago; the reminder cron's `daysRemaining` parameter is computed by the caller, not by the verify route, and might reuse stale math.
+- **Approach (when picked up):**
+  - Grep agent-side surfaces (`src/app/(dashboard)/brokerage/client-onboarding/**`) for `termDays`, `daysRemaining`, `expiresAt`, `createdAt` computations involving subtraction.
+  - Trace the reminder cron caller back from `sendOnboardingReminder` / `sendOnboardingReminderSms` (both accept `daysRemaining` as a parameter) to where the value is computed.
+  - Fix any computation that anchors to `createdAt` instead of `now` for "remaining" semantics; preserve `(expiresAt - createdAt)` only where "original term length" is the intended display.
+- **Files:** TBD — depends on what the grep finds. Likely `src/app/(dashboard)/brokerage/client-onboarding/page.tsx` + actions, plus the reminder cron entry point (need to locate during the slice).
+- **Estimated diff:** ~20-50 lines + 2-3 smoke contracts.
+- **Stop conditions:** if no actual drift is found anywhere, close as `done — verified, no fix needed` (same shape as slice 7a-fixup). If drift is found in the reminder cron, surface and confirm before fixing — reminder math affects external client-facing communications.
+- **Depends on:** none. Independent slice.
+- **Requires approval:** No.
 
 ### 20-fix-followup-client-email — Wire client-facing completion email
 - **Status:** `pending` (Phase 5 polish — only ship if Gulino asks)

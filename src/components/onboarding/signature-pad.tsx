@@ -50,10 +50,13 @@ export default function SignaturePad({
 
     padRef.current = pad;
 
-    // Size canvas to container
+    // Size canvas to container. Mobile orientation rotation fires resize,
+    // which used to wipe in-progress signatures — snapshot before clear and
+    // rehydrate after so the user doesn't have to redraw.
     const resize = () => {
       const container = containerRef.current;
       if (!container) return;
+      const snapshot = !pad.isEmpty() ? pad.toDataURL() : null;
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       const w = container.clientWidth;
       const h = Math.min(height, 200);
@@ -63,7 +66,12 @@ export default function SignaturePad({
       canvas.style.height = `${h}px`;
       canvas.getContext("2d")?.scale(ratio, ratio);
       pad.clear();
-      setHasDrawn(false);
+      if (snapshot) {
+        pad.fromDataURL(snapshot);
+        setHasDrawn(true);
+      } else {
+        setHasDrawn(false);
+      }
     };
 
     resize();
