@@ -13,6 +13,27 @@ import { hasPermission } from "@/lib/feature-gate";
 import type { Feature } from "@/lib/feature-gate";
 import Paywall from "@/components/ui/paywall";
 import { getRequiredPlan } from "@/lib/feature-gate";
+import {
+  LayoutDashboard,
+  Briefcase,
+  ClipboardCheck,
+  MessageSquare,
+  Calendar,
+  Users,
+  Map,
+  Activity,
+  Target,
+  ShieldCheck,
+  Building,
+  Building2,
+  Calculator,
+  Bot,
+  Settings,
+  LogOut,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 /* ------------------------------------------------------------------ */
 /*  Types & Config                                                     */
@@ -21,7 +42,7 @@ import { getRequiredPlan } from "@/lib/feature-gate";
 interface NavItem {
   name: string;
   href: string;
-  icon: string;
+  icon: LucideIcon;
   badge?: boolean;
   feature?: Feature;
   roles?: string[];
@@ -33,7 +54,7 @@ interface NavSection {
 }
 
 /* Dashboard — rendered above sections (no group header) */
-const DASHBOARD_ITEM: NavItem = { name: "Dashboard", href: "/dashboard", icon: "📊" };
+const DASHBOARD_ITEM: NavItem = { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard };
 
 /* ── Slice 7 — Wireframe A: agent-focused sidebar ──────────────
  *
@@ -47,20 +68,20 @@ const AGENT_NAV_SECTIONS: NavSection[] = [
   {
     label: "My Work",
     items: [
-      { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
-      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
-      { name: "Messages", href: "/messages", icon: "📬", badge: true },
-      { name: "Calendar", href: "/calendar", icon: "📅" },
-      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "My Deals", href: "/brokerage/my-deals", icon: Briefcase },
+      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: ClipboardCheck },
+      { name: "Messages", href: "/messages", icon: MessageSquare, badge: true },
+      { name: "Calendar", href: "/calendar", icon: Calendar },
+      { name: "Contacts", href: "/contacts", icon: Users },
     ],
   },
   {
     label: "Research",
     items: [
-      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+      { name: "Market Intel", href: "/market-intel", icon: Map, feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: Activity, feature: "nav_terminal" },
+      { name: "Prospecting", href: "/prospecting", icon: Target },
+      { name: "Screening", href: "/screening", icon: ShieldCheck, feature: "screening_view" },
     ],
   },
 ];
@@ -88,32 +109,32 @@ const ADMIN_NAV_SECTIONS: NavSection[] = [
   {
     label: "My Work",
     items: [
-      { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions", badge: true },
-      { name: "Messages", href: "/messages", icon: "📬", badge: true },
-      { name: "Calendar", href: "/calendar", icon: "📅" },
-      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "Brokerage", href: "/brokerage", icon: Building, feature: "bms_submissions", badge: true },
+      { name: "Messages", href: "/messages", icon: MessageSquare, badge: true },
+      { name: "Calendar", href: "/calendar", icon: Calendar },
+      { name: "Contacts", href: "/contacts", icon: Users },
     ],
   },
   {
     label: "Listings & Deals",
     items: [
-      { name: "Properties", href: "/properties", icon: "🏢" },
-      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
-      { name: "Leasing", href: "/leasing", icon: "🤖", badge: true },
+      { name: "Properties", href: "/properties", icon: Building2 },
+      { name: "Underwrite", href: "/deals", icon: Calculator, feature: "nav_deal_modeler" },
+      { name: "Leasing", href: "/leasing", icon: Bot, badge: true },
     ],
   },
   {
     label: "Intel",
     items: [
-      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+      { name: "Market Intel", href: "/market-intel", icon: Map, feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: Activity, feature: "nav_terminal" },
+      { name: "Screening", href: "/screening", icon: ShieldCheck, feature: "screening_view" },
     ],
   },
 ];
 
 /* Settings — rendered below separator at bottom */
-const SETTINGS_ITEM: NavItem = { name: "Settings", href: "/settings", icon: "⚙️" };
+const SETTINGS_ITEM: NavItem = { name: "Settings", href: "/settings", icon: Settings };
 
 /* Slice 7 — positive-match polarity. Today's `role === "agent"
  * ? AGENT : ADMIN` ternary granted the admin sidebar to anything
@@ -260,12 +281,12 @@ export default function Sidebar() {
       <div className="border-t border-slate-100 p-2 space-y-1">
         <button onClick={handleSignOut} title={collapsed ? "Sign out" : undefined}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-red-600 hover:bg-red-50 transition-colors ${collapsed ? "justify-center" : ""}`}>
-          <span className="text-base">🚪</span>
+          <LogOut className="w-4 h-4 flex-shrink-0" />
           {!collapsed && <span>Sign out</span>}
         </button>
         <button onClick={toggle} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
           className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-colors ${collapsed ? "justify-center" : ""}`}>
-          <span className="text-base">{collapsed ? "»" : "«"}</span>
+          {collapsed ? <ChevronRight className="w-4 h-4 flex-shrink-0" /> : <ChevronLeft className="w-4 h-4 flex-shrink-0" />}
           {!collapsed && <span>Collapse</span>}
         </button>
       </div>
@@ -308,9 +329,10 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
     : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
   }`;
 
+  const Icon = item.icon;
   const inner = (
     <>
-      <span className={`${collapsed ? "text-lg" : "text-base"} ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
+      <Icon className={`${collapsed ? "w-5 h-5" : "w-4 h-4"} flex-shrink-0 ${locked ? "opacity-50" : ""}`} />
       {!collapsed && (
         <>
           <span className="flex-1">{item.name}</span>

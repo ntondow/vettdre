@@ -2,10 +2,34 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  User,
+  PenTool,
+  Bell,
+  Clock,
+  Users,
+  Target,
+  GitBranch,
+  Sparkles,
+  Palette,
+  Mail,
+  Phone,
+  RefreshCw,
+  FileText,
+  CreditCard,
+  Zap,
+  Key,
+  Download,
+  ShieldCheck,
+  Building2,
+  UserPlus,
+  Activity,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
   href: string;
-  icon: string;
+  icon: LucideIcon;
   label: string;
   adminOnly?: boolean;
 }
@@ -15,57 +39,62 @@ interface NavGroup {
   items: NavItem[];
 }
 
+/* Slice 9 — semantic disambiguations baked in:
+ * - Pipeline → GitBranch (BarChart3 reads "reports", which Reports owns).
+ * - AI Settings → Sparkles (Bot is reserved for the Leasing surface).
+ * - Add User → UserPlus (specific intent vs. generic Plus).
+ * Locked by smoke contract #7 in tests/smoke/sidebar-icon-migration.test.ts. */
 const NAV: NavGroup[] = [
   {
     group: "Account",
     items: [
-      { href: "/settings/profile", icon: "👤", label: "Profile" },
-      { href: "/settings/signature", icon: "✍️", label: "Signature" },
-      { href: "/settings/notifications", icon: "🔔", label: "Notifications" },
-      { href: "/settings/hours", icon: "🕐", label: "Working Hours" },
+      { href: "/settings/profile", icon: User, label: "Profile" },
+      { href: "/settings/signature", icon: PenTool, label: "Signature" },
+      { href: "/settings/notifications", icon: Bell, label: "Notifications" },
+      { href: "/settings/hours", icon: Clock, label: "Working Hours" },
     ],
   },
   {
     group: "Team",
     items: [
-      { href: "/settings/team", icon: "👥", label: "Members" },
-      { href: "/settings/lead-rules", icon: "🎯", label: "Lead Rules", adminOnly: true },
+      { href: "/settings/team", icon: Users, label: "Members" },
+      { href: "/settings/lead-rules", icon: Target, label: "Lead Rules", adminOnly: true },
     ],
   },
   {
     group: "CRM",
     items: [
-      { href: "/settings/pipeline", icon: "📊", label: "Pipeline", adminOnly: true },
-      { href: "/settings/ai", icon: "🤖", label: "AI Settings", adminOnly: true },
-      { href: "/settings/branding", icon: "🎨", label: "Branding", adminOnly: true },
+      { href: "/settings/pipeline", icon: GitBranch, label: "Pipeline", adminOnly: true },
+      { href: "/settings/ai", icon: Sparkles, label: "AI Settings", adminOnly: true },
+      { href: "/settings/branding", icon: Palette, label: "Branding", adminOnly: true },
     ],
   },
   {
     group: "Communications",
     items: [
-      { href: "/settings/gmail", icon: "📬", label: "Gmail" },
-      { href: "/settings/phone", icon: "📞", label: "Phone & SMS", adminOnly: true },
-      { href: "/settings/sync", icon: "⏱️", label: "Sync" },
-      { href: "/settings/templates", icon: "📝", label: "Templates" },
+      { href: "/settings/gmail", icon: Mail, label: "Gmail" },
+      { href: "/settings/phone", icon: Phone, label: "Phone & SMS", adminOnly: true },
+      { href: "/settings/sync", icon: RefreshCw, label: "Sync" },
+      { href: "/settings/templates", icon: FileText, label: "Templates" },
     ],
   },
   {
     group: "Billing",
     items: [
-      { href: "/settings/billing", icon: "💳", label: "Billing" },
+      { href: "/settings/billing", icon: CreditCard, label: "Billing" },
     ],
   },
   {
     group: "Workflows",
     items: [
-      { href: "/settings/automations", icon: "⚡", label: "Automations", adminOnly: true },
+      { href: "/settings/automations", icon: Zap, label: "Automations", adminOnly: true },
     ],
   },
   {
     group: "Data",
     items: [
-      { href: "/settings/api-keys", icon: "🔑", label: "API Keys", adminOnly: true },
-      { href: "/settings/export", icon: "📤", label: "Export" },
+      { href: "/settings/api-keys", icon: Key, label: "API Keys", adminOnly: true },
+      { href: "/settings/export", icon: Download, label: "Export" },
     ],
   },
 ];
@@ -73,11 +102,11 @@ const NAV: NavGroup[] = [
 const ADMIN_NAV: NavGroup = {
   group: "Admin",
   items: [
-    { href: "/settings/admin", icon: "🛡️", label: "Dashboard" },
-    { href: "/settings/admin/users", icon: "👥", label: "Manage Users" },
-    { href: "/settings/admin/teams", icon: "🏢", label: "Teams" },
-    { href: "/settings/admin/waitlist", icon: "➕", label: "Add User" },
-    { href: "/settings/admin/terminal", icon: "📡", label: "Terminal Health" },
+    { href: "/settings/admin", icon: ShieldCheck, label: "Dashboard" },
+    { href: "/settings/admin/users", icon: Users, label: "Manage Users" },
+    { href: "/settings/admin/teams", icon: Building2, label: "Teams" },
+    { href: "/settings/admin/waitlist", icon: UserPlus, label: "Add User" },
+    { href: "/settings/admin/terminal", icon: Activity, label: "Terminal Health" },
   ],
 };
 
@@ -118,6 +147,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
         <div className="flex gap-1.5">
           {allItems.map((item) => {
             const active = pathname === item.href;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
@@ -128,7 +158,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
                     : "bg-white text-slate-600 border border-slate-200 active:bg-slate-100"
                 }`}
               >
-                <span className="text-sm">{item.icon}</span>
+                <Icon className="w-3.5 h-3.5" />
                 {item.label}
               </Link>
             );
@@ -145,6 +175,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
             </p>
             {group.items.map((item) => {
               const active = pathname === item.href;
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
@@ -155,7 +186,7 @@ export default function SettingsSidebar({ userEmail, userRole }: { userEmail?: s
                       : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
-                  <span className="text-sm w-5 text-center">{item.icon}</span>
+                  <Icon className="w-4 h-4 flex-shrink-0" />
                   {item.label}
                 </Link>
               );
