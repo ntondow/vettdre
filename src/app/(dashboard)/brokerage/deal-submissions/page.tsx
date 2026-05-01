@@ -14,7 +14,17 @@ export default async function DealSubmissionsPage({
   const { as_org } = await searchParams;
   const role = await getCurrentBrokerageRole({ overrideAsOrg: as_org });
   if (!role || !hasPermission(role, "view_all_submissions")) {
-    redirect("/brokerage/my-deals");
+    // Preserve ?as_org= on redirect so super_admin override survives the
+    // bounce — slice-0c-class regression guard. super_admin shouldn't hit
+    // this branch (line-25 short-circuit in bms-auth.ts maps them to
+    // brokerage_admin which has view_all_submissions), but if a transient
+    // role lookup fails or a future role lacks the permission, we still
+    // hand the override to the destination.
+    redirect(
+      as_org
+        ? `/brokerage/my-deals?as_org=${encodeURIComponent(as_org)}`
+        : "/brokerage/my-deals",
+    );
   }
 
   const [submissionsResult, statsResult] = await Promise.all([

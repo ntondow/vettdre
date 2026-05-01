@@ -595,3 +595,64 @@ describe("Slice 0c — auth-context priority", () => {
     );
   });
 });
+
+// ── Phase 4 slice — /deal-submissions redirect hardening ──────
+//
+// Three contracts lock in the fix for the slice-0c-class regression where
+// /brokerage/deal-submissions's redirect-on-permission-fail dropped the
+// ?as_org= override on the way to /my-deals, plus the canAccessPage agent
+// special case that contradicted the page's own redirect.
+describe("Phase 4 — /deal-submissions redirect hardening", () => {
+  it("page.tsx preserves ?as_org= when redirecting to /my-deals", () => {
+    // Latent slice-0c-class bug: super_admin shouldn't hit this branch on
+    // current main (line-25 short-circuit in bms-auth.ts), but if any role
+    // does, the override must survive the redirect. Static-source guard is
+    // sufficient — the redirect is a one-line call we just want to ensure
+    // threads as_org into the URL.
+    const src = readSource(
+      "src/app/(dashboard)/brokerage/deal-submissions/page.tsx",
+    );
+    // Must call redirect with a conditional that includes as_org in the URL
+    // when present. Match either ternary or template-literal styles.
+    expect(src).toMatch(
+      /redirect\(\s*as_org\s*\?\s*`\/brokerage\/my-deals\?as_org=\$\{[^}]*as_org[^}]*\}`\s*:\s*"\/brokerage\/my-deals"/,
+    );
+  });
+
+  it("canAccessPage requires view_all_submissions for /brokerage/deal-submissions (no agent shortcut)", async () => {
+    // The page itself redirects agents to /my-deals, so canAccessPage must
+    // agree: agents cannot access this page. Locks in the removal of the
+    // pre-Phase-4 special case at bms-permissions.ts:65-68.
+    const { canAccessPage } = await import("../../src/lib/bms-permissions");
+    expect(canAccessPage("agent", "/brokerage/deal-submissions")).toBe(false);
+    expect(canAccessPage("brokerage_admin", "/brokerage/deal-submissions")).toBe(true);
+    expect(canAccessPage("manager", "/brokerage/deal-submissions")).toBe(true);
+    expect(canAccessPage("broker", "/brokerage/deal-submissions")).toBe(true);
+
+    // Source-level guard against re-introducing the special case.
+    const src = readSource("src/lib/bms-permissions.ts");
+    expect(src).not.toMatch(
+      /Special case:\s*agents can access deal-submissions/,
+    );
+    expect(src).not.toMatch(
+      /page\s*===\s*"\/brokerage\/deal-submissions"\s*&&\s*role\s*===\s*"agent"/,
+    );
+  });
+
+  it("super_admin → brokerage_admin path: brokerage_admin has view_all_submissions", async () => {
+    // bms-auth.ts:25 short-circuits super_admin (and owner/admin) to the
+    // brokerage_admin role. This contract locks in the permission table side:
+    // brokerage_admin must have view_all_submissions, otherwise the
+    // short-circuit silently breaks the deal-submissions page for super_admin.
+    const { hasPermission } = await import("../../src/lib/bms-permissions");
+    expect(hasPermission("brokerage_admin", "view_all_submissions")).toBe(true);
+
+    // Source-level guard that the line-25 short-circuit still exists in
+    // bms-auth.ts. If someone deletes it without thinking through what
+    // happens to super_admin's BMS access, this test fails.
+    const src = readSource("src/lib/bms-auth.ts");
+    expect(src).toMatch(
+      /user\.role\s*===\s*"owner"\s*\|\|\s*user\.role\s*===\s*"admin"\s*\|\|\s*user\.role\s*===\s*"super_admin"[\s\S]*?return\s+"brokerage_admin"/,
+    );
+  });
+});
