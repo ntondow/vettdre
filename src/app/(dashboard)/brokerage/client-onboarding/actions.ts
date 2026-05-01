@@ -202,7 +202,21 @@ export async function getOnboarding(
 // otherwise we'd recreate the friction this slice exists to remove. Only
 // suspended/terminated agents are excluded.
 
-type AgentRosterEntry = { id: string; firstName: string; lastName: string; email: string };
+// Slice 13-cross-cut: each entry carries the linked User's profile-completeness
+// fields so the new-onboarding form can warn the manager when the selected
+// agent has gaps before client docs are filed (placeholders would otherwise
+// render on the signed PDF). `user` is null for BrokerAgents whose
+// `userId` FK is unset (pending/invited hires who haven't logged in yet) —
+// those rows are intentionally not flagged. The fields read here are the
+// same ones `getProfile()` reads in settings/actions.ts; see slice 13's
+// `computeMissingProfileFields` for the canonical completeness rule.
+type AgentRosterEntry = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  user: { fullName: string | null; phone: string | null; licenseNumber: string | null } | null;
+};
 
 export async function getAgentRosterForOnboarding(
   options: { overrideAsOrg?: string } = {},
@@ -215,11 +229,20 @@ export async function getAgentRosterForOnboarding(
     const ctx = await getAuthContext(options);
     if (!ctx) return { success: false, error: "Not authenticated" };
 
+    const ROSTER_SELECT = {
+      id: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      user: { select: { fullName: true, phone: true, licenseNumber: true } },
+    } as const;
+
     // Always fetch current user's agent record — needed for the self-label
-    // fallback when the caller can't see the full roster.
+    // fallback when the caller can't see the full roster, AND for the slice
+    // 13-cross-cut self-pick warning path.
     const currentAgent = await prisma.brokerAgent.findFirst({
       where: { id: ctx.agentId, orgId: ctx.orgId },
-      select: { id: true, firstName: true, lastName: true, email: true },
+      select: ROSTER_SELECT,
     });
 
     if (!hasPermission(ctx.role, "view_agents")) {
@@ -232,7 +255,7 @@ export async function getAgentRosterForOnboarding(
         orgId: ctx.orgId,
         status: { in: ["active", "pending", "invited"] },
       },
-      select: { id: true, firstName: true, lastName: true, email: true },
+      select: ROSTER_SELECT,
       orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
 
