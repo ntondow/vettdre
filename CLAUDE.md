@@ -1010,7 +1010,7 @@ After completing all slices in a phase:
 
 **Lint baseline (Phase 1 close, 2026-04-30):** 4520 errors (measured on `main` post-PR-D merge; was 4530 at end of Phase Z). Future slices must hold ≤4520 or improve; never let an in-flight phase silently increase it.
 
-**Typecheck baseline (Phase 2 mid, 2026-04-30):** 293 errors (measured on `main` post-PR #21 merge; was 292 at Phase 1 close). Drift of +1 across slices 7a/17/18 was below triage threshold to bisect. Future slices must hold ≤293 or improve. **Measurement protocol:** run `git stash --include-untracked` first to remove untracked Finder dupes from the laptop, then `npx tsc --noEmit 2>&1 | grep -cE "error TS"` — no `grep -v` filter (the filter regex used in slice 7a/17 PR descriptions was unreliable and produced fake "improvements"). The ~80 untracked Finder-dupe files on Nathan's laptop inflate raw counts by ~20-40 errors but never enter git.
+**Typecheck baseline (Phase 2 mid, 2026-04-30):** 292 errors (measured on `main` post-PR #22 merge across two consecutive runs; the 293 measurement that briefly anchored after PR #21 was tsc incremental-cache flutter — once it settled, repeat measurements gave a stable 292). Future slices must hold ≤292 or improve. **Measurement protocol:** run `git stash --include-untracked` first to remove untracked Finder dupes from the laptop, then `npx tsc --noEmit 2>&1 | grep -cE "error TS"` — no `grep -v` filter (the filter regex used in slice 7a/17 PR descriptions was unreliable and produced fake "improvements"). For high confidence, run twice and require the same number; one-off readings can drift ±1 from cache state. The ~80+ untracked Finder-dupe files on Nathan's laptop inflate raw counts by ~200+ errors but never enter git.
 
 ### Measurement discipline
 
