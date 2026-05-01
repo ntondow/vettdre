@@ -7,6 +7,32 @@ import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
 import type { Feature } from "@/lib/feature-gate";
 import Paywall from "@/components/ui/paywall";
+import {
+  LayoutDashboard,
+  Building,
+  MessageSquare,
+  Calendar,
+  Menu,
+  Briefcase,
+  ClipboardCheck,
+  Users,
+  Building2,
+  Calculator,
+  Bot,
+  Map,
+  Activity,
+  Target,
+  ShieldCheck,
+  Settings,
+  LogOut,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
+interface TabItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+}
 
 /* ── Slice 7 — Tab configs by role ──────────────────────────────
  *
@@ -21,27 +47,31 @@ import Paywall from "@/components/ui/paywall";
  *
  * Agent: kept Onboarding + My Deals in the tab bar — these were already
  * the agent's daily flow and the agent feedback loop showed they're
- * thumb-reach surfaces. */
-const ADMIN_TABS = [
-  { name: "Dashboard", href: "/dashboard", icon: "🏠" },
-  { name: "Brokerage", href: "/brokerage", icon: "🏛️" },
-  { name: "Messages", href: "/messages", icon: "📧" },
-  { name: "Calendar", href: "/calendar", icon: "📅" },
-  { name: "More", href: "#more", icon: "☰" },
+ * thumb-reach surfaces.
+ *
+ * Slice 9: Mobile Dashboard maps to LayoutDashboard for parity with the
+ * desktop sidebar — same surface, same icon, no Home/Dashboard semantic
+ * split. Menu icon for the More sheet trigger. */
+const ADMIN_TABS: TabItem[] = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Brokerage", href: "/brokerage", icon: Building },
+  { name: "Messages", href: "/messages", icon: MessageSquare },
+  { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "More", href: "#more", icon: Menu },
 ];
 
-const AGENT_TABS = [
-  { name: "Dashboard", href: "/dashboard", icon: "🏠" },
-  { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
-  { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
-  { name: "Messages", href: "/messages", icon: "📧" },
-  { name: "More", href: "#more", icon: "☰" },
+const AGENT_TABS: TabItem[] = [
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "My Deals", href: "/brokerage/my-deals", icon: Briefcase },
+  { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: ClipboardCheck },
+  { name: "Messages", href: "/messages", icon: MessageSquare },
+  { name: "More", href: "#more", icon: Menu },
 ];
 
 interface MoreItem {
   name: string;
   href: string;
-  icon: string;
+  icon: LucideIcon;
   feature?: Feature;
 }
 
@@ -62,23 +92,23 @@ const ADMIN_MORE_SECTIONS: MoreSection[] = [
   {
     label: "My Work",
     items: [
-      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "Contacts", href: "/contacts", icon: Users },
     ],
   },
   {
     label: "Listings & Deals",
     items: [
-      { name: "Properties", href: "/properties", icon: "🏢" },
-      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
-      { name: "Leasing", href: "/leasing", icon: "🤖" },
+      { name: "Properties", href: "/properties", icon: Building2 },
+      { name: "Underwrite", href: "/deals", icon: Calculator, feature: "nav_deal_modeler" },
+      { name: "Leasing", href: "/leasing", icon: Bot },
     ],
   },
   {
     label: "Intel",
     items: [
-      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+      { name: "Market Intel", href: "/market-intel", icon: Map, feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: Activity, feature: "nav_terminal" },
+      { name: "Screening", href: "/screening", icon: ShieldCheck, feature: "screening_view" },
     ],
   },
 ];
@@ -87,17 +117,17 @@ const AGENT_MORE_SECTIONS: MoreSection[] = [
   {
     label: "My Work",
     items: [
-      { name: "Calendar", href: "/calendar", icon: "📅" },
-      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "Calendar", href: "/calendar", icon: Calendar },
+      { name: "Contacts", href: "/contacts", icon: Users },
     ],
   },
   {
     label: "Research",
     items: [
-      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
+      { name: "Market Intel", href: "/market-intel", icon: Map, feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: Activity, feature: "nav_terminal" },
+      { name: "Prospecting", href: "/prospecting", icon: Target },
+      { name: "Screening", href: "/screening", icon: ShieldCheck, feature: "screening_view" },
     ],
   },
 ];
@@ -105,7 +135,7 @@ const AGENT_MORE_SECTIONS: MoreSection[] = [
 const allAdminMoreItems = ADMIN_MORE_SECTIONS.flatMap(s => s.items);
 const allAgentMoreItems = AGENT_MORE_SECTIONS.flatMap(s => s.items);
 
-const SETTINGS_ITEM: MoreItem = { name: "Settings", href: "/settings", icon: "⚙️" };
+const SETTINGS_ITEM: MoreItem = { name: "Settings", href: "/settings", icon: Settings };
 
 export default function MobileNav() {
   const pathname = usePathname();
@@ -159,18 +189,19 @@ export default function MobileNav() {
             const cls = `flex flex-col items-center justify-center gap-0.5 min-w-[64px] h-full text-[10px] font-medium transition-colors ${
               isActive ? "text-blue-600" : "text-slate-500"
             }`;
+            const Icon = tab.icon;
 
             if (isMore) {
               return (
                 <button key={tab.name} onClick={() => showMore ? closeMore() : openMore()} className={cls}>
-                  <span className="text-lg leading-none">{tab.icon}</span>
+                  <Icon className="w-5 h-5" />
                   <span>{tab.name}</span>
                 </button>
               );
             }
             return (
               <Link key={tab.name} href={tab.href} className={cls}>
-                <span className="text-lg leading-none">{tab.icon}</span>
+                <Icon className="w-5 h-5" />
                 <span>{tab.name}</span>
               </Link>
             );
@@ -208,9 +239,10 @@ export default function MobileNav() {
                           ? "text-slate-400 active:bg-slate-100"
                           : isActive ? "bg-blue-50 text-blue-700" : "text-slate-600 active:bg-slate-100"
                       }`;
+                      const Icon = item.icon;
                       const inner = (
                         <>
-                          <span className={`text-2xl ${locked ? "opacity-50" : ""}`}>{item.icon}</span>
+                          <Icon className={`w-6 h-6 ${locked ? "opacity-50" : ""}`} />
                           <span>{item.name}</span>
                           {locked && (
                             <span className="absolute top-2 right-2">
@@ -244,7 +276,7 @@ export default function MobileNav() {
                   <Link href={SETTINGS_ITEM.href} className={`flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors ${
                     pathname.startsWith(SETTINGS_ITEM.href) ? "bg-blue-50 text-blue-700" : "text-slate-600 active:bg-slate-100"
                   }`}>
-                    <span className="text-2xl">{SETTINGS_ITEM.icon}</span>
+                    <SETTINGS_ITEM.icon className="w-6 h-6" />
                     <span>{SETTINGS_ITEM.name}</span>
                   </Link>
                 </div>
@@ -255,7 +287,7 @@ export default function MobileNav() {
                 onClick={handleSignOut}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium text-red-600 active:bg-red-50 transition-colors"
               >
-                <span>🚪</span> Sign out
+                <LogOut className="w-4 h-4" /> Sign out
               </button>
             </div>
           </div>
