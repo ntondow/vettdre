@@ -561,12 +561,25 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 10 — Empty states pattern across all surfaces
-- **Status:** `pending`
-- **Goal:** Every surface has Payments-style empty state (illustration + helpful subtitle + primary CTA).
+- **Status:** `awaiting_review`
+- **Goal:** Extend slice 18's filter-aware empty-state pattern (filter-narrowed branch with no CTA + slate-zero branch with primary CTA + per-branch testid hooks) from `/brokerage/client-onboarding` to 5 more list surfaces.
 - **Closes bug:** U-029, U-071
-- **Files:** Every list page.
-- **Success criteria:** Manual sweep confirms.
-- **Depends on:** Phase 2
+- **Surfaces migrated (5):**
+  - `/brokerage/transactions` (search + typeFilter + stageFilter; multi-axis → "Clear filters to see everything.")
+  - `/brokerage/invoices` (statusFilter tabs + search; tab-canonical → "Try the All tab to see everything." Bug fix: pre-slice-10 branched only on `search`, ignoring statusFilter.)
+  - `/brokerage/payments` (search + dates + method; multi-axis. Pre-slice-10 already had correct CTA-presence semantics; slice 10 adds testid contracts to lock in the invariants.)
+  - `/brokerage/agents` (statusFilter tabs + search; same shape as invoices, same statusFilter bug fixed.)
+  - `/contacts` (typeFilter pills; cross-file split — slate-zero in `page.tsx`, filter-narrowed in `contact-list.tsx`. Documented exception: slate-zero has no inline CTA because the page-toolbar `<ContactForm />` is the implicit primary action.)
+- **Skipped (per stop condition):** `/deals/pipeline` — kanban shape doesn't translate cleanly to the list-page pattern (with active filters and zero results, user sees empty kanban columns rather than a single empty-state block).
+- **Per-surface copy variance:** intentional. Multi-axis surfaces use "Clear filters" (no canonical "All" to revert to); tab-canonical use "Try the All tab"; pill-canonical use "Try the All filter." Forcing one phrasing would either lie about the filter shape or be uselessly generic. Contract is on structural invariants (testid + CTA presence), not exact text.
+- **Files:** `transactions/page.tsx`, `invoices/page.tsx`, `payments/page.tsx`, `agents/page.tsx`, `contacts/page.tsx`, `contacts/contact-list.tsx`, `tests/smoke/empty-state-pattern.test.ts` (NEW — 26 contracts: 5 per surface + 1 contacts-split exception, asserting testid presence, no-CTA-on-filtered, CTA-on-zero, copy differs, filter-condition combines all axes).
+- **Verification gates:**
+  - `npm run test`: 245 pass (was 219; +26 new). Test files: 12 (was 11).
+  - `npx tsc --noEmit` filtered: 288 (matches baseline; zero new TS errors). Two consecutive runs.
+  - `npm run build`: exit 0.
+  - `npx eslint <changed files>`: 40 problems on touched files match origin/main exactly (verified by checkout-from-origin/main rerun). Zero new lint errors.
+- **Success criteria:** Each of the 5 migrated surfaces renders correct empty-state copy + correct CTA presence based on filter state; smoke contracts catch any regression that drops a testid, adds a CTA to the filter-narrowed branch, or forgets to consult a filter axis.
+- **Depends on:** 18 (merged).
 - **Requires approval:** No.
 
 ### 19 — Document template management UI
@@ -645,3 +658,49 @@ of slices. Add as `Phase 4 — Hygiene` when Phase 3 ships.
 The future-features list (Cmd-K, in-app messaging, scheduled reports, mobile-optimized
 agent flow, bulk approve) becomes `Phase 5 — Q3 features`. Don't start until product
 direction is clear.
+
+---
+
+## Phase 5 — Polish backlog
+
+Low-priority cleanup slices filed during Phase 4 but explicitly deferred to
+keep individual slices reviewable. Pick up only if Gulino flags a specific
+inconsistency, or batch into a single sweep when capacity permits.
+
+### 9-ext-inline — Inline button-text emoji migration (deferred from 9-ext)
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Migrate emoji embedded directly inside button labels, header text, and inline link prefixes — the cases slice 9-ext deliberately deferred because each needs a per-instance design decision about layout/spacing rather than a typed-props swap.
+- **Why deferred from slice 9-ext:** typed-props icons (e.g. `icon: LucideIcon` on a config array) migrate mechanically with no visual change beyond the icon glyph. Inline emoji like `<button>✉️ Email</button>` change layout because lucide components are SVG with explicit width/height — replacing the emoji with `<Mail className="w-4 h-4" /> Email` shifts spacing, baseline alignment, and gap requirements. Shipping inline migrations alongside typed-props would inflate the diff and bury the "easy" structural changes inside per-instance design judgments.
+- **Files in scope** (audit-confirmed during slice 9-ext, all surfaces touched but not migrated):
+  - `src/app/(dashboard)/contacts/[id]/contact-detail.tsx` — 7 emoji (4 contact info icons, ternary in activity row, empty states)
+  - `src/app/(dashboard)/contacts/[id]/contact-dossier.tsx` — ~25 inline uses (button labels for ✉️ Email / 📞 Log Call / 💬 Log Text / 📱 SMS / ✅ Add Task; section headers for ✅ Open Tasks / 💰 Deals / 🏠 Recent Showings / 📈 Stats / 📝 Add a Note / 👥 People at; LinkedIn/Website link prefixes 🔗 / 🌐; activityIcons fallback `|| "📋"` in two render sites; empty states 💰 ✅ 📬; pin indicators 📌; sentiment 🔥/⚡; mailto/tel emoji prefixes ✉️ / 📞)
+  - `src/app/(dashboard)/market-intel/building-profile-modal.tsx` — 3 inline (📞 phone, 📞 Call Owner, 💬 SMS)
+  - `src/app/(dashboard)/market-intel/nj-building-profile.tsx` and `nys-building-profile.tsx` — 3 emoji each in `<span className="text-lg">` headers (👤 🏠 💰 / 👤 🏢 💰) — adjacent to migrated Section icon prop, so design decision is whether to drop the emoji entirely or replace with lucide
+  - `src/app/(dashboard)/messages/messages-view.tsx` — ~10 inline (📬 / 📭 empty states, 📌 pin indicators, sentiment 🔥/⚡, 📎 attachment indicator, sub-headers 👤 / 💰 / 📋 / ✅)
+  - `src/app/(dashboard)/contacts/contact-list.tsx` — 2 inline `<span className="text-lg">📞</span>` and `<span className="text-lg">✉️</span>` in row action cells
+  - `src/app/(dashboard)/contacts/page.tsx` — 1 emoji (👥) in slate-zero empty state
+  - `src/app/(dashboard)/leasing/loading.tsx` — 5 string-emoji uses on `SkeletonSection` (💬 ⏰ 📊 ⚡ ⚙️) — slice 9-ext widened the `SkeletonSection.icon` prop type to `string | LucideIcon` so this caller keeps working unchanged; migration here just swaps the strings to lucide components.
+  - `src/app/(dashboard)/deals/pipeline/page.tsx` — 2 inline (🧮 empty state at line 502, ✎ on a non-emoji char that's actually a typographic mark — verify before scope)
+- **Approach:** per-file decision. For each inline use:
+  - Button text: `<button>X foo</button>` → `<button><Icon className="w-4 h-4" /> foo</button>` plus gap-1.5 to button className.
+  - Header text: `<h3>X foo</h3>` → either `<h3><Icon className="w-4 h-4 inline mr-1.5" /> foo</h3>` OR drop the icon (audit each per surface).
+  - Link prefix: `<a>X link</a>` → similar to button.
+  - Empty-state hero: `<div className="text-3xl">X</div>` → `<Icon className="w-8 h-8 text-slate-300" />` plus container adjustment.
+- **Estimated diff:** ~150-200 lines code + 1-2 smoke contracts per file (extend existing sidebar-icon-migration.test.ts file-wide bans now that typed-props are clean).
+- **Stop conditions:** any emoji that's load-bearing in user-visible content (not decorative) — surface and skip; any DB-stored emoji (none currently in scope per slice 9-ext-audit, but re-verify before migration).
+- **Depends on:** 9-ext (merged).
+- **Requires approval:** No, but propose-then-implement per-file given the layout-shift risk.
+
+### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Delete `src/app/(dashboard)/deals/deal-pipeline.tsx`. The file is dead code — exported as `DealPipeline` but `grep -rn "DealPipeline\b"` finds zero importers. The live deal pipeline UI is in `src/app/(dashboard)/deals/pipeline/page.tsx`; `deal-pipeline.tsx` is an older version that was superseded but never removed.
+- **Why a separate slice:** discovered during slice 9-ext file-list audit. Migrating dead code's emoji would have been waste, so 9-ext skipped it. Deleting it here removes the temptation for future emoji/icon/typography sweeps to keep migrating it.
+- **Verification before deletion:**
+  - `grep -rn "DealPipeline\b" src/ tests/` returns only the file's own `export default function DealPipeline` (already confirmed during slice 9-ext audit, but re-verify just before deletion).
+  - `grep -rn "deals/deal-pipeline\b" src/ tests/` returns zero — no path imports.
+  - `npm run build` passes after deletion.
+- **Files:** delete `src/app/(dashboard)/deals/deal-pipeline.tsx` (594 lines).
+- **Estimated diff:** -594 lines, 1 file.
+- **Smoke contracts:** none — deletion is its own contract (build + zero importers proof).
+- **Depends on:** none.
+- **Requires approval:** No.
