@@ -591,12 +591,11 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** YES — architectural change.
 
 ### 3.X — Parent branch cleanup
-- **Status:** `in_progress` (PR-A merged 2026-04-30; PR-D superseding planned PR-B/PR-C, awaiting_review)
-- **Goal:** Merge `feat/super-admin-cross-tenant-view` + 15 BMS overhaul slice branches to main.
-- **Plan revision (2026-04-30):** Original A → B → C plan replaced after P0: deploying from main rolled back all 15 slice branches because they weren't on main yet. New plan is PR-A (already merged) + PR-D (single integration PR collapsing planned PR-B + PR-C + the 15 slice branches via rebase of `cf6e1cf` onto main). c05e952 R6 cleanup handled inline in PR-D's rebase.
-- **PRs:** PR-A #17 (merged); PR-D awaiting_review.
-- **Success criteria:** main reflects production reality; deploy from main = current prod; no orphan slice branches.
-- **Requires approval:** PR-D collapses ~43 commits and is the single point where parent branch + Phase 1 slices land together.
+- **Status:** `done` (PR-A merged 2026-04-30; PR-D merged 2026-04-30).
+- **Goal (closed):** Merge `feat/super-admin-cross-tenant-view` + 15 BMS overhaul slice branches to main.
+- **Plan revision (2026-04-30):** Original A → B → C plan replaced after P0 — deploying from main rolled back all 15 slice branches because they weren't on main yet. Final plan was PR-A + PR-D (single integration PR collapsing planned PR-B + PR-C + the 15 slice branches via rebase of `cf6e1cf` onto main). c05e952 R6 cleanup handled inline in PR-D's rebase.
+- **PRs:** PR-A #17 (merged); PR-D (merged 2026-04-30, restoring all 15 BMS overhaul slices to main).
+- **Outcome:** main reflects production reality; deploy from main = current prod; no orphan slice branches. Status flipped to `done` in Phase 3 slice 1 (PR #TBD).
 
 ### 13-cross-cut — Manager-side profile-completeness warning at filing time
 - **Status:** `pending`
@@ -608,16 +607,17 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 7a + 13 (both merged).
 
 ### 3.W — Clean Finder-duplicate files from main
-- **Status:** `pending`
-- **Priority:** low (Phase 3 polish)
-- **Goal:** Remove four ` 2.tsx` Finder-duplicate files that landed on main via commit `53d7751 chore: in-flight work — terminal realtime, screening IDV, market-intel updates, building-intel docs`. Surfaced during PR-D rebase (not in PR-D's scope to fix — they predate PR-D).
-- **Files:**
-  - `src/components/layout/sidebar 2.tsx`
-  - `src/app/screen/[token]/client 2.tsx`
-  - `src/app/(dashboard)/screening/[id]/page 2.tsx`
-  - `src/app/(dashboard)/brokerage/client-onboarding/page 2.tsx`
-- **Success criteria:** `find . -name '* 2.tsx' -o -name '* 2.ts'` (excluding node_modules, .next, venvs) returns zero tracked files. One-line PR.
-- **Depends on:** none (independent).
+- **Status:** `awaiting_review` (PR #TBD — bundled with 3.X status flip as Phase 3 slice 1).
+- **Priority:** low (Phase 3 polish).
+- **Goal:** Remove four ` 2.tsx` Finder-duplicate files that landed on main via commit `53d7751 chore: in-flight work — terminal realtime, screening IDV, market-intel updates, building-intel docs`. Surfaced during PR-D rebase (predate PR-D).
+- **Files removed (4):**
+  - `src/components/layout/sidebar 2.tsx` (375 lines, primary `sidebar.tsx` is 384 lines).
+  - `src/app/screen/[token]/client 2.tsx` (376 lines, primary `client.tsx` is 498 lines).
+  - `src/app/(dashboard)/screening/[id]/page 2.tsx` (799 lines, primary `page.tsx` is 1021 lines).
+  - `src/app/(dashboard)/brokerage/client-onboarding/page 2.tsx` (294 lines, primary `page.tsx` is 499 lines).
+- **Verification before removal:** zero imports of any dupe anywhere in `src/` or `tests/`. All dupes are shorter than their primaries (stale snapshots, not divergent forks). Origin commit `53d7751` matches the slice spec exactly.
+- **Baseline impact:** typecheck and lint anchors held at 292 / 4520 after removal — the 4 dupes were error-clean themselves, so anchor counts didn't move. CLAUDE.md anchors unchanged.
+- **Outcome:** `git ls-files | grep -E ' [0-9]+\.(tsx?|js)$'` returns zero results.
 
 **[PHASE 3 APPROVAL GATE — STOP HERE]**
 
