@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { landingForRole } from "../../src/app/page";
+import { canAccessPage } from "../../src/lib/bms-permissions";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -100,5 +101,58 @@ describe("Slice 1b — Role-aware default landing", () => {
         expect(src).not.toMatch(/["']\/market-intel["']/);
       });
     }
+  });
+
+  // ── Slice 6: agent landing is permission-compatible ─────────────────
+  //
+  // Locks in B-018's exact regression class. Three classes of silent
+  // regression on the agent's first-impression flow are caught here:
+  //
+  //   1. Remove view_own_submissions from the agent role (refactor in
+  //      bms-permissions.ts) → agent lands on /brokerage/my-deals,
+  //      gets bounced to /login → redirect loop.
+  //   2. Change /brokerage/my-deals/page.tsx to require a different
+  //      permission (entry in PAGE_PERMISSION_MAP) → same loop.
+  //   3. Change landingForRole("agent") to a different route that the
+  //      agent can't access → same loop.
+  //
+  // The 1b smoke verifies the role-to-path map. This contract verifies
+  // the path is also access-compatible for the agent role.
+  //
+  // ── Why scoped to "agent" only ──────────────────────────────────────
+  //
+  // The codebase has two distinct role vocabularies:
+  //
+  //   User.role           : super_admin | admin | agent (Prisma)
+  //   BrokerageRoleType   : brokerage_admin | broker | manager | agent
+  //
+  // landingForRole() reads User.role; canAccessPage() reads
+  // BrokerageRoleType. The two are bridged by getCurrentBrokerageRole
+  // (lib/bms-auth.ts) which translates User.role → BrokerageRole via a
+  // Prisma query (BrokerAgent join, async). That translation can't be
+  // exercised in a pure source-level test.
+  //
+  // Only "agent" is identical across both vocabularies — that's why this
+  // contract is scoped to it. End-to-end coverage for owner/admin/manager
+  // landing requires a Prisma fixture or mocked getCurrentBrokerageRole;
+  // tracked as `slice 6-ext` in SLICES.md (Phase 3 polish).
+  //
+  // super_admin is also skipped — lands on /dashboard which is outside
+  // the BMS scope (not in PAGE_PERMISSION_MAP); per SLICES.md 3.Z a
+  // dedicated admin surface will replace it.
+
+  describe("Slice 6 — agent landing is permission-compatible (B-018)", () => {
+    it("agent role can access the path landingForRole returns for it", () => {
+      const dest = landingForRole("agent");
+      expect(
+        canAccessPage("agent", dest),
+        `landingForRole("agent") returned "${dest}", but ` +
+          `canAccessPage("agent", "${dest}") is false. Either ` +
+          `landingForRole drifted, /brokerage/my-deals's required ` +
+          `permission changed in PAGE_PERMISSION_MAP, or the agent role ` +
+          `lost view_own_submissions in BMS_PERMISSIONS — agent's ` +
+          `first impression is now a redirect loop to /login.`,
+      ).toBe(true);
+    });
   });
 });
