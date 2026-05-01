@@ -8,10 +8,7 @@ import {
   BarChart3,
   FileText,
   Receipt,
-  Package,
   Users,
-  Layers,
-  ShieldCheck,
   CreditCard,
   FileBarChart,
   Settings,
@@ -21,7 +18,6 @@ import {
   Building2,
   Trophy,
   UserPlus,
-  Rocket,
   Wallet,
 } from "lucide-react";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
@@ -43,50 +39,53 @@ interface NavGroup {
   items: NavItem[];
 }
 
+// ── Slice 8: brokerage_admin sub-nav (Wireframe C) ──────────────
+//
+// Three sections + Admin link, eleven primary items. Down from seven
+// sections × seventeen items in slice 7's inventory.
+//
+// OPERATIONS holds the daily money-and-deal flow: Dashboard at the top
+// because it's the at-a-glance landing, then Submissions (highest-
+// frequency action — same item that carries the global sidebar's slice 7
+// badge), then the rest of the lifecycle. AGENTS & LISTINGS groups
+// roster + inventory ("what we manage"). REPORTS is the past/insight
+// surface.
+//
+// Removed from this constant (relocated, not deleted as routes):
+//   - /brokerage/setup            → Settings → Brokerage Configuration card
+//   - /brokerage/commission-plans → Settings → Brokerage Configuration card
+//   - /brokerage/compliance       → Settings → Brokerage Configuration card
+//                                   AND /brokerage/dashboard → ComplianceAlert
+//                                   panel when totalItems > 0
+//   - /brokerage/invoices/bulk    → already-existing "Bulk Generate" button
+//                                   in /brokerage/invoices header
+//
+// canAccessPage filtering still runs per-item in getVisibleNav below;
+// no permission changes needed.
 const ADMIN_NAV: NavGroup[] = [
   {
-    group: "Overview",
+    group: "Operations",
     items: [
-      { href: "/brokerage/setup", icon: Rocket, label: "Setup" },
       { href: "/brokerage/dashboard", icon: BarChart3, label: "Dashboard" },
+      { href: "/brokerage/deal-submissions", icon: FileText, label: "Submissions" },
+      { href: "/brokerage/transactions", icon: FolderOpen, label: "Transactions" },
+      { href: "/brokerage/invoices", icon: Receipt, label: "Invoices" },
+      { href: "/brokerage/payments", icon: CreditCard, label: "Payments" },
     ],
   },
   {
-    group: "Inventory",
+    group: "Agents & Listings",
     items: [
+      { href: "/brokerage/agents", icon: Users, label: "Agents" },
+      { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
       { href: "/brokerage/listings", icon: Home, label: "Listings" },
       { href: "/brokerage/listings/properties", icon: Building2, label: "Properties" },
     ],
   },
   {
-    group: "Deals",
+    group: "Reports",
     items: [
-      { href: "/brokerage/my-deals", icon: Briefcase, label: "My Deals" },
-      { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
-      { href: "/brokerage/deal-submissions", icon: FileText, label: "Submissions" },
-      { href: "/brokerage/invoices", icon: Receipt, label: "Invoices" },
-      { href: "/brokerage/invoices/bulk", icon: Package, label: "Bulk Invoices" },
-      { href: "/brokerage/transactions", icon: FolderOpen, label: "Transactions" },
-    ],
-  },
-  {
-    group: "Management",
-    items: [
-      { href: "/brokerage/agents", icon: Users, label: "Agents" },
-      { href: "/brokerage/commission-plans", icon: Layers, label: "Commission Plans" },
-      { href: "/brokerage/compliance", icon: ShieldCheck, label: "Compliance" },
-    ],
-  },
-  {
-    group: "Finance",
-    items: [
-      { href: "/brokerage/payments", icon: CreditCard, label: "Payments" },
       { href: "/brokerage/reports", icon: FileBarChart, label: "Reports" },
-    ],
-  },
-  {
-    group: "Performance",
-    items: [
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
     ],
   },
@@ -98,6 +97,14 @@ const ADMIN_NAV: NavGroup[] = [
   },
 ];
 
+// ── Slice 8: agent sub-nav cleanup ──────────────────────────────
+//
+// Drops the prior `Admin > Setup` entry. /brokerage/setup is a
+// brokerage_admin onboarding flow — agents had no business seeing it.
+// The pre-slice-8 layout returned AGENT_NAV unfiltered (no
+// canAccessPage gate on the agent path), so agents could literally
+// click into the brokerage Setup wizard. Stale entry from before
+// AGENT_NAV existed; cleaning up here.
 const AGENT_NAV: NavGroup[] = [
   {
     group: "My Brokerage",
@@ -107,12 +114,6 @@ const AGENT_NAV: NavGroup[] = [
       { href: "/brokerage/listings", icon: Home, label: "Listings" },
       { href: "/brokerage/client-onboarding", icon: UserPlus, label: "Client Onboarding" },
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
-    ],
-  },
-  {
-    group: "Admin",
-    items: [
-      { href: "/brokerage/setup", icon: Rocket, label: "Setup" },
     ],
   },
 ];

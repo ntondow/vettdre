@@ -8,6 +8,7 @@ import { PrimaryCtaStrip } from "./components/primary-cta-strip";
 import { TasksPanel } from "./components/tasks-panel";
 import { TopPerformersPanel } from "./components/top-performers-panel";
 import { ActiveTransactionsPanel } from "./components/active-transactions-panel";
+import { ComplianceAlert } from "./components/compliance-alert";
 
 const PERIOD_LABELS: Record<KpiPeriod, string> = {
   month: "Month",
@@ -117,6 +118,11 @@ export default function BrokerageDashboardPage() {
 
       {/* ── Primary CTA strip ─────────────────────────────── */}
       <PrimaryCtaStrip asOrg={asOrg} />
+
+      {/* ── Slice 8: Compliance expiring-soon alert ───────────
+          Auto-hides when no expiring docs. Stays at the top of the
+          flow so license expirations surface before scrolling. */}
+      <ComplianceAlert asOrg={asOrg} />
 
       {/* ── 4 KPIs (with vs-prior delta) ──────────────────── */}
       <KpiStrip asOrg={asOrg} period={period} />

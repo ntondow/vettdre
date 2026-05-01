@@ -43,7 +43,10 @@ import {
   ImageIcon,
   DollarSign,
   Mail,
+  Rocket,
+  Layers,
 } from "lucide-react";
+import Link from "next/link";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -789,6 +792,57 @@ export default function BrokerageSettingsPage() {
       {/* ═══════════════════════════════════════════════════════ */}
       {activeTab === "settings" && (
         <div className="space-y-6">
+          {/* ── Slice 8: Brokerage Configuration cards ────────────
+              Three relocations from the pre-slice-8 sub-nav. Routes
+              (/brokerage/setup, /brokerage/commission-plans,
+              /brokerage/compliance) are unchanged — only the entry
+              point moves here. Compliance also surfaces an expiring-
+              soon alert on /brokerage/dashboard. */}
+          <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2">
+              <Settings className="w-5 h-5 text-slate-400" />
+              <h2 className="font-semibold text-slate-900">Brokerage Configuration</h2>
+            </div>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <Link
+                href="/brokerage/setup"
+                data-testid="brokerage-config-setup"
+                className="flex items-start gap-3 p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/40 transition-colors group"
+              >
+                <Rocket className="w-5 h-5 text-slate-400 group-hover:text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900">Brokerage Setup</p>
+                  <p className="text-xs text-slate-500 mt-0.5">One-time onboarding wizard for new brokerages</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 flex-shrink-0" />
+              </Link>
+              <Link
+                href="/brokerage/commission-plans"
+                data-testid="brokerage-config-commission-plans"
+                className="flex items-start gap-3 p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/40 transition-colors group"
+              >
+                <Layers className="w-5 h-5 text-slate-400 group-hover:text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900">Commission Plans</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Tiered, flat, or hybrid commission structures</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 flex-shrink-0" />
+              </Link>
+              <Link
+                href="/brokerage/compliance"
+                data-testid="brokerage-config-compliance"
+                className="flex items-start gap-3 p-4 border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50/40 transition-colors group"
+              >
+                <ShieldCheck className="w-5 h-5 text-slate-400 group-hover:text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900">Compliance</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Agent license, E&amp;O, and document tracking</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 flex-shrink-0" />
+              </Link>
+            </div>
+          </div>
+
           {!settingsLoaded ? (
             <div className="animate-pulse space-y-4">
               {[1, 2, 3].map((i) => (
