@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getProfile, updateProfile } from "../actions";
+import ProfileCompletionBanner, { computeMissingProfileFields } from "@/components/profile-completion-banner";
 
 const AVATAR_COLORS: Record<string, string> = {
   A: "bg-red-500",    B: "bg-orange-500", C: "bg-amber-500",  D: "bg-yellow-500",
@@ -105,6 +106,20 @@ export default function ProfilePage() {
       <p className="text-sm text-slate-500 mb-6">
         Manage your personal information and professional details.
       </p>
+
+      {/* Profile completion banner (B-017). Skip while loading to avoid a
+          flash of "all fields missing" while getProfile is in flight; the
+          form below still renders skeletons during that window. No CTA —
+          the form below IS the action. */}
+      {!loading && (
+        <ProfileCompletionBanner
+          missingFields={computeMissingProfileFields({
+            fullName: [firstName, lastName].filter(Boolean).join(" "),
+            phone,
+            licenseNumber,
+          })}
+        />
+      )}
 
       {/* Profile Card */}
       <div className="bg-white rounded-xl border border-slate-200 p-6">

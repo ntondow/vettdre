@@ -455,12 +455,28 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 13 — Profile-completion banner for agents
-- **Status:** `pending`
-- **Goal:** When agent's profile (License #, Phone, Email) is incomplete, show banner on /my-deals + Settings.
+- **Status:** `awaiting_review` (PR #TBD)
+- **Goal:** Server-rendered banner on `/brokerage/my-deals` and client-side banner on `/settings/profile` that surfaces missing profile fields (Full Name, Phone, License Number) tied to concrete downstream artifacts (signed onboarding documents, SMS delivery, NYS compliance).
 - **Closes bug:** B-017
-- **Files:** my-deals + settings/profile pages.
-- **Success criteria:** Banner shows for incomplete profile; banner dismisses after fields filled.
-- **Depends on:** None blocking
+- **Field set decision:** fullName, phone, licenseNumber. Email skipped — set at signup, effectively always present. Title and brokerage skipped — nice-to-haves that would pollute the banner with low-signal noise.
+- **No-dismiss-button decision:** banner naturally disappears when fields are populated (next render computes empty `missingFields`). Avoids "user clicks X, banner stays gone forever" UX trap.
+- **Files:**
+  - `src/components/profile-completion-banner.tsx` (new): stateless component + `computeMissingProfileFields` helper.
+  - `src/app/(dashboard)/brokerage/my-deals/page.tsx`: add `getProfile()` to a `Promise.all` with the existing submissions fetch, compute missing fields, pass to view.
+  - `src/app/(dashboard)/brokerage/my-deals/my-deals-view.tsx`: accept `profileMissingFields` prop, render banner with link to /settings/profile.
+  - `src/app/(dashboard)/settings/profile/page.tsx`: render banner inline (gated on `!loading` to avoid flicker), no link (form below is the action).
+  - `tests/smoke/profile-completion-banner.test.ts` (new): 16 contracts (mix of pure-helper unit tests + source-level callsite assertions).
+- **Success criteria:**
+  - Agent with incomplete profile sees amber banner at top of /my-deals listing missing fields, with "Update profile" CTA → /settings/profile.
+  - Same agent sees banner at top of /settings/profile listing missing fields (no CTA — form is the action).
+  - Banner stops rendering when all three fields are populated (next request / next render).
+  - Super_admin viewing via `?as_org=` sees their OWN profile state (not the override target's), because `getCurrentOrgContext` swaps orgId not userId.
+- **Verification gates:**
+  - `npm run test`: 113 → 129 (+16 new for slice 13).
+  - `npm run build`: exit 0.
+  - `npx tsc --noEmit` clean tree: ≤ 293 (current main anchor).
+  - `npx eslint <changed files>`: zero new errors.
+- **Depends on:** none blocking.
 - **Requires approval:** No.
 
 ### 6 — Default landing for agent (continued from 1b if needed)
@@ -558,6 +574,15 @@ Phase 0 status as of 2026-04-29:
 - **PRs:** PR-A #17 (merged); PR-D awaiting_review.
 - **Success criteria:** main reflects production reality; deploy from main = current prod; no orphan slice branches.
 - **Requires approval:** PR-D collapses ~43 commits and is the single point where parent branch + Phase 1 slices land together.
+
+### 13-cross-cut — Manager-side profile-completeness warning at filing time
+- **Status:** `pending`
+- **Priority:** low (Phase 3 polish)
+- **Goal:** When a manager uses the slice 7a agent picker on `/brokerage/client-onboarding/new` to file an onboarding for an agent whose profile is incomplete (Full Name, Phone, or License Number missing), surface a warning at the moment of filing — not just on the agent's own /my-deals banner.
+- **Why:** Without this, John/Kristin file docs for Anthony, the prefill renders with `(Agent's name)` placeholders, and nobody catches it until the client signs a document with the placeholder visible. Slice 13 surfaces the gap to the agent themselves but doesn't warn the manager filing on their behalf.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx`; reuse `computeMissingProfileFields` from `src/components/profile-completion-banner.tsx`.
+- **Success criteria:** when the picker selects an agent with missing fields, an inline note appears below the picker listing the gaps; submission still proceeds (warning not block).
+- **Depends on:** 7a + 13 (both merged).
 
 ### 3.W — Clean Finder-duplicate files from main
 - **Status:** `pending`
