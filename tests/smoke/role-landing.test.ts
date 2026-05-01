@@ -14,6 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { landingForRole } from "../../src/app/page";
 import { canAccessPage } from "../../src/lib/bms-permissions";
+import { translateUserRoleToBrokerageRole } from "../../src/lib/bms-role-translation";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
@@ -154,5 +155,114 @@ describe("Slice 1b — Role-aware default landing", () => {
           `first impression is now a redirect loop to /login.`,
       ).toBe(true);
     });
+  });
+
+  // ── Slice 6-ext: cross-role landing permission contract ────────────
+  //
+  // Slice 6 closed the regression class for "agent" via the role-string
+  // identity (User.role "agent" === BrokerageRoleType "agent"). 6-ext
+  // extends that coverage to owner / admin / manager — the three roles
+  // whose User.role → BrokerageRoleType translation runs through the
+  // pure helper extracted to bms-role-translation.ts.
+  //
+  // The two-step bridge:
+  //   1. landingForRole(userRole)                  → path
+  //   2. translateUserRoleToBrokerageRole(userRole) → brokerage role
+  //   3. canAccessPage(brokerageRole, path)         → must be true
+  //
+  // The pure helper is a strict subset of getCurrentBrokerageRole's full
+  // translation (the production codepath): it covers exactly the
+  // owner/admin/manager → brokerage_admin|manager branches and returns
+  // null for everything else (agent path needs a DB read, "first user
+  // is owner" fallback also needs a DB read). Those DB-dependent
+  // branches are out of scope for a pure smoke test — they're covered
+  // end-to-end by manual verification per phase.
+  //
+  // ── Why super_admin and agent are excluded from this loop ──────────
+  //
+  // - super_admin lands on /dashboard, which is NOT in PAGE_PERMISSION_MAP
+  //   (it's outside the BMS scope). Per SLICES.md 3.Z, a dedicated admin
+  //   surface will replace the interim /dashboard landing; until then
+  //   canAccessPage("...", "/dashboard") returns false by design. Adding
+  //   super_admin to this loop would fail every run for a non-bug reason.
+  //
+  // - agent is already covered by slice 6 above. Including it here would
+  //   duplicate a contract that's already locked in, and would obscure the
+  //   distinct purpose of 6-ext: validating the *translation* layer, not
+  //   the role-string identity that holds for "agent".
+
+  describe("Slice 6-ext — pure User.role → BrokerageRole helper", () => {
+    it("owner / admin / super_admin → brokerage_admin", () => {
+      expect(translateUserRoleToBrokerageRole("owner")).toBe("brokerage_admin");
+      expect(translateUserRoleToBrokerageRole("admin")).toBe("brokerage_admin");
+      expect(translateUserRoleToBrokerageRole("super_admin")).toBe("brokerage_admin");
+    });
+
+    it("manager → manager", () => {
+      expect(translateUserRoleToBrokerageRole("manager")).toBe("manager");
+    });
+
+    it("agent → null (DB lookup needed; out of pure-helper scope)", () => {
+      // The agent translation requires reading BrokerAgent.brokerageRole
+      // from Postgres — getCurrentBrokerageRole handles it; the pure helper
+      // intentionally does not. If this returns non-null in the future, the
+      // helper has overreached and the pure-vs-DB boundary has slipped.
+      expect(translateUserRoleToBrokerageRole("agent")).toBeNull();
+    });
+
+    it("null / undefined / empty string → null", () => {
+      expect(translateUserRoleToBrokerageRole(null)).toBeNull();
+      expect(translateUserRoleToBrokerageRole(undefined)).toBeNull();
+      expect(translateUserRoleToBrokerageRole("")).toBeNull();
+    });
+
+    it("unknown role string → null (no silent default)", () => {
+      // A future refactor that adds e.g. role="trainee" should fall through
+      // to null rather than silently default to brokerage_admin. Locks in
+      // the explicit-allowlist behavior.
+      expect(translateUserRoleToBrokerageRole("trainee")).toBeNull();
+      expect(translateUserRoleToBrokerageRole("ghost-role")).toBeNull();
+      expect(translateUserRoleToBrokerageRole("OWNER")).toBeNull();
+    });
+  });
+
+  describe("Slice 6-ext — owner/admin/manager landings are permission-compatible", () => {
+    const CROSS_ROLE_CASES = [
+      { userRole: "owner", expectedBrokerageRole: "brokerage_admin" },
+      { userRole: "admin", expectedBrokerageRole: "brokerage_admin" },
+      { userRole: "manager", expectedBrokerageRole: "manager" },
+    ] as const;
+
+    for (const { userRole, expectedBrokerageRole } of CROSS_ROLE_CASES) {
+      it(`User.role "${userRole}" lands on a path its translated role can access`, () => {
+        // Step 1: pure translation (matches the manager / owner-admin
+        // branches inside getCurrentBrokerageRole).
+        const brokerageRole = translateUserRoleToBrokerageRole(userRole);
+        expect(brokerageRole).toBe(expectedBrokerageRole);
+
+        // Step 2: where does landingForRole send this User.role?
+        const dest = landingForRole(userRole);
+
+        // Step 3: contract — the translated brokerage role must be allowed
+        // to load the page landingForRole picked. Failure modes:
+        //   a) landingForRole drifted to a path the role can't load.
+        //   b) PAGE_PERMISSION_MAP entry for the path changed permission.
+        //   c) BMS_PERMISSIONS revoked the permission from the role.
+        //   d) translateUserRoleToBrokerageRole started returning a
+        //      different brokerage role for this User.role.
+        // Any of these silently produces a redirect loop for owner/admin/
+        // manager users — the regression class slice 6 closed for "agent".
+        expect(
+          canAccessPage(brokerageRole!, dest),
+          `User.role "${userRole}" lands on "${dest}", translates to ` +
+            `"${brokerageRole}", but canAccessPage("${brokerageRole}", ` +
+            `"${dest}") is false. Either landingForRole drifted, the ` +
+            `PAGE_PERMISSION_MAP entry for "${dest}" changed, the role ` +
+            `lost the required permission, or the translation helper ` +
+            `started mapping "${userRole}" differently. Result: this user ` +
+            `lands on a page they can't load → redirect loop to /login.`,
+        ).toBe(true);
+      });
+    }
   });
 });

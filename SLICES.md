@@ -499,14 +499,15 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 6-ext — Cross-role landing permission contract
-- **Status:** `pending`
+- **Status:** `awaiting_review` (PR #25)
 - **Priority:** low (Phase 3 polish)
-- **Goal:** End-to-end smoke covering User.role → BrokerageRole runtime translation + `canAccessPage`, so the cross-role contract slice 6 couldn't ship in pure source-level form is covered for owner / admin / manager / super_admin landing destinations.
-- **Why:** slice 6 is scoped to agent only because that's the one role string that appears in both `User.role` and `BrokerageRoleType` vocabularies. Other roles need translation through `getCurrentBrokerageRole` (Prisma BrokerAgent join, async) before `canAccessPage` is meaningful.
-- **Approach:** Prisma test fixture OR mocked `getCurrentBrokerageRole` returning each translated role. Assert `canAccessPage(translatedRole, landingForRole(originalUserRole))` returns true for the four BMS roles; super_admin's `/dashboard` destination needs a separate guard (it's outside `PAGE_PERMISSION_MAP`).
-- **Closes:** the gap left by slice 6's source-only scope. Catches drift on the User → BrokerageRole map in `bms-auth.ts:39-42` that slice 6 can't see.
-- **Files:** new `tests/integration/role-landing-translation.test.ts` (likely — Phase 3 will decide test infra). Update `bms-auth.ts` only if test surfaces a translation bug.
-- **Depends on:** none blocking (1b is on main).
+- **Goal:** Extend slice 6's permission-compat contract from "agent" (role-string identity) to owner / admin / manager via the *pure* User.role → BrokerageRole translation path.
+- **Why:** slice 6 was scoped to agent only because that's the one role string that appears in both `User.role` and `BrokerageRoleType` vocabularies. Other roles flow through a translation layer that can drift silently — bms-auth had two near-identical inline `ROLE_MAP` literals (in `getCurrentBrokerageRole` + `getCurrentAgentInfo`) duplicating the manager/admin/owner mapping.
+- **Approach (Option A):** Extract the pure subset of the translation into `src/lib/bms-role-translation.ts` (`translateUserRoleToBrokerageRole`), which depends only on the User.role string. Refactor *both* `getCurrentBrokerageRole` and `getCurrentAgentInfo` to call the helper instead of inlining ROLE_MAP. Add 8 new contracts to `tests/smoke/role-landing.test.ts`: 5 pure-helper unit tests + 3 cross-role permission contracts (owner/admin/manager). No behavior change vs the previous inline mappings — verified per-input.
+- **Scope notes:** super_admin and agent are documented exclusions in the cross-role loop. super_admin lands on `/dashboard` which is outside `PAGE_PERMISSION_MAP` (parked by 3.Z). agent is already covered by slice 6 via role-string identity. The "first user in org is owner" fallback and the BrokerAgent.brokerageRole DB read remain DB-dependent and out of pure-helper scope (manual end-to-end coverage per phase).
+- **Closes:** the gap left by slice 6's source-only scope. Catches drift on the User → BrokerageRole map that slice 6 can't see.
+- **Files:** new `src/lib/bms-role-translation.ts`, modified `src/lib/bms-auth.ts`, modified `tests/smoke/role-landing.test.ts`.
+- **Depends on:** none blocking (1b + 6 on main).
 
 **[PHASE 2 APPROVAL GATE — STOP HERE]**
 
