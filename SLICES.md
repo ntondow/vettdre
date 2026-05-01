@@ -455,7 +455,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 13 — Profile-completion banner for agents
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` (PR #22)
 - **Goal:** Server-rendered banner on `/brokerage/my-deals` and client-side banner on `/settings/profile` that surfaces missing profile fields (Full Name, Phone, License Number) tied to concrete downstream artifacts (signed onboarding documents, SMS delivery, NYS compliance).
 - **Closes bug:** B-017
 - **Field set decision:** fullName, phone, licenseNumber. Email skipped — set at signup, effectively always present. Title and brokerage skipped — nice-to-haves that would pollute the banner with low-signal noise.
