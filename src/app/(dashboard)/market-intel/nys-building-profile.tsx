@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { BarChart3, Building, type LucideIcon } from "lucide-react";
 import { getNYSPropertyByParcel, getNYSTaxRate, fetchNYSDealPrefill, searchNYSComps } from "./nys-actions";
 import type { NYSPropertyResult } from "./nys-actions";
 
@@ -20,15 +21,15 @@ const fmtDate = (d: string) => {
   try { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(d)); } catch { return d; }
 };
 
-function Section({ id, title, icon, badge, className, collapsed, onToggle, children }: {
-  id: string; title: string; icon?: string; badge?: React.ReactNode;
+function Section({ id, title, icon: Icon, badge, className, collapsed, onToggle, children }: {
+  id: string; title: string; icon?: LucideIcon; badge?: React.ReactNode;
   className?: string; collapsed: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
     <div className={className || "bg-white rounded-xl border border-slate-200"}>
       <button onClick={onToggle} className="w-full flex items-center justify-between p-5 text-left cursor-pointer">
         <div className="flex items-center gap-2">
-          {icon && <span className="text-lg">{icon}</span>}
+          {Icon && <Icon className="w-4 h-4 text-slate-700" strokeWidth={1.75} />}
           <h3 className="text-sm font-bold text-slate-900">{title}</h3>
           {badge}
         </div>
@@ -254,7 +255,7 @@ export default function NYSBuildingProfile({ swisCode, printKey, county, address
       </div>
 
       {/* Comps */}
-      <Section id="comps" title="Comparable Sales" icon="📊"
+      <Section id="comps" title="Comparable Sales" icon={BarChart3}
         badge={compsLoading ? <span className="animate-spin inline-block w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full"></span> :
           compsLoaded ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{comps.length}</span> : null}
         collapsed={collapsed.comps} onToggle={() => toggle("comps")}>
@@ -299,7 +300,7 @@ export default function NYSBuildingProfile({ swisCode, printKey, county, address
       </Section>
 
       {/* NYC-Only Sections (grayed out) */}
-      <Section id="nycOnly" title="NYC-Only Data Sources" icon="🏙️"
+      <Section id="nycOnly" title="NYC-Only Data Sources" icon={Building}
         badge={<span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full font-medium">Not Available</span>}
         collapsed={collapsed.nycOnly} onToggle={() => toggle("nycOnly")}>
         <div className="space-y-3">

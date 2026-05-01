@@ -228,3 +228,231 @@ describe("Slice 9-typography — section labels are not ALL CAPS", () => {
     expect(match![0]).toMatch(/\btracking-wider\b/);
   });
 });
+
+// ── Slice 9-ext — emoji → lucide on secondary render surfaces ──
+//
+// Slice 9 PR #29 migrated 54 emoji icons across the 3 nav files; slice
+// 9-typography (PR #31) dropped uppercase rendering on section labels.
+// Slice 9-ext extends the emoji migration to the secondary render-side
+// surfaces (filter pills, tab bars, kanban stages, building-profile
+// section icons, message folders/categories, export cards).
+//
+// Scope: typed-props pattern only (icon: LucideIcon on configs/maps).
+// Inline button-text emoji (e.g. "✉️ Email") deferred to slice 9-ext-inline.
+// Per-file regexes scan ONLY the typed-props declaration block (not the
+// whole file) so deferred inline emoji can stay in place without
+// false-failing.
+//
+// Lucide picks track the slice 9 swap-table conventions: `Building2`
+// for landlords/multifamily, `Home` for buyers, `DollarSign` for sellers/
+// deals, `Mail` for email, etc. Departures noted inline below.
+
+const contactListSrc = readSource("src/app/(dashboard)/contacts/contact-list.tsx");
+const contactDossierSrc = readSource("src/app/(dashboard)/contacts/[id]/contact-dossier.tsx");
+const dealsPipelineSrc = readSource("src/app/(dashboard)/deals/pipeline/page.tsx");
+const njBuildingSrc = readSource("src/app/(dashboard)/market-intel/nj-building-profile.tsx");
+const nysBuildingSrc = readSource("src/app/(dashboard)/market-intel/nys-building-profile.tsx");
+const buildingSkeletonSrc = readSource("src/app/(dashboard)/market-intel/building-profile-skeleton.tsx");
+const messagesSrc = readSource("src/app/(dashboard)/messages/messages-view.tsx");
+const exportSrc = readSource("src/app/(dashboard)/settings/export/page.tsx");
+const skeletonShimmerSrc = readSource("src/components/ui/skeleton-shimmer.tsx");
+
+// Helper: extract the body of an `=` assignment that opens with `[` (array)
+// or `{` (object literal), brace-matched. Handles nested braces correctly.
+// Used to scope emoji bans to a single config block (e.g. TYPE_FILTERS array)
+// without false-failing on deferred inline emoji elsewhere in the file.
+function extractDeclBody(src: string, declStart: RegExp): string {
+  const m = src.match(declStart);
+  if (!m) return "";
+  const start = src.indexOf(m[0]) + m[0].length;
+  // Find the opening bracket/brace
+  let i = start;
+  while (i < src.length && src[i] !== "[" && src[i] !== "{") i++;
+  if (i >= src.length) return "";
+  const open = src[i];
+  const close = open === "[" ? "]" : "}";
+  let depth = 0;
+  let j = i;
+  for (; j < src.length; j++) {
+    if (src[j] === open) depth++;
+    else if (src[j] === close) { depth--; if (depth === 0) { j++; break; } }
+  }
+  return src.slice(i, j);
+}
+
+describe("Slice 9-ext — contact-list.tsx TYPE_FILTERS migrated", () => {
+  it("TYPE_FILTERS array contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(contactListSrc, /TYPE_FILTERS\s*:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    // Type annotation references LucideIcon
+    expect(contactListSrc).toMatch(/icon:\s*LucideIcon\s*\}\[\]\s*=/);
+  });
+
+  it("imports the lucide icons", () => {
+    const lucideImportBlock = contactListSrc.match(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/,
+    );
+    expect(lucideImportBlock).not.toBeNull();
+    const imported = lucideImportBlock![1];
+    for (const name of ["Users", "Building2", "Home", "DollarSign", "Key"]) {
+      expect(imported).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+});
+
+describe("Slice 9-ext — contact-dossier.tsx TABS + activityIcons migrated", () => {
+  it("activityIcons map contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(contactDossierSrc, /const activityIcons:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    expect(contactDossierSrc).toMatch(/activityIcons:\s*Record<string,\s*LucideIcon>/);
+  });
+
+  it("tabs array contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(contactDossierSrc, /const tabs:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    expect(contactDossierSrc).toMatch(/tabs:\s*\{[^}]*icon:\s*LucideIcon[^}]*\}\[\]/);
+  });
+
+  it("imports the lucide icons for both tabs + activity types", () => {
+    const lucideImportBlock = contactDossierSrc.match(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/,
+    );
+    expect(lucideImportBlock).not.toBeNull();
+    const imported = lucideImportBlock![1];
+    for (const name of [
+      "ClipboardList", "Pencil", "BarChart3", "DollarSign", "CheckSquare", "Mail",
+      "Phone", "MessageCircle", "Home", "Handshake", "FileText", "Settings",
+    ]) {
+      expect(imported).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+});
+
+describe("Slice 9-ext — deals/pipeline/page.tsx STAGES migrated", () => {
+  it("STAGES array contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(dealsPipelineSrc, /const STAGES\s*:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    expect(dealsPipelineSrc).toMatch(/icon:\s*LucideIcon\s*\}\[\]\s*=/);
+  });
+
+  it("imports stage lucide icons (Search/Target/Send/Pencil/CheckCircle2/Skull)", () => {
+    const lucideImportBlock = dealsPipelineSrc.match(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/,
+    );
+    expect(lucideImportBlock).not.toBeNull();
+    const imported = lucideImportBlock![1];
+    // Skull picked deliberately for "dead" stage — reads as "lost deal" in
+    // a way no other lucide icon does. If a future PR swaps this, the
+    // contract fails as a heads-up.
+    for (const name of ["Search", "Target", "Send", "Pencil", "CheckCircle2", "Skull"]) {
+      expect(imported).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+});
+
+describe("Slice 9-ext — building-profile family migrated", () => {
+  it("nj-building-profile.tsx Section component accepts LucideIcon", () => {
+    expect(njBuildingSrc).toMatch(/icon\?:\s*LucideIcon/);
+    // Both Section call sites use lucide components, not strings.
+    expect(njBuildingSrc).toMatch(/icon=\{BarChart3\}/);
+    expect(njBuildingSrc).toMatch(/icon=\{Lock\}/);
+    // No string-emoji icon attributes in the file.
+    expect(njBuildingSrc).not.toMatch(/icon="[^"]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+
+  it("nys-building-profile.tsx Section component accepts LucideIcon", () => {
+    expect(nysBuildingSrc).toMatch(/icon\?:\s*LucideIcon/);
+    expect(nysBuildingSrc).toMatch(/icon=\{BarChart3\}/);
+    expect(nysBuildingSrc).toMatch(/icon=\{Building\}/);
+    expect(nysBuildingSrc).not.toMatch(/icon="[^"]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+
+  it("building-profile-skeleton.tsx passes LucideIcon to SkeletonSection", () => {
+    expect(buildingSkeletonSrc).toMatch(/icon=\{BarChart3\}/);
+    expect(buildingSkeletonSrc).toMatch(/icon=\{Building\}/);
+    expect(buildingSkeletonSrc).toMatch(/icon=\{Building2\}/);
+    expect(buildingSkeletonSrc).not.toMatch(/icon="[^"]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+    // Imports
+    const lucideImportBlock = buildingSkeletonSrc.match(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/,
+    );
+    expect(lucideImportBlock).not.toBeNull();
+    expect(lucideImportBlock![1]).toMatch(/\bBarChart3\b/);
+    expect(lucideImportBlock![1]).toMatch(/\bBuilding\b/);
+    expect(lucideImportBlock![1]).toMatch(/\bBuilding2\b/);
+  });
+});
+
+describe("Slice 9-ext — messages-view.tsx categoryConfig + folders migrated", () => {
+  it("categoryConfig map contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(messagesSrc, /const categoryConfig:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    expect(messagesSrc).toMatch(/categoryConfig:\s*Record<string,\s*\{[^}]*icon:\s*LucideIcon/);
+  });
+
+  it("gmailFolders array contains zero emoji + uses LucideIcon", () => {
+    const block = extractDeclBody(messagesSrc, /const gmailFolders\s*:[^=]*=\s*/);
+    expect(block.length).toBeGreaterThan(0);
+    expect(block).not.toMatch(emojiRegex);
+    expect(messagesSrc).toMatch(/gmailFolders:\s*\{[^}]*icon:\s*LucideIcon[^}]*\}\[\]/);
+  });
+
+  it("imports the folder + category lucide icons", () => {
+    const lucideImportBlock = messagesSrc.match(
+      /import\s*\{([\s\S]*?)\}\s*from\s*["']lucide-react["']/,
+    );
+    expect(lucideImportBlock).not.toBeNull();
+    const imported = lucideImportBlock![1];
+    for (const name of [
+      "Circle", "User", "Newspaper", "Receipt", "Ban",
+      "Inbox", "Send", "Star", "Pencil", "Trash2", "AlertTriangle", "Folder",
+    ]) {
+      expect(imported).toMatch(new RegExp(`\\b${name}\\b`));
+    }
+  });
+});
+
+describe("Slice 9-ext — settings/export/page.tsx ExportCard migrated", () => {
+  it("ExportCardProps.icon is LucideIcon", () => {
+    expect(exportSrc).toMatch(/interface\s+ExportCardProps\s*\{[\s\S]*?icon:\s*LucideIcon/);
+  });
+
+  it("All 3 ExportCard call sites pass lucide components", () => {
+    expect(exportSrc).toMatch(/icon=\{Users\}/);
+    expect(exportSrc).toMatch(/icon=\{DollarSign\}/);
+    expect(exportSrc).toMatch(/icon=\{Mail\}/);
+    // No string-emoji icon attributes anywhere on ExportCard.
+    expect(exportSrc).not.toMatch(/<ExportCard\s+icon="[^"]*[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u);
+  });
+});
+
+describe("Slice 9-ext — skeleton-shimmer.tsx SkeletonSection accepts both icon types", () => {
+  // The shared utility's prop type was widened from `string` to
+  // `string | LucideIcon` to enable building-profile-skeleton.tsx to
+  // migrate without breaking the deferred leasing/loading.tsx caller
+  // (which still passes string emoji and lands in 9-ext-inline).
+  it("icon prop type is the union string | LucideIcon", () => {
+    expect(skeletonShimmerSrc).toMatch(/icon\?:\s*string\s*\|\s*LucideIcon/);
+  });
+
+  it("renders both branches: lucide component AND legacy string", () => {
+    // Function-typeof check distinguishes the lucide branch (component)
+    // from the string branch — locking in the dual-mode render so a
+    // future "simplify to one or the other" edit fails the contract
+    // until the leasing-skeleton caller also migrates.
+    expect(skeletonShimmerSrc).toMatch(/typeof\s+icon\s*===\s*"function"/);
+    expect(skeletonShimmerSrc).toMatch(/<IconComponent\s+className=/);
+    expect(skeletonShimmerSrc).toMatch(/<span\s+className="text-lg">\{icon\s+as\s+string\}</);
+  });
+
+  it("imports LucideIcon type", () => {
+    expect(skeletonShimmerSrc).toMatch(
+      /import\s+type\s*\{\s*LucideIcon\s*\}\s+from\s+["']lucide-react["']/,
+    );
+  });
+});

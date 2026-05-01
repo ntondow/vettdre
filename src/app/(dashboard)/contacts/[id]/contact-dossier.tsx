@@ -3,6 +3,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  ClipboardList, Pencil, BarChart3, DollarSign, CheckSquare, Mail,
+  Phone, MessageCircle, Home, Handshake, FileText, Settings,
+  type LucideIcon,
+} from "lucide-react";
 import { updateContact, addNote, logInteraction, createTask, completeTask, updateTags, deleteContact, updateContactTypeData, findPeopleAtCompany, findMorePeopleAtCompany, addPersonAsContact, enrichCompanyOnDemand } from "./actions";
 import { enrichContact } from "./enrich-actions";
 import { sendNewEmail } from "@/app/(dashboard)/messages/actions";
@@ -33,7 +38,16 @@ const fmt = (d: Date | string | null) => d ? new Intl.DateTimeFormat("en-US", { 
 const fmtFull = (d: Date | string | null) => d ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(d)) : "—";
 const statusColors: Record<string, string> = { lead: "bg-blue-50 text-blue-700", active: "bg-emerald-50 text-emerald-700", client: "bg-purple-50 text-purple-700", past_client: "bg-slate-100 text-slate-600", archived: "bg-slate-100 text-slate-400" };
 const priorityColors: Record<string, string> = { urgent: "bg-red-50 text-red-700", high: "bg-orange-50 text-orange-700", medium: "bg-amber-50 text-amber-700", low: "bg-slate-100 text-slate-600" };
-const activityIcons: Record<string, string> = { email: "✉️", call: "📞", text: "💬", showing: "🏠", note: "📝", meeting: "🤝", document: "📄", system: "⚙️" };
+const activityIcons: Record<string, LucideIcon> = {
+  email: Mail,
+  call: Phone,
+  text: MessageCircle,
+  showing: Home,
+  note: Pencil,
+  meeting: Handshake,
+  document: FileText,
+  system: Settings,
+};
 const statusOptions = ["lead", "active", "client", "past_client", "archived"];
 const sourceOptions = ["website", "referral", "zillow", "realtor.com", "streeteasy", "open_house", "cold_call", "social_media", "other"];
 
@@ -160,14 +174,15 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
     await updateTags(contact.id, newTags); router.refresh();
   };
 
-  const tabs = [
-    { key: "overview", label: "Overview", icon: "📋" },
-    { key: "details", label: "Details", icon: "📝" },
-    { key: "activity", label: `Activity (${contact.activities.length})`, icon: "📊" },
-    { key: "deals", label: `Deals (${contact.deals.length})`, icon: "💰" },
-    { key: "tasks", label: `Tasks (${contact.tasks.length})`, icon: "✅" },
-    { key: "emails", label: `Emails (${contact.emailMessages?.length || 0})`, icon: "📬" },
-  ] as const;
+  type TabKey = "overview" | "details" | "activity" | "deals" | "tasks" | "emails";
+  const tabs: { key: TabKey; label: string; icon: LucideIcon }[] = [
+    { key: "overview", label: "Overview", icon: ClipboardList },
+    { key: "details", label: "Details", icon: Pencil },
+    { key: "activity", label: `Activity (${contact.activities.length})`, icon: BarChart3 },
+    { key: "deals", label: `Deals (${contact.deals.length})`, icon: DollarSign },
+    { key: "tasks", label: `Tasks (${contact.tasks.length})`, icon: CheckSquare },
+    { key: "emails", label: `Emails (${contact.emailMessages?.length || 0})`, icon: Mail },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -241,12 +256,15 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
 
         {/* Tab Bar */}
         <div className="px-8 flex gap-0">
-          {tabs.map(tab => (
-            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
-              <span className="mr-1.5">{tab.icon}</span>{tab.label}
-            </button>
-          ))}
+          {tabs.map(tab => {
+            const Icon = tab.icon;
+            return (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors inline-flex items-center gap-1.5 ${activeTab === tab.key ? "border-blue-600 text-blue-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
+                <Icon className="w-4 h-4" strokeWidth={1.75} />{tab.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -738,19 +756,22 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
                 </div>
                 {contact.activities.length > 0 ? (
                   <div className="space-y-3">
-                    {contact.activities.slice(0, 5).map(a => (
-                      <div key={a.id} className="flex gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm flex-shrink-0">{activityIcons[a.type] || "📋"}</div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm text-slate-900 font-medium">{a.subject || `${a.type} ${a.direction || ""}`}</p>
-                            <span className="text-xs text-slate-400 flex-shrink-0 ml-3">{fmtFull(a.occurredAt)}</span>
+                    {contact.activities.slice(0, 5).map(a => {
+                      const Icon = activityIcons[a.type] || ClipboardList;
+                      return (
+                        <div key={a.id} className="flex gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-sm flex-shrink-0 text-slate-600"><Icon className="w-4 h-4" strokeWidth={1.75} /></div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <p className="text-sm text-slate-900 font-medium">{a.subject || `${a.type} ${a.direction || ""}`}</p>
+                              <span className="text-xs text-slate-400 flex-shrink-0 ml-3">{fmtFull(a.occurredAt)}</span>
+                            </div>
+                            {a.body && <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{a.body}</p>}
+                            {a.user && <p className="text-xs text-slate-400 mt-0.5">by {a.user.fullName}</p>}
                           </div>
-                          {a.body && <p className="text-sm text-slate-500 mt-0.5 line-clamp-2">{a.body}</p>}
-                          {a.user && <p className="text-xs text-slate-400 mt-0.5">by {a.user.fullName}</p>}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-slate-400 text-center py-4">No activity yet</p>
@@ -967,19 +988,22 @@ export default function ContactDossier({ contact }: { contact: Contact }) {
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               {contact.activities.length > 0 ? (
                 <div className="space-y-4">
-                  {contact.activities.map((a, i) => (
-                    <div key={a.id} className={`flex gap-3 pb-4 ${i < contact.activities.length - 1 ? "border-b border-slate-100" : ""}`}>
-                      <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-base flex-shrink-0">{activityIcons[a.type] || "📋"}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-slate-900">{a.subject || `${a.type} ${a.direction || ""}`.trim()}</p>
-                          <span className="text-xs text-slate-400 ml-3 flex-shrink-0">{fmtFull(a.occurredAt)}</span>
+                  {contact.activities.map((a, i) => {
+                    const Icon = activityIcons[a.type] || ClipboardList;
+                    return (
+                      <div key={a.id} className={`flex gap-3 pb-4 ${i < contact.activities.length - 1 ? "border-b border-slate-100" : ""}`}>
+                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center text-base flex-shrink-0 text-slate-600"><Icon className="w-4 h-4" strokeWidth={1.75} /></div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-slate-900">{a.subject || `${a.type} ${a.direction || ""}`.trim()}</p>
+                            <span className="text-xs text-slate-400 ml-3 flex-shrink-0">{fmtFull(a.occurredAt)}</span>
+                          </div>
+                          {a.body && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{a.body}</p>}
+                          {a.user && <p className="text-xs text-slate-400 mt-1">by {a.user.fullName}</p>}
                         </div>
-                        {a.body && <p className="text-sm text-slate-600 mt-1 whitespace-pre-wrap">{a.body}</p>}
-                        {a.user && <p className="text-xs text-slate-400 mt-1">by {a.user.fullName}</p>}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="text-sm text-slate-400 text-center py-8">No activity recorded yet. Log a call, email, or note above.</p>

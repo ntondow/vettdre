@@ -19,6 +19,12 @@ import {
   ExternalLink,
   FileBarChart,
   ChevronDown,
+  Send,
+  Pencil,
+  CheckCircle2,
+  Skull,
+  Target,
+  type LucideIcon,
 } from "lucide-react";
 import { getDeals, getDealStats, updateDealStatus, duplicateDeal, deleteDeal } from "./actions";
 
@@ -51,13 +57,13 @@ interface DealStats {
 
 // ── Constants ───────────────────────────────────────────────
 
-const STAGES = [
-  { key: "analyzing", label: "Screening", color: "#3B82F6", bg: "bg-blue-50", text: "text-blue-700", icon: "🔍" },
-  { key: "prospecting", label: "Underwriting", color: "#8B5CF6", bg: "bg-violet-50", text: "text-violet-700", icon: "🎯" },
-  { key: "loi_sent", label: "LOI Sent", color: "#F59E0B", bg: "bg-amber-50", text: "text-amber-700", icon: "📨" },
-  { key: "under_contract", label: "Under Contract", color: "#10B981", bg: "bg-emerald-50", text: "text-emerald-700", icon: "📝" },
-  { key: "closed", label: "Closed", color: "#059669", bg: "bg-green-50", text: "text-green-700", icon: "✅" },
-  { key: "dead", label: "Dead", color: "#6B7280", bg: "bg-slate-100", text: "text-slate-500", icon: "💀" },
+const STAGES: { key: string; label: string; color: string; bg: string; text: string; icon: LucideIcon }[] = [
+  { key: "analyzing", label: "Screening", color: "#3B82F6", bg: "bg-blue-50", text: "text-blue-700", icon: Search },
+  { key: "prospecting", label: "Underwriting", color: "#8B5CF6", bg: "bg-violet-50", text: "text-violet-700", icon: Target },
+  { key: "loi_sent", label: "LOI Sent", color: "#F59E0B", bg: "bg-amber-50", text: "text-amber-700", icon: Send },
+  { key: "under_contract", label: "Under Contract", color: "#10B981", bg: "bg-emerald-50", text: "text-emerald-700", icon: Pencil },
+  { key: "closed", label: "Closed", color: "#059669", bg: "bg-green-50", text: "text-green-700", icon: CheckCircle2 },
+  { key: "dead", label: "Dead", color: "#6B7280", bg: "bg-slate-100", text: "text-slate-500", icon: Skull },
 ];
 
 const STRUCTURES: Record<string, string> = {
@@ -324,11 +330,12 @@ export default function PipelinePage() {
             {STAGES.map(stage => {
               const stageDeals = dealsByStatus[stage.key] || [];
               const stageValue = stageDeals.reduce((s, d) => s + ((d.inputs as any)?.purchasePrice || 0), 0);
+              const StageIcon = stage.icon;
               return (
                 <details key={stage.key} open={stageDeals.length > 0} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
                   <summary className="flex items-center gap-2 px-4 py-3 cursor-pointer">
                     <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: stage.color }} />
-                    <span className="text-sm font-semibold text-slate-700 flex-1">{stage.icon} {stage.label}</span>
+                    <span className="text-sm font-semibold text-slate-700 flex-1 inline-flex items-center gap-1.5"><StageIcon className="w-4 h-4" strokeWidth={1.75} /> {stage.label}</span>
                     {stageValue > 0 && <span className="text-xs text-slate-400 mr-2">{fmt(stageValue)}</span>}
                     <span className="text-xs font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{stageDeals.length}</span>
                   </summary>
@@ -353,6 +360,7 @@ export default function PipelinePage() {
               {STAGES.map(stage => {
                 const stageDeals = dealsByStatus[stage.key] || [];
                 const stageValue = stageDeals.reduce((s, d) => s + ((d.inputs as any)?.purchasePrice || 0), 0);
+                const StageIcon = stage.icon;
                 return (
                   <div
                     key={stage.key}
@@ -372,7 +380,7 @@ export default function PipelinePage() {
                     <div className="p-4 border-b border-slate-100">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: stage.color }} />
-                        <h3 className="text-sm font-semibold text-slate-700">{stage.icon} {stage.label}</h3>
+                        <h3 className="text-sm font-semibold text-slate-700 inline-flex items-center gap-1.5"><StageIcon className="w-4 h-4" strokeWidth={1.75} /> {stage.label}</h3>
                         <span className="ml-auto text-xs font-medium text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">{stageDeals.length}</span>
                       </div>
                       {stageValue > 0 && <p className="text-xs text-slate-400 mt-1">{fmt(stageValue)}</p>}
@@ -440,11 +448,14 @@ export default function PipelinePage() {
                           {deal.address || "—"}{deal.borough ? `, ${deal.borough}` : ""}
                         </td>
                         <td className="px-3 py-3 text-center">
-                          {stageInfo && (
-                            <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${stageInfo.bg} ${stageInfo.text}`}>
-                              {stageInfo.icon} {stageInfo.label}
-                            </span>
-                          )}
+                          {stageInfo && (() => {
+                            const StageIcon = stageInfo.icon;
+                            return (
+                              <span className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full ${stageInfo.bg} ${stageInfo.text}`}>
+                                <StageIcon className="w-3 h-3" strokeWidth={1.75} /> {stageInfo.label}
+                              </span>
+                            );
+                          })()}
                         </td>
                         <td className="px-3 py-3 text-center text-xs text-slate-500">
                           {deal.structure ? (STRUCTURES[deal.structure] || deal.structure) : "—"}
@@ -630,12 +641,15 @@ function DealCard({ deal, onMove, onDuplicate, onDelete, movingDeal, setMovingDe
         <div className="mt-2 pt-2 border-t border-slate-100">
           <p className="text-xs text-slate-400 mb-1.5">Move to:</p>
           <div className="flex flex-wrap gap-1">
-            {STAGES.filter(s => s.key !== deal.status).map(s => (
-              <button key={s.key} onClick={() => onMove(deal.id, s.key)} disabled={updating}
-                className="text-xs px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors disabled:opacity-50">
-                {s.icon} {s.label}
-              </button>
-            ))}
+            {STAGES.filter(s => s.key !== deal.status).map(s => {
+              const StageIcon = s.icon;
+              return (
+                <button key={s.key} onClick={() => onMove(deal.id, s.key)} disabled={updating}
+                  className="text-xs px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-700 hover:border-blue-200 transition-colors disabled:opacity-50 inline-flex items-center gap-1">
+                  <StageIcon className="w-3 h-3" strokeWidth={1.75} /> {s.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

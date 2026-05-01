@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Users, DollarSign, Mail, type LucideIcon } from "lucide-react";
 import { exportContacts, exportDeals, exportEmails } from "../actions";
 
 function downloadCsv(csv: string, filename: string) {
@@ -14,7 +15,7 @@ function downloadCsv(csv: string, filename: string) {
 }
 
 interface ExportCardProps {
-  icon: string;
+  icon: LucideIcon;
   title: string;
   desc: string;
   children?: React.ReactNode;
@@ -22,11 +23,11 @@ interface ExportCardProps {
   exporting: boolean;
 }
 
-function ExportCard({ icon, title, desc, children, onExport, exporting }: ExportCardProps) {
+function ExportCard({ icon: Icon, title, desc, children, onExport, exporting }: ExportCardProps) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6">
       <div className="flex items-start gap-3 mb-4">
-        <span className="text-xl">{icon}</span>
+        <Icon className="w-5 h-5 text-slate-700" strokeWidth={1.75} />
         <div>
           <p className="text-sm font-bold text-slate-900">{title}</p>
           <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
@@ -86,7 +87,7 @@ export default function ExportPage() {
       <p className="text-sm text-slate-500 mb-6">Export your data as CSV files</p>
 
       <div className="space-y-4">
-        <ExportCard icon="👥" title="Contacts Export" desc="All contacts with enrichment data"
+        <ExportCard icon={Users} title="Contacts Export" desc="All contacts with enrichment data"
           onExport={handleExportContacts} exporting={exporting === "contacts"}>
           <div>
             <label className="text-xs font-medium text-slate-500">Filter by status</label>
@@ -101,10 +102,10 @@ export default function ExportPage() {
           </div>
         </ExportCard>
 
-        <ExportCard icon="💰" title="Deals Export" desc="All deals with contact and stage info"
+        <ExportCard icon={DollarSign} title="Deals Export" desc="All deals with contact and stage info"
           onExport={handleExportDeals} exporting={exporting === "deals"} />
 
-        <ExportCard icon="📧" title="Emails Export" desc="Email metadata (date, sender, subject, category)"
+        <ExportCard icon={Mail} title="Emails Export" desc="Email metadata (date, sender, subject, category)"
           onExport={handleExportEmails} exporting={exporting === "emails"}>
           <div className="grid grid-cols-2 gap-3">
             <div>

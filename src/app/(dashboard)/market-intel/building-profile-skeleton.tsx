@@ -10,6 +10,7 @@ import {
   SkeletonTable,
   SkeletonKeyValue,
 } from "@/components/ui/skeleton-shimmer";
+import { BarChart3, Building, Building2 } from "lucide-react";
 
 export default function BuildingProfileSkeleton() {
   return (
@@ -123,7 +124,7 @@ export default function BuildingProfileSkeleton() {
       {/* ============================================ */}
       {/* COMPARABLES */}
       {/* ============================================ */}
-      <SkeletonSection title="Sales Comparables" icon="📊">
+      <SkeletonSection title="Sales Comparables" icon={BarChart3}>
         <div className="space-y-3">
           <div className="flex gap-2">
             <SkeletonBlock width="w-24" height="h-8" className="rounded-lg" />
@@ -137,7 +138,7 @@ export default function BuildingProfileSkeleton() {
       {/* ============================================ */}
       {/* PROPERTY OVERVIEW (collapsed by default) */}
       {/* ============================================ */}
-      <SkeletonSection title="Property Overview" icon="🏢">
+      <SkeletonSection title="Property Overview" icon={Building}>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonStatCard key={i} />
@@ -148,7 +149,7 @@ export default function BuildingProfileSkeleton() {
       {/* ============================================ */}
       {/* NEIGHBORHOOD / CENSUS */}
       {/* ============================================ */}
-      <SkeletonSection title="Neighborhood Profile" icon="🏘️">
+      <SkeletonSection title="Neighborhood Profile" icon={Building2}>
         <div className="grid grid-cols-3 gap-3">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonStatCard key={i} />
