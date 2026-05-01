@@ -14,6 +14,8 @@ import {
   EyeOff,
   ChevronDown,
   ChevronUp,
+  FileCheck,
+  Download,
 } from "lucide-react";
 import SignaturePad from "@/components/onboarding/signature-pad";
 import PdfViewer from "@/components/onboarding/pdf-viewer";
@@ -235,23 +237,44 @@ export default function SigningClient({ token }: { token: string }) {
     );
   }
 
-  if (step === "already_complete") {
+  if (step === "already_complete" && data) {
     return (
       <Shell>
-        <div className="flex flex-col items-center justify-center py-16 sm:py-20 text-center px-2">
-          <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-            <CheckCircle className="h-7 w-7 text-green-600" />
+        <div className="py-10 sm:py-12 px-2">
+          <div className="mx-auto max-w-lg text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
+              <CheckCircle className="h-7 w-7 text-green-600" />
+            </div>
+            <h2 className="mb-2 text-lg sm:text-xl font-bold text-slate-900">Already Signed</h2>
+            <p className="mb-8 max-w-sm mx-auto text-sm text-slate-500">
+              All documents have been signed. You can download your copies below.
+            </p>
+            <div className="rounded-xl border border-slate-200 bg-white text-left">
+              <div className="border-b border-slate-100 px-5 py-3">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  Download Your Signed Copies
+                </span>
+              </div>
+              <ul className="divide-y divide-slate-100">
+                {data.documents.map((doc) => (
+                  <li key={doc.id}>
+                    <a
+                      href={`/api/onboarding/${token}/download?docType=${encodeURIComponent(doc.docType)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-5 py-3 hover:bg-slate-50 active:bg-slate-100 transition-colors"
+                    >
+                      <FileCheck className="h-4 w-4 flex-shrink-0 text-green-500" />
+                      <span className="text-sm font-medium text-slate-700 truncate flex-1 min-w-0">
+                        {doc.docTitle}
+                      </span>
+                      <Download className="h-4 w-4 flex-shrink-0 text-slate-400" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <h2 className="mb-2 text-lg sm:text-xl font-bold text-slate-900">Already Signed</h2>
-          <p className="mb-6 max-w-sm text-sm text-slate-500">All documents have been signed.</p>
-          <a
-            href={`/api/onboarding/${token}/download`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-3 text-sm font-medium text-white hover:bg-blue-700 active:bg-blue-800"
-          >
-            Download Copies
-          </a>
         </div>
       </Shell>
     );
@@ -598,9 +621,13 @@ export default function SigningClient({ token }: { token: string }) {
             clientFirstName: data.clientFirstName,
             agentFullName: data.agentFullName,
             brokerageName: data.brokerageName,
-            documents: data.documents.map((d) => ({ docTitle: d.docTitle, signedAt: new Date().toISOString() })),
+            documents: data.documents.map((d) => ({
+              docTitle: d.docTitle,
+              docType: d.docType,
+              signedAt: new Date().toISOString(),
+            })),
           }}
-          downloadUrl={`/api/onboarding/${token}/download`}
+          token={token}
         />
       </Shell>
     );

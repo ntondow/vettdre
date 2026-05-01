@@ -182,7 +182,7 @@ export async function POST(
           status: "signed",
           signedAt: new Date(),
           signedIp: ip,
-          signatureData: signatureImage.slice(0, 100) + "...", // store truncated reference, not full base64
+          signatureData: signatureImage ? signatureImage.slice(0, 100) + "..." : null,
           pdfUrl: signedPdfUrl || doc.pdfUrl,
         },
       });
