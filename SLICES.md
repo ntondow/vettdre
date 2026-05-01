@@ -480,7 +480,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 6 — Default landing for agent (regression-guard contract)
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` (PR #23)
 - **Verification finding:** 1b + 1b2 fully cover the original scope (agent → `/brokerage/my-deals`, role-to-path map locked in, 3 auth-flow files class-scanned for hardcoded `/market-intel`). Slice 6's original "add agent-specific landing logic if 1b didn't cover it" goal is **closed by 1b**.
 - **What this slice ships instead:** one source-level regression contract in `tests/smoke/role-landing.test.ts` asserting `canAccessPage("agent", landingForRole("agent")) === true`. Locks in B-018's exact regression class — catches three classes of silent breakage:
   1. agent loses `view_own_submissions` in `BMS_PERMISSIONS`,
