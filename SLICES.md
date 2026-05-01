@@ -545,7 +545,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** YES — new admin surface, wireframe gated.
 
 ### 9 — Emoji → lucide icon migration (nav surfaces)
-- **Status:** `awaiting_review`
+- **Status:** `awaiting_review` ([PR #29](https://github.com/ntondow/vettdre/pull/29))
 - **Goal:** All nav surfaces use lucide-react icon components instead of emoji characters. NavItem.icon type widens from `string` to `LucideIcon` in three files, converging on the same render-path pattern brokerage/layout.tsx adopted in slice 8.
 - **Closes bug:** U-002, U-004 (partial — emoji half).
 - **Approach:** 54 emoji-character icons → 54 lucide-react components across `src/components/layout/sidebar.tsx` (18 NAV + sign-out + collapse arrows = 21 swaps), `src/components/layout/mobile-nav.tsx` (5 tabs + 7 More items + Menu trigger + sign-out = 14 swaps), and `src/app/(dashboard)/settings/settings-sidebar.tsx` (14 NAV + 5 ADMIN_NAV = 19 swaps). NavItem.icon: string → LucideIcon in all three files; render swaps `<span>{item.icon}</span>` → `const Icon = item.icon; <Icon className="..." />`. Three semantic disambiguations baked in and locked by smoke contract: Pipeline → GitBranch (BarChart3 reads "reports", which Reports owns), AI Settings → Sparkles (Bot is reserved for Leasing), Add User → UserPlus (specific intent vs. generic Plus). Mobile Dashboard → LayoutDashboard for desktop parity (no Home/Dashboard semantic split).
