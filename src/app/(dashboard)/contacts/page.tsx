@@ -23,7 +23,12 @@ export default async function ContactsPage({
         {contacts.length > 0 ? (
           <ContactList contacts={contacts} />
         ) : (
-          <div className="bg-white rounded-xl border border-slate-200 p-16 text-center">
+          // Slate-zero — slice 10 / U-071 differentiation. The filter-narrowed
+          // counterpart lives in contact-list.tsx (only renders when contacts
+          // exist but typeFilter narrows them to zero); this branch only runs
+          // when there are no contacts at all. CTA is implicit via the
+          // ContactForm button at the page top, so no inline CTA here.
+          <div data-testid="contacts-empty-zero" className="bg-white rounded-xl border border-slate-200 p-16 text-center">
             <p className="text-4xl mb-4">👥</p>
             <h3 className="text-lg font-semibold text-slate-900 mb-1">No contacts yet</h3>
             <p className="text-sm text-slate-500 max-w-md mx-auto mb-6">

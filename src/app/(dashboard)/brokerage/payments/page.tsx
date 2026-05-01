@@ -429,26 +429,31 @@ export default function PaymentsPage() {
         </div>
       )}
 
-      {/* Empty state */}
+      {/* Empty state — slice 10 / U-071 differentiation. payments has multi-axis
+          filtering (search + date range + method); no canonical "All" tab, so
+          the filter-narrowed copy points back to clearing filters. Locked in by
+          tests/smoke/empty-state-pattern.test.ts. */}
       {!loading && filteredPayments.length === 0 && (
-        <div className="text-center py-16">
-          <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No payments found</p>
-          <p className="text-sm text-slate-400 mt-1">
-            {search || startDate || endDate || method !== "all"
-              ? "Try adjusting your filters"
-              : "Record your first payment to get started"}
-          </p>
-          {!search && !startDate && !endDate && method === "all" && (
+        search || startDate || endDate || method !== "all" ? (
+          <div data-testid="payments-empty-filtered" className="text-center py-16">
+            <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No payments match your filters</p>
+            <p className="text-sm text-slate-400 mt-1">Clear filters to see everything.</p>
+          </div>
+        ) : (
+          <div data-testid="payments-empty-zero" className="text-center py-16">
+            <Receipt className="h-12 w-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No payments yet</p>
+            <p className="text-sm text-slate-400 mt-1 mb-4">Record your first payment to get started.</p>
             <button
               onClick={openRecordPayment}
-              className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Record Payment
             </button>
-          )}
-        </div>
+          </div>
+        )
       )}
 
       {/* Payment History Table */}

@@ -362,17 +362,30 @@ export default function TransactionsPage() {
         </div>
       )}
 
-      {/* Empty */}
+      {/* Empty — slice 10 / U-071 differentiation: filter-narrowed (no CTA, point
+          back to clearing filters) vs slate-zero (primary CTA). Locked in by
+          tests/smoke/empty-state-pattern.test.ts. */}
       {!loading && transactions.length === 0 && (
-        <div className="text-center py-16">
-          <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-          <p className="text-slate-500 font-medium">No transactions found</p>
-          <p className="text-sm text-slate-400 mt-1">
-            {search || typeFilter !== "all" || stageFilter !== "all"
-              ? "Try adjusting your filters"
-              : "Create your first transaction to get started"}
-          </p>
-        </div>
+        search || typeFilter !== "all" || stageFilter !== "all" ? (
+          <div data-testid="transactions-empty-filtered" className="text-center py-16">
+            <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No transactions match your filters</p>
+            <p className="text-sm text-slate-400 mt-1">Clear filters to see everything.</p>
+          </div>
+        ) : (
+          <div data-testid="transactions-empty-zero" className="text-center py-16">
+            <FolderOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+            <p className="text-slate-500 font-medium">No transactions yet</p>
+            <p className="text-sm text-slate-400 mt-1 mb-4">Create your first transaction to get started.</p>
+            <button
+              onClick={openCreate}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              New Transaction
+            </button>
+          </div>
+        )
       )}
 
       {/* Table */}
