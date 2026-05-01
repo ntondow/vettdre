@@ -36,6 +36,7 @@ import {
   SUBMISSION_STATUS_COLORS,
   DEAL_TYPE_LABELS,
 } from "@/lib/bms-types";
+import ProfileCompletionBanner from "@/components/profile-completion-banner";
 
 // ── Local label/color maps for exclusive type ─────────────────
 
@@ -124,6 +125,10 @@ interface MyDealsViewProps {
   asOrg?: string;
   initialSubmissions: Record<string, unknown>[];
   showSuccessBanner: boolean;
+  // Slice 13 / B-017. Computed server-side in page.tsx via
+  // computeMissingProfileFields(getProfile()). Empty array → banner doesn't
+  // render (component handles its own early-return).
+  profileMissingFields: string[];
 }
 
 // ── Sub-components ────────────────────────────────────────────
@@ -940,6 +945,7 @@ export default function MyDealsView({
   asOrg,
   initialSubmissions,
   showSuccessBanner,
+  profileMissingFields,
 }: MyDealsViewProps) {
   // Forwarded to every server-action call so the super_admin override target
   // survives client-side actions (open detail panel, file upload/download).
@@ -1073,6 +1079,13 @@ export default function MyDealsView({
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-6 py-6">
+      {/* Profile completion (B-017). Component returns null when the
+          missing-fields list is empty, so we can render unconditionally. */}
+      <ProfileCompletionBanner
+        missingFields={profileMissingFields}
+        actionHref="/settings/profile"
+      />
+
       {/* Success banner */}
       {banner && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 mb-6 flex items-center gap-3 animate-[fade-in_0.3s_ease-out]">
