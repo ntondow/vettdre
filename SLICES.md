@@ -599,12 +599,14 @@ Phase 0 status as of 2026-04-29:
 - **Outcome:** main reflects production reality; deploy from main = current prod; no orphan slice branches. Status flipped to `done` in Phase 3 slice 1 (PR #24).
 
 ### 13-cross-cut — Manager-side profile-completeness warning at filing time
-- **Status:** `pending`
+- **Status:** `awaiting_review` (PR #TBD)
 - **Priority:** low (Phase 3 polish)
 - **Goal:** When a manager uses the slice 7a agent picker on `/brokerage/client-onboarding/new` to file an onboarding for an agent whose profile is incomplete (Full Name, Phone, or License Number missing), surface a warning at the moment of filing — not just on the agent's own /my-deals banner.
 - **Why:** Without this, John/Kristin file docs for Anthony, the prefill renders with `(Agent's name)` placeholders, and nobody catches it until the client signs a document with the placeholder visible. Slice 13 surfaces the gap to the agent themselves but doesn't warn the manager filing on their behalf.
-- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx`; reuse `computeMissingProfileFields` from `src/components/profile-completion-banner.tsx`.
+- **Approach:** Extend `getAgentRosterForOnboarding` to JOIN BrokerAgent → User and select `user.fullName / user.phone / user.licenseNumber` (no Prisma schema change — fields already on User). Render an inline amber callout in `new/page.tsx` below the picker's helper text via a new `ProfileCompletenessWarning` component that reuses slice 13's `computeMissingProfileFields` helper. Three early-return guards (no selected agent, BrokerAgent.userId === null, or empty missingFields) keep it from firing during initial paint or for pending/invited hires. Copy branches on `isSelf`: second-person ("your profile is missing … Complete your profile") when manager picks themselves, third-person ("{firstName}'s profile … Ask {firstName}") otherwise. Both link to /settings/profile (same target as slice 13's banner).
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/actions.ts` (extend select), `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx` (warning component + render below picker), `tests/smoke/profile-completion-banner.test.ts` (extend with 8 cross-cut contracts).
 - **Success criteria:** when the picker selects an agent with missing fields, an inline note appears below the picker listing the gaps; submission still proceeds (warning not block).
+- **Bundled:** CLAUDE.md typecheck baseline 292 → 286 (re-anchored per surface-baseline-mismatches rule).
 - **Depends on:** 7a + 13 (both merged).
 
 ### 3.W — Clean Finder-duplicate files from main
