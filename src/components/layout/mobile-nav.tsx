@@ -229,7 +229,7 @@ export default function MobileNav() {
             <div className="px-4 pb-2 space-y-3">
               {moreSections.map((section) => (
                 <div key={section.label}>
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1.5">{section.label}</p>
+                  <p className="text-[10px] font-semibold text-slate-400 tracking-wider px-2 mb-1.5">{section.label}</p>
                   <div className="grid grid-cols-4 gap-1">
                     {section.items.map((item) => {
                       const locked = item.feature ? !hasPermission(plan, item.feature) : false;
