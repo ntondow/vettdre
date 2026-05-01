@@ -527,7 +527,7 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 2 (done).
 
 ### 8 — Brokerage nav flatten
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` ([PR #28](https://github.com/ntondow/vettdre/pull/28))
 - **Goal:** From 7 sections × 17 items (Variant 3 in slice 7's inventory) to 3 sections × 11 items + Admin link (Wireframe C). One above the ≤10 target — ship at 11; both My Deals and Leaderboard have clear weekly use cases for John/Kristin.
 - **Closes bug:** U-013, U-014, U-016.
 - **Approach:** Replace `ADMIN_NAV` in `brokerage/layout.tsx` per Wireframe C (Operations / Agents & Listings / Reports / Admin). Drop entire stale "Admin > Setup" section from `AGENT_NAV` (agents shouldn't see brokerage_admin onboarding wizard; pre-slice-8 layout returned AGENT_NAV unfiltered). Relocate four sub-nav items: Setup, Commission Plans, Compliance → Settings page "Brokerage Configuration" cards (lighter approach — no inline tab refactor). Bulk Invoices was already accessible via existing "Bulk Generate" button in `/brokerage/invoices` header (no change needed). Add `<ComplianceAlert />` to `/brokerage/dashboard` — calls existing `getExpiringItems(60)` helper (no Prisma schema change), surfaces "X compliance documents expiring in next 60 days. View →" amber callout, override-aware via `?as_org=`. Without this Dashboard alert, hiding Compliance from sub-nav is unsafe — NYS license expiration is a real-world legal risk.
