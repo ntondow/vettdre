@@ -544,13 +544,19 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 1 + 3 work first; this is platform polish.
 - **Requires approval:** YES — new admin surface, wireframe gated.
 
-### 9 — Replace mixed icons + ALL CAPS labels
-- **Status:** `pending`
-- **Goal:** All-lucide. Mixed-case section labels.
-- **Closes bug:** U-002, U-004
-- **Files:** sidebar components.
-- **Success criteria:** No emoji icons. No ALL CAPS section headers.
-- **Depends on:** 7
+### 9 — Emoji → lucide icon migration (nav surfaces)
+- **Status:** `awaiting_review`
+- **Goal:** All nav surfaces use lucide-react icon components instead of emoji characters. NavItem.icon type widens from `string` to `LucideIcon` in three files, converging on the same render-path pattern brokerage/layout.tsx adopted in slice 8.
+- **Closes bug:** U-002, U-004 (partial — emoji half).
+- **Approach:** 54 emoji-character icons → 54 lucide-react components across `src/components/layout/sidebar.tsx` (18 NAV + sign-out + collapse arrows = 21 swaps), `src/components/layout/mobile-nav.tsx` (5 tabs + 7 More items + Menu trigger + sign-out = 14 swaps), and `src/app/(dashboard)/settings/settings-sidebar.tsx` (14 NAV + 5 ADMIN_NAV = 19 swaps). NavItem.icon: string → LucideIcon in all three files; render swaps `<span>{item.icon}</span>` → `const Icon = item.icon; <Icon className="..." />`. Three semantic disambiguations baked in and locked by smoke contract: Pipeline → GitBranch (BarChart3 reads "reports", which Reports owns), AI Settings → Sparkles (Bot is reserved for Leasing), Add User → UserPlus (specific intent vs. generic Plus). Mobile Dashboard → LayoutDashboard for desktop parity (no Home/Dashboard semantic split).
+- **Files:** `src/components/layout/sidebar.tsx`, `src/components/layout/mobile-nav.tsx`, `src/app/(dashboard)/settings/settings-sidebar.tsx`, `tests/smoke/sidebar-icon-migration.test.ts` (NEW — 7 source-level contracts in 3 describe blocks: emoji-free regex per file, lucide imports matching swap table, NavItem type widening, semantic disambiguations locked by name).
+- **Bundled chore:** CLAUDE.md typecheck baseline 286 → 288 (re-anchored per surface-baseline-mismatches rule; +2 errors accumulated silently on origin/main between PR #28 close and slice 9 measurement — not introduced by slice 9 itself, which holds 288 → 288 across two consecutive runs both pre-edit and post-edit).
+- **Out of scope (deferred):**
+  - **9-typography (Phase 4):** ALL CAPS section header removal — stylistic change unsanctioned by audit; deferred to keep the nav-icon migration clean and bisectable.
+  - **9-ext (after Phase 3 deploy):** ~7 secondary render-side emoji surfaces (contacts/deals/market-intel/leasing/messages). Each uses emoji differently and bundling would inflate a clean nav-migration slice.
+  - **9-db-emoji-migration (Phase 4):** `EmailLabel.icon` `DEFAULT_LABELS` and `Pipeline.stages` JSON contain DB-stored emoji strings. Migration requires a Prisma data-shape decision (keep schema as nullable string with lucide-name lookup, vs. migrate stored values, vs. drop the icon column). Out of scope for slice 9.
+- **Success criteria:** 7/7 new contracts pass; 41/41 existing slice-7/slice-8 sidebar + brokerage-subnav contracts continue passing; visual nav surfaces render lucide components instead of emoji on agent + admin + super_admin views (manual smoke after deploy).
+- **Depends on:** 7 (merged), 8 (merged).
 - **Requires approval:** No.
 
 ### 10 — Empty states pattern across all surfaces
