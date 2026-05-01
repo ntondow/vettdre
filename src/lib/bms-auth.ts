@@ -3,6 +3,7 @@
 import { cache } from "react";
 import prisma from "@/lib/prisma";
 import { getCurrentOrgContext } from "@/lib/auth-context";
+import { translateUserRoleToBrokerageRole } from "./bms-role-translation";
 import type { BrokerageRoleType, AgentStatus } from "./bms-types";
 
 // ── Get Current Brokerage Role ──────────────────────────────
@@ -36,12 +37,14 @@ export const getCurrentBrokerageRole = cache(async function (
       return "brokerage_admin";
     }
 
-    const ROLE_MAP: Partial<Record<string, BrokerageRoleType>> = {
-      admin:   "brokerage_admin",
-      manager: "manager",
-    };
-    if (user.role && ROLE_MAP[user.role]) {
-      return ROLE_MAP[user.role]!;
+    // Pure User.role → BrokerageRole mapping (manager → manager). The
+    // owner/admin/super_admin → "brokerage_admin" branch above already
+    // returns before this point, so the helper effectively only fires for
+    // the manager case here. Helper extraction is for testability + reuse;
+    // no behavior change vs the previous inline ROLE_MAP.
+    const pureMapping = translateUserRoleToBrokerageRole(user.role);
+    if (pureMapping) {
+      return pureMapping;
     }
 
     if (user.brokerAgent?.brokerageRole) {
@@ -95,13 +98,13 @@ export const getCurrentAgentInfo = cache(async function (
       };
     }
 
-    const ROLE_MAP2: Partial<Record<string, BrokerageRoleType>> = {
-      admin:   "brokerage_admin",
-      manager: "manager",
-    };
-    if (user.role && ROLE_MAP2[user.role]) {
+    // Same pure mapping as getCurrentBrokerageRole — manager case lands
+    // here (owner/admin/super_admin already returned above). No behavior
+    // change vs the previous inline ROLE_MAP2.
+    const pureMapping = translateUserRoleToBrokerageRole(user.role);
+    if (pureMapping) {
       return {
-        role: ROLE_MAP2[user.role]!,
+        role: pureMapping,
         agentId: user.brokerAgent?.id ?? user.id,
         agentStatus: (user.brokerAgent?.status as AgentStatus) ?? "active",
       };
