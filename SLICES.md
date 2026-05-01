@@ -516,7 +516,7 @@ Phase 0 status as of 2026-04-29:
 ## Phase 3 — IA + polish (Week 4)
 
 ### 7 — Single sidebar per role
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` ([PR #27](https://github.com/ntondow/vettdre/pull/27))
 - **Goal:** Brokerage admins → brokerage-shaped sidebar (Wireframe B: WORK / LISTINGS & DEALS / INTEL — three sections, ten items, down from nine sections / thirteen items). Agents → agent-focused sidebar (Wireframe A: WORK / RESEARCH — two sections, nine items, down from three sections / ten items).
 - **Closes bug:** addresses U-001 through U-005, U-012.
 - **Approach:** Replace `AGENT_NAV_SECTIONS` and `ADMIN_NAV_SECTIONS` constants in `sidebar.tsx` per the approved wireframes. Mirror in `mobile-nav.tsx` (5-tab bottom bar holds highest-frequency surfaces; More sheet holds the rest). Flip the role-branch polarity from `role === "agent" ? AGENT : ADMIN` (privilege-by-default) to `isAdminRole(role) ? ADMIN : AGENT` with a positive-match `ADMIN_USER_ROLES = {admin, owner, super_admin}` set — unknown roles fall through to agent. Add submitted-count badge to the global "Brokerage" item (override-aware via `useSearchParams`'s `?as_org=`). Delete `ComingSoonItem` function + all `comingSoon` code paths (Property Management section gone). Remove AUTOMATION top-level entry (still accessible via `/settings/automations`) and the duplicate "Client Onboarding" global entry (single source of truth in the brokerage sub-nav).
