@@ -21,6 +21,7 @@ import {
 import { createOnboarding, getAgentRosterForOnboarding } from "../actions";
 import { getDocumentTemplates } from "../vault-actions";
 import { getBrokerageSettings } from "../../settings/actions";
+import { computeMissingProfileFields } from "@/components/profile-completion-banner";
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -33,11 +34,16 @@ interface TemplateOption {
   fields: unknown[];
 }
 
+// Slice 13-cross-cut: roster entry carries the linked User row so the form
+// can warn when the selected agent's profile is incomplete. `user` is null
+// for BrokerAgents without a linked User (pending/invited hires); slice
+// 13's helper handles that shape and returns [] (no warning).
 interface AgentRosterEntry {
   id: string;
   firstName: string;
   lastName: string;
   email: string;
+  user: { fullName: string | null; phone: string | null; licenseNumber: string | null } | null;
 }
 
 // Placeholder styling (B-025): italic + lighter weight + slate-400 so a hint
@@ -58,6 +64,48 @@ function formatCurrency(val: string): string {
     minimumFractionDigits: num % 1 === 0 ? 0 : 2,
     maximumFractionDigits: 2,
   });
+}
+
+// Slice 13-cross-cut: inline profile-completeness warning rendered below the
+// agent picker. Reuses slice 13's `computeMissingProfileFields` so the
+// manager and the agent see exactly the same field set; if a future field
+// gates "complete", both surfaces pick it up at once.
+//
+// Early-return guards (in priority order):
+//   1. No selected agent yet → render nothing (initial paint before roster load).
+//   2. BrokerAgent.user is null → no User row, can't determine completeness;
+//      this is the normal state for pending/invited hires, not a warning state.
+//   3. computeMissingProfileFields returns [] → fields all present.
+//
+// Copy branches on `isSelf` per the slice spec: second-person when the
+// manager picks themselves, third-person otherwise. Both link to
+// /settings/profile (same target as slice 13's agent banner).
+function ProfileCompletenessWarning({
+  selectedAgent,
+  isSelf,
+}: {
+  selectedAgent: AgentRosterEntry | null;
+  isSelf: boolean;
+}) {
+  if (!selectedAgent) return null;
+  if (!selectedAgent.user) return null;
+  const missingFields = computeMissingProfileFields(selectedAgent.user);
+  if (missingFields.length === 0) return null;
+
+  const fieldsList = missingFields.join(", ");
+  const message = isSelf
+    ? `Heads up — your profile is missing: ${fieldsList}. The signed documents will render placeholders for any missing fields. Complete your profile at /settings/profile before filing.`
+    : `Heads up — ${selectedAgent.firstName}'s profile is missing: ${fieldsList}. The signed documents will render placeholders for any missing fields. Ask ${selectedAgent.firstName} to complete their profile at /settings/profile before filing.`;
+
+  return (
+    <div
+      data-testid="onboarding-agent-profile-warning"
+      className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"
+    >
+      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600" />
+      <p className="leading-relaxed">{message}</p>
+    </div>
+  );
 }
 
 // ── Component ────────────────────────────────────────────────
@@ -294,6 +342,10 @@ export default function NewOnboardingPage() {
             <p className="mt-2 text-xs text-slate-500">
               Defaults to you. Pick another agent in your brokerage to file this onboarding on their behalf.
             </p>
+            <ProfileCompletenessWarning
+              selectedAgent={agentRoster.find((a) => a.id === selectedAgentId) ?? null}
+              isSelf={!!currentAgent && selectedAgentId === currentAgent.id}
+            />
           </section>
         ) : currentAgent ? (
           <div

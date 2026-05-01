@@ -185,4 +185,114 @@ describe("Slice 13 — Profile completion banner (B-017)", () => {
       expect(bannerInstance?.[0]).not.toMatch(/actionHref/);
     });
   });
+
+  // ── Slice 13-cross-cut: manager-side warning at filing time ─────────
+  //
+  // Locks in the regression class that slice 13 left open. Slice 13 only
+  // surfaced incomplete-profile state to the *agent themselves*, on
+  // /my-deals and /settings/profile. When a manager (slice 7a admin /
+  // broker / manager role) files an onboarding for an agent via the
+  // picker on /brokerage/client-onboarding/new, the agent never sees
+  // their own banner before the manager hits Create — so an incomplete
+  // profile silently produces a signed PDF with `(Agent's name)`-style
+  // placeholders.
+  //
+  // This contract guards three failure modes:
+  //   1. The roster fetch stops returning user.fullName/phone/licenseNumber
+  //      (for any reason — schema rename, select trim, tenant-scoping
+  //      refactor) → warning silently can't compute, regression to
+  //      placeholder-on-PDF.
+  //   2. The form drops the import of computeMissingProfileFields and
+  //      reimplements its own check inline → drift from slice 13's
+  //      canonical "what counts as complete" rule.
+  //   3. The early-return guards on the warning component are removed →
+  //      warning fires on initial paint before roster loads, or fires
+  //      with an empty field list, both noisy false positives.
+  describe("Slice 13-cross-cut — manager-side filing-time warning", () => {
+    const actionsSrc = readSource(
+      "src/app/(dashboard)/brokerage/client-onboarding/actions.ts",
+    );
+    const newPageSrc = readSource(
+      "src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx",
+    );
+
+    it("getAgentRosterForOnboarding selects user.fullName / user.phone / user.licenseNumber", () => {
+      // The select must include the linked User's profile-completeness
+      // fields. computeMissingProfileFields needs all three; missing any
+      // would silently weaken the warning.
+      expect(actionsSrc).toMatch(
+        /user:\s*\{\s*select:\s*\{[\s\S]{0,400}fullName:\s*true[\s\S]{0,400}phone:\s*true[\s\S]{0,400}licenseNumber:\s*true/,
+      );
+    });
+
+    it("AgentRosterEntry type carries an optional user object on action + page", () => {
+      // Both action-side and page-side type definitions need the user
+      // shape for end-to-end TypeScript coverage. Drift between the two
+      // would mean either the page can't see fields the action returns,
+      // or the page reads fields the action doesn't fetch.
+      expect(actionsSrc).toMatch(
+        /user:\s*\{\s*fullName:\s*string\s*\|\s*null;\s*phone:\s*string\s*\|\s*null;\s*licenseNumber:\s*string\s*\|\s*null\s*\}\s*\|\s*null/,
+      );
+      expect(newPageSrc).toMatch(
+        /user:\s*\{\s*fullName:\s*string\s*\|\s*null;\s*phone:\s*string\s*\|\s*null;\s*licenseNumber:\s*string\s*\|\s*null\s*\}\s*\|\s*null/,
+      );
+    });
+
+    it("new/page.tsx imports computeMissingProfileFields from the banner module", () => {
+      // Reuse slice 13's helper rather than reimplementing — single source
+      // of truth for the completeness rule.
+      expect(newPageSrc).toMatch(
+        /import\s*\{\s*computeMissingProfileFields\s*\}\s*from\s*["']@\/components\/profile-completion-banner["']/,
+      );
+    });
+
+    it("warning component early-returns on null agent and null user", () => {
+      // Without these guards, the warning fires before the roster has
+      // loaded (no selected agent yet) or for pending/invited hires
+      // (BrokerAgent.userId === null) — both produce noisy false
+      // positives on every page load.
+      expect(newPageSrc).toMatch(
+        /if\s*\(\s*!selectedAgent\s*\)\s*return\s+null;[\s\S]{0,300}if\s*\(\s*!selectedAgent\.user\s*\)\s*return\s+null/,
+      );
+    });
+
+    it("warning component early-returns on empty missingFields", () => {
+      // computeMissingProfileFields([]) → no warning. Without this guard
+      // the amber callout would render every time, defeating its purpose.
+      expect(newPageSrc).toMatch(
+        /computeMissingProfileFields\(\s*selectedAgent\.user\s*\)[\s\S]{0,400}missingFields\.length\s*===\s*0\s*\)\s*return\s+null/,
+      );
+    });
+
+    it("warning copy branches on isSelf (second-person vs third-person)", () => {
+      // Manager picking themselves should read "your profile is missing
+      // … Complete your profile" (second-person). Picking another agent
+      // should read "{firstName}'s profile is missing … Ask {firstName}"
+      // (third-person). Both must point to /settings/profile — the same
+      // target as slice 13's agent banner.
+      expect(newPageSrc).toMatch(/isSelf\s*\?\s*[\s\S]{0,300}your profile is missing/);
+      expect(newPageSrc).toMatch(/Complete your profile at \/settings\/profile/);
+      expect(newPageSrc).toMatch(/\$\{selectedAgent\.firstName\}'s profile is missing/);
+      expect(newPageSrc).toMatch(/Ask \$\{selectedAgent\.firstName\} to complete their profile/);
+    });
+
+    it("warning is keyed by data-testid for downstream checks", () => {
+      // Anchors any future Playwright/integration check to a stable
+      // selector so the warning can be asserted on without snapshotting
+      // the full form.
+      expect(newPageSrc).toMatch(
+        /data-testid=["']onboarding-agent-profile-warning["']/,
+      );
+    });
+
+    it("warning is rendered inside the agent picker section, below the helper text", () => {
+      // Placement matters: the warning must be inside the picker section
+      // so the manager sees it the moment they select an agent — not in
+      // a global toast or at the form submit boundary. Locks the inline
+      // placement decision (Option A in the proposal) against drift.
+      expect(newPageSrc).toMatch(
+        /Defaults to you\. Pick another agent[\s\S]{0,500}<ProfileCompletenessWarning/,
+      );
+    });
+  });
 });
