@@ -527,13 +527,13 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 2 (done).
 
 ### 8 — Brokerage nav flatten
-- **Status:** `pending`
-- **Goal:** From 7 sections × 14 items to 3 sections × 8-10 items.
-- **Closes bug:** U-013, U-014, U-016
-- **Files:** brokerage layout sub-sidebar.
-- **Success criteria:** Manager nav matches consulting proposal in audit doc.
-- **Depends on:** 7
-- **Requires approval:** No.
+- **Status:** `awaiting_review` (PR #TBD)
+- **Goal:** From 7 sections × 17 items (Variant 3 in slice 7's inventory) to 3 sections × 11 items + Admin link (Wireframe C). One above the ≤10 target — ship at 11; both My Deals and Leaderboard have clear weekly use cases for John/Kristin.
+- **Closes bug:** U-013, U-014, U-016.
+- **Approach:** Replace `ADMIN_NAV` in `brokerage/layout.tsx` per Wireframe C (Operations / Agents & Listings / Reports / Admin). Drop entire stale "Admin > Setup" section from `AGENT_NAV` (agents shouldn't see brokerage_admin onboarding wizard; pre-slice-8 layout returned AGENT_NAV unfiltered). Relocate four sub-nav items: Setup, Commission Plans, Compliance → Settings page "Brokerage Configuration" cards (lighter approach — no inline tab refactor). Bulk Invoices was already accessible via existing "Bulk Generate" button in `/brokerage/invoices` header (no change needed). Add `<ComplianceAlert />` to `/brokerage/dashboard` — calls existing `getExpiringItems(60)` helper (no Prisma schema change), surfaces "X compliance documents expiring in next 60 days. View →" amber callout, override-aware via `?as_org=`. Without this Dashboard alert, hiding Compliance from sub-nav is unsafe — NYS license expiration is a real-world legal risk.
+- **Files:** `src/app/(dashboard)/brokerage/layout.tsx` (constants flatten + agent cleanup), `src/app/(dashboard)/brokerage/dashboard/page.tsx` (import + render alert), `src/app/(dashboard)/brokerage/dashboard/components/compliance-alert.tsx` (NEW), `src/app/(dashboard)/brokerage/settings/page.tsx` (Brokerage Configuration card section), `tests/smoke/brokerage-subnav-shape.test.ts` (NEW — 21 contracts: Wireframe C item set, removed surfaces, agent variant cleanup, sub-nav badge wiring, mobile pill ordering parity, Compliance Dashboard alert wiring + auto-hide guard + override propagation, Settings cards reachability).
+- **Success criteria:** 21/21 smoke contracts pass. Manager nav matches consulting proposal in audit doc.
+- **Depends on:** 7 (merged).
 
 ### 3.Z — Admin Home for super_admin (slice 1b follow-up)
 - **Status:** `pending`
