@@ -90,8 +90,16 @@ export async function POST(
     });
 
     // ── Process PDF ─────────────────────────────────────────
+    //
+    // Fail-fast on PDF processing errors (#12). If a doc has a template URL
+    // but we couldn't generate or upload the signed copy, we MUST NOT mark
+    // the document signed — the audit record would point at the unsigned
+    // template, which is unrecoverable for legal compliance. Instead we
+    // bail with 503 and let the client retry. Docs without pdfUrl (legacy
+    // path) skip this entire block and continue normally.
 
     let signedPdfUrl: string | null = null;
+    let pdfProcessingFailed = false;
 
     if (doc.pdfUrl) {
       try {
@@ -121,7 +129,9 @@ export async function POST(
           pdfBytes = new Uint8Array(await resp.arrayBuffer());
         }
 
-        if (pdfBytes.length > 0) {
+        if (pdfBytes.length === 0) {
+          pdfProcessingFailed = true;
+        } else {
           let modifiedPdf = pdfBytes;
 
           // Check if this document has template fields
@@ -162,22 +172,55 @@ export async function POST(
           if (!uploadError) {
             const { data: urlData } = supabase.storage.from("bms-files").getPublicUrl(signedPath);
             signedPdfUrl = urlData?.publicUrl ?? null;
+            if (!signedPdfUrl) {
+              pdfProcessingFailed = true;
+            }
           } else {
             console.error("Signed PDF upload error:", uploadError);
+            pdfProcessingFailed = true;
           }
         }
       } catch (pdfErr) {
         console.error("PDF processing error:", pdfErr);
-        // Continue — the signing status update is more important than the PDF
+        pdfProcessingFailed = true;
       }
     }
 
-    // ── Update database ─────────────────────────────────────
+    // Fail-fast (#12): if the doc has a pdfUrl but we couldn't generate the
+    // signed copy, bail BEFORE the database transaction. The client retry
+    // path will land cleanly because no document state was mutated.
+    if (pdfProcessingFailed) {
+      return NextResponse.json(
+        {
+          error: "We couldn't save your signed document. Please try again in a moment.",
+        },
+        { status: 503 },
+      );
+    }
 
-    await prisma.$transaction(async (tx) => {
-      // Update document
-      await tx.onboardingDocument.update({
-        where: { id: documentId },
+    // ── Update database ─────────────────────────────────────
+    //
+    // Idempotent sign (#10) — two-level atomic CAS prevents the duplicate-
+    // contact race when a client double-clicks Sign or has two tabs open:
+    //
+    //   1. Document-level guard: updateMany with `status: { not: "signed" }`.
+    //      The second concurrent transaction's count is 0 and it bails with
+    //      `kind: "already_signed"` — no audit log, no further writes.
+    //   2. Onboarding-completion CAS: when this transaction's writes leave
+    //      every document signed, an updateMany with `allDocsSigned: false`
+    //      atomically flips the flag. Only the transaction whose count === 1
+    //      "wins the race" and is allowed to fire the post-completion
+    //      workflow (Contact creation, FileAttachments, agent email).
+    //      Without this, a 2-tab last-doc race would create two Contacts.
+
+    type TxResult =
+      | { kind: "already_signed" }
+      | { kind: "ok"; completionWonRace: boolean };
+
+    const txResult: TxResult = await prisma.$transaction(async (tx): Promise<TxResult> => {
+      // 1. Document-level guard
+      const docUpdate = await tx.onboardingDocument.updateMany({
+        where: { id: documentId, status: { not: "signed" } },
         data: {
           status: "signed",
           signedAt: new Date(),
@@ -186,8 +229,11 @@ export async function POST(
           pdfUrl: signedPdfUrl || doc.pdfUrl,
         },
       });
+      if (docUpdate.count === 0) {
+        return { kind: "already_signed" };
+      }
 
-      // Create audit log
+      // Audit log for the signature
       await tx.signingAuditLog.create({
         data: {
           onboardingId: onboarding.id,
@@ -208,7 +254,8 @@ export async function POST(
         },
       });
 
-      // Check if all documents are now signed
+      // Recompute completion state inside the transaction so we see our own
+      // write plus any concurrent write that committed before us.
       const allDocs = await tx.onboardingDocument.findMany({
         where: { onboardingId: onboarding.id },
         select: { status: true },
@@ -216,31 +263,48 @@ export async function POST(
       const allSigned = allDocs.every((d) => d.status === "signed");
       const anySigned = allDocs.some((d) => d.status === "signed");
 
+      let completionWonRace = false;
       if (allSigned) {
-        await tx.clientOnboarding.update({
-          where: { id: onboarding.id },
+        // 2. Onboarding-completion CAS — atomic compare-and-swap.
+        const cas = await tx.clientOnboarding.updateMany({
+          where: { id: onboarding.id, allDocsSigned: false },
           data: {
             status: "completed",
             completedAt: new Date(),
             allDocsSigned: true,
           },
         });
-        await tx.signingAuditLog.create({
-          data: {
-            onboardingId: onboarding.id,
-            action: "completed",
-            actorType: "system",
-            actorName: "System",
-            metadata: { trigger: "all_documents_signed" },
-          },
-        });
+        completionWonRace = cas.count === 1;
+        if (completionWonRace) {
+          await tx.signingAuditLog.create({
+            data: {
+              onboardingId: onboarding.id,
+              action: "completed",
+              actorType: "system",
+              actorName: "System",
+              metadata: { trigger: "all_documents_signed" },
+            },
+          });
+        }
       } else if (anySigned) {
-        await tx.clientOnboarding.update({
-          where: { id: onboarding.id },
+        // Move to partially_signed only if still in an earlier state. Avoids
+        // clobbering a "completed" status set by a concurrent transaction.
+        await tx.clientOnboarding.updateMany({
+          where: { id: onboarding.id, status: { in: ["draft", "pending"] } },
           data: { status: "partially_signed" },
         });
       }
+
+      return { kind: "ok", completionWonRace };
     });
+
+    // Idempotent retry: second submitter gets a clean 409, not a 500.
+    if (txResult.kind === "already_signed") {
+      return NextResponse.json(
+        { error: "This document has already been signed" },
+        { status: 409 },
+      );
+    }
 
     // Check final state for response
     const updatedOnboarding = await prisma.clientOnboarding.findUnique({
@@ -251,7 +315,13 @@ export async function POST(
     const allComplete = updatedOnboarding?.allDocsSigned ?? false;
 
     // ── Post-completion workflow (fire-and-forget) ───────────
-    if (allComplete && updatedOnboarding) {
+    //
+    // Gated on completionWonRace (#10) — only the transaction that flipped
+    // allDocsSigned false→true fires the workflow. Without this gate, a
+    // double-click on the last document would create two Contacts. Note:
+    // .catch (not await) is intentional — the response shouldn't block on
+    // background work.
+    if (txResult.completionWonRace && allComplete && updatedOnboarding) {
       runPostCompletionWorkflow(onboarding.id, updatedOnboarding).catch((err) =>
         console.error("Post-completion workflow error:", err),
       );
