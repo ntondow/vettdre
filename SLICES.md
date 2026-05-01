@@ -479,11 +479,34 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** none blocking.
 - **Requires approval:** No.
 
-### 6 — Default landing for agent (continued from 1b if needed)
-- **Status:** `pending`
-- **Goal:** Confirm 1b covers agent flow. If not, add agent-specific landing logic.
-- **Depends on:** 1b
+### 6 — Default landing for agent (regression-guard contract)
+- **Status:** `awaiting_review` (PR #TBD)
+- **Verification finding:** 1b + 1b2 fully cover the original scope (agent → `/brokerage/my-deals`, role-to-path map locked in, 3 auth-flow files class-scanned for hardcoded `/market-intel`). Slice 6's original "add agent-specific landing logic if 1b didn't cover it" goal is **closed by 1b**.
+- **What this slice ships instead:** one source-level regression contract in `tests/smoke/role-landing.test.ts` asserting `canAccessPage("agent", landingForRole("agent")) === true`. Locks in B-018's exact regression class — catches three classes of silent breakage:
+  1. agent loses `view_own_submissions` in `BMS_PERMISSIONS`,
+  2. `/brokerage/my-deals` permission requirement changes in `PAGE_PERMISSION_MAP`,
+  3. `landingForRole("agent")` changes to a route agent can't access.
+- **Scoped to "agent" only:** the codebase has two distinct role vocabularies (`User.role`: super_admin/admin/agent; `BrokerageRoleType`: brokerage_admin/broker/manager/agent) bridged by `getCurrentBrokerageRole` via an async Prisma join. Only `"agent"` is identical across both vocabularies, so it's the only role testable in pure source-level form. Other roles tracked in `slice 6-ext` below.
+- **Closes bug:** B-018 (regression guard).
+- **Files:** `tests/smoke/role-landing.test.ts` (+1 describe block, +1 it; +1 import for `canAccessPage`).
+- **No production code changes.**
+- **Verification gates:**
+  - `npm run test`: 130 (was 129; +1 new).
+  - `npm run build`: exit 0.
+  - `npx tsc --noEmit` clean tree: ≤ 292 (no production code changes).
+  - `npx eslint <changed files>`: zero new errors.
+- **Depends on:** 1b + 1b2 (both merged on main).
 - **Requires approval:** No.
+
+### 6-ext — Cross-role landing permission contract
+- **Status:** `pending`
+- **Priority:** low (Phase 3 polish)
+- **Goal:** End-to-end smoke covering User.role → BrokerageRole runtime translation + `canAccessPage`, so the cross-role contract slice 6 couldn't ship in pure source-level form is covered for owner / admin / manager / super_admin landing destinations.
+- **Why:** slice 6 is scoped to agent only because that's the one role string that appears in both `User.role` and `BrokerageRoleType` vocabularies. Other roles need translation through `getCurrentBrokerageRole` (Prisma BrokerAgent join, async) before `canAccessPage` is meaningful.
+- **Approach:** Prisma test fixture OR mocked `getCurrentBrokerageRole` returning each translated role. Assert `canAccessPage(translatedRole, landingForRole(originalUserRole))` returns true for the four BMS roles; super_admin's `/dashboard` destination needs a separate guard (it's outside `PAGE_PERMISSION_MAP`).
+- **Closes:** the gap left by slice 6's source-only scope. Catches drift on the User → BrokerageRole map in `bms-auth.ts:39-42` that slice 6 can't see.
+- **Files:** new `tests/integration/role-landing-translation.test.ts` (likely — Phase 3 will decide test infra). Update `bms-auth.ts` only if test surfaces a translation bug.
+- **Depends on:** none blocking (1b is on main).
 
 **[PHASE 2 APPROVAL GATE — STOP HERE]**
 
