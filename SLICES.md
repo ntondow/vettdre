@@ -397,7 +397,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 7a-fixup — Re-attribute existing pre-picker onboarding records
-- **Status:** `pending`
+- **Status:** `done` (verified 2026-05-01, no DB write needed)
 - **Priority:** low (Phase 2 polish)
 - **Type:** Manual SQL update (no code change). Run after 7a ships and the new picker is in active use.
 - **Goal:** For the 9 onboarding records that predate the agent picker (all currently attributed to "Nathan Tondow" because no picker existed), re-attribute each to the BrokerAgent that the deal was actually for. Decision per-record is Nathan's — most are voided/expired/test or family-of-Nathan and may be left as-is; only the 2 Gulino-client records may need re-attribution if those onboardings should belong to a Gulino-org agent.
@@ -413,8 +413,9 @@ Phase 0 status as of 2026-04-29:
   | `e412faf5-7a90-44f4-991e-03fef7a72854` | Kristin Gulino | completed | 2026-03-31 |
   | `dde681de-550d-4b67-959a-dd1eeb7638ef` | Linda Tondow | completed | 2026-04-01 |
   | `2e335658-96ac-4fad-964b-caa5f57856b3` | Jon Klomp | completed | 2026-04-05 |
-- **Note:** All 9 records live in `org_id = 5ecba9ba-...` ("Nathan Tondow's Organization"), NOT in "Gulino Group" — they were created before the 2026-04-27 org split. Re-attribution may need to also move records cross-org if the intent is to associate them with Gulino agents. Confirm with Nathan before any UPDATE.
-- **Success criteria:** Each of the 9 records is either (a) confirmed to remain attributed to Nathan, or (b) re-attributed to the correct BrokerAgent (and possibly correct org).
+- **Note:** All 9 records live in `org_id = b770bb07-af8a-4001-818f-046844fdef15` (Nathan Tondow's Organization), NOT in `5ecba9ba-...` (Gulino Group). The original SLICES.md note had the org IDs swapped; corrected here. Gulino's tenant has zero `client_onboardings` rows.
+- **Resolution (2026-05-01):** No DB write needed. Verification via Supabase MCP confirmed (a) all 9 records correctly attributed to Nathan as the BrokerAgent, (b) `signing_audit_logs` shows Nathan as `actor_id` on every `created` action — Nathan personally created each record, no other agent involved, (c) all 9 records pre-date Gulino's tenant (created 2026-03-30 to 2026-04-05; Gulino onboarded 2026-04-27 — three weeks after the latest record). The "auto-attribution bug" described in slice 7a's filing was a *future risk* for Gulino-era multi-agent onboardings (where John/Kristin would have all their work auto-filed under their own names instead of Anthony/Christine/etc.) — not a historical defect on these 9 records. Records 1/6/7 with "Kristin Gulino" / "John Gulino" client names are test onboardings Nathan created while prototyping the flow before Gulino was a customer; the data correctly reflects Nathan as actor. Slice 7a's picker prevents the future bug; no historical correction needed.
+- **Success criteria:** ✅ All 9 records confirmed attributed to Nathan. No re-attribution required.
 - **Depends on:** 7a (picker live + 24h soak so the new code path is the canonical one before historical fix).
 
 ### 17 — Onboarding form UX cleanup
