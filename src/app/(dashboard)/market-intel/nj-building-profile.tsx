@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { BarChart3, Lock, type LucideIcon } from "lucide-react";
 import { getNJPropertyByParcel, searchNJComps } from "./nj-actions";
 import type { NJPropertyResult } from "./nj-actions";
 
@@ -20,15 +21,15 @@ const fmtDate = (d: string) => {
   try { return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(d)); } catch { return d; }
 };
 
-function Section({ id, title, icon, badge, className, collapsed, onToggle, children }: {
-  id: string; title: string; icon?: string; badge?: React.ReactNode;
+function Section({ id, title, icon: Icon, badge, className, collapsed, onToggle, children }: {
+  id: string; title: string; icon?: LucideIcon; badge?: React.ReactNode;
   className?: string; collapsed: boolean; onToggle: () => void; children: React.ReactNode;
 }) {
   return (
     <div className={className || "bg-white rounded-xl border border-slate-200"}>
       <button onClick={onToggle} className="w-full flex items-center justify-between p-5 text-left cursor-pointer">
         <div className="flex items-center gap-2">
-          {icon && <span className="text-lg">{icon}</span>}
+          {Icon && <Icon className="w-4 h-4 text-slate-700" strokeWidth={1.75} />}
           <h3 className="text-sm font-bold text-slate-900">{title}</h3>
           {badge}
         </div>
@@ -229,7 +230,7 @@ export default function NJBuildingProfile({ municipality, block, lot, county, ad
           </div>
 
           {/* Comps */}
-          <Section id="comps" title="Comparable Sales" icon="📊" collapsed={collapsed.comps} onToggle={() => { toggle("comps"); loadComps(); }}>
+          <Section id="comps" title="Comparable Sales" icon={BarChart3} collapsed={collapsed.comps} onToggle={() => { toggle("comps"); loadComps(); }}>
             {compsLoading && <div className="flex justify-center py-4"><div className="animate-spin rounded-full h-6 w-6 border-4 border-blue-600 border-t-transparent" /></div>}
             {compsLoaded && comps.length === 0 && <p className="text-sm text-slate-500">No comparable sales found in {data.municipality}.</p>}
             {compsStats && (
@@ -257,7 +258,7 @@ export default function NJBuildingProfile({ municipality, block, lot, county, ad
           </Section>
 
           {/* NJ Limitations */}
-          <Section id="njOnly" title="NYC-Only Data (Not Available in NJ)" icon="🔒" collapsed={collapsed.njOnly} onToggle={() => toggle("njOnly")}>
+          <Section id="njOnly" title="NYC-Only Data (Not Available in NJ)" icon={Lock} collapsed={collapsed.njOnly} onToggle={() => toggle("njOnly")}>
             <div className="space-y-2 text-sm text-slate-400">
               <p>HPD Violations — not available in NJ</p>
               <p>HPD Complaints — not available in NJ</p>

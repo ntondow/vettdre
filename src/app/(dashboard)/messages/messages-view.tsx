@@ -4,6 +4,11 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  Circle, User, Newspaper, Receipt, Ban,
+  Inbox, Send, Star, Pencil, Trash2, AlertTriangle, Folder,
+  type LucideIcon,
+} from "lucide-react";
+import {
   syncGmail, sendNewEmail, replyToEmail, markThreadAsRead,
   getThreads, getThreadMessages, getContactsForAutocomplete,
   findContactByEmail, quickCreateContact,
@@ -90,22 +95,22 @@ const urgencyConfig: Record<number, { label: string; color: string; dot: string 
   5: { label: "Urgent", color: "text-red-600 font-bold", dot: "bg-red-500" },
 };
 
-const categoryConfig: Record<string, { icon: string; label: string; color: string }> = {
-  lead: { icon: "🔴", label: "Lead", color: "text-red-600" },
-  personal: { icon: "👤", label: "Personal", color: "text-indigo-600" },
-  newsletter: { icon: "📰", label: "Newsletter", color: "text-purple-600" },
-  transactional: { icon: "🧾", label: "Receipt", color: "text-slate-500" },
-  spam: { icon: "🚫", label: "Spam", color: "text-slate-400" },
+const categoryConfig: Record<string, { icon: LucideIcon; iconClass: string; label: string; color: string }> = {
+  lead: { icon: Circle, iconClass: "fill-red-500 text-red-500", label: "Lead", color: "text-red-600" },
+  personal: { icon: User, iconClass: "text-indigo-600", label: "Personal", color: "text-indigo-600" },
+  newsletter: { icon: Newspaper, iconClass: "text-purple-600", label: "Newsletter", color: "text-purple-600" },
+  transactional: { icon: Receipt, iconClass: "text-slate-500", label: "Receipt", color: "text-slate-500" },
+  spam: { icon: Ban, iconClass: "text-slate-400", label: "Spam", color: "text-slate-400" },
 };
 
-const gmailFolders = [
-  { id: "INBOX", label: "Inbox", icon: "📥" },
-  { id: "SENT", label: "Sent", icon: "📤" },
-  { id: "STARRED", label: "Starred", icon: "⭐" },
-  { id: "DRAFT", label: "Drafts", icon: "📝" },
-  { id: "TRASH", label: "Trash", icon: "🗑️" },
-  { id: "SPAM", label: "Spam", icon: "⚠️" },
-  { id: "ALL", label: "All Mail", icon: "📁" },
+const gmailFolders: { id: string; label: string; icon: LucideIcon }[] = [
+  { id: "INBOX", label: "Inbox", icon: Inbox },
+  { id: "SENT", label: "Sent", icon: Send },
+  { id: "STARRED", label: "Starred", icon: Star },
+  { id: "DRAFT", label: "Drafts", icon: Pencil },
+  { id: "TRASH", label: "Trash", icon: Trash2 },
+  { id: "SPAM", label: "Spam", icon: AlertTriangle },
+  { id: "ALL", label: "All Mail", icon: Folder },
 ];
 
 // Avatar color by first letter
@@ -433,16 +438,19 @@ export default function MessagesView({
 
         {/* Gmail Folders */}
         <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-slate-100 bg-slate-50/50 overflow-x-auto scrollbar-hide">
-          {gmailFolders.map(f => (
-            <button key={f.id} onClick={() => { setGmailFolder(f.id); setFilter("all"); setSelectedThreadId(null); }}
-              className={`px-2 py-1 text-[11px] rounded font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                gmailFolder === f.id
-                  ? "bg-white text-slate-900 shadow-sm border border-slate-200"
-                  : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
-              }`}>
-              <span className="mr-0.5">{f.icon}</span>{f.label}
-            </button>
-          ))}
+          {gmailFolders.map(f => {
+            const Icon = f.icon;
+            return (
+              <button key={f.id} onClick={() => { setGmailFolder(f.id); setFilter("all"); setSelectedThreadId(null); }}
+                className={`px-2 py-1 text-[11px] rounded font-medium transition-all whitespace-nowrap flex-shrink-0 inline-flex items-center gap-1 ${
+                  gmailFolder === f.id
+                    ? "bg-white text-slate-900 shadow-sm border border-slate-200"
+                    : "text-slate-500 hover:text-slate-700 hover:bg-white/50"
+                }`}>
+                <Icon className="w-3.5 h-3.5" strokeWidth={1.75} />{f.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Toolbar */}
@@ -807,9 +815,14 @@ function ThreadRow({
         </p>
         <p className="text-xs text-slate-400 truncate mt-0.5">{thread.snippet}</p>
         <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-          {cat && thread.category !== "personal" && (
-            <span className={`text-[10px] font-medium ${cat.color}`}>{cat.icon} {cat.label}</span>
-          )}
+          {cat && thread.category !== "personal" && (() => {
+            const CatIcon = cat.icon;
+            return (
+              <span className={`text-[10px] font-medium ${cat.color} inline-flex items-center gap-1`}>
+                <CatIcon className={`w-3 h-3 ${cat.iconClass}`} strokeWidth={1.75} /> {cat.label}
+              </span>
+            );
+          })()}
           {thread.leadSource && thread.leadSource !== "unknown" && (
             <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${sourceColors[thread.leadSource] || sourceColors.unknown}`}>
               {sourceLabels[thread.leadSource] || thread.leadSource}

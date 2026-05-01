@@ -4,6 +4,7 @@ import { useState } from "react";
 import { deleteContact, bulkEnrichContacts } from "./actions";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Users, Building2, Home, DollarSign, Key, type LucideIcon } from "lucide-react";
 import { CONTACT_TYPE_META } from "@/lib/contact-types";
 import type { ContactType } from "@/lib/contact-types";
 
@@ -22,12 +23,12 @@ interface Contact {
   createdAt: Date;
 }
 
-const TYPE_FILTERS: { key: ContactType | "all"; label: string; icon: string }[] = [
-  { key: "all", label: "All", icon: "👥" },
-  { key: "landlord", label: "Landlords", icon: "🏢" },
-  { key: "buyer", label: "Buyers", icon: "🏠" },
-  { key: "seller", label: "Sellers", icon: "💰" },
-  { key: "renter", label: "Renters", icon: "🔑" },
+const TYPE_FILTERS: { key: ContactType | "all"; label: string; icon: LucideIcon }[] = [
+  { key: "all", label: "All", icon: Users },
+  { key: "landlord", label: "Landlords", icon: Building2 },
+  { key: "buyer", label: "Buyers", icon: Home },
+  { key: "seller", label: "Sellers", icon: DollarSign },
+  { key: "renter", label: "Renters", icon: Key },
 ];
 
 export default function ContactList({ contacts }: { contacts: Contact[] }) {
@@ -121,6 +122,7 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
         {TYPE_FILTERS.map((f) => {
           const count = typeCounts[f.key] || 0;
           const active = typeFilter === f.key;
+          const Icon = f.icon;
           return (
             <button
               key={f.key}
@@ -131,7 +133,7 @@ export default function ContactList({ contacts }: { contacts: Contact[] }) {
                   : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
               }`}
             >
-              <span>{f.icon}</span>
+              <Icon className="w-4 h-4" strokeWidth={1.75} />
               <span>{f.label}</span>
               <span className={`text-xs ${active ? "text-blue-200" : "text-slate-400"}`}>{count}</span>
             </button>

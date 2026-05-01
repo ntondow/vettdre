@@ -2,6 +2,7 @@
 // Used primarily by building-profile-skeleton.tsx but available app-wide
 
 import { type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 const shimmerCls = "animate-shimmer rounded";
 
@@ -88,16 +89,22 @@ export function SkeletonScoreCard({ className = "" }: { className?: string }) {
 // Section wrapper skeleton (matches Section component layout)
 export function SkeletonSection({ title, icon, children, className = "" }: {
   title?: string;
-  icon?: string;
+  // Accepts a string (legacy emoji icons) or a LucideIcon component. Existing
+  // callers passing emoji strings keep working; new callers pass lucide
+  // components for visual consistency with the rest of the app.
+  icon?: string | LucideIcon;
   children: ReactNode;
   className?: string;
 }) {
+  const IconComponent = typeof icon === "function" ? icon : null;
   return (
     <div className={`bg-white rounded-xl border border-slate-200 ${className}`}>
       <div className="flex items-center justify-between p-5">
         <div className="flex items-center gap-2">
-          {icon ? (
-            <span className="text-lg">{icon}</span>
+          {IconComponent ? (
+            <IconComponent className="w-5 h-5 text-slate-700" strokeWidth={1.75} />
+          ) : icon ? (
+            <span className="text-lg">{icon as string}</span>
           ) : (
             <SkeletonCircle size="w-5 h-5" />
           )}
