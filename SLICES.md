@@ -599,7 +599,7 @@ Phase 0 status as of 2026-04-29:
 - **Outcome:** main reflects production reality; deploy from main = current prod; no orphan slice branches. Status flipped to `done` in Phase 3 slice 1 (PR #24).
 
 ### 13-cross-cut — Manager-side profile-completeness warning at filing time
-- **Status:** `awaiting_review` (PR #TBD)
+- **Status:** `awaiting_review` ([PR #26](https://github.com/ntondow/vettdre/pull/26))
 - **Priority:** low (Phase 3 polish)
 - **Goal:** When a manager uses the slice 7a agent picker on `/brokerage/client-onboarding/new` to file an onboarding for an agent whose profile is incomplete (Full Name, Phone, or License Number missing), surface a warning at the moment of filing — not just on the agent's own /my-deals banner.
 - **Why:** Without this, John/Kristin file docs for Anthony, the prefill renders with `(Agent's name)` placeholders, and nobody catches it until the client signs a document with the placeholder visible. Slice 13 surfaces the gap to the agent themselves but doesn't warn the manager filing on their behalf.
