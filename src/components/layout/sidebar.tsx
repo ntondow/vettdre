@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { getUnreadCount } from "@/app/(dashboard)/messages/actions";
 import { getFollowUpCount } from "@/app/(dashboard)/messages/follow-up-actions";
 import { getEscalatedCount } from "@/app/(dashboard)/leasing/actions";
+import { getSubmittedCount } from "@/app/(dashboard)/brokerage/deal-submissions/actions";
 import { useSidebar } from "./sidebar-context";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { hasPermission } from "@/lib/feature-gate";
@@ -24,113 +25,113 @@ interface NavItem {
   badge?: boolean;
   feature?: Feature;
   roles?: string[];
-  comingSoon?: boolean;
 }
 
 interface NavSection {
   label: string;
   items: NavItem[];
-  comingSoon?: boolean;
-  comingSoonTooltip?: string;
 }
 
 /* Dashboard — rendered above sections (no group header) */
 const DASHBOARD_ITEM: NavItem = { name: "Dashboard", href: "/dashboard", icon: "📊" };
 
-/* ── Agent-focused sidebar (simplified for agent role) ────── */
+/* ── Slice 7 — Wireframe A: agent-focused sidebar ──────────────
+ *
+ * Two sections, nine items. WORK collapses what was MY WORK +
+ * COMMUNICATION (the agent's daily work IS communication; the split
+ * was bureaucratic). Order within WORK reflects daily flow priority:
+ * My Deals first (most-clicked), then the file-an-onboarding action,
+ * then the inbox/calendar/contacts trio. RESEARCH unchanged in items
+ * but reorganized for parity with the admin sidebar. */
 const AGENT_NAV_SECTIONS: NavSection[] = [
   {
     label: "My Work",
     items: [
-      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
       { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
-      { name: "Contacts", href: "/contacts", icon: "👥" },
-    ],
-  },
-  {
-    label: "Communication",
-    items: [
+      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
       { name: "Messages", href: "/messages", icon: "📬", badge: true },
       { name: "Calendar", href: "/calendar", icon: "📅" },
+      { name: "Contacts", href: "/contacts", icon: "👥" },
     ],
   },
   {
     label: "Research",
     items: [
-      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
       { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
       { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
+      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
     ],
   },
 ];
 
-/* ── Admin / Owner sidebar (full platform) ────────────────── */
+/* ── Slice 7 — Wireframe B: brokerage_admin sidebar ──────────────
+ *
+ * Three sections, ten items. Down from nine sections / thirteen items.
+ *
+ * WORK is the daily flow: Brokerage (gateway to the 17-item sub-nav,
+ * with the new submitted-count badge that surfaces deal-submission
+ * volume on the global rail), then the inbox/calendar/contacts trio.
+ *
+ * LISTINGS & DEALS replaces three single-item sections (Portfolio /
+ * Acquisitions / Leasing) with the three items themselves grouped.
+ *
+ * INTEL replaces RESEARCH + SCREENING — they're all "looking up
+ * information about a property or person."
+ *
+ * Removed: PROPERTY MANAGEMENT (coming-soon noise; resurface when it
+ * ships), AUTOMATION (low-frequency power feature; lives at
+ * /settings/automations), and the global-sidebar duplicate of
+ * "Client Onboarding" (single source of truth in the brokerage
+ * sub-nav at /brokerage/client-onboarding). */
 const ADMIN_NAV_SECTIONS: NavSection[] = [
   {
-    label: "Research",
+    label: "My Work",
     items: [
-      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-    ],
-  },
-  {
-    label: "Portfolio",
-    items: [
-      { name: "Properties", href: "/properties", icon: "🏢" },
-    ],
-  },
-  {
-    label: "Acquisitions",
-    items: [
-      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
-    ],
-  },
-  {
-    label: "Closing",
-    items: [
-      { name: "Contacts", href: "/contacts", icon: "👥" },
+      { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions", badge: true },
       { name: "Messages", href: "/messages", icon: "📬", badge: true },
       { name: "Calendar", href: "/calendar", icon: "📅" },
+      { name: "Contacts", href: "/contacts", icon: "👥" },
     ],
   },
   {
-    label: "Leasing",
+    label: "Listings & Deals",
     items: [
+      { name: "Properties", href: "/properties", icon: "🏢" },
+      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
       { name: "Leasing", href: "/leasing", icon: "🤖", badge: true },
     ],
   },
   {
-    label: "Screening",
+    label: "Intel",
     items: [
+      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
       { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
-    ],
-  },
-  {
-    label: "Property Management",
-    comingSoon: true,
-    comingSoonTooltip: "Rent roll, tenant tracking, maintenance requests, and lease management.",
-    items: [
-      { name: "Property Mgmt", href: "#", icon: "🏠", comingSoon: true },
-    ],
-  },
-  {
-    label: "Brokerage",
-    items: [
-      { name: "Brokerage", href: "/brokerage", icon: "🏛️", feature: "bms_submissions" },
-      { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
-    ],
-  },
-  {
-    label: "Automation",
-    items: [
-      { name: "Automations", href: "/settings/automations", icon: "⚡" },
     ],
   },
 ];
 
 /* Settings — rendered below separator at bottom */
 const SETTINGS_ITEM: NavItem = { name: "Settings", href: "/settings", icon: "⚙️" };
+
+/* Slice 7 — positive-match polarity. Today's `role === "agent"
+ * ? AGENT : ADMIN` ternary granted the admin sidebar to anything
+ * that wasn't literally "agent" — including unknown roles and
+ * empty strings. The defensive default is the opposite: only known
+ * admin-tier User.roles get the admin sidebar; everything else
+ * (including future enum additions) falls through to the agent
+ * shape. Locked by smoke contract #8.
+ *
+ * NOTE: this is User.role, not BrokerageRoleType. Manager-aware
+ * global-sidebar segmentation is out of scope for slice 7 (would
+ * require getCurrentBrokerageRole at the global layout, a bigger
+ * lift). The brokerage sub-nav at /brokerage/* still segments by
+ * BrokerageRoleType independently. */
+const ADMIN_USER_ROLES = new Set<string>(["admin", "owner", "super_admin"]);
+function isAdminRole(role: string): boolean {
+  return ADMIN_USER_ROLES.has(role);
+}
 
 /* All items flattened (for paywall lookup) */
 const ALL_ITEMS = [DASHBOARD_ITEM, ...ADMIN_NAV_SECTIONS.flatMap(s => s.items), ...AGENT_NAV_SECTIONS.flatMap(s => s.items), SETTINGS_ITEM];
@@ -142,12 +143,25 @@ const ALL_ITEMS = [DASHBOARD_ITEM, ...ADMIN_NAV_SECTIONS.flatMap(s => s.items), 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const asOrg = searchParams.get("as_org");
   const { collapsed, toggle } = useSidebar();
   const { plan, role } = useUserPlan();
   const [unread, setUnread] = useState(0);
   const [followUps, setFollowUps] = useState(0);
   const [escalated, setEscalated] = useState(0);
+  const [submitted, setSubmitted] = useState(0);
   const [paywallFeature, setPaywallFeature] = useState<Feature | null>(null);
+
+  // Override-aware options for org-scoped fetches. Slice 7 makes the
+  // global sidebar respect ?as_org= for the submitted badge so super_admin
+  // viewing a tenant sees the tenant's queue, not their own. Other badges
+  // (unread, followUps, escalated) are user-scoped and don't need the
+  // override; leaving them unchanged.
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
 
   useEffect(() => {
     getUnreadCount().then(n => setUnread(n)).catch(() => {});
@@ -155,11 +169,25 @@ export default function Sidebar() {
     getEscalatedCount().then(n => setEscalated(n)).catch(() => {});
   }, [pathname]);
 
+  // Submitted-count fetch is admin-only. Agents don't see the Brokerage
+  // item, so skipping the COUNT here saves a query on every agent page
+  // load. Same cadence as the other badges (refetch on pathname change)
+  // so approving in /brokerage/deal-submissions naturally drops the
+  // count when the manager moves to another section.
+  useEffect(() => {
+    if (!isAdminRole(role)) return;
+    let cancelled = false;
+    getSubmittedCount(overrideOpts)
+      .then((r) => { if (!cancelled) setSubmitted(r.count ?? 0); })
+      .catch(() => { if (!cancelled) setSubmitted(0); });
+    return () => { cancelled = true; };
+  }, [pathname, role, overrideOpts]);
+
   const handleSignOut = async () => { const supabase = createClient(); await supabase.auth.signOut(); router.push("/login"); router.refresh(); };
 
   /** Check if any item in a section is active */
   const isSectionActive = (section: NavSection) =>
-    section.items.some(item => !item.comingSoon && pathname.startsWith(item.href));
+    section.items.some(item => pathname.startsWith(item.href));
 
   return (
     <aside className={`fixed inset-y-0 left-0 bg-white border-r border-slate-200 hidden md:flex flex-col z-40 transition-all duration-200 ${collapsed ? "w-[60px]" : "w-60"}`}>
@@ -178,12 +206,15 @@ export default function Sidebar() {
         <div className="mb-3">
           <SidebarItem item={DASHBOARD_ITEM} pathname={pathname} collapsed={collapsed}
             plan={plan} role={role} unread={unread} followUps={followUps} escalated={escalated}
-            onPaywall={setPaywallFeature} />
+            submitted={submitted} onPaywall={setPaywallFeature} />
         </div>
 
-        {/* Lifecycle sections — agents get a focused sidebar */}
+        {/* Lifecycle sections — slice 7 positive-match polarity. Only the
+            known admin User.role set gets the admin sidebar; everything
+            else (including unknown roles and empty strings) falls through
+            to the agent-focused shape. */}
         <div className="flex-1 space-y-4">
-          {(role === "agent" ? AGENT_NAV_SECTIONS : ADMIN_NAV_SECTIONS).map((section) => {
+          {(isAdminRole(role) ? ADMIN_NAV_SECTIONS : AGENT_NAV_SECTIONS).map((section) => {
             const isSuperAdmin = role === "super_admin";
             const hasVisibleItems = section.items.some(item => isSuperAdmin || !item.roles || item.roles.includes(role));
             if (!hasVisibleItems) return null;
@@ -205,17 +236,10 @@ export default function Sidebar() {
                   {section.items.map((item) => {
                     if (item.roles && !isSuperAdmin && !item.roles.includes(role)) return null;
 
-                    if (item.comingSoon) {
-                      return (
-                        <ComingSoonItem key={item.name} item={item} collapsed={collapsed}
-                          tooltip={section.comingSoonTooltip} />
-                      );
-                    }
-
                     return (
                       <SidebarItem key={item.name} item={item} pathname={pathname} collapsed={collapsed}
                         plan={plan} role={role} unread={unread} followUps={followUps} escalated={escalated}
-                        onPaywall={setPaywallFeature} />
+                        submitted={submitted} onPaywall={setPaywallFeature} />
                     );
                   })}
                 </div>
@@ -228,7 +252,7 @@ export default function Sidebar() {
         <div className="pt-4 border-t border-slate-100">
           <SidebarItem item={SETTINGS_ITEM} pathname={pathname} collapsed={collapsed}
             plan={plan} role={role} unread={0} followUps={0} escalated={0}
-            onPaywall={setPaywallFeature} />
+            submitted={0} onPaywall={setPaywallFeature} />
         </div>
       </nav>
 
@@ -263,7 +287,7 @@ export default function Sidebar() {
 /*  SidebarItem — standard nav item                                    */
 /* ------------------------------------------------------------------ */
 
-function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps, escalated, onPaywall }: {
+function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps, escalated, submitted, onPaywall }: {
   item: NavItem;
   pathname: string;
   collapsed: boolean;
@@ -272,6 +296,7 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
   unread: number;
   followUps: number;
   escalated: number;
+  submitted: number;
   onPaywall: (f: Feature) => void;
 }) {
   const locked = item.feature ? !hasPermission(plan as any, item.feature) : false;
@@ -296,13 +321,21 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
           )}
         </>
       )}
-      {/* Badge — Messages: unread + follow-ups; Leasing: escalated */}
+      {/* Badge dispatch — Leasing: escalated; Brokerage: submitted (slice 7);
+          Messages and other badged items: unread + follow-ups. Each badge is
+          keyed on item.href so the dispatch is explicit; adding a fourth
+          badge type means another branch here, not a polymorphic refactor. */}
       {!collapsed && item.badge && item.href === "/leasing" && escalated > 0 && (
         <span className="min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full animate-pulse">
           {escalated > 9 ? "9+" : escalated}
         </span>
       )}
-      {!collapsed && item.badge && item.href !== "/leasing" && (unread > 0 || followUps > 0) && (
+      {!collapsed && item.badge && item.href === "/brokerage" && submitted > 0 && (
+        <span className="min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-blue-600 text-white text-[10px] font-bold rounded-full">
+          {submitted > 99 ? "99+" : submitted}
+        </span>
+      )}
+      {!collapsed && item.badge && item.href !== "/leasing" && item.href !== "/brokerage" && (unread > 0 || followUps > 0) && (
         <span className="flex items-center gap-1">
           {unread > 0 && (
             <span className="min-w-[18px] h-[18px] flex items-center justify-center px-1 bg-red-500 text-white text-[10px] font-bold rounded-full">
@@ -320,7 +353,10 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
       {collapsed && item.badge && item.href === "/leasing" && escalated > 0 && (
         <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full animate-pulse" />
       )}
-      {collapsed && item.badge && item.href !== "/leasing" && unread > 0 && (
+      {collapsed && item.badge && item.href === "/brokerage" && submitted > 0 && (
+        <span className="absolute top-1 right-1 w-2 h-2 bg-blue-600 rounded-full" />
+      )}
+      {collapsed && item.badge && item.href !== "/leasing" && item.href !== "/brokerage" && unread > 0 && (
         <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
       )}
       {/* Collapsed lock dot */}
@@ -350,35 +386,3 @@ function SidebarItem({ item, pathname, collapsed, plan, role, unread, followUps,
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  ComingSoonItem — grayed-out placeholder                            */
-/* ------------------------------------------------------------------ */
-
-function ComingSoonItem({ item, collapsed, tooltip }: {
-  item: NavItem;
-  collapsed: boolean;
-  tooltip?: string;
-}) {
-  return (
-    <div
-      className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-slate-400 cursor-default relative group ${
-        collapsed ? "justify-center" : ""
-      }`}
-      title={collapsed ? `${item.name} — Coming Soon` : tooltip}
-    >
-      <span className={`${collapsed ? "text-lg" : "text-base"} opacity-50`}>{item.icon}</span>
-      {!collapsed && (
-        <>
-          <span className="flex-1">{item.name}</span>
-          <span className="text-[10px] bg-slate-100 text-slate-400 rounded-full px-1.5 py-0.5 font-medium">Soon</span>
-        </>
-      )}
-      {/* Tooltip when collapsed */}
-      {collapsed && (
-        <span className="absolute left-full ml-2 px-2 py-1 bg-slate-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity z-50">
-          {item.name} — Coming Soon
-        </span>
-      )}
-    </div>
-  );
-}

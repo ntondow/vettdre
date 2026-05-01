@@ -8,20 +8,32 @@ import { hasPermission, getRequiredPlan } from "@/lib/feature-gate";
 import type { Feature } from "@/lib/feature-gate";
 import Paywall from "@/components/ui/paywall";
 
-/* ── Tab configs by role ───────────────────────────────────── */
-
+/* ── Slice 7 — Tab configs by role ──────────────────────────────
+ *
+ * Five-tab bottom bar holds the highest-frequency surfaces; everything
+ * else lives in the More sheet. Tab choice mirrors the desktop sidebar's
+ * top-of-WORK items so muscle memory carries between phone and laptop.
+ *
+ * Admin: Dashboard + the four daily-flow surfaces (Brokerage, Messages,
+ * Calendar, More). Brokerage in the tab bar is the gateway to the
+ * 17-item sub-nav (slice 8 owns that); badge wiring matches the desktop
+ * sidebar's submitted-count badge.
+ *
+ * Agent: kept Onboarding + My Deals in the tab bar — these were already
+ * the agent's daily flow and the agent feedback loop showed they're
+ * thumb-reach surfaces. */
 const ADMIN_TABS = [
   { name: "Dashboard", href: "/dashboard", icon: "🏠" },
-  { name: "Research", href: "/market-intel", icon: "🔍" },
+  { name: "Brokerage", href: "/brokerage", icon: "🏛️" },
   { name: "Messages", href: "/messages", icon: "📧" },
-  { name: "Brokerage", href: "/brokerage", icon: "🏢" },
+  { name: "Calendar", href: "/calendar", icon: "📅" },
   { name: "More", href: "#more", icon: "☰" },
 ];
 
 const AGENT_TABS = [
   { name: "Dashboard", href: "/dashboard", icon: "🏠" },
-  { name: "Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
   { name: "My Deals", href: "/brokerage/my-deals", icon: "💼" },
+  { name: "Client Onboarding", href: "/brokerage/client-onboarding", icon: "📋" },
   { name: "Messages", href: "/messages", icon: "📧" },
   { name: "More", href: "#more", icon: "☰" },
 ];
@@ -31,7 +43,6 @@ interface MoreItem {
   href: string;
   icon: string;
   feature?: Feature;
-  comingSoon?: boolean;
 }
 
 interface MoreSection {
@@ -39,68 +50,54 @@ interface MoreSection {
   items: MoreItem[];
 }
 
-/* ── More sheet sections by role ───────────────────────────── */
+/* ── Slice 7 — More sheet sections by role ──────────────────────
+ *
+ * Mirrors the desktop sidebar sections (Wireframe A / B). Items already
+ * pinned in the tab bar are excluded from the More sheet — duplication
+ * was a dead-spot in the original mobile-nav (e.g. Messages was both a
+ * tab AND a More item). The smoke contract enforces that every desktop
+ * item is reachable on mobile via either the tab bar OR the More sheet. */
 
 const ADMIN_MORE_SECTIONS: MoreSection[] = [
   {
-    label: "Screening",
-    items: [
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
-    ],
-  },
-  {
-    label: "Research",
-    items: [
-      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
-    ],
-  },
-  {
-    label: "Acquisitions",
-    items: [
-      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
-    ],
-  },
-  {
-    label: "Closing",
+    label: "My Work",
     items: [
       { name: "Contacts", href: "/contacts", icon: "👥" },
-      { name: "Calendar", href: "/calendar", icon: "📅" },
     ],
   },
   {
-    label: "Leasing",
+    label: "Listings & Deals",
     items: [
-      { name: "Leasing AI", href: "/leasing", icon: "🤖" },
+      { name: "Properties", href: "/properties", icon: "🏢" },
+      { name: "Underwrite", href: "/deals", icon: "🧮", feature: "nav_deal_modeler" },
+      { name: "Leasing", href: "/leasing", icon: "🤖" },
     ],
   },
   {
-    label: "Property Management",
+    label: "Intel",
     items: [
-      { name: "Property Mgmt", href: "#", icon: "🏠", comingSoon: true },
+      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
+      { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
     ],
   },
 ];
 
 const AGENT_MORE_SECTIONS: MoreSection[] = [
   {
-    label: "Screening",
+    label: "My Work",
     items: [
-      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
-    ],
-  },
-  {
-    label: "Communication",
-    items: [
-      { name: "Contacts", href: "/contacts", icon: "👥" },
       { name: "Calendar", href: "/calendar", icon: "📅" },
+      { name: "Contacts", href: "/contacts", icon: "👥" },
     ],
   },
   {
     label: "Research",
     items: [
-      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
-      { name: "Market Intel", href: "/market-intel", icon: "🔍" },
+      { name: "Market Intel", href: "/market-intel", icon: "🔍", feature: "nav_market_intel" },
       { name: "Terminal", href: "/terminal", icon: "📡", feature: "nav_terminal" },
+      { name: "Prospecting", href: "/prospecting", icon: "🎯" },
+      { name: "Screening", href: "/screening", icon: "🛡️", feature: "screening_view" },
     ],
   },
 ];
@@ -147,7 +144,6 @@ export default function MobileNav() {
   };
 
   const isMoreActive = [...allMoreItems, SETTINGS_ITEM].some(item => {
-    if (item.comingSoon) return false;
     const locked = item.feature ? !hasPermission(plan, item.feature) : false;
     return !locked && pathname.startsWith(item.href);
   });
@@ -205,15 +201,6 @@ export default function MobileNav() {
                   <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider px-2 mb-1.5">{section.label}</p>
                   <div className="grid grid-cols-4 gap-1">
                     {section.items.map((item) => {
-                      if (item.comingSoon) {
-                        return (
-                          <div key={item.name} className="flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium text-slate-400 relative">
-                            <span className="text-2xl opacity-50">{item.icon}</span>
-                            <span>{item.name}</span>
-                            <span className="text-[9px] bg-slate-100 text-slate-400 rounded-full px-1.5 py-0.5 font-medium">Soon</span>
-                          </div>
-                        );
-                      }
                       const locked = item.feature ? !hasPermission(plan, item.feature) : false;
                       const isActive = !locked && pathname.startsWith(item.href);
                       const cls = `flex flex-col items-center gap-1 py-3 rounded-xl text-[11px] font-medium transition-colors relative ${
