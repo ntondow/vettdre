@@ -30,3 +30,32 @@ next-env.d.ts
 /src/generated/prisma
 design-system/
 scripts/create-secrets.sh
+
+# Sibling-project working dirs that landed under this repo's tree but are
+# not part of the Cloud Build source. Confirmed safe to exclude — no
+# reference from cloudbuild.yaml or Dockerfile. Their bulk (~970 MiB
+# combined) is the dominant cause of pre-fix upload bloat.
+mobile/
+NEW LISTINGS PROJECT agents/
+_restore/
+terminal-handoff/
+
+# Finder-dupe files (e.g. "auth-context 100.ts", "SLICES 1042.md").
+# The *.md rule above already catches markdown dupes; these patterns
+# catch the remaining ~14.8K .ts/.tsx + .csv/.json variants.
+* [0-9]*.ts
+* [0-9]*.tsx
+* [0-9]*.csv
+* [0-9]*.json
+
+# One-off backup artifacts (each prisma data-fix script writes one)
+migration-backup-*.json
+
+# Local handoff screenshots (audit artifacts, not needed for build)
+docs/handoff/screenshots/
+
+# Test/coverage artifacts
+coverage/
+playwright-report/
+test-results/
+*.log
