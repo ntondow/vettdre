@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { FileText, Download, Eye } from "lucide-react";
 
 interface Props {
@@ -9,18 +9,87 @@ interface Props {
   onViewed?: () => void;
 }
 
+interface RenderedPage {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 const VIEW_DELAY_MS = 3000; // 3 seconds before considered "viewed"
 
+// Render legacy (non-template) PDF docs via pdfjs (#9). Replaces the
+// previous `<iframe>`-based viewer that was unreliable on iOS Safari —
+// the iframe would silently fail to display PDF content but still fire
+// onLoad, so the IntersectionObserver-based "viewed" tracker would mark
+// the doc as reviewed even when nothing was actually visible. Now we
+// render PDF pages to images via the same self-hosted pdfjs path that
+// pdf-field-viewer.tsx uses (proven to work on iOS for templates).
 export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
+  const [pages, setPages] = useState<RenderedPage[]>([]);
   const [viewed, setViewed] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Track viewing — mark as viewed after the PDF has been visible for VIEW_DELAY_MS
+  // Render PDF pages to images via pdfjs. Self-hosted worker + cmaps
+  // (slice 20-fixes-A); no external CDN dependency.
+  const renderPdf = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        cMapUrl: "/pdfjs/cmaps/",
+        cMapPacked: true,
+      });
+
+      const pdf = await loadingTask.promise;
+      const rendered: RenderedPage[] = [];
+      const containerWidth = containerRef.current?.clientWidth ?? 612;
+
+      for (let i = 0; i < pdf.numPages; i++) {
+        const page = await pdf.getPage(i + 1);
+        const defaultViewport = page.getViewport({ scale: 1 });
+        const scale = (containerWidth / defaultViewport.width) * 2;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        rendered.push({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: viewport.width,
+          height: viewport.height,
+        });
+      }
+
+      setPages(rendered);
+    } catch (err) {
+      console.error("[PdfViewer] Failed to render PDF:", err);
+      setError("Failed to load PDF preview");
+    } finally {
+      setLoading(false);
+    }
+  }, [pdfUrl]);
+
   useEffect(() => {
-    if (viewed || !pdfUrl) return;
+    renderPdf();
+  }, [renderPdf]);
+
+  // Track viewing — mark as viewed after the rendered pages are visible
+  // for VIEW_DELAY_MS. Anchored to the rendered images container, not the
+  // iframe wrapper, so the badge only fires when actual content is on screen.
+  useEffect(() => {
+    if (viewed || loading || error || !pages.length) return;
 
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -29,8 +98,8 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
             setViewed(true);
             onViewed?.();
           }, VIEW_DELAY_MS);
-        } else {
-          if (timerRef.current) clearTimeout(timerRef.current);
+        } else if (timerRef.current) {
+          clearTimeout(timerRef.current);
         }
       },
       { threshold: 0.5 },
@@ -43,10 +112,10 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
       if (timerRef.current) clearTimeout(timerRef.current);
       if (el) observer.unobserve(el);
     };
-  }, [pdfUrl, viewed, onViewed]);
+  }, [viewed, loading, error, pages.length, onViewed]);
 
   return (
-    <div ref={containerRef} className="space-y-3">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -72,10 +141,13 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
         </div>
       </div>
 
-      {/* PDF embed */}
-      <div className="relative rounded-lg border border-slate-200 shadow-sm overflow-hidden bg-slate-100">
+      {/* PDF render */}
+      <div
+        ref={containerRef}
+        className="relative rounded-lg border border-slate-200 shadow-sm overflow-hidden bg-white"
+      >
         {loading && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-slate-50 z-10">
+          <div className="flex items-center justify-center py-24 sm:py-32">
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
               <p className="text-sm text-slate-500">Loading document...</p>
@@ -97,23 +169,23 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
             </a>
           </div>
         )}
-        {!error && (
-          <iframe
-            src={`${pdfUrl}#toolbar=0&navpanes=0`}
-            title={title}
-            className="w-full border-0"
-            style={{ height: "650px" }}
-            onLoad={() => setLoading(false)}
-            onError={() => {
-              setLoading(false);
-              setError(true);
-            }}
-          />
+        {!loading && !error && pages.length > 0 && (
+          <div>
+            {pages.map((page, pageIndex) => (
+              <img
+                key={pageIndex}
+                src={page.dataUrl}
+                alt={`Page ${pageIndex + 1}`}
+                className="w-full block"
+                draggable={false}
+              />
+            ))}
+          </div>
         )}
       </div>
 
       {/* Viewing hint */}
-      {!viewed && !error && (
+      {!viewed && !error && !loading && (
         <p className="text-center text-xs text-slate-400">
           Please review this document before signing
         </p>

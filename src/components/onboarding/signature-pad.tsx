@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from "react";
 import SignaturePadLib from "signature_pad";
-import { Eraser, Check, Type, PenTool } from "lucide-react";
+import { Eraser, Type, PenTool } from "lucide-react";
 
 interface Props {
   onSignature: (dataUrl: string) => void;
@@ -14,6 +14,8 @@ interface Props {
 }
 
 const CURSIVE_FONT = "'Segoe Script', 'Bradley Hand', 'Brush Script MT', cursive";
+const DRAW_DEBOUNCE_MS = 200;
+const TYPE_DEBOUNCE_MS = 500;
 
 export default function SignaturePad({
   onSignature,
@@ -29,6 +31,35 @@ export default function SignaturePad({
   const [isTyping, setIsTyping] = useState(false);
   const [typedName, setTypedName] = useState("");
   const [hasDrawn, setHasDrawn] = useState(false);
+  const [captured, setCaptured] = useState(false);
+
+  // Auto-emit (#8) — onSignature can change identity between parent renders,
+  // but the init useEffect only re-runs on [isTyping, height, disabled] so we
+  // can't depend on it directly without thrashing the canvas. Stash the
+  // latest in a ref so the endStroke listener always emits the current one.
+  const onSignatureRef = useRef(onSignature);
+  useEffect(() => { onSignatureRef.current = onSignature; }, [onSignature]);
+
+  // Render typed name → offscreen canvas → dataURL. Used by both the typed
+  // auto-emit effect and the blur handler (immediate emit).
+  const renderTypedSignature = useCallback((name: string): string | null => {
+    const trimmed = name.trim();
+    if (!trimmed) return null;
+    const container = containerRef.current;
+    const cw = container?.clientWidth ?? 400;
+    const offscreen = document.createElement("canvas");
+    offscreen.width = Math.max(cw, 300);
+    offscreen.height = 100;
+    const ctx = offscreen.getContext("2d");
+    if (!ctx) return null;
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, offscreen.width, 100);
+    ctx.font = `32px ${CURSIVE_FONT}`;
+    ctx.fillStyle = "rgb(20, 20, 60)";
+    ctx.textBaseline = "middle";
+    ctx.fillText(trimmed, 16, 50);
+    return offscreen.toDataURL("image/png");
+  }, []);
 
   // Initialize signature pad
   useEffect(() => {
@@ -44,8 +75,21 @@ export default function SignaturePad({
 
     if (disabled) pad.off();
 
+    // Auto-emit on endStroke (#8) — debounced so the emit fires once after
+    // the user stops drawing, not per-stroke. This eliminates the old
+    // "Confirm Signature → Sign & Continue" two-button flow that confused
+    // mobile users. The parent's "Sign & Continue" is now the single
+    // primary CTA; this pad just keeps the parent's fieldValue in sync.
+    let emitTimer: ReturnType<typeof setTimeout> | null = null;
     pad.addEventListener("endStroke", () => {
-      setHasDrawn(!pad.isEmpty());
+      const empty = pad.isEmpty();
+      setHasDrawn(!empty);
+      if (emitTimer) clearTimeout(emitTimer);
+      if (empty) return;
+      emitTimer = setTimeout(() => {
+        onSignatureRef.current(pad.toDataURL("image/png"));
+        setCaptured(true);
+      }, DRAW_DEBOUNCE_MS);
     });
 
     padRef.current = pad;
@@ -79,10 +123,35 @@ export default function SignaturePad({
 
     return () => {
       pad.off();
+      if (emitTimer) clearTimeout(emitTimer);
       window.removeEventListener("resize", resize);
       padRef.current = null;
     };
   }, [isTyping, height, disabled]);
+
+  // Auto-emit on typed name change (#8) — debounced so we don't spam the
+  // parent on every keystroke. Blur emits immediately for "I'm done" feel.
+  useEffect(() => {
+    if (!isTyping || disabled) return;
+    if (!typedName.trim()) return;
+    const t = setTimeout(() => {
+      const dataUrl = renderTypedSignature(typedName);
+      if (dataUrl) {
+        onSignatureRef.current(dataUrl);
+        setCaptured(true);
+      }
+    }, TYPE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [typedName, isTyping, disabled, renderTypedSignature]);
+
+  const handleTypedBlur = useCallback(() => {
+    if (disabled || !typedName.trim()) return;
+    const dataUrl = renderTypedSignature(typedName);
+    if (dataUrl) {
+      onSignatureRef.current(dataUrl);
+      setCaptured(true);
+    }
+  }, [typedName, disabled, renderTypedSignature]);
 
   // Clear handler
   const handleClear = useCallback(() => {
@@ -92,38 +161,11 @@ export default function SignaturePad({
       padRef.current?.clear();
       setHasDrawn(false);
     }
+    setCaptured(false);
     onClear();
   }, [isTyping, onClear]);
 
-  // Confirm handler
-  const handleConfirm = useCallback(() => {
-    if (disabled) return;
-
-    if (isTyping) {
-      if (!typedName.trim()) return;
-      // Render typed name to a canvas to produce a base64 PNG
-      const container = containerRef.current;
-      const cw = container?.clientWidth ?? 400;
-      const offscreen = document.createElement("canvas");
-      offscreen.width = Math.max(cw, 300);
-      offscreen.height = 100;
-      const ctx = offscreen.getContext("2d");
-      if (ctx) {
-        ctx.fillStyle = "white";
-        ctx.fillRect(0, 0, offscreen.width, 100);
-        ctx.font = `32px ${CURSIVE_FONT}`;
-        ctx.fillStyle = "rgb(20, 20, 60)";
-        ctx.textBaseline = "middle";
-        ctx.fillText(typedName.trim(), 16, 50);
-      }
-      onSignature(offscreen.toDataURL("image/png"));
-    } else {
-      if (!padRef.current || padRef.current.isEmpty()) return;
-      onSignature(padRef.current.toDataURL("image/png"));
-    }
-  }, [isTyping, typedName, onSignature, disabled]);
-
-  const canConfirm = isTyping ? typedName.trim().length > 0 : hasDrawn;
+  const canDraw = isTyping ? typedName.trim().length > 0 : hasDrawn;
 
   return (
     <div className="space-y-2.5 sm:space-y-3">
@@ -185,6 +227,7 @@ export default function SignaturePad({
               type="text"
               value={typedName}
               onChange={(e) => setTypedName(e.target.value)}
+              onBlur={handleTypedBlur}
               placeholder="Type your full name"
               disabled={disabled}
               autoComplete="name"
@@ -213,16 +256,23 @@ export default function SignaturePad({
         </div>
       )}
 
-      {/* Confirm button */}
-      <button
-        type="button"
-        onClick={handleConfirm}
-        disabled={disabled || !canConfirm}
-        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 py-3 sm:py-2.5 text-sm font-medium text-white transition-colors hover:bg-emerald-700 active:bg-emerald-800 disabled:bg-slate-300 disabled:cursor-not-allowed"
+      {/* Status — replaces the old "Confirm Signature" button (#8). The pad
+          auto-emits when the user stops drawing or finishes typing; the
+          parent's "Sign & Continue" is now the single primary CTA.
+          aria-live announces capture for screen readers. */}
+      <div
+        role="status"
+        aria-live="polite"
+        className="text-center text-xs"
       >
-        <Check className="w-4 h-4" />
-        {canConfirm ? "Confirm Signature" : isTyping ? "Type your name above" : "Draw your signature above"}
-      </button>
+        {captured && canDraw ? (
+          <span className="text-emerald-600">Signature captured</span>
+        ) : (
+          <span className="text-slate-400">
+            {isTyping ? "Type your name above" : "Draw your signature above"}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
