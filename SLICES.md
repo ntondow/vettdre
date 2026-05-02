@@ -776,7 +776,7 @@ Phase 0 status as of 2026-04-29:
 - **Outcome:** _filled in at gate-run time_
 
 ### 22-as-org-vault — Honor `?as_org=` override in Document Vault list and detail pages
-- **Status:** `awaiting_review` (PR #44)
+- **Status:** `done` (PR #44 merged 2026-05-02)
 - **Goal:** super_admin viewing the Document Vault under `?as_org=<otherOrgId>` should see the target tenant's templates, not their home-org templates. The orange override banner already renders correctly on `/brokerage/client-onboarding/vault` and `/brokerage/client-onboarding/vault/[id]`, but the underlying queries return home-org data — blocking cross-tenant verification of vault work.
 - **Closes bug:** Phase 4 cleanup; extends B-009 / B-022 family. Specifically the gap noted in slice 0c3 (line 173): "vault list page itself doesn't support override (tied to org-scoped templates), so detail-page override is moot until the list page changes. Filed as a future slice." This is that future slice.
 - **Why:** Vault was built later as client components and missed both halves of the codebase-standard override pattern: (a) client component reading `useSearchParams()` and threading `overrideOpts`, (b) server actions accepting `options: { overrideAsOrg?: string } = {}` and forwarding to `getCurrentOrgContext`. The `readAsOrgFromReferer()` fallback in `auth-context.ts:30-40` exists as a safety net but is not load-bearing — every other client→server-action surface in this codebase explicitly threads the option. Vault should match.
@@ -822,6 +822,52 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** typecheck holds at clean-tree 285; full vitest suite passes; build clean; lint changed-files clean; new smoke test green; override-scoping.test.ts still green with vault-actions.ts in scope.
 - **Depends on:** none.
 - **Requires approval:** Pre-approved by Nathan (precedent check confirmed; data-layer-adjacent but uses existing `auth-context.ts` API only).
+- **Outcome:** Shipped via PR #44 (merged 2026-05-02, build 9c9eb72d). Prod verification via Chrome MCP 2026-05-02: super_admin viewing Vault under `?as_org=<otherOrgId>` now sees target tenant's templates on both list and detail surfaces; `?as_org=` preserved on intra-vault navigation; orange override banner displays correctly throughout. Non-super_admin `?as_org` requests silently ignored as designed (auth-context.ts unchanged).
+
+### gcloudignore — Augment `.gcloudignore` to cut Cloud Build upload size
+- **Status:** `in_progress`
+- **Goal:** Reduce `gcloud builds submit` source upload from ~664 MiB to ~30 MiB by augmenting the existing `.gcloudignore` to filter out sibling-project working directories and Finder-dupe `.ts/.tsx` files. Saves 1–2 minutes per deploy; compounds across all future deploys.
+- **Why:** Existing `.gcloudignore` (created 2026-03-30) covers the obvious node_modules/.next/.git basics and `*.md` (which catches Finder-dupe markdown), but misses two ~hundreds-of-MB sibling-project dirs (`mobile/`, `NEW LISTINGS PROJECT agents/`) and the `.ts`/`.tsx` Finder dupes (~14,800 files) that have accumulated under the working tree.
+- **Approach:** Pure additive. Don't restructure existing patterns. Don't touch `cloudbuild.yaml` or `.dockerignore` (out of scope). Don't exclude `data/zillow/*.csv` — Dockerfile:66 ships `data/` into runner stage, runtime dependency unverified, kept in upload as a safety default.
+
+## Plan of record
+
+**Files to be created/modified:**
+- `.gcloudignore` (modify — append: 4 sibling/working-tree dirs confirmed safe by Nathan + 4 Finder-dupe extension patterns + defensive test/log/screenshot patterns)
+- `SLICES.md` (modify — flip slice 22 status to `done` with verified-in-prod outcome line; add this slice entry with plan-of-record)
+- `tests/smoke/gcloudignore.test.ts` (create — 2 contracts as specified below)
+
+**Smoke contract regex pins (literal regex strings):**
+1. **C1 (Positive):** `.gcloudignore` exists and pins the critical exclusions.
+   - `/^node_modules\/$/m`, `/^\.next\/$/m`, `/^\.git\/$/m`
+   - `/^\* \[0-9\]\*\.tsx?$/m` (Finder-dupe pattern for `.ts/.tsx`)
+   - `/^mobile\/$/m`, `/^NEW LISTINGS PROJECT agents\/$/m` (sibling-project exclusions)
+2. **C2 (Positive):** SLICES.md slice 22 entry shows shipped state.
+   - Slice 22 status line matches `/Status:.*done.*PR #44/`
+   - Slice 22 outcome line matches `/PR #44.*build 9c9eb72d.*verified/`
+
+**Estimated line count:** ~50 net (15-line `.gcloudignore` append + ~35-line smoke test + slice-entry SLICES.md edits already counted under slice 22 close-out).
+
+**Stop conditions internalized:**
+- Don't touch `cloudbuild.yaml` or `.dockerignore`.
+- Don't exclude `data/zillow/*.csv` — Dockerfile:66 runtime dependency.
+- Don't exclude `tests/`, `scripts/`, `migrations/` — Nathan confirmed `migrations/registry.json` is needed at runtime; `tests/`/`scripts/` are lower-impact and the Finder-dupe pattern reclaims most of their bloat.
+- If line count exceeds 100, stop.
+
+**Open questions for Nathan:** none after pre-approval round.
+
+**Discovery findings:**
+- Existing `.gcloudignore` (339 bytes) covers basics; gap is in working-tree-only dirs and `.ts`/`.tsx` Finder dupes.
+- `mobile/` (584M), `NEW LISTINGS PROJECT agents/` (385M) — sibling projects under the working tree, no reference from `cloudbuild.yaml` or `Dockerfile` (Nathan confirmed safe to exclude).
+- `_restore/` (212K) already in `.gitignore:51` but not `.gcloudignore`.
+- `terminal-handoff/` (124K) — local handoff notes, not needed for build.
+- 14,846 `.ts` Finder dupes + 36 `.tsx` Finder dupes. The `*.md` rule already catches 3,434 markdown dupes.
+- Dockerfile uses `COPY . .` (line 18); `gcloud builds submit` filters via `.gcloudignore` before unpacking the build context, so aggressive `.gcloudignore` filtering is the correct lever.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** smoke tests pass; full vitest suite still green; `.gcloudignore` syntactically valid (no trailing pattern errors); next deploy upload size drops materially (Nathan to verify post-merge — target ≤30 MiB, actual to be measured).
+- **Depends on:** Slice 22-as-org-vault (this slice closes that out in the same PR).
+- **Requires approval:** Pre-approved by Nathan (3 adjustments incorporated: confirmed-safe dir list, slice 22 outcome wording, build ID).
 - **Outcome:** _filled in at gate-run time_
 
 ### 3.Y — Structural fix for override-context propagation
