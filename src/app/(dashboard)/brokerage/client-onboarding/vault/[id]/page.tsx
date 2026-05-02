@@ -31,6 +31,12 @@ interface TemplateData {
   isDefault: boolean;
 }
 
+interface RenderedPage {
+  dataUrl: string;
+  width: number;
+  height: number;
+}
+
 const FIELD_TYPE_ICONS: Record<TemplateFieldType, React.ReactNode> = {
   text: <Type className="w-3 h-3" />,
   date: <Calendar className="w-3 h-3" />,
@@ -75,6 +81,17 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
   const [addingFieldType, setAddingFieldType] = useState<TemplateFieldType | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
 
+  // Slice 19-B1: pdfjs render path replaces the iframe (iOS Safari black
+  // hole — same fix as slice 20-fixes-C for the public viewer). Multi-page
+  // editor support is B2; this slice keeps the page-0 filter on field
+  // overlays and the fixed-size canvas. The pdfjs migration alone unblocks
+  // iPad/iPhone editing for single-page templates, which covers the bulk
+  // of custom uploads in production today.
+  const [pages, setPages] = useState<RenderedPage[]>([]);
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0 });
+
   useEffect(() => {
     async function load() {
       const result = await getDocumentTemplates();
@@ -91,6 +108,68 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
     }
     load();
   }, [id]);
+
+  // Render PDF pages via pdfjs (slice 19-B1). Mirrors pdf-field-viewer.tsx
+  // exactly so the public viewer and the editor share one rendering pattern.
+  // Worker + cmaps are self-hosted under /public/pdfjs/ (slice 20-fixes-A);
+  // no CDN dependency.
+  const renderPdf = useCallback(async () => {
+    if (!template?.templatePdfUrl) return;
+    setPdfLoading(true);
+    setPdfError(null);
+
+    try {
+      const pdfjsLib = await import("pdfjs-dist");
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+
+      const loadingTask = pdfjsLib.getDocument({
+        url: template.templatePdfUrl,
+        cMapUrl: "/pdfjs/cmaps/",
+        cMapPacked: true,
+      });
+
+      const pdf = await loadingTask.promise;
+      const rendered: RenderedPage[] = [];
+      // Editor canvas is fixed at 612px wide (B2 will make this dynamic per
+      // page). Render at 2x for retina sharpness.
+      const containerWidth = 612;
+
+      setRenderProgress({ current: 0, total: pdf.numPages });
+
+      for (let i = 0; i < pdf.numPages; i++) {
+        const page = await pdf.getPage(i + 1);
+        const defaultViewport = page.getViewport({ scale: 1 });
+        const scale = (containerWidth / defaultViewport.width) * 2;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement("canvas");
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext("2d")!;
+
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        rendered.push({
+          dataUrl: canvas.toDataURL("image/png"),
+          width: viewport.width,
+          height: viewport.height,
+        });
+
+        setRenderProgress({ current: i + 1, total: pdf.numPages });
+      }
+
+      setPages(rendered);
+    } catch (err) {
+      console.error("[VaultEditor] Failed to render PDF:", err);
+      setPdfError("Failed to load PDF preview");
+    } finally {
+      setPdfLoading(false);
+    }
+  }, [template?.templatePdfUrl]);
+
+  useEffect(() => {
+    if (template?.templatePdfUrl) renderPdf();
+  }, [template?.templatePdfUrl, renderPdf]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
@@ -208,17 +287,47 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
         <div className="flex-1 overflow-auto p-6 bg-slate-100">
           <div
             ref={pdfContainerRef}
-            className={`relative mx-auto bg-white shadow-lg rounded-sm ${addingFieldType ? "cursor-crosshair" : ""}`}
+            className={`relative mx-auto bg-white shadow-lg rounded-sm overflow-hidden ${addingFieldType ? "cursor-crosshair" : ""}`}
             style={{ width: "612px", minHeight: "792px" }}
             onClick={handlePdfClick}
           >
-            {/* PDF embed */}
-            <iframe
-              src={`${template.templatePdfUrl}#toolbar=0&navpanes=0`}
-              className="w-full border-0 pointer-events-none"
-              style={{ height: "792px" }}
-              title="Template PDF"
-            />
+            {/* PDF render via pdfjs (slice 19-B1). Replaces the iframe that
+                broke silently on iOS Safari. Multi-page editor support is
+                B2; today the field-overlay filter below still pins to
+                page 0, so only the first rendered page is editable. */}
+            {pdfLoading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-slate-50">
+                <div className="text-center">
+                  <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">
+                    {renderProgress.total > 0
+                      ? `Loading page ${renderProgress.current} of ${renderProgress.total}...`
+                      : "Loading template..."}
+                  </p>
+                </div>
+              </div>
+            )}
+            {pdfError && !pdfLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-50">
+                <AlertTriangle className="w-8 h-8 text-amber-400" />
+                <p className="text-sm text-slate-600">{pdfError}</p>
+                <button
+                  type="button"
+                  onClick={() => renderPdf()}
+                  className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {!pdfLoading && !pdfError && pages.length > 0 && (
+              <img
+                src={pages[0].dataUrl}
+                alt="Template page 1"
+                className="w-full block pointer-events-none"
+                draggable={false}
+              />
+            )}
             {/* Field overlays */}
             {fields.filter((f) => f.page === 0).map((field) => (
               <div
