@@ -19,6 +19,7 @@ import {
   Trophy,
   UserPlus,
   Wallet,
+  Layers,
 } from "lucide-react";
 import { useUserPlan } from "@/components/providers/user-plan-provider";
 import { getCurrentBrokerageRole } from "@/lib/bms-auth";
@@ -87,6 +88,17 @@ const ADMIN_NAV: NavGroup[] = [
     items: [
       { href: "/brokerage/reports", icon: FileBarChart, label: "Reports" },
       { href: "/brokerage/leaderboard", icon: Trophy, label: "Leaderboard" },
+    ],
+  },
+  // Slice 19-B1: surface the existing Document Vault — it was built but
+  // unreachable from any nav surface. Templates is a power-user surface
+  // (monthly-at-most), so it lives in the brokerage subnav, not the global
+  // sidebar. New "Documents" group keeps IA honest — templates aren't
+  // agents OR listings, and folding under Admin would over-elevate them.
+  {
+    group: "Documents",
+    items: [
+      { href: "/brokerage/client-onboarding/vault", icon: Layers, label: "Templates" },
     ],
   },
   {

@@ -583,13 +583,15 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No.
 
 ### 19 — Document template management UI
-- **Status:** `pending`
+- **Status:** `in_progress` (Phase 1 audit complete 2026-05-01; B1 in flight)
 - **Goal:** Settings → Brokerage → Templates tab. Upload custom PDFs + map fields.
 - **Closes bug:** U-076, U-084
 - **Files:** new — settings templates page + template upload action.
 - **Success criteria:** Brokerage admin can upload + map a custom doc. Visible in onboarding form.
 - **Depends on:** Phase 2
 - **Requires approval:** YES — biggest new feature, scope check.
+- **Phase 1 audit outcome (2026-05-01):** Document Vault is **already built but invisible**. List page (`/brokerage/client-onboarding/vault/page.tsx`, 236 lines, upload + delete) and full visual editor (`/vault/[id]/page.tsx`, 341 lines, click-to-place fields) exist with all 5 server actions wired and the schema designed for `category: "standard" | "custom"`. The /new picker already consumes custom templates. Scope re-frames from "build template UI" to "ship + harden the existing UI." Critical bugs in the existing editor: (1) iframe-based PDF preview has the same iOS Safari black hole we fixed in slice 20-fixes-C; (2) page-1-only field filter prevents multi-page editing; (3) no field move/resize after placement; (4) no nav links — discoverable only by direct URL. Approved scope: Option B with 2-PR split. Option C (URL move to settings) deferred until usage patterns emerge.
+- **Fix order:** B1 (visibility + iOS pdfjs migration) → B2 (multi-page + drag/resize).
 
 ### 20 — Signing flow end-to-end audit + fixes
 - **Status:** `done` (audit complete + all 4 fix slices merged/awaiting_review; closeout 2026-05-01)
@@ -669,6 +671,41 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 20-fixes-C (merged, PR #36).
 - **Requires approval:** No (proposal pre-approved by Nathan: drop #23, silent-ignore for #17, apply #20+#21 to both viewers, slice 20 closing summary in PR body).
 - **Outcome:** Smoke 13/13 green. Full test 279/279. Build clean. Typecheck dirty-tree 287 = clean-tree 285 (anchor held exactly; the +2 dirty-tree delta is the same Finder-dupe pollution we've seen since slice 20-fixes-A, not from changed files — verified zero new tsc errors in the 5 changed files). 0 new lint errors on changed files (4 pre-existing warnings: 3 `<img>` for canvas-rendered PDFs which is intentional, 1 useCallback dep warning that predates this slice). Total slice diff ~70 code + ~270 tests = ~340 lines, slightly over the 320 mid-flight threshold but the smoke test file is most of it (13 contracts × ~20 lines each); held as one PR per the precommitted single-PR-for-slice-20-closeout call.
+
+### 19-B1 — Vault visibility + iOS pdfjs migration
+- **Status:** `awaiting_review`
+- **Goal:** Surface the existing Document Vault into the brokerage subnav AND replace its iframe-based PDF preview with the same self-hosted pdfjs render path the public viewers use. After this ships, brokerage admins can find the vault and the editor works on iPad/iPhone for single-page templates. Multi-page editing + drag/resize is 19-B2.
+- **Closes bug:** 4 of the slice 19 audit's "vault visibility + iOS bug" cluster.
+- **Defects fixed:**
+  - **Visibility (3 surfaces wired):** New `Documents` group in `brokerage/layout.tsx` ADMIN_NAV with a `Templates` item linking to `/brokerage/client-onboarding/vault`. Inline "Manage templates" affordance on `/new` picker next to the selected-count span — admins discover the vault while picking templates.
+  - **canAccessPage gate added.** `bms-permissions.ts` PAGE_PERMISSION_MAP is whitelist-based (returns false for unmapped paths); without the explicit add the new subnav entry would silently disappear. Vault gated on a new `manage_templates` permission scoped to admin-tier (`brokerage_admin`, `broker`, `manager`) — matches the pattern of `view_agents`, `view_dashboard`, `transactions_manage`. Agents can still see templates via the /new picker (read-only consumption) but can't manage them.
+  - **iOS pdfjs migration in editor.** `vault/[id]/page.tsx` replaces the iframe (lines 216-221 pre-fix) with the same `pdfjs-dist` render path used by `pdf-field-viewer.tsx` (slice 20-fixes-A) and `pdf-viewer.tsx` (slice 20-fixes-C). Self-hosted worker + cmaps (no jsdelivr CDN). Per-page render progress + Retry button on error (slice 20-fixes-D parity).
+- **Defect intentionally deferred to B2:** Multi-page editing — `vault/[id]/page.tsx:223` still filters `fields.filter((f) => f.page === 0)`, so even though pdfjs renders all pages, only the first page is editable. Hardcoded 612×792 canvas size is also B2 (will become per-page dynamic via pdfjs viewport). Single-page templates work end-to-end on iOS post-B1; that's the customer value here.
+- **Pre-existing bugs surfaced as Phase 5 stubs:**
+  - `19-fix-followup-doctype-enum` — `actions.ts:353` hardcodes `docType: "tenant_rep_agreement"` for ALL custom templates because `OnboardingDocTypeValue` is a 3-value enum.
+  - `19-fix-followup-vault-rbac` — vault-actions server actions (createDocumentTemplate, deleteDocumentTemplate, updateTemplateFields) check `orgId` but NOT role. Direct-URL access to `/vault` bypasses the subnav RBAC gate. Pre-existing; not introduced by B1.
+  - `19-fix-followup-ia-cleanup` — revisit `/vault` URL location after B1 + B2 ship and we know how Gulino actually uses it.
+  - `19-fix-followup-doc-references` — CLAUDE.md and SLICES.md don't yet reference the existing vault implementation. Doc-cleanup pass.
+- **Files:** `src/lib/bms-types.ts` (+1 permission), `src/lib/bms-permissions.ts` (+1 PAGE_PERMISSION_MAP entry), `src/app/(dashboard)/brokerage/layout.tsx` (Documents group + Layers icon), `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (iframe → pdfjs render path), `src/app/(dashboard)/brokerage/client-onboarding/new/page.tsx` (inline Manage templates link), `tests/smoke/vault-visibility-ios.test.ts` (new — 7 contracts), `SLICES.md` (this entry + 19-B2 stub + 4 Phase 5 stubs).
+- **Success criteria:** typecheck holds at clean-tree 285 (= dirty-tree 287); lint changed-files only — zero new errors; build passes; full vitest suite passes; 7 smoke contracts green.
+- **Depends on:** slice 19 Phase 1 audit (this slice).
+- **Requires approval:** No (proposal pre-approved by Nathan with all 3 questions answered: new Documents group, brokerage subnav only — not global rail or mobile More sheet, inline link placement on /new picker).
+- **Outcome:** _filled in at gate-run time_
+
+### 19-B2 — Vault editor multi-page support + drag/resize (pending)
+- **Status:** `pending` (depends on 19-B1)
+- **Goal:** Make the vault editor production-grade: multi-page navigation in the editor, field drag-to-move post-placement, resize handles, touch-event compatibility for iPad. After B2, John can upload a 5-page custom landlord agreement and place fields on every page; misplacement is recoverable via drag instead of delete + re-place.
+- **Approach (agent proposes details when slice begins):**
+  - Page tabs/buttons in editor; `currentPage` state; field overlay filter becomes `f.page === currentPage` instead of `=== 0`.
+  - Per-page canvas dimensions from pdfjs viewport (replace hardcoded 612×792).
+  - Drag-to-move: pointerdown + pointermove + pointerup on field overlay; clamp x/y to [0, 100−width] / [0, 100−height].
+  - Resize handles: 8 corner/edge handles; same drag pattern but updates width/height.
+  - Touch-event compatibility tested on iPad.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, possibly extract a `<PdfFieldEditor>` shared component if the file gets too long; `tests/smoke/vault-editor-b2.test.ts` (new).
+- **Success criteria:** typecheck holds; lint changed-files only — zero new errors; build passes; full vitest suite passes; smoke contracts green for page nav, drag handler, resize handler, boundary clamping.
+- **Depends on:** 19-B1 (this PR).
+- **Requires approval:** YES — drag/resize touch-event work is fiddly; bisect-clarity matters.
+- **Estimated:** ~5-9 hours, ~250-400 lines.
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -790,6 +827,42 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Stop conditions:** PDF attachment vs download-link decision — propose both, ask Nathan. Spam-filter testing — verify with a Gulino-domain test address before declaring done.
 - **Depends on:** 20-fixes-A (merged); ideally also 20-fixes-B (P1 idempotency fix on the post-completion workflow — duplicate Contact race) so we don't email twice on a double-click.
 - **Requires approval:** Yes if PDF attachment path chosen (new Resend feature scope); No if download-links-only.
+
+### 19-fix-followup-doctype-enum — Custom templates use generic docType
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Stop hardcoding `docType: "tenant_rep_agreement"` for ALL custom templates in `src/app/(dashboard)/brokerage/client-onboarding/actions.ts:353`. Audit logs claim every custom template is a tenant rep agreement, which breaks any agent-side display or reporting that filters by docType.
+- **Why deferred from slice 19-B1:** Real fix requires either (a) extending `OnboardingDocTypeValue` enum to allow string-based custom types or (b) adding a `customDocType` column on `OnboardingDocument`. Both are schema-touching work that requires migration planning. Slice 19-B1's iOS migration + visibility was urgent; this is technical-debt cleanup that doesn't affect production correctness today (routes query by `template.id`, not `docType`).
+- **Approach (agent proposes details when slice begins):**
+  - Option A: relax `OnboardingDocTypeValue` to `string` and let custom templates use slugified template names. Type system gets weaker but no migration.
+  - Option B: add `customDocType: String?` on `OnboardingDocument` schema; populate when `templateId` references a `category: "custom"` template. Migration required.
+- **Files:** `src/lib/onboarding-types.ts`, `src/app/(dashboard)/brokerage/client-onboarding/actions.ts`, possibly `prisma/schema.prisma`.
+- **Stop conditions:** Schema migration if Option B chosen; surface and ask before applying.
+- **Requires approval:** YES if Option B (schema change).
+
+### 19-fix-followup-vault-rbac — Vault server actions don't enforce role
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Add role-tier enforcement (`manage_templates` permission) to `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts` server actions. Today they check `getCurrentOrgContext()` for `orgId` only — agents who direct-URL `/vault` (bypassing the subnav RBAC gate that 19-B1 added) can upload, delete, and edit-fields on org templates.
+- **Why deferred from slice 19-B1:** Pre-existing bug, not introduced by B1. B1's nav-level gate (manage_templates on PAGE_PERMISSION_MAP) closes the discovery vector for normal users, but the underlying server actions remain open. Hardening the actions is a bigger lift (auth helper integration, error-shape decisions for unauthorized access) that would have inflated B1's scope.
+- **Approach:**
+  - Each of `createDocumentTemplate`, `updateDocumentTemplate`, `deleteDocumentTemplate`, `updateTemplateFields` should call `getCurrentBrokerageRole()` and check `hasPermission(role, "manage_templates")` before any DB write. Return `{ success: false, error: "..." }` for unauthorized.
+  - `getDocumentTemplates` is read-only — leave open since the /new picker reads it for all roles.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts`, plus 4-5 smoke contracts asserting role-gate enforcement.
+- **Estimated diff:** ~40-60 lines.
+
+### 19-fix-followup-ia-cleanup — Revisit vault URL location
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Decide whether `/brokerage/client-onboarding/vault` should move to `/brokerage/settings/templates` (or `/settings/brokerage/templates`) once we know how Gulino's admins actually use it. Original SLICES.md spec suggested settings-tab placement; current implementation lives nested under client-onboarding.
+- **Why deferred from slice 19-B1:** URL move is its own scoping conversation (settings-vs-onboarding nesting touches IA, deep-link bookmarks, redirect logic). Better to ship 19-B1 + 19-B2 first, observe usage, then decide.
+- **Approach:** Look at telemetry/feedback from Gulino post-B2 ship. If admins report "I had to dig to find it," consider the move. Add a redirect from the old URL.
+- **Files:** rename + redirect — TBD.
+- **Stop conditions:** URL changes invalidate bookmarks; need redirect; touches sidebar + brokerage subnav + /new picker link.
+
+### 19-fix-followup-doc-references — Document the existing vault in CLAUDE.md + SLICES.md
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** CLAUDE.md (under "Client Onboarding Tool" section) and SLICES.md (slice 19 audit history) currently don't reference the existing vault implementation that pre-dates the slice 19 audit. Fix the docs so future agents starting on slice 19-related work don't repeat the discovery process.
+- **Why deferred from slice 19-B1:** Doc-cleanup pass is non-blocking and would inflate the B1 PR diff with prose changes that don't affect production behavior.
+- **Files:** `CLAUDE.md`, `SLICES.md`.
+- **Estimated diff:** ~30-50 lines, doc-only.
 
 ### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   ArrowLeft,
   UserPlus,
@@ -17,6 +18,7 @@ import {
   Square,
   Lock,
   MapPin,
+  Settings,
 } from "lucide-react";
 import { createOnboarding, getAgentRosterForOnboarding } from "../actions";
 import { getDocumentTemplates } from "../vault-actions";
@@ -400,7 +402,21 @@ export default function NewOnboardingPage() {
               <h2 className="text-base font-semibold text-slate-800 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-slate-400" /> Documents
               </h2>
-              <span className="text-xs text-slate-500">{selectedTemplateIds.size} selected</span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-slate-500">{selectedTemplateIds.size} selected</span>
+                {/* Slice 19-B1: discovery affordance for the existing vault.
+                    Inline placement so admins notice it while picking
+                    templates ("wait, I want to add one"). The vault page
+                    itself is RBAC-gated by manage_templates so agents who
+                    click through hit the auth check there, not here. */}
+                <Link
+                  href="/brokerage/client-onboarding/vault"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+                >
+                  <Settings className="w-3 h-3" />
+                  Manage templates
+                </Link>
+              </div>
             </div>
             {errors.templates && <p className="mb-3 text-xs text-red-600 flex items-center gap-1"><AlertCircle className="w-3 h-3" />{errors.templates}</p>}
             <div className="space-y-2">

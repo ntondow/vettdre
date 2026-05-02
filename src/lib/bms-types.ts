@@ -796,6 +796,11 @@ export const BMS_PERMISSIONS = {
   manage_brokerage_settings: ["brokerage_admin"],
   manage_roles: ["brokerage_admin"],
 
+  // Client Onboarding — document templates (vault) are admin-tier; the
+  // /new picker shows templates to all roles, but managing them (upload,
+  // delete, edit field positions) is restricted to admin/broker/manager.
+  manage_templates: ["brokerage_admin", "broker", "manager"],
+
   // Client Onboarding
   client_onboarding_create: ["brokerage_admin", "broker", "manager", "agent"],
   client_onboarding_view_all: ["brokerage_admin", "broker", "manager"],

@@ -56,9 +56,16 @@ describe("Slice 8 — Wireframe C: brokerage_admin sub-nav shape", () => {
   // premise. Wireframe C flattens to 11 items / 4 groups (3 primary +
   // Admin link). Order matters because the mobile pill scroller renders
   // items in this exact sequence — see Mobile Pill Parity below.
+  //
+  // Slice 19-B1 extends this to 12 items / 5 groups by adding a
+  // "Documents" group with a "Templates" item, surfacing the previously-
+  // invisible Document Vault. The new group is inserted before "Admin"
+  // (right after "Reports") so Settings remains the last entry; this
+  // preserves the muscle-memory invariant that Settings sits at the
+  // bottom of the rail.
   const adminBody = extractConstantBody(layoutSrc, "ADMIN_NAV");
 
-  it("ADMIN_NAV has exactly the 11 items from Wireframe C, in order, by label", () => {
+  it("ADMIN_NAV has exactly the 12 items (Wireframe C + slice 19-B1 Templates), in order, by label", () => {
     const labels = extractItemLabels(adminBody);
     expect(labels).toEqual([
       "Dashboard",
@@ -72,13 +79,14 @@ describe("Slice 8 — Wireframe C: brokerage_admin sub-nav shape", () => {
       "Properties",
       "Reports",
       "Leaderboard",
+      "Templates",
       "Settings",
     ]);
   });
 
-  it("ADMIN_NAV has exactly 4 groups (Operations / Agents & Listings / Reports / Admin)", () => {
+  it("ADMIN_NAV has exactly 5 groups (Operations / Agents & Listings / Reports / Documents / Admin)", () => {
     const groups = extractGroupNames(adminBody);
-    expect(groups).toEqual(["Operations", "Agents & Listings", "Reports", "Admin"]);
+    expect(groups).toEqual(["Operations", "Agents & Listings", "Reports", "Documents", "Admin"]);
   });
 });
 
