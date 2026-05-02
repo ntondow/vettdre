@@ -82,15 +82,15 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
   const [hasChanges, setHasChanges] = useState(false);
 
   // Slice 19-B1: pdfjs render path replaces the iframe (iOS Safari black
-  // hole — same fix as slice 20-fixes-C for the public viewer). Multi-page
-  // editor support is B2; this slice keeps the page-0 filter on field
-  // overlays and the fixed-size canvas. The pdfjs migration alone unblocks
-  // iPad/iPhone editing for single-page templates, which covers the bulk
-  // of custom uploads in production today.
+  // hole — same fix as slice 20-fixes-C for the public viewer).
+  // Slice 19-B2a: multi-page navigation. The editor now renders one page
+  // at a time, scoped via currentPage; new fields placed via the toolbar
+  // get page: currentPage. Drag/resize is B2b.
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0 });
+  const [currentPage, setCurrentPage] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -190,7 +190,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       id: crypto.randomUUID().replace(/-/g, "").slice(0, 12),
       label: `${FIELD_TYPE_LABELS[type]} Field`,
       type,
-      page: 0,
+      page: currentPage,
       x: 25,
       y: 50,
       width: type === "signature" ? 30 : type === "checkbox" ? 4 : 20,
@@ -201,7 +201,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
     setSelectedFieldId(newField.id);
     setAddingFieldType(null);
     setHasChanges(true);
-  }, []);
+  }, [currentPage]);
 
   const updateField = useCallback((fieldId: string, updates: Partial<TemplateFieldDefinition>) => {
     setFields((prev) => prev.map((f) => (f.id === fieldId ? { ...f, ...updates } : f)));
@@ -224,7 +224,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       id: crypto.randomUUID().replace(/-/g, "").slice(0, 12),
       label: `${FIELD_TYPE_LABELS[addingFieldType]} Field`,
       type: addingFieldType,
-      page: 0,
+      page: currentPage,
       x: Math.max(0, Math.min(x, 90)),
       y: Math.max(0, Math.min(y, 95)),
       width: addingFieldType === "signature" ? 30 : addingFieldType === "checkbox" ? 4 : 20,
@@ -235,7 +235,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
     setSelectedFieldId(newField.id);
     setAddingFieldType(null);
     setHasChanges(true);
-  }, [addingFieldType]);
+  }, [addingFieldType, currentPage]);
 
   if (loading) {
     return <div className="min-h-dvh bg-slate-50 flex items-center justify-center"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div>;
@@ -285,16 +285,44 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       <div className="flex flex-1 overflow-hidden">
         {/* Left: PDF Preview with field overlays */}
         <div className="flex-1 overflow-auto p-6 bg-slate-100">
+          {/* Slice 19-B2a: page tab strip. Hidden on single-page templates
+              to avoid clutter; shown when pages.length > 1. Lives outside
+              the canvas div so tab clicks don't trigger handlePdfClick. */}
+          {pages.length > 1 && (
+            <div className="mx-auto mb-3 flex flex-wrap gap-1.5" style={{ maxWidth: pages[currentPage] ? `${pages[currentPage].width / 2}px` : "612px" }}>
+              {pages.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setCurrentPage(i)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    i === currentPage
+                      ? "bg-blue-600 text-white"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Page {i + 1}
+                </button>
+              ))}
+            </div>
+          )}
           <div
             ref={pdfContainerRef}
             className={`relative mx-auto bg-white shadow-lg rounded-sm overflow-hidden ${addingFieldType ? "cursor-crosshair" : ""}`}
-            style={{ width: "612px", minHeight: "792px" }}
+            // Slice 19-B2a: variable per-page canvas size. Pages render at 2x
+            // for retina (see renderPdf scale), so display at half. Falls
+            // back to legacy 612x792 only during initial load before pages
+            // are rendered.
+            style={pages[currentPage]
+              ? { width: `${pages[currentPage].width / 2}px`, minHeight: `${pages[currentPage].height / 2}px` }
+              : { width: "612px", minHeight: "792px" }}
             onClick={handlePdfClick}
           >
             {/* PDF render via pdfjs (slice 19-B1). Replaces the iframe that
-                broke silently on iOS Safari. Multi-page editor support is
-                B2; today the field-overlay filter below still pins to
-                page 0, so only the first rendered page is editable. */}
+                broke silently on iOS Safari. Slice 19-B2a wires multi-page
+                navigation: only the currentPage image renders, and the
+                field-overlay filter below scopes to currentPage. Drag and
+                resize on the rendered overlays is B2b. */}
             {pdfLoading && (
               <div className="absolute inset-0 flex items-center justify-center bg-slate-50">
                 <div className="text-center">
@@ -320,16 +348,16 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                 </button>
               </div>
             )}
-            {!pdfLoading && !pdfError && pages.length > 0 && (
+            {!pdfLoading && !pdfError && pages[currentPage] && (
               <img
-                src={pages[0].dataUrl}
-                alt="Template page 1"
+                src={pages[currentPage].dataUrl}
+                alt={`Template page ${currentPage + 1}`}
                 className="w-full block pointer-events-none"
                 draggable={false}
               />
             )}
-            {/* Field overlays */}
-            {fields.filter((f) => f.page === 0).map((field) => (
+            {/* Field overlays — scoped to currentPage (slice 19-B2a). */}
+            {fields.filter((f) => f.page === currentPage).map((field) => (
               <div
                 key={field.id}
                 onClick={(e) => { e.stopPropagation(); setSelectedFieldId(field.id); }}
@@ -437,6 +465,25 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                   </select>
                 </div>
               </div>
+              {/* Slice 19-B2a: Page selector. Lets the user reassign a field
+                  to a different page without delete + re-place. Hidden on
+                  single-page templates to avoid a no-op control. Companion
+                  to the page-tab strip on the canvas; switching the page
+                  here moves the field's overlay to that page. */}
+              {pages.length > 1 && (
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">Page</label>
+                  <select
+                    value={selectedField.page}
+                    onChange={(e) => updateField(selectedField.id, { page: parseInt(e.target.value, 10) })}
+                    className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    {pages.map((_, i) => (
+                      <option key={i} value={i}>Page {i + 1}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <label className="flex items-center gap-2 cursor-pointer">
                 <input type="checkbox" checked={selectedField.required} onChange={(e) => updateField(selectedField.id, { required: e.target.checked })} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500" />
                 <span className="text-xs text-slate-600">Required field</span>

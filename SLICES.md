@@ -692,20 +692,36 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No (proposal pre-approved by Nathan with all 3 questions answered: new Documents group, brokerage subnav only — not global rail or mobile More sheet, inline link placement on /new picker).
 - **Outcome:** _filled in at gate-run time_
 
-### 19-B2 — Vault editor multi-page support + drag/resize (pending)
-- **Status:** `pending` (depends on 19-B1)
-- **Goal:** Make the vault editor production-grade: multi-page navigation in the editor, field drag-to-move post-placement, resize handles, touch-event compatibility for iPad. After B2, John can upload a 5-page custom landlord agreement and place fields on every page; misplacement is recoverable via drag instead of delete + re-place.
+### 19-B2a — Vault editor multi-page navigation + variable canvas + page selector
+- **Status:** `awaiting_review`
+- **Goal:** Make the vault editor work for multi-page templates. Today the editor renders only page 1 even when pdfjs renders all pages. After B2a, John can upload a 5-page landlord agreement and place fields on every page via tab navigation; misplaced fields are recoverable via a Page selector in the field editor sidebar (no delete + re-place required).
+- **Closes bug:** 3 of the slice 19 audit's "production-grade editor" cluster (defects 1, 5, 6 from the B2 plan).
+- **Defects fixed:**
+  - **Defect 1 — Multi-page navigation.** New `currentPage` state (default 0). Page tab strip rendered above the canvas, hidden on single-page templates (`pages.length > 1` gate) so single-page editing is unchanged. The displayed image switches from `pages[0]` to `pages[currentPage]`. Field overlay filter switches from `f.page === 0` to `f.page === currentPage`. New-field placement (`handlePdfClick` + `addField`) writes `page: currentPage` so a field placed while looking at page 2 lands on page 2.
+  - **Defect 5 — Variable per-page canvas size.** Drop the hardcoded `width: 612px, minHeight: 792px`. Container size now derives from `pages[currentPage].width / 2` and `.height / 2` (pdfjs renders at 2x for retina; display at half). Falls back to legacy 612×792 only during initial load before pages render. Aligns legal/A4/landscape PDFs correctly. Field overlay percentages remain relative to the new container size, so existing field positions stay correct.
+  - **Defect 6 — Page selector in field editor sidebar.** New `<select>` in the field editor block alongside Type/Prefill, bound to `selectedField.page`. Lets users reassign a field to a different page without delete + re-place. Hidden on single-page templates to avoid a no-op control.
+- **Cross-page drag intentionally NOT supported.** Filed as Phase 5 stub `19-fix-followup-cross-page-move`. Rationale: the editor shows one page at a time, so there's no destination canvas to catch a cross-page drop. The Page selector in the field editor (defect 6) gives users a manual recovery path that's enough for B2a's scope.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (state + tabs + render swap + filter swap + variable canvas + Page selector), `tests/smoke/vault-editor-multipage.test.ts` (new — 7 contracts), `SLICES.md` (this entry + B2b stub + cross-page-move stub).
+- **Success criteria:** typecheck holds at clean-tree 285 (= dirty-tree 287); lint changed-files only — zero new errors; build passes; full vitest suite passes; 7 smoke contracts green.
+- **Depends on:** 19-B1 (merged, PR #38).
+- **Requires approval:** No (proposal pre-approved by Nathan: all 6 recommendations accepted including pre-commit B2a/B2b split for bisect-clarity).
+- **Outcome:** _filled in at gate-run time_
+
+### 19-B2b — Vault editor field drag-to-move + corner resize + touch (pending)
+- **Status:** `pending` (depends on 19-B2a)
+- **Goal:** Add interactive field manipulation on rendered overlays. Drag a placed field with mouse or finger to move it; drag corner handles to resize. Boundary-clamp at page edges so fields stay on the page. Touch-event parity on iPad via Pointer Events API. After B2b, the editor is production-grade: misplacement is recoverable via drag (alongside the Page selector from B2a).
+- **Closes bug:** 3 of the slice 19 audit's "production-grade editor" cluster (defects 2, 3, 4 from the B2 plan).
 - **Approach (agent proposes details when slice begins):**
-  - Page tabs/buttons in editor; `currentPage` state; field overlay filter becomes `f.page === currentPage` instead of `=== 0`.
-  - Per-page canvas dimensions from pdfjs viewport (replace hardcoded 612×792).
-  - Drag-to-move: pointerdown + pointermove + pointerup on field overlay; clamp x/y to [0, 100−width] / [0, 100−height].
-  - Resize handles: 8 corner/edge handles; same drag pattern but updates width/height.
-  - Touch-event compatibility tested on iPad.
-- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, possibly extract a `<PdfFieldEditor>` shared component if the file gets too long; `tests/smoke/vault-editor-b2.test.ts` (new).
-- **Success criteria:** typecheck holds; lint changed-files only — zero new errors; build passes; full vitest suite passes; smoke contracts green for page nav, drag handler, resize handler, boundary clamping.
-- **Depends on:** 19-B1 (this PR).
+  - Pointer Events API (`onPointerDown`/`onPointerMove`/`onPointerUp`). iOS Safari has supported since 13.0 — covers every iPad in active use. No polyfill, single set of handlers for mouse + touch + pen.
+  - Drag-to-move: `dragState` ref tracks origin x/y + pointer start; `setPointerCapture` on pointerdown so the pointer stays bound to the overlay element across the canvas.
+  - Resize: 4 corner handles (nw/ne/sw/se) on the selected field. Each handle has its own pointerdown handler that sets `resizeState` with the corner identifier; pointermove computes width/height delta based on corner direction.
+  - Boundary clamp: `Math.max(0, Math.min(newX, 100 - field.width))` for x; same for y. Min field size: 1% × 1%. Max field size: clamps to `x + width <= 100` and `y + height <= 100`.
+  - `touch-action: none` CSS on draggable overlays + resize handles so iOS doesn't intercept the drag for native scroll/pinch.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (pointer state + 6 handlers — drag down/move/up + resize down/move/up — plus 4 corner handle JSX + touch-action CSS), `tests/smoke/vault-editor-drag-resize.test.ts` (new — ~9 contracts).
+- **Success criteria:** typecheck holds; lint changed-files only — zero new errors; build passes; full vitest suite passes; 9 smoke contracts green; manual iPad QA verifies drag/resize/touch-action.
+- **Depends on:** 19-B2a (this PR).
 - **Requires approval:** YES — drag/resize touch-event work is fiddly; bisect-clarity matters.
-- **Estimated:** ~5-9 hours, ~250-400 lines.
+- **Estimated:** ~3-4 hours, ~250 lines.
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -863,6 +879,18 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Why deferred from slice 19-B1:** Doc-cleanup pass is non-blocking and would inflate the B1 PR diff with prose changes that don't affect production behavior.
 - **Files:** `CLAUDE.md`, `SLICES.md`.
 - **Estimated diff:** ~30-50 lines, doc-only.
+
+### 19-fix-followup-cross-page-move — Drag fields across page boundaries
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** Allow users to drag a field from page N to page N+1 by dragging it across a page boundary, instead of clamping at the boundary edge.
+- **Why deferred from slice 19-B2a/B2b:** The editor renders one page at a time (B2a's design). For cross-page drag to work, the editor would need a multi-page-visible mode where pages are stacked vertically and the user can scroll/drag between them, OR a "snap to page N" gesture when the pointer reaches the boundary. Both are real product features that deserve their own scoping conversation. The Page selector in the field editor sidebar (defect 6 in B2a) gives users a manual recovery path that's enough for B2's scope: select field → change Page dropdown.
+- **Approach (agent proposes details when slice begins):**
+  - Option A: stacked-pages mode for "drag mode" only. Show all rendered pages in a vertical scroll; user can drag a field from page 1 down past the page-boundary line and drop on page 2. Click a field to select; right sidebar still shows per-field editor.
+  - Option B: boundary-snap. When pointer crosses the page edge during a drag, switch the rendered page (auto-page-flip) and continue the drag on the new page.
+  - Option C: drag-and-drop with explicit "Move to page" dialog when pointer exits canvas, similar to `confirm()`-based modal.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, possibly extract a `<MultiPagePdfEditor>` component if Option A.
+- **Stop conditions:** Each option has UX trade-offs; surface and ask before implementing.
+- **Requires approval:** YES — UX scope question.
 
 ### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)
