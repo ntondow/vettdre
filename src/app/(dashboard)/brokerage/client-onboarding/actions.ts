@@ -371,8 +371,9 @@ export async function createOnboarding(
 
     // Fallback: if no templates selected, use the old hardcoded 3-doc flow
     if (selectedTemplates.length === 0) {
-      // Generate Tenant Rep Agreement PDF from scratch
-      const pdfBytes = await generateTenantRepAgreementPdf({
+      // Generate Tenant Rep Agreement PDF from scratch (fallback path —
+      // discards fieldCoords; this branch only renders a static PDF).
+      const { pdfBytes } = await generateTenantRepAgreementPdf({
         brokerageName: org.name,
         agentFullName,
         agentLicense: agent.licenseNumber || "N/A",
