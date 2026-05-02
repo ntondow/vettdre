@@ -264,6 +264,7 @@ export default function SigningClient({ token }: { token: string }) {
         setDocIndex((i) => i + 1);
         setShowMobilePdf(false);
         setPrefillCollapsed(true);
+        setFocusedFieldId(null); // #19 — clear stale focus before next doc
       }
     } catch {
       setSignError("Network error. Please try again.");
@@ -431,7 +432,9 @@ export default function SigningClient({ token }: { token: string }) {
 
   if (step === "signing" && currentDoc) {
     const totalDocs = data.documents.length;
-    const progressPct = (docIndex / totalDocs) * 100;
+    // (#18) — midpoint math so doc N of N reads ~83% while signing instead
+    // of 67%. doc 1 → 17%, doc 2 → 50%, doc 3 → 83%, complete step → 100%.
+    const progressPct = ((docIndex + 0.5) / totalDocs) * 100;
 
     return (
       <Shell wide={hasTemplateFields}>

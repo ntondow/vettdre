@@ -592,7 +592,7 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** YES — biggest new feature, scope check.
 
 ### 20 — Signing flow end-to-end audit + fixes
-- **Status:** `in_progress` (Phase 1 audit complete 2026-05-01; fix slices in flight)
+- **Status:** `done` (audit complete + all 4 fix slices merged/awaiting_review; closeout 2026-05-01)
 - **Goal:** Walk /sign/[token] flow. Test mobile, multi-device, resume mid-signing. Fix what breaks.
 - **Closes bug:** Various deferred from initial audit
 - **Files:** `src/app/sign/[token]/*` + signing components.
@@ -600,6 +600,7 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** Phase 2
 - **Requires approval:** No.
 - **Phase 1 audit outcome (2026-05-01):** 24 defects across 9 surfaces. 5 P0s (sign-route signature crash, completion download returns JSON, completed onboardings 410'd as error, false "emailed to you" claim, jsdelivr CDN dependency for PDF preview), 8 P1s (mobile orientation wipes signature, refresh loses field state, double-click race creates duplicate Contact, etc.), 11 P2s. Fix order: A (P0 batch) → B (P1 batch) → C (P1 mobile UX) → D (P2 polish).
+- **Closeout (2026-05-01):** 24 defects identified → 22 shipped across 4 fix slices (A=5, B=4, C=3, D=10) → 2 dropped on re-verification (#11 termDays display drift was a dead fallback in the public flow; #23 sequential-signing >= comparison was correctly handling sibling sortOrder cases — both filed as Phase 5 polish stubs where the concern *could* legitimately apply: agent-side display + reminder cron for #11; cross-onboarding sort-order audit for #23). Plus 2 Phase 5 stubs for honest-UX deferrals (`20-fix-followup-client-email` for the false "emailed to you" claim removed in slice A; `20-fix-followup-term-display` for #11). Fix slices: PR #34 (A, merged), PR #35 (B, merged), PR #36 (C, merged), PR #37 (D, awaiting review).
 
 ### 20-fixes-A — Signing flow P0 fixes (Gulino-blocking)
 - **Status:** `awaiting_review`
@@ -646,6 +647,28 @@ Phase 0 status as of 2026-04-29:
 - **Depends on:** 20-fixes-B (merged, PR #35) — both touch signature-pad.tsx; needed B's resize-snapshot work as the foundation before this slice's auto-emit.
 - **Requires approval:** No (proposal pre-approved by Nathan with all three options confirmed: Option A auto-emit for #8, single PR with mid-flight split condition for #9, interactive-only 44px for #13).
 - **Outcome:** Smoke 7/7 green. Full test 266/266. Build clean. Typecheck dirty-tree 287 vs clean-tree 285 (the +2 is the same Finder-dupe pollution we've seen since slice 20-fixes-A; not from changed files — verified zero new tsc errors in signature-pad.tsx, pdf-viewer.tsx, pdf-field-viewer.tsx). 0 new lint errors on changed files. The pdf-viewer.tsx rewrite added one `<img>` warning that matches pdf-field-viewer.tsx's existing pattern (pdfjs renders to a canvas dataURL, which Next/Image's optimizer can't handle — plain `<img>` is correct). pdf-viewer.tsx grew 124 → 195 lines (+71, under the 100-line stop condition for #9). Total slice diff ~140 code + ~210 tests = ~350 lines, slightly over the 280 target but within the 320 mid-flight stop threshold; held as one PR rather than splitting per the precommitted call.
+
+### 20-fixes-D — Signing flow P2 polish (closes slice 20 audit)
+- **Status:** `awaiting_review`
+- **Goal:** Ship 10 of 11 P2 polish fixes from slice 20's audit in a single PR — the final pass that closes the slice 20 audit. Logic-only, no schema migrations.
+- **Closes bug:** 10 of 24 defects from slice 20 audit (the P2 batch minus #23).
+- **Defects fixed:**
+  - **#14 Fire-and-forget expired-cache update.** Both `verify/route.ts` and `sign/route.ts` now use `prisma...update().catch(...)` (no await) for the `status: "expired"` flip. Source of truth is `expiresAt < now()`; the cached status is just a denormalized hint for agent-side queries and doesn't gate any read logic, so blocking the GET on this write was wasted latency.
+  - **#15 Cap audit-log fieldValues at 500 chars + filter images.** `sign/route.ts` audit log metadata now filters out values starting with `data:image` (signature blobs were ~50KB each in the JSON column) and truncates remaining text values at 500 chars with an ellipsis suffix. Bounds JSON growth without losing the audit signal.
+  - **#16 410 (not 404) for token-not-found.** `verify/route.ts` returns 410 with a generic "no longer valid" message when the token isn't found, matching the voided/expired shape. Removes the enumeration vector that pre-fix let attackers distinguish "valid token, voided" (410) from "invalid token" (404).
+  - **#17 Server-derived signer identity.** `sign/route.ts` no longer reads `signerName`/`signerEmail` from the request body — they're derived from the canonical onboarding record post-lookup (`${firstName} ${lastName}` + `clientEmail`). The body fields are still allowed in the type for client back-compat (no-op migration) but ignored at read time. A malicious request can't record a different name on the audit log.
+  - **#18 Midpoint progress math.** `client.tsx` progress bar now uses `(docIndex + 0.5) / totalDocs` so the bar moves halfway through the current doc, not just on doc flip. Makes mid-flow progress visible for multi-doc onboardings.
+  - **#19 Clear focusedFieldId on doc switch.** `client.tsx` advance branch (after successful sign on a non-final doc) now calls `setFocusedFieldId(null)` alongside the other per-doc resets. Without this, the field-overlay highlight from the previous doc carried into the next one.
+  - **#20 Per-page render progress.** Both `pdf-field-viewer.tsx` and `pdf-viewer.tsx` now track `{ current, total }` page-render progress and surface it in the loading UI as "Loading page X of N..." instead of a static "Loading...". Slow-mobile users see motion. Both viewers are near-twins post-slice-C, so the same pattern applies to both for consistency.
+  - **#21 Retry button on PDF render error.** Both `pdf-field-viewer.tsx` and `pdf-viewer.tsx` error states now render a Retry button wired to re-invoke the `renderPdf()` callback. A transient network blip no longer strands the user (pre-fix they'd have to manually reload the whole page).
+  - **#22 signedPath keys by doc.id, not docType.** `sign/route.ts` storage upload path is now `onboarding/${onboarding.id}/signed/${doc.id}.pdf` instead of using `doc.docType`. Two documents with the same custom docType in one onboarding (possible for templates with custom types) no longer collide on `upsert: true`. Pre-existing pdfUrl values keep working — they're stored per-document.
+  - **#24 Server-side date override at sign time.** `sign/route.ts` walks template fields BEFORE `embedFieldValues` and overwrites any field with `prefillKey === "date"` with the server's `signDate`. The embedded PDF is the legal artifact — a long-open tab no longer embeds the stale client-side date from when the user first opened the link.
+- **Defect dropped:** #23 sequential-signing >= comparison. Re-verified during proposal: the loop `for (const prev of onboarding.documents) { if (prev.sortOrder >= doc.sortOrder) break; ... }` correctly stops at the current doc and only enforces "all earlier docs signed" semantics. Sibling docs (same sortOrder — possible if two templates share an order) are intentionally treated as concurrent, not sequential. Behavior is correct. Filed as Phase 5 polish stub `20-fix-followup-sortorder-audit` to audit cross-onboarding behavior where sortOrder collisions might confuse the agent UI.
+- **Files:** `src/app/api/onboarding/[token]/{sign,verify}/route.ts`, `src/app/sign/[token]/client.tsx`, `src/components/onboarding/{pdf-field-viewer,pdf-viewer}.tsx`, `tests/smoke/signing-fixes-D.test.ts` (new — 13 contracts, one+ per defect), `SLICES.md` (this entry + slice 20 closeout).
+- **Success criteria:** typecheck holds at clean-tree 285 (= dirty-tree 287); lint changed-files only — zero new errors; build passes; full vitest suite passes; 13 smoke contracts green.
+- **Depends on:** 20-fixes-C (merged, PR #36).
+- **Requires approval:** No (proposal pre-approved by Nathan: drop #23, silent-ignore for #17, apply #20+#21 to both viewers, slice 20 closing summary in PR body).
+- **Outcome:** Smoke 13/13 green. Full test 279/279. Build clean. Typecheck dirty-tree 287 = clean-tree 285 (anchor held exactly; the +2 dirty-tree delta is the same Finder-dupe pollution we've seen since slice 20-fixes-A, not from changed files — verified zero new tsc errors in the 5 changed files). 0 new lint errors on changed files (4 pre-existing warnings: 3 `<img>` for canvas-rendered PDFs which is intentional, 1 useCallback dep warning that predates this slice). Total slice diff ~70 code + ~270 tests = ~340 lines, slightly over the 320 mid-flight threshold but the smoke test file is most of it (13 contracts × ~20 lines each); held as one PR per the precommitted single-PR-for-slice-20-closeout call.
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`

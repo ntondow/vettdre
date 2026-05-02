@@ -25,8 +25,11 @@ export async function GET(
       },
     });
 
+    // Generic 410 for not-found (#16) — was 404, which let attackers
+    // distinguish "valid token, voided" from "invalid token". Returning the
+    // same shape for both cases removes the enumeration vector.
     if (!onboarding) {
-      return NextResponse.json({ error: "Onboarding not found" }, { status: 404 });
+      return NextResponse.json({ error: "This signing link is no longer valid" }, { status: 410 });
     }
 
     // Check voided
@@ -38,13 +41,16 @@ export async function GET(
     // the "already complete" branch where the client can download their copies.
     // Returning 410 here was misclassifying success as error.
 
-    // Check expired
+    // Check expired (#14) — fire-and-forget the cached status flip so the GET
+    // response isn't blocked on a write. Source of truth is `expiresAt < now()`;
+    // the cached `status: "expired"` is just a denormalized hint for agent-side
+    // queries and doesn't gate any read logic here.
     if (onboarding.expiresAt && new Date(onboarding.expiresAt) < new Date()) {
-      // Update status to expired
-      await prisma.clientOnboarding.update({
-        where: { id: onboarding.id },
-        data: { status: "expired" },
-      });
+      if (onboarding.status !== "expired") {
+        prisma.clientOnboarding
+          .update({ where: { id: onboarding.id }, data: { status: "expired" } })
+          .catch((err) => console.error("Onboarding expired-cache update failed:", err));
+      }
       return NextResponse.json({ error: "This signing link has expired" }, { status: 410 });
     }
 
