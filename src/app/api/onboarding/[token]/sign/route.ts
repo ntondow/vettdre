@@ -16,7 +16,12 @@ export async function POST(
     }
 
     const body = await req.json();
-    const { documentId, signatureImage, signerName, signerEmail, fieldValues } = body as {
+    // Body's signerName/signerEmail are intentionally ignored (#17) — we
+    // derive identity from the canonical onboarding record post-lookup so a
+    // malicious request can't record a different name on the audit log.
+    // The fields are still accepted in the type to keep the existing client
+    // a no-op migration; we just don't read them.
+    const { documentId, signatureImage, fieldValues } = body as {
       documentId?: string;
       signatureImage?: string;
       signerName?: string;
@@ -24,8 +29,8 @@ export async function POST(
       fieldValues?: Record<string, string>;
     };
 
-    if (!documentId || !signerName || !signerEmail) {
-      return NextResponse.json({ error: "Missing required fields: documentId, signerName, signerEmail" }, { status: 400 });
+    if (!documentId) {
+      return NextResponse.json({ error: "Missing required field: documentId" }, { status: 400 });
     }
 
     // ── Validate token ──────────────────────────────────────
@@ -40,7 +45,7 @@ export async function POST(
     });
 
     if (!onboarding) {
-      return NextResponse.json({ error: "Onboarding not found" }, { status: 404 });
+      return NextResponse.json({ error: "This signing link is no longer valid" }, { status: 410 });
     }
     if (onboarding.status === "voided") {
       return NextResponse.json({ error: "This signing request has been cancelled" }, { status: 410 });
@@ -49,12 +54,18 @@ export async function POST(
       return NextResponse.json({ error: "All documents have already been signed" }, { status: 410 });
     }
     if (onboarding.expiresAt && new Date(onboarding.expiresAt) < new Date()) {
-      await prisma.clientOnboarding.update({
-        where: { id: onboarding.id },
-        data: { status: "expired" },
-      });
+      // Fire-and-forget the expired-cache update (#14) — same shape as verify.
+      if (onboarding.status !== "expired") {
+        prisma.clientOnboarding
+          .update({ where: { id: onboarding.id }, data: { status: "expired" } })
+          .catch((err) => console.error("Onboarding expired-cache update failed:", err));
+      }
       return NextResponse.json({ error: "This signing link has expired" }, { status: 410 });
     }
+
+    // Derive signer identity server-side (#17) — never trust the request body.
+    const signerName = `${onboarding.clientFirstName} ${onboarding.clientLastName}`;
+    const signerEmail = onboarding.clientEmail;
 
     // ── Validate document ───────────────────────────────────
 
@@ -140,6 +151,15 @@ export async function POST(
             : [];
 
           if (templateFields.length > 0 && fieldValues) {
+            // Server-side date override (#24) — any field with prefillKey
+            // "date" gets stamped with the actual signing time, not the
+            // client-side time from when the user opened the link. The
+            // client UI is a preview; the embedded PDF is the legal artifact.
+            for (const field of templateFields) {
+              if (field.prefillKey === "date") {
+                fieldValues[field.id] = signDate;
+              }
+            }
             // Template-based: embed all field values (text, date, checkbox, signature, initials)
             modifiedPdf = await embedFieldValues(modifiedPdf, templateFields, fieldValues);
           } else if (signatureImage) {
@@ -160,8 +180,12 @@ export async function POST(
             auditText,
           });
 
-          // Upload signed PDF
-          const signedPath = `onboarding/${onboarding.id}/signed/${doc.docType}.pdf`;
+          // Upload signed PDF — keyed by doc.id (#22), not docType, so two
+          // documents with the same custom docType in one onboarding don't
+          // collide (upsert: true would silently overwrite the earlier file).
+          // Pre-existing pdfUrl values keep working — they're stored in the
+          // document record and continue resolving via download/route.ts.
+          const signedPath = `onboarding/${onboarding.id}/signed/${doc.id}.pdf`;
           const { error: uploadError } = await supabase.storage
             .from("bms-files")
             .upload(signedPath, modifiedPdf, {
@@ -249,7 +273,16 @@ export async function POST(
             signedPdfUrl,
             documentTitle: doc.title,
             templateId: (doc as Record<string, unknown>).templateId ?? null,
-            fieldValues: fieldValues ? Object.fromEntries(Object.entries(fieldValues).filter(([, v]) => v && !v.startsWith("data:image"))) : null,
+            // Cap text fieldValues at 500 chars (#15) to bound audit log
+            // JSON growth. Image data URLs are filtered above; text values
+            // get truncated with an ellipsis suffix so the cap is visible.
+            fieldValues: fieldValues
+              ? Object.fromEntries(
+                  Object.entries(fieldValues)
+                    .filter(([, v]) => v && !v.startsWith("data:image"))
+                    .map(([k, v]) => [k, v.length > 500 ? v.slice(0, 500) + "…" : v]),
+                )
+              : null,
           },
         },
       });

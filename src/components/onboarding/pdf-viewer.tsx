@@ -29,6 +29,8 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
   const [viewed, setViewed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Per-page render progress (#20) for the loading UI on slow mobile.
+  const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0 });
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -52,6 +54,8 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
       const rendered: RenderedPage[] = [];
       const containerWidth = containerRef.current?.clientWidth ?? 612;
 
+      setRenderProgress({ current: 0, total: pdf.numPages });
+
       for (let i = 0; i < pdf.numPages; i++) {
         const page = await pdf.getPage(i + 1);
         const defaultViewport = page.getViewport({ scale: 1 });
@@ -70,6 +74,8 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
           width: viewport.width,
           height: viewport.height,
         });
+
+        setRenderProgress({ current: i + 1, total: pdf.numPages });
       }
 
       setPages(rendered);
@@ -150,23 +156,38 @@ export default function PdfViewer({ pdfUrl, title, onViewed }: Props) {
           <div className="flex items-center justify-center py-24 sm:py-32">
             <div className="text-center">
               <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <p className="text-sm text-slate-500">Loading document...</p>
+              {/* #20 — per-page progress so slow mobile users see motion. */}
+              <p className="text-sm text-slate-500">
+                {renderProgress.total > 0
+                  ? `Loading page ${renderProgress.current} of ${renderProgress.total}...`
+                  : "Loading document..."}
+              </p>
             </div>
           </div>
         )}
         {error && (
-          <div className="flex flex-col items-center justify-center py-16 px-4">
-            <FileText className="w-10 h-10 text-slate-300 mb-3" />
-            <p className="text-sm text-slate-500 mb-2">Unable to display PDF inline</p>
-            <a
-              href={pdfUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-            >
-              <Download className="w-4 h-4" />
-              Open PDF in New Tab
-            </a>
+          <div className="flex flex-col items-center justify-center py-16 px-4 gap-3">
+            <FileText className="w-10 h-10 text-slate-300 mb-1" />
+            <p className="text-sm text-slate-500">Unable to display PDF inline</p>
+            <div className="flex items-center gap-2">
+              {/* #21 — retry button so a transient blip doesn't strand the user. */}
+              <button
+                type="button"
+                onClick={() => renderPdf()}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                Retry
+              </button>
+              <a
+                href={pdfUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                Open PDF in New Tab
+              </a>
+            </div>
           </div>
         )}
         {!loading && !error && pages.length > 0 && (

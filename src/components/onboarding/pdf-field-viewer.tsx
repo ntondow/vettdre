@@ -36,6 +36,8 @@ export default function PdfFieldViewer({
   const [pages, setPages] = useState<RenderedPage[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Per-page render progress (#20) for the loading UI on slow mobile.
+  const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Determine total pages needed (at least 1, max from field page refs + 1)
@@ -76,6 +78,8 @@ export default function PdfFieldViewer({
 
       const containerWidth = containerRef.current?.clientWidth ?? 612;
 
+      setRenderProgress({ current: 0, total: pagesToRender });
+
       for (let i = 0; i < pagesToRender; i++) {
         const page = await pdf.getPage(i + 1);
         const defaultViewport = page.getViewport({ scale: 1 });
@@ -96,6 +100,8 @@ export default function PdfFieldViewer({
           width: viewport.width,
           height: viewport.height,
         });
+
+        setRenderProgress({ current: i + 1, total: pagesToRender });
       }
 
       setPages(rendered);
@@ -112,10 +118,16 @@ export default function PdfFieldViewer({
   }, [renderPdf]);
 
   if (loading) {
+    // #20 — show per-page progress so slow mobile users know the render is
+    // working and roughly how much is left, instead of a blank "Loading...".
+    const progressLabel =
+      renderProgress.total > 0
+        ? `Loading page ${renderProgress.current} of ${renderProgress.total}...`
+        : "Loading preview...";
     return (
       <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden w-full max-w-[612px] md:max-w-none">
         <div className="flex items-center justify-center py-24 sm:py-32 text-sm text-slate-400">
-          <div className="animate-pulse">Loading preview...</div>
+          <div className="animate-pulse">{progressLabel}</div>
         </div>
       </div>
     );
@@ -124,8 +136,18 @@ export default function PdfFieldViewer({
   if (error || !pages.length) {
     return (
       <div ref={containerRef} className="bg-white shadow-lg rounded-sm overflow-hidden w-full max-w-[612px] md:max-w-none">
-        <div className="flex items-center justify-center py-24 sm:py-32 text-sm text-slate-400">
-          {error || "No pages to display"}
+        <div className="flex flex-col items-center justify-center py-24 sm:py-32 text-sm text-slate-400 gap-3">
+          <span>{error || "No pages to display"}</span>
+          {/* #21 — retry button so a transient network blip doesn't strand the user. */}
+          {error && (
+            <button
+              type="button"
+              onClick={() => renderPdf()}
+              className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50"
+            >
+              Retry
+            </button>
+          )}
         </div>
       </div>
     );
