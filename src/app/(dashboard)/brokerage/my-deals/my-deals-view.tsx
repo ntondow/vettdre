@@ -35,6 +35,7 @@ import {
   SUBMISSION_STATUS_LABELS,
   SUBMISSION_STATUS_COLORS,
   DEAL_TYPE_LABELS,
+  isRentalDealType,
 } from "@/lib/bms-types";
 import ProfileCompletionBanner from "@/components/profile-completion-banner";
 
@@ -651,11 +652,15 @@ function AgentDetailPanel({
               label="Deal Type"
               value={DEAL_TYPE_LABELS[str(data.dealType)] ?? str(data.dealType)}
             />
-            <InfoRow
-              label="Transaction Value"
-              value={fmtFull(num(data.transactionValue))}
-              mono
-            />
+            {/* Slice 21: hide Transaction Value row on rentals — annual rent
+                misleads as a deal headline; commission is the agent-facing number. */}
+            {!isRentalDealType(data) && (
+              <InfoRow
+                label="Transaction Value"
+                value={fmtFull(num(data.transactionValue))}
+                mono
+              />
+            )}
             <InfoRow label="Closing Date" value={fmtDate(str(data.closingDate))} />
             <InfoRow
               label="Represented Side"

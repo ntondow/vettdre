@@ -756,6 +756,25 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** Pre-approved by Nathan (Option B = both layers, 24px signature floor at WCAG 2.5.8 AA, slice 20-C contract relaxation justified by spirit-vs-letter trade, exact-match guard on height 7).
 - **Outcome:** _filled in at gate-run time_
 
+### 21 — Hide annual-rent "Value" on rental transaction surfaces
+- **Status:** `awaiting_review`
+- **Goal:** On rental/lease transactions, displaying `transactionValue` (= annual rent, e.g. $54,000 for a $4,500/mo lease) as the deal headline misled brokerages: their actual revenue impact is gross commission ($4,500), not the lease total. Sale transactions don't have this problem (Value = sale price = correctly meaningful). Slice hides the "Value" row/cell on rental surfaces so Commission stays the headline number for those rows. No relabeling, no replacement — just an em-dash placeholder where rentals land.
+- **Closes bug:** Reported on `/brokerage/transactions/[id]` Deal Info panel — "Value: $54,000" / "Commission: $4,500" mismatch on a Gulino rental.
+- **Approach (Path A — per-row only):** Discovery surfaced 4 per-row display surfaces with the bug AND aggregate computations (`agents/actions.ts`, `earnings/actions.ts`, `reports/actions.ts`) that sum `transactionValue` across all transaction types as `totalVolume` / `volumeThisYear` / `periodVolume`. Critically, `agents/[id]/page.tsx:514-517` uses `stats.totalVolume` to calculate commission tier for `volume_based` plans — silently changing that aggregate would shift agents' contractually-bound tiers. Path A scopes this slice to the per-row fix only; aggregates filed as Phase 5 stub `21-fix-followup-volume-aggregates` (below) since they need a stakeholder conversation, not a silent code change.
+- **Files:**
+  - `src/lib/bms-types.ts` — adds `BmsDealTypeAlias` (mirrors Prisma's 7-value `BmsDealType` enum) and two helpers: `isRentalTransaction(t.type === "rental")` for the 2-value `BmsTransactionTypeAlias`; `isRentalDealType` for the 7-value enum (true for `rental | lease | commercial_lease`). Two helpers because conflating them would lose granularity — `BmsDealType` distinguishes sale variants from lease variants in ways `BmsTransactionType` doesn't.
+  - `src/app/(dashboard)/brokerage/transactions/[id]/page.tsx` — Deal Info panel "Value" row gated on `!isRentalTransaction(tx)`.
+  - `src/app/(dashboard)/brokerage/transactions/page.tsx` — both list rows (mobile compact + desktop right-aligned column) use `isRentalTransaction(tx) ? "—" : (tx.transactionValue ? fmt(...) : "—")`.
+  - `src/app/(dashboard)/brokerage/agents/[id]/page.tsx` — recent-deals list (line 1077) + deals table (line 1188) gate value display on `isRentalDealType(d) ? "—" : fmt(...)`. (DealSubmission carries the wider `BmsDealType` so the right helper is `isRentalDealType`.)
+  - `src/app/(dashboard)/brokerage/my-deals/my-deals-view.tsx` — Deal Overview "Transaction Value" InfoRow gated on `!isRentalDealType(data)`.
+  - `tests/smoke/rental-value-display.test.ts` (new — 5 contracts): C1 helper behavior on both enums (incl. null/undefined tolerance for stale DB rows); C2 detail page Deal Info "Value" row gated; C3 transactions list both rows (≥2 occurrences pinned via `g` flag match count); C4 agent detail both per-row displays (≥2 occurrences); C5 my-deals InfoRow gated on `!isRentalDealType(data)`. Em-dash regex uses alternation `(?:—|—)` because the repo mixes literal glyphs and JS escapes.
+- **Placeholder choice:** Em-dash "—" (matches existing convention for missing values). Always-populated Commission column anchors the meaning ("Value: — / Commission: $4,500" reads naturally as "commission is the headline"). No tooltips or "(commission)" labels — adds complexity without payoff.
+- **Out of scope (don't touch):** DB schema (no migration); sale transactions (no behavior change); aggregate KPIs (Phase 5 stub below); invoice forms + PDFs (financial documents need value snapshot); commission plan input forms (collect value as user input, not display); public-facing pages.
+- **Success criteria:** typecheck holds at clean-tree 285 / dirty-tree 287; full vitest suite passes; build clean; lint changed-files clean; manual visual check on transactions detail / list / agent detail / my-deals confirms rentals show "—" and sales unchanged.
+- **Depends on:** none (touches existing surfaces independently of other Phase 4 slices).
+- **Requires approval:** Pre-approved by Nathan (Path A = per-row only, two helpers, em-dash placeholder, 5 contracts, Phase 5 stub for aggregates).
+- **Outcome:** _filled in at gate-run time_
+
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
 - **Goal:** Replace per-callsite override threading with a single OrgContext wrapper that every Prisma query must use. Make it impossible to forget threading without a typecheck error.
@@ -938,6 +957,18 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Estimated diff:** ~40-60 lines.
 - **Depends on:** 19-B2b (merged).
 - **Requires approval:** Yes — focus management decision is a small UX call.
+
+### 21-fix-followup-volume-aggregates — Aggregate transactionValue computations still mix annual rent into "totalVolume"
+- **Status:** `phase-5-stub`
+- **Background:** Slice 21 fixed per-row "Value" display for rentals (annual rent was misleadingly displayed as the deal headline). Aggregate computations in `agents/actions.ts`, `earnings/actions.ts`, `reports/actions.ts`, `reports/revenue/actions.ts` still sum `transactionValue` across all transaction types — so dashboard "total volume" cards include annual rent for rentals.
+- **Why deferred:** `agents/[id]/page.tsx:514-517` uses `stats.totalVolume` to calculate the agent's commission tier for `volume_based` commission plans. Excluding rentals from `totalVolume` would silently shift which tier an agent lands in — a paycheck-impacting change that needs a stakeholder conversation with the brokerage owner BEFORE the math is changed.
+- **Required input before slicing:**
+  - Conversation with Gulino owner (or the relevant brokerage owner per tenant) on whether volume-based commission tiers should apply to rental-heavy books.
+  - Decision on metric naming: redefine `totalVolume` to exclude rentals, OR add a parallel `saleVolume` / `commissionEarned` stat alongside `totalVolume` for backward compatibility.
+  - Communication plan for agents on volume-based plans whose tier might shift.
+- **Affected surfaces if redefining totalVolume:** agent profile stat cards, agent earnings dashboard, brokerage reports overview, revenue breakdown, commission tier calc on agent detail page (`agents/[id]/page.tsx:514-517`).
+- **Depends on:** 21 (per-row fix already merged).
+- **Requires approval:** YES — financial-KPI definition change.
 
 ### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)

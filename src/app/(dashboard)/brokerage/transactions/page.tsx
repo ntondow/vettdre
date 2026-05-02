@@ -35,6 +35,7 @@ import type {
   BmsTransactionTypeAlias,
   TransactionStageType,
 } from "@/lib/bms-types";
+import { isRentalTransaction } from "@/lib/bms-types";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -429,7 +430,8 @@ export default function TransactionsPage() {
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>{tx.clientName || "\u2014"}</span>
                     <div className="flex items-center gap-3">
-                      <span>{tx.transactionValue ? fmt(tx.transactionValue) : "\u2014"}</span>
+                      {/* Slice 21: rental transaction values (= annual rent) misled as deal headline. */}
+                      <span>{isRentalTransaction(tx) ? "\u2014" : (tx.transactionValue ? fmt(tx.transactionValue) : "\u2014")}</span>
                       {(() => {
                         const agents = (tx as any).agents as Array<{ payoutStatus: string }> | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
                         if (agents && agents.length > 1) {
@@ -473,7 +475,8 @@ export default function TransactionsPage() {
                   {tx.clientName || "\u2014"}
                 </div>
                 <div className="hidden md:flex col-span-1 items-center justify-end text-sm text-slate-700 font-medium">
-                  {tx.transactionValue ? fmt(tx.transactionValue) : "\u2014"}
+                  {/* Slice 21: rental value = annual rent \u2014 hidden so commission stays the headline. */}
+                  {isRentalTransaction(tx) ? "\u2014" : (tx.transactionValue ? fmt(tx.transactionValue) : "\u2014")}
                 </div>
                 <div className="hidden md:flex col-span-1 items-center justify-center">
                   {(() => {

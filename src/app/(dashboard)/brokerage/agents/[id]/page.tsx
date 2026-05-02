@@ -18,6 +18,7 @@ import {
   COMMISSION_PLAN_TYPE_LABELS,
   COMPLIANCE_DOC_TYPE_LABELS,
   COMPLIANCE_STATUS_COLORS,
+  isRentalDealType,
 } from "@/lib/bms-types";
 import type { BrokerageConfig, ComplianceDocType, AgentDashboardData } from "@/lib/bms-types";
 import {
@@ -1072,7 +1073,8 @@ export default function AgentDetailPage({
                         </span>
                       </div>
                       <div className="text-xs text-slate-500">
-                        <span className="capitalize">{d.dealType}</span> &middot; {fmt(Number(d.transactionValue))} &middot; {fmtDate(d.createdAt)}
+                        {/* Slice 21: rentals show "—" for value (annual rent ≠ deal headline). */}
+                        <span className="capitalize">{d.dealType}</span> &middot; {isRentalDealType(d) ? "—" : fmt(Number(d.transactionValue))} &middot; {fmtDate(d.createdAt)}
                       </div>
                     </div>
                   ))}
@@ -1182,7 +1184,8 @@ export default function AgentDetailPage({
                     <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-4 py-3 text-sm text-slate-800 max-w-[200px] truncate">{d.propertyAddress}</td>
                       <td className="px-4 py-3 text-sm text-slate-600 capitalize">{d.dealType}</td>
-                      <td className="px-4 py-3 text-sm text-slate-700 text-right">{fmt(Number(d.transactionValue))}</td>
+                      {/* Slice 21: rentals show "—" for value cell — commission is the meaningful number. */}
+                      <td className="px-4 py-3 text-sm text-slate-700 text-right">{isRentalDealType(d) ? "—" : fmt(Number(d.transactionValue))}</td>
                       <td className="px-4 py-3 text-sm text-slate-700 text-right">{fmt(Number(d.totalCommission))}</td>
                       <td className="px-4 py-3 text-sm text-green-600 font-medium text-right">{fmt(Number(d.agentPayout))}</td>
                       <td className="px-4 py-3 text-center">
