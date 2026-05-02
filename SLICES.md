@@ -776,7 +776,7 @@ Phase 0 status as of 2026-04-29:
 - **Outcome:** _filled in at gate-run time_
 
 ### 22-as-org-vault — Honor `?as_org=` override in Document Vault list and detail pages
-- **Status:** `in_progress`
+- **Status:** `awaiting_review` (PR #44)
 - **Goal:** super_admin viewing the Document Vault under `?as_org=<otherOrgId>` should see the target tenant's templates, not their home-org templates. The orange override banner already renders correctly on `/brokerage/client-onboarding/vault` and `/brokerage/client-onboarding/vault/[id]`, but the underlying queries return home-org data — blocking cross-tenant verification of vault work.
 - **Closes bug:** Phase 4 cleanup; extends B-009 / B-022 family. Specifically the gap noted in slice 0c3 (line 173): "vault list page itself doesn't support override (tied to org-scoped templates), so detail-page override is moot until the list page changes. Filed as a future slice." This is that future slice.
 - **Why:** Vault was built later as client components and missed both halves of the codebase-standard override pattern: (a) client component reading `useSearchParams()` and threading `overrideOpts`, (b) server actions accepting `options: { overrideAsOrg?: string } = {}` and forwarding to `getCurrentOrgContext`. The `readAsOrgFromReferer()` fallback in `auth-context.ts:30-40` exists as a safety net but is not load-bearing — every other client→server-action surface in this codebase explicitly threads the option. Vault should match.
