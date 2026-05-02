@@ -171,9 +171,13 @@ export default function PdfFieldViewer({
                   top: `${field.y}%`,
                   width: `${field.width}%`,
                   height: `${field.height}%`,
-                  // Ensure minimum touch target on mobile
-                  minHeight: "16px",
-                  minWidth: "16px",
+                  // Mobile touch targets (#13) — interactive (non-prefill)
+                  // fields get a 44px minimum hit area per iOS HIG. Prefill
+                  // fields stay at 16px because they're locked/read-only and
+                  // never tapped; bumping them too would cause overlap on
+                  // dense forms (DOS-1736 has 8 fields close together).
+                  minHeight: field.prefillKey ? "16px" : "44px",
+                  minWidth: field.prefillKey ? "16px" : "44px",
                 }}
               >
                 {isSignature && value ? (
