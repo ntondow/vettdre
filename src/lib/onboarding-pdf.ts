@@ -112,17 +112,23 @@ function drawBlankLine(page: PDFPage, font: PDFFont, label: string, y: number): 
 
 // ── Field Geometry Constants (used by both the generator and consumers) ─────
 //
-// Box dimensions match the existing seed convention (text/date 4% tall, signature
-// 7% tall). x is fixed at 18% — the labels start at margin ML=60 (~9.8% of 612)
-// and the underlines start a few pixels past the label, so 18% is a reasonable
-// shared left edge that overlays the start of every line. width is per-type.
+// Box dimensions. x is fixed at 18% — the labels start at margin ML=60 (~9.8%
+// of 612) and the underlines start a few pixels past the label, so 18% is a
+// reasonable shared left edge that overlays the start of every line. Width is
+// per-type. Heights are tuned against the underline cascade on Page 2: lines
+// are spaced ~22 PDF units = ~2.78% apart, so a 7% signature box (slice
+// 19-fix-tra-seed-coords) overlapped the printed-name field above it.
+// Slice 19-fix-tra-sig-height drops sig height to 3% — leaves only ~0.22% of
+// vertical share with the text field below it (visually negligible) and the
+// signing UI's full-screen pad means the inline overlay just needs to be
+// tappable, not the actual signing surface.
 
 const TRA_FIELD_X = 18;
 const TRA_TEXT_WIDTH = 50;
 const TRA_SIG_WIDTH = 40;
 const TRA_DATE_WIDTH = 25;
 const TRA_TEXT_HEIGHT = 4;
-const TRA_SIG_HEIGHT = 7;
+const TRA_SIG_HEIGHT = 3;
 
 // drawBlankLine draws the underline 2px below the y baseline passed in. Convert
 // the baseline-y (PDF user space, bottom-origin) to the underline's top-origin

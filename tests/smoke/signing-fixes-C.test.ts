@@ -180,23 +180,31 @@ describe("slice 20-fixes-C — public signing flow P1 mobile UX fixes", () => {
 
   // ── #13: 44px hit area for interactive fields ─────────────
 
-  it("#13 pdf-field-viewer field overlays use 44px hit area for interactive (non-prefill) fields only", () => {
+  it("#13 pdf-field-viewer field overlays use 44px hit area for interactive (non-prefill, non-signature) fields", () => {
     const src = readSource("src/components/onboarding/pdf-field-viewer.tsx");
 
     // The conditional must distinguish prefill (read-only, locked) from
     // interactive. Prefill stays at 16px because it's never tapped;
     // bumping all fields to 44px would cause overlap on dense forms.
+    //
+    // Slice 19-fix-tra-sig-height added an OUTER signature ternary that
+    // wraps the prefill ternary: signatures get 24px (WCAG 2.5.8 AA) not
+    // 44px (WCAG 2.5.5 AAA / iOS HIG) because tapping a signature opens a
+    // full-screen pad — the inline overlay just needs to be tappable, not
+    // the actual signing surface. The regex tolerates that wrapping
+    // ternary while still pinning the prefill ? "16px" : "44px" branch
+    // for everything that ISN'T a signature.
     expect(
       src,
-      "minHeight must be conditional on field.prefillKey, with 44px for interactive",
+      "minHeight must keep the prefill ? '16px' : '44px' branch for non-signature interactive fields",
     ).toMatch(
-      /minHeight:\s*field\.prefillKey\s*\?\s*["']16px["']\s*:\s*["']44px["']/,
+      /minHeight:\s*(?:field\.type\s*===\s*["']signature["']\s*\?\s*["']\d+px["']\s*:\s*\(?\s*)?field\.prefillKey\s*\?\s*["']16px["']\s*:\s*["']44px["']/,
     );
     expect(
       src,
-      "minWidth must be conditional on field.prefillKey, with 44px for interactive",
+      "minWidth must keep the prefill ? '16px' : '44px' branch for non-signature interactive fields",
     ).toMatch(
-      /minWidth:\s*field\.prefillKey\s*\?\s*["']16px["']\s*:\s*["']44px["']/,
+      /minWidth:\s*(?:field\.type\s*===\s*["']signature["']\s*\?\s*["']\d+px["']\s*:\s*\(?\s*)?field\.prefillKey\s*\?\s*["']16px["']\s*:\s*["']44px["']/,
     );
 
     // The unconditional 16px from the pre-fix code must be gone.
