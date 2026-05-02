@@ -5,7 +5,7 @@
 
 import prisma from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
-import { generateTenantRepAgreementPdf } from "@/lib/onboarding-pdf";
+import { generateTenantRepAgreementPdf, type TraFieldCoords } from "@/lib/onboarding-pdf";
 import { generateNysDisclosurePdf } from "@/lib/onboarding-pdf-nys-disclosure";
 import { generateFairHousingPdf } from "@/lib/onboarding-pdf-fair-housing";
 import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
@@ -17,11 +17,61 @@ import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
 // width/height = field dimensions as % of page width/height
 // page = 0-indexed page number within the PDF
 
-const TENANT_REP_FIELDS: TemplateFieldDefinition[] = [
-  { id: "tr_tenant_name", label: "Tenant Printed Name", type: "text", page: 1, x: 18, y: 69, width: 50, height: 4, prefillKey: "clientName", required: true },
-  { id: "tr_tenant_sig", label: "Tenant Signature", type: "signature", page: 1, x: 18, y: 75, width: 40, height: 7, required: true },
-  { id: "tr_tenant_date", label: "Tenant Date", type: "date", page: 1, x: 18, y: 83, width: 25, height: 4, prefillKey: "date", required: true },
-];
+// TRA fields are derived from the generator's `fieldCoords` return so the
+// percentages always match the underlines drawn by `drawBlankLine`. Hand-tuned
+// values are forbidden here — past drift between seed and PDF is exactly what
+// this slice fixes (slice 19-fix-tra-seed-coords).
+export function buildTraFieldsFromCoords(
+  coords: TraFieldCoords,
+): TemplateFieldDefinition[] {
+  return [
+    {
+      id: "tr_tenant_name",
+      label: "Tenant Printed Name",
+      type: "text",
+      ...coords.tenantPrintedName,
+      prefillKey: "clientName",
+      required: true,
+    },
+    {
+      id: "tr_tenant_sig",
+      label: "Tenant Signature",
+      type: "signature",
+      ...coords.tenantSignature,
+      required: true,
+    },
+    {
+      id: "tr_tenant_date",
+      label: "Tenant Date",
+      type: "date",
+      ...coords.tenantDate,
+      prefillKey: "date",
+      required: true,
+    },
+    {
+      id: "tr_agent_name",
+      label: "Agent Printed Name",
+      type: "text",
+      ...coords.agentPrintedName,
+      prefillKey: "agentName",
+      required: false,
+    },
+    {
+      id: "tr_agent_sig",
+      label: "Agent Signature",
+      type: "signature",
+      ...coords.agentSignature,
+      required: false,
+    },
+    {
+      id: "tr_agent_date",
+      label: "Agent Date",
+      type: "date",
+      ...coords.agentDate,
+      required: false,
+    },
+  ];
+}
 
 // DOS-1735-f — NYS Agency Disclosure Form for Landlord and Tenant
 // All signable fields are on page 2 (index 1)
@@ -57,13 +107,17 @@ const FAIR_HOUSING_FIELDS: TemplateFieldDefinition[] = [
   { id: "fh_client_date",  label: "Date",            type: "date",      page: 1, x: 81, y: 53, width: 14, height: 3, prefillKey: "date",          required: true },
 ];
 
+interface TemplateBuildResult {
+  pdfBytes: Uint8Array;
+  fields: TemplateFieldDefinition[];
+}
+
 interface TemplateConfig {
   name: string;
   description: string;
   docType: string;
-  fields: TemplateFieldDefinition[];
   sortOrder: number;
-  generatePdf: (brokerageName: string) => Promise<Uint8Array>;
+  build: (brokerageName: string) => Promise<TemplateBuildResult>;
 }
 
 export async function seedDefaultTemplates(orgId: string): Promise<void> {
@@ -89,42 +143,48 @@ export async function seedDefaultTemplates(orgId: string): Promise<void> {
         name: "Tenant Representation Agreement",
         description: "Standard tenant rep agreement with commission terms and FARE Act compliance",
         docType: "tenant_rep_agreement",
-        fields: TENANT_REP_FIELDS,
         sortOrder: 0,
-        generatePdf: async (bn) => generateTenantRepAgreementPdf({
-          brokerageName: bn,
-          agentFullName: "[Agent Name]",
-          agentLicense: "[License #]",
-          clientFirstName: "[Client",
-          clientLastName: "Name]",
-          commissionAmount: 0,
-          commissionType: "percentage",
-          termDays: 30,
-        }),
+        build: async (bn) => {
+          const { pdfBytes, fieldCoords } = await generateTenantRepAgreementPdf({
+            brokerageName: bn,
+            agentFullName: "[Agent Name]",
+            agentLicense: "[License #]",
+            clientFirstName: "[Client",
+            clientLastName: "Name]",
+            commissionAmount: 0,
+            commissionType: "percentage",
+            termDays: 30,
+          });
+          return { pdfBytes, fields: buildTraFieldsFromCoords(fieldCoords) };
+        },
       },
       {
         name: "NYS Agency Disclosure (DOS 1736)",
         description: "Required New York State disclosure form explaining agency relationships",
         docType: "nys_disclosure",
-        fields: NYS_DISCLOSURE_FIELDS,
         sortOrder: 1,
-        generatePdf: async (bn) => generateNysDisclosurePdf({
-          brokerageName: bn,
-          agentFullName: "[Agent Name]",
-          agentLicense: "[License #]",
-          clientFirstName: "[Client",
-          clientLastName: "Name]",
+        build: async (bn) => ({
+          pdfBytes: await generateNysDisclosurePdf({
+            brokerageName: bn,
+            agentFullName: "[Agent Name]",
+            agentLicense: "[License #]",
+            clientFirstName: "[Client",
+            clientLastName: "Name]",
+          }),
+          fields: NYS_DISCLOSURE_FIELDS,
         }),
       },
       {
         name: "Fair Housing Notice",
         description: "Federal, NYS, and NYC fair housing protections acknowledgment",
         docType: "fair_housing_notice",
-        fields: FAIR_HOUSING_FIELDS,
         sortOrder: 2,
-        generatePdf: async (bn) => generateFairHousingPdf({
-          brokerageName: bn,
-          agentFullName: "[Agent Name]",
+        build: async (bn) => ({
+          pdfBytes: await generateFairHousingPdf({
+            brokerageName: bn,
+            agentFullName: "[Agent Name]",
+          }),
+          fields: FAIR_HOUSING_FIELDS,
         }),
       },
     ];
@@ -133,8 +193,8 @@ export async function seedDefaultTemplates(orgId: string): Promise<void> {
 
     for (const config of configs) {
       try {
-        // Generate template PDF
-        const pdfBytes = await config.generatePdf(brokerageName);
+        // Generate template PDF + field array
+        const { pdfBytes, fields } = await config.build(brokerageName);
 
         // Upload to storage
         const storagePath = `document-templates/${orgId}/default-${config.docType}.pdf`;
@@ -158,7 +218,7 @@ export async function seedDefaultTemplates(orgId: string): Promise<void> {
             description: config.description,
             category: "standard",
             templatePdfUrl: pdfUrl,
-            fields: JSON.parse(JSON.stringify(config.fields)),
+            fields: JSON.parse(JSON.stringify(fields)),
             isActive: true,
             isDefault: true,
             sortOrder: config.sortOrder,

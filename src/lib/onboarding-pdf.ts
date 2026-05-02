@@ -18,6 +18,28 @@ interface TenantRepAgreementParams {
   termDays: number;
 }
 
+// Field overlay box (in 0..100 percentages of page width/height, top-origin).
+// `page` is the 0-indexed page in the generated PDF.
+export interface TraFieldCoord {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  page: number;
+}
+
+// All 6 signable underlines drawn on Page 2 of the TRA. Each box has its
+// bottom edge sitting on the underline so users type / sign on top of the
+// line. Names mirror the seed file's field IDs (without the `tr_` prefix).
+export interface TraFieldCoords {
+  tenantPrintedName: TraFieldCoord;
+  tenantSignature: TraFieldCoord;
+  tenantDate: TraFieldCoord;
+  agentPrintedName: TraFieldCoord;
+  agentSignature: TraFieldCoord;
+  agentDate: TraFieldCoord;
+}
+
 // ── Constants ────────────────────────────────────────────────
 
 const PAGE_W = 612; // letter width
@@ -88,11 +110,34 @@ function drawBlankLine(page: PDFPage, font: PDFFont, label: string, y: number): 
   return y - LINE_HEIGHT - 6;
 }
 
+// ── Field Geometry Constants (used by both the generator and consumers) ─────
+//
+// Box dimensions match the existing seed convention (text/date 4% tall, signature
+// 7% tall). x is fixed at 18% — the labels start at margin ML=60 (~9.8% of 612)
+// and the underlines start a few pixels past the label, so 18% is a reasonable
+// shared left edge that overlays the start of every line. width is per-type.
+
+const TRA_FIELD_X = 18;
+const TRA_TEXT_WIDTH = 50;
+const TRA_SIG_WIDTH = 40;
+const TRA_DATE_WIDTH = 25;
+const TRA_TEXT_HEIGHT = 4;
+const TRA_SIG_HEIGHT = 7;
+
+// drawBlankLine draws the underline 2px below the y baseline passed in. Convert
+// the baseline-y (PDF user space, bottom-origin) to the underline's top-origin
+// percentage of PAGE_H, then place the field box so its BOTTOM sits on the
+// underline (user types above the line). Field box top = underlineTopPct - height.
+function topPctFromBaseline(baselineY: number): number {
+  const underlinePdfY = baselineY - 2;
+  return ((PAGE_H - underlinePdfY) / PAGE_H) * 100;
+}
+
 // ── Main Generator ───────────────────────────────────────────
 
 export async function generateTenantRepAgreementPdf(
   params: TenantRepAgreementParams,
-): Promise<Uint8Array> {
+): Promise<{ pdfBytes: Uint8Array; fieldCoords: TraFieldCoords }> {
   const {
     brokerageName,
     agentFullName,
@@ -274,12 +319,16 @@ export async function generateTenantRepAgreementPdf(
   y = drawSectionHeader(page2, fontBold, "7. SIGNATURES", y);
   y -= 6;
 
-  // Tenant signature block
+  // Tenant signature block. Capture y BEFORE each drawBlankLine call so the
+  // returned fieldCoords stay in lockstep with the actual underlines drawn.
   page2.drawText("TENANT", { x: ML, y, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3) });
   y -= LINE_HEIGHT + 4;
 
+  const tenantPrintedNameBaselineY = y;
   y = drawBlankLine(page2, font, "Printed Name:", y);
+  const tenantSignatureBaselineY = y;
   y = drawBlankLine(page2, font, "Signature:", y);
+  const tenantDateBaselineY = y;
   y = drawBlankLine(page2, font, "Date:", y);
 
   y -= PARA_SPACING * 2;
@@ -288,8 +337,11 @@ export async function generateTenantRepAgreementPdf(
   page2.drawText("AGENT", { x: ML, y, size: 9, font: fontBold, color: rgb(0.3, 0.3, 0.3) });
   y -= LINE_HEIGHT + 4;
 
+  const agentPrintedNameBaselineY = y;
   y = drawBlankLine(page2, font, "Printed Name:", y);
+  const agentSignatureBaselineY = y;
   y = drawBlankLine(page2, font, "Signature:", y);
+  const agentDateBaselineY = y;
   y = drawBlankLine(page2, font, "Date:", y);
 
   // Page number
@@ -301,5 +353,51 @@ export async function generateTenantRepAgreementPdf(
     color: rgb(0.5, 0.5, 0.5),
   });
 
-  return doc.save();
+  const fieldCoords: TraFieldCoords = {
+    tenantPrintedName: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(tenantPrintedNameBaselineY) - TRA_TEXT_HEIGHT,
+      width: TRA_TEXT_WIDTH,
+      height: TRA_TEXT_HEIGHT,
+      page: 1,
+    },
+    tenantSignature: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(tenantSignatureBaselineY) - TRA_SIG_HEIGHT,
+      width: TRA_SIG_WIDTH,
+      height: TRA_SIG_HEIGHT,
+      page: 1,
+    },
+    tenantDate: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(tenantDateBaselineY) - TRA_TEXT_HEIGHT,
+      width: TRA_DATE_WIDTH,
+      height: TRA_TEXT_HEIGHT,
+      page: 1,
+    },
+    agentPrintedName: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(agentPrintedNameBaselineY) - TRA_TEXT_HEIGHT,
+      width: TRA_TEXT_WIDTH,
+      height: TRA_TEXT_HEIGHT,
+      page: 1,
+    },
+    agentSignature: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(agentSignatureBaselineY) - TRA_SIG_HEIGHT,
+      width: TRA_SIG_WIDTH,
+      height: TRA_SIG_HEIGHT,
+      page: 1,
+    },
+    agentDate: {
+      x: TRA_FIELD_X,
+      y: topPctFromBaseline(agentDateBaselineY) - TRA_TEXT_HEIGHT,
+      width: TRA_DATE_WIDTH,
+      height: TRA_TEXT_HEIGHT,
+      page: 1,
+    },
+  };
+
+  const pdfBytes = await doc.save();
+  return { pdfBytes, fieldCoords };
 }
