@@ -775,6 +775,55 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** Pre-approved by Nathan (Path A = per-row only, two helpers, em-dash placeholder, 5 contracts, Phase 5 stub for aggregates).
 - **Outcome:** _filled in at gate-run time_
 
+### 22-as-org-vault — Honor `?as_org=` override in Document Vault list and detail pages
+- **Status:** `in_progress`
+- **Goal:** super_admin viewing the Document Vault under `?as_org=<otherOrgId>` should see the target tenant's templates, not their home-org templates. The orange override banner already renders correctly on `/brokerage/client-onboarding/vault` and `/brokerage/client-onboarding/vault/[id]`, but the underlying queries return home-org data — blocking cross-tenant verification of vault work.
+- **Closes bug:** Phase 4 cleanup; extends B-009 / B-022 family. Specifically the gap noted in slice 0c3 (line 173): "vault list page itself doesn't support override (tied to org-scoped templates), so detail-page override is moot until the list page changes. Filed as a future slice." This is that future slice.
+- **Why:** Vault was built later as client components and missed both halves of the codebase-standard override pattern: (a) client component reading `useSearchParams()` and threading `overrideOpts`, (b) server actions accepting `options: { overrideAsOrg?: string } = {}` and forwarding to `getCurrentOrgContext`. The `readAsOrgFromReferer()` fallback in `auth-context.ts:30-40` exists as a safety net but is not load-bearing — every other client→server-action surface in this codebase explicitly threads the option. Vault should match.
+- **Approach:** Mirror the working `client-onboarding/page.tsx` + `actions.ts` pattern exactly. No new mechanism; thread the existing `overrideAsOrg` option through 5 vault server actions, read `as_org` from `useSearchParams()` in both vault client pages, preserve `?as_org=` on intra-vault navigation links so the override survives. Vault has no agent-identity coupling (templates are org-scoped only with no agent FK), so the `createOnboarding`-style legal-deferral concern doesn't apply — all 5 mutations thread.
+
+## Plan of record
+
+**Files to be created/modified:**
+- `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts` (modify — add `options: { overrideAsOrg?: string } = {}` arg to all 5 exported server actions; helper `getOrgId()` accepts options and forwards to `getCurrentOrgContext(options)`)
+- `src/app/(dashboard)/brokerage/client-onboarding/vault/page.tsx` (modify — `useSearchParams` + `overrideOpts` memo; thread to all 4 server-action call sites; preserve `?as_org=` on `<Link>` to detail page and back-link to `/brokerage/client-onboarding`)
+- `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (modify — same `useSearchParams` + `overrideOpts` pattern; thread to `getDocumentTemplates` + `updateTemplateFields`; preserve `?as_org=` on `router.push` back-navigation)
+- `tests/smoke/22-as-org-vault.test.ts` (create — 3 contracts as specified below)
+- `tests/smoke/override-scoping.test.ts` (modify — add `vault-actions.ts` to `FILES_UNDER_TEST` to lock in the fix against future regression of any new vault export)
+
+**Smoke contract regex pins (literal regex strings):**
+1. **Positive (P):** Vault list reads `as_org` AND threads `overrideOpts` to `getDocumentTemplates`.
+   - `/sp\.get\(["']as_org["']\)/` against `vault/page.tsx`
+   - `/getDocumentTemplates\([^)]*overrideOpts/` against `vault/page.tsx`
+2. **Negative (N):** `vault-actions.ts` has no bare `getCurrentOrgContext()` call (every call must forward `options`).
+   - `/getCurrentOrgContext\(\)/` against `vault-actions.ts` → `expect(...).toBeNull()`
+   - All `getCurrentOrgContext(` occurrences match `/getCurrentOrgContext\(options\)/`
+3. **Cardinality (C):** Both vault client pages contain the override pattern.
+   - `useSearchParams` AND `overrideAsOrg` token present in both `vault/page.tsx` and `vault/[id]/page.tsx`
+   - `expect(matchCount).toBeGreaterThanOrEqual(2)` for the page-file count
+
+**Estimated line count:** ~70 net (5 server-action signatures expanded + 2 client pages threading the option + 2 link query-string preservations + ~30-line smoke test + 1-line addition to override-scoping.test.ts FILES_UNDER_TEST + this slice entry).
+
+**Stop conditions internalized:**
+- Do NOT modify `lib/auth-context.ts` (slice rule + project rule).
+- Mirror the onboarding `actions.ts` signature shape exactly — no new patterns invented.
+- If `vault-actions.ts` exports turn out to be called from anywhere else (e.g. non-vault pages), surface before changing signatures.
+- If line count exceeds 200, stop and reassess.
+
+**Open questions for Nathan:** none after precedent check (mutations thread per onboarding precedent; agent-identity coupling that gates `createOnboarding` doesn't apply to vault).
+
+**Discovery findings:**
+- Working reference: `src/app/(dashboard)/brokerage/client-onboarding/page.tsx:73-81,115` (client) + `actions.ts:26-29,82-86` (server-action signature).
+- `auth-context.ts:42-104` validates `super_admin` role + target org existence before honoring override; non-super_admin calls silently ignored. Threading is safe — no extra checks needed in vault-actions.
+- `override-scoping.test.ts:77-84` documents that `createOnboarding` is intentionally exempted (agent-identity coupling, legal/audit implications). Vault templates have no such coupling — schema scopes templates by `orgId` with no agent FK.
+- `vault/page.tsx:171` and `vault/[id]/page.tsx:432` strip `?as_org=` from navigation URLs today; intra-vault navigation breaks the override. Preserving on these two surfaces.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** typecheck holds at clean-tree 285; full vitest suite passes; build clean; lint changed-files clean; new smoke test green; override-scoping.test.ts still green with vault-actions.ts in scope.
+- **Depends on:** none.
+- **Requires approval:** Pre-approved by Nathan (precedent check confirmed; data-layer-adjacent but uses existing `auth-context.ts` API only).
+- **Outcome:** _filled in at gate-run time_
+
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
 - **Goal:** Replace per-callsite override threading with a single OrgContext wrapper that every Prisma query must use. Make it impossible to forget threading without a typecheck error.

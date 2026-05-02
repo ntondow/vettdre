@@ -7,8 +7,10 @@ import type { TemplateFieldDefinition } from "@/lib/onboarding-types";
 
 // ── Auth Helper ─────────────────────────────────────────────
 
-async function getOrgId(): Promise<string | null> {
-  const ctx = await getCurrentOrgContext();
+async function getOrgId(
+  options: { overrideAsOrg?: string } = {},
+): Promise<string | null> {
+  const ctx = await getCurrentOrgContext(options);
   return ctx?.orgId ?? null;
 }
 
@@ -21,13 +23,15 @@ function serialize<T>(obj: T): T {
 
 // ── 1. getDocumentTemplates ─────────────────────────────────
 
-export async function getDocumentTemplates(): Promise<{
+export async function getDocumentTemplates(
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   success: boolean;
   data?: Record<string, unknown>[];
   error?: string;
 }> {
   try {
-    const orgId = await getOrgId();
+    const orgId = await getOrgId(options);
     if (!orgId) return { success: false, error: "Not authenticated" };
 
     let templates = await prisma.documentTemplate.findMany({
@@ -58,13 +62,16 @@ export async function getDocumentTemplates(): Promise<{
 
 // ── 2. createDocumentTemplate ───────────────────────────────
 
-export async function createDocumentTemplate(formData: FormData): Promise<{
+export async function createDocumentTemplate(
+  formData: FormData,
+  options: { overrideAsOrg?: string } = {},
+): Promise<{
   success: boolean;
   data?: Record<string, unknown>;
   error?: string;
 }> {
   try {
-    const orgId = await getOrgId();
+    const orgId = await getOrgId(options);
     if (!orgId) return { success: false, error: "Not authenticated" };
 
     const name = formData.get("name") as string;
@@ -118,9 +125,10 @@ export async function createDocumentTemplate(formData: FormData): Promise<{
 export async function updateDocumentTemplate(
   id: string,
   input: { name?: string; description?: string; sortOrder?: number; isActive?: boolean },
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const orgId = await getOrgId();
+    const orgId = await getOrgId(options);
     if (!orgId) return { success: false, error: "Not authenticated" };
 
     const existing = await prisma.documentTemplate.findFirst({
@@ -147,9 +155,10 @@ export async function updateDocumentTemplate(
 
 export async function deleteDocumentTemplate(
   id: string,
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const orgId = await getOrgId();
+    const orgId = await getOrgId(options);
     if (!orgId) return { success: false, error: "Not authenticated" };
 
     const existing = await prisma.documentTemplate.findFirst({
@@ -175,9 +184,10 @@ export async function deleteDocumentTemplate(
 export async function updateTemplateFields(
   templateId: string,
   fields: TemplateFieldDefinition[],
+  options: { overrideAsOrg?: string } = {},
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const orgId = await getOrgId();
+    const orgId = await getOrgId(options);
     if (!orgId) return { success: false, error: "Not authenticated" };
 
     const existing = await prisma.documentTemplate.findFirst({

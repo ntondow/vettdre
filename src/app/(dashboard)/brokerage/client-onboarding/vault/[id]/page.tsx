@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, use } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useRef, use, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Save,
@@ -79,6 +79,13 @@ type ResizeCorner = "nw" | "ne" | "sw" | "se";
 export default function TemplateEditorPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
   const pdfContainerRef = useRef<HTMLDivElement>(null);
 
   const [template, setTemplate] = useState<TemplateData | null>(null);
@@ -127,7 +134,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
 
   useEffect(() => {
     async function load() {
-      const result = await getDocumentTemplates();
+      const result = await getDocumentTemplates(overrideOpts);
       if (result.success && Array.isArray(result.data)) {
         const found = result.data.find((t: Record<string, unknown>) => t.id === id) as unknown as TemplateData | undefined;
         if (found) {
@@ -140,7 +147,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       setLoading(false);
     }
     load();
-  }, [id]);
+  }, [id, overrideOpts]);
 
   // Render PDF pages via pdfjs (slice 19-B1). Mirrors pdf-field-viewer.tsx
   // exactly so the public viewer and the editor share one rendering pattern.
@@ -207,7 +214,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
   const handleSave = useCallback(async () => {
     setSaving(true);
     setError(null);
-    const result = await updateTemplateFields(id, fields);
+    const result = await updateTemplateFields(id, fields, overrideOpts);
     setSaving(false);
     if (result.success) {
       setSuccess("Fields saved");
@@ -216,7 +223,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
     } else {
       setError(result.error ?? "Failed to save");
     }
-  }, [id, fields]);
+  }, [id, fields, overrideOpts]);
 
   const addField = useCallback((type: TemplateFieldType) => {
     const newField: TemplateFieldDefinition = {
@@ -429,7 +436,7 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
       <header className="bg-white border-b border-slate-200 flex-shrink-0">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push("/brokerage/client-onboarding/vault")} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500">
+            <button onClick={() => router.push(`/brokerage/client-onboarding/vault${detailQs}`)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-500">
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div>
