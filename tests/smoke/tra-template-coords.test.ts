@@ -189,4 +189,59 @@ describe("slice 19-fix-tra-seed-coords — TRA template field positions", () => 
       "must write a migration-backup-tra-fields-*.json snapshot before any DB or Storage writes",
     ).toMatch(/migration-backup-tra-fields-/);
   });
+
+  // ── C6: TRA signature height is small enough to clear adjacent fields ─
+
+  it("TRA_SIG_HEIGHT < 5 (no overlap with printed-name field above on Page 2)", () => {
+    // Page 2's drawBlankLine cascade puts adjacent underlines ~22 PDF
+    // units = ~2.78% apart. A 7%-tall signature box (slice
+    // 19-fix-tra-seed-coords initial value) overlapped the printed-name
+    // field above it by ~4.22%, click-blocking the printed-name field
+    // entirely (later DOM siblings paint on top under default z-order).
+    // Locking SIG_HEIGHT < 5 keeps the box small enough that the layered
+    // overlap stays minimal even on the vault editor where field.height
+    // is used directly (no minHeight floor). Slice 19-fix-tra-sig-height
+    // sets it to 3 — this contract is the regression guard.
+    const src = readSource("src/lib/onboarding-pdf.ts");
+
+    expect(
+      src,
+      "TRA_SIG_HEIGHT must be 1..4 (was 7 pre-fix; 5+ would re-introduce overlap on the vault editor)",
+    ).toMatch(/const\s+TRA_SIG_HEIGHT\s*=\s*[1-4]\b/);
+  });
+
+  // ── C7: signing UI carve-out — signatures use 24px floor, not 44px ─
+
+  it("pdf-field-viewer differentiates signature minHeight from non-signature interactive", () => {
+    // The signing UI's 44px minHeight floor for non-prefill fields wins
+    // over field.height on small displays — so shrinking TRA_SIG_HEIGHT
+    // alone does NOT fix the click-block on /sign/[token]. Slice
+    // 19-fix-tra-sig-height adds an outer ternary that gives signatures
+    // a 24px floor (WCAG 2.5.8 AA minimum) so the inline overlay no
+    // longer engulfs adjacent fields. The carve-out reasoning: tapping a
+    // signature opens a full-screen pad — the inline overlay just needs
+    // to be tappable, not the actual signing surface.
+    const src = readSource("src/components/onboarding/pdf-field-viewer.tsx");
+
+    // Positive: signature carve-out at 24px exists on minHeight + minWidth.
+    expect(
+      src,
+      "minHeight must special-case signatures at 24px (WCAG 2.5.8 AA)",
+    ).toMatch(
+      /minHeight:[\s\S]{0,80}field\.type\s*===\s*["']signature["']\s*\?\s*["']24px["']/,
+    );
+    expect(
+      src,
+      "minWidth must special-case signatures at 24px (WCAG 2.5.8 AA)",
+    ).toMatch(
+      /minWidth:[\s\S]{0,80}field\.type\s*===\s*["']signature["']\s*\?\s*["']24px["']/,
+    );
+
+    // Negative: no flat 44px floor on all interactive fields (would
+    // re-introduce the click-block).
+    expect(
+      src,
+      "must NOT use a flat 44px floor — signatures need the carve-out",
+    ).not.toMatch(/minHeight:\s*["']44px["']\s*,/);
+  });
 });

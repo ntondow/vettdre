@@ -193,13 +193,29 @@ export default function PdfFieldViewer({
                   top: `${field.y}%`,
                   width: `${field.width}%`,
                   height: `${field.height}%`,
-                  // Mobile touch targets (#13) — interactive (non-prefill)
-                  // fields get a 44px minimum hit area per iOS HIG. Prefill
-                  // fields stay at 16px because they're locked/read-only and
-                  // never tapped; bumping them too would cause overlap on
-                  // dense forms (DOS-1736 has 8 fields close together).
-                  minHeight: field.prefillKey ? "16px" : "44px",
-                  minWidth: field.prefillKey ? "16px" : "44px",
+                  // Mobile touch targets — interactive (non-prefill) fields
+                  // get a 44px minimum hit area per iOS HIG / WCAG 2.5.5
+                  // (slice 20-fixes-C #13). Prefill fields stay at 16px
+                  // because they're locked/read-only and never tapped;
+                  // bumping them too would cause overlap on dense forms
+                  // (DOS-1736 has 8 fields close together).
+                  //
+                  // Signatures use 24px (WCAG 2.5.8 AA minimum) instead of
+                  // 44px because the inline overlay only needs to be
+                  // tappable to open a full-screen signature pad — it isn't
+                  // the actual signing surface. With 44px the signature
+                  // overlay engulfs adjacent fields when underlines are
+                  // closely spaced (slice 19-fix-tra-sig-height — fixes the
+                  // TRA Page 2 click-block where the signature box covered
+                  // the printed-name field above it).
+                  minHeight:
+                    field.type === "signature"
+                      ? "24px"
+                      : field.prefillKey ? "16px" : "44px",
+                  minWidth:
+                    field.type === "signature"
+                      ? "24px"
+                      : field.prefillKey ? "16px" : "44px",
                 }}
               >
                 {isSignature && value ? (
