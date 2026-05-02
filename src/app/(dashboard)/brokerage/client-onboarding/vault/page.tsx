@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   FileText,
   Plus,
@@ -35,6 +36,14 @@ function fmtDate(iso: string): string {
 }
 
 export default function VaultPage() {
+  const sp = useSearchParams();
+  const asOrg = sp.get("as_org") ?? undefined;
+  const overrideOpts = useMemo(
+    () => (asOrg ? { overrideAsOrg: asOrg } : {}),
+    [asOrg],
+  );
+  const detailQs = asOrg ? `?as_org=${encodeURIComponent(asOrg)}` : "";
+
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -49,14 +58,17 @@ export default function VaultPage() {
 
   async function load() {
     setLoading(true);
-    const result = await getDocumentTemplates();
+    const result = await getDocumentTemplates(overrideOpts);
     if (result.success) {
       setTemplates((result.data ?? []) as unknown as TemplateRow[]);
     }
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overrideOpts]);
 
   async function handleUpload() {
     if (!uploadName.trim() || !uploadFile) return;
@@ -66,7 +78,7 @@ export default function VaultPage() {
     fd.append("name", uploadName.trim());
     fd.append("description", uploadDesc.trim());
     fd.append("file", uploadFile);
-    const result = await createDocumentTemplate(fd);
+    const result = await createDocumentTemplate(fd, overrideOpts);
     setUploading(false);
     if (result.success) {
       setSuccess("Template uploaded");
@@ -84,7 +96,7 @@ export default function VaultPage() {
   async function handleDelete(id: string) {
     if (!confirm("Remove this template from the vault?")) return;
     setDeleting(id);
-    const result = await deleteDocumentTemplate(id);
+    const result = await deleteDocumentTemplate(id, overrideOpts);
     if (result.success) {
       setSuccess("Template removed");
       await load();
@@ -99,7 +111,7 @@ export default function VaultPage() {
     <div className="min-h-dvh bg-slate-50">
       <header className="bg-white border-b border-slate-200">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-5">
-          <Link href="/brokerage/client-onboarding" className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-3">
+          <Link href={`/brokerage/client-onboarding${detailQs}`} className="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-3">
             <ArrowLeft className="w-4 h-4" /> Client Onboarding
           </Link>
           <div className="flex items-center justify-between">
@@ -168,7 +180,7 @@ export default function VaultPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Link
-                    href={`/brokerage/client-onboarding/vault/${t.id}`}
+                    href={`/brokerage/client-onboarding/vault/${t.id}${detailQs}`}
                     className="flex-1 text-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                   >
                     Edit Fields

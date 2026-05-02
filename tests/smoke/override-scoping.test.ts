@@ -41,6 +41,8 @@ const FILES_UNDER_TEST = [
   // Slice 0c3: detail-route surfaces.
   "src/app/(dashboard)/brokerage/client-onboarding/actions.ts",
   "src/app/(dashboard)/brokerage/listings/actions.ts",
+  // Slice 22-as-org-vault: vault server actions.
+  "src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts",
 ];
 
 // Exports that intentionally do NOT take the override (agent-self-service
