@@ -979,6 +979,41 @@ export type TransactionStageType =
 
 export type BmsTransactionTypeAlias = "rental" | "sale";
 
+// Mirrors Prisma's BmsDealType enum (7 values). DealSubmissions and the
+// `dealType` snapshot on Transaction-derived rows use this wider enum;
+// the Transaction model itself uses the narrower BmsTransactionTypeAlias.
+export type BmsDealTypeAlias =
+  | "sale"
+  | "lease"
+  | "rental"
+  | "commercial_sale"
+  | "commercial_lease"
+  | "land"
+  | "new_construction";
+
+// Discriminators for hiding the annual-rent "Value" on rental surfaces
+// (slice 21). For brokerages the meaningful headline number on a rental
+// is gross commission, not annual rent — annual rent on the Value row
+// misleads ($54,000 reads as deal size when actual revenue is $4,500).
+//
+// Two helpers because two enums are involved with different breadth:
+//  - Transaction.type is the 2-value `rental | sale` enum.
+//  - DealSubmission/my-deals data carries the wider 7-value BmsDealType
+//    where `lease` and `commercial_lease` are also rentals semantically.
+// Conflating into one helper would lose that granularity.
+
+export function isRentalTransaction(t: { type: BmsTransactionTypeAlias }): boolean {
+  return t.type === "rental";
+}
+
+// Accepts `dealType?: unknown` so DealSubmission rows typed as
+// `Record<string, unknown>` (the my-deals shape, where TS can't guarantee
+// the property's presence) can pass through without coercion. Strict
+// equality narrows `unknown` to literal strings safely at runtime.
+export function isRentalDealType(t: { dealType?: unknown }): boolean {
+  return t.dealType === "rental" || t.dealType === "lease" || t.dealType === "commercial_lease";
+}
+
 export interface CreateTransactionInput {
   type: BmsTransactionTypeAlias;
   propertyAddress: string;

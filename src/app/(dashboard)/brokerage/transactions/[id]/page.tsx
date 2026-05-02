@@ -73,6 +73,7 @@ import {
   PAYMENT_METHOD_LABELS,
   TRANSACTION_AGENT_ROLE_LABELS,
   TRANSACTION_AGENT_ROLE_COLORS,
+  isRentalTransaction,
 } from "@/lib/bms-types";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -1306,12 +1307,16 @@ export default function TransactionDetailPage({
               <span className="text-sm font-medium text-slate-700">Deal Info</span>
             </div>
             <div className="px-4 py-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-slate-500">Value</span>
-                <span className="text-sm font-medium text-slate-900">
-                  {tx.transactionValue ? fmt(tx.transactionValue) : "\u2014"}
-                </span>
-              </div>
+              {/* Slice 21: hide "Value" row on rentals \u2014 annual rent is misleading
+                  as a deal headline (commission is the meaningful revenue number). */}
+              {!isRentalTransaction(tx) && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-slate-500">Value</span>
+                  <span className="text-sm font-medium text-slate-900">
+                    {tx.transactionValue ? fmt(tx.transactionValue) : "\u2014"}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">Commission</span>
                 <span className="text-sm font-medium text-slate-900">
