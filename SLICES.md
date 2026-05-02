@@ -707,21 +707,22 @@ Phase 0 status as of 2026-04-29:
 - **Requires approval:** No (proposal pre-approved by Nathan: all 6 recommendations accepted including pre-commit B2a/B2b split for bisect-clarity).
 - **Outcome:** _filled in at gate-run time_
 
-### 19-B2b — Vault editor field drag-to-move + corner resize + touch (pending)
-- **Status:** `pending` (depends on 19-B2a)
+### 19-B2b — Vault editor field drag-to-move + corner resize + touch
+- **Status:** `awaiting_review`
 - **Goal:** Add interactive field manipulation on rendered overlays. Drag a placed field with mouse or finger to move it; drag corner handles to resize. Boundary-clamp at page edges so fields stay on the page. Touch-event parity on iPad via Pointer Events API. After B2b, the editor is production-grade: misplacement is recoverable via drag (alongside the Page selector from B2a).
 - **Closes bug:** 3 of the slice 19 audit's "production-grade editor" cluster (defects 2, 3, 4 from the B2 plan).
-- **Approach (agent proposes details when slice begins):**
-  - Pointer Events API (`onPointerDown`/`onPointerMove`/`onPointerUp`). iOS Safari has supported since 13.0 — covers every iPad in active use. No polyfill, single set of handlers for mouse + touch + pen.
-  - Drag-to-move: `dragState` ref tracks origin x/y + pointer start; `setPointerCapture` on pointerdown so the pointer stays bound to the overlay element across the canvas.
-  - Resize: 4 corner handles (nw/ne/sw/se) on the selected field. Each handle has its own pointerdown handler that sets `resizeState` with the corner identifier; pointermove computes width/height delta based on corner direction.
-  - Boundary clamp: `Math.max(0, Math.min(newX, 100 - field.width))` for x; same for y. Min field size: 1% × 1%. Max field size: clamps to `x + width <= 100` and `y + height <= 100`.
-  - `touch-action: none` CSS on draggable overlays + resize handles so iOS doesn't intercept the drag for native scroll/pinch.
-- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (pointer state + 6 handlers — drag down/move/up + resize down/move/up — plus 4 corner handle JSX + touch-action CSS), `tests/smoke/vault-editor-drag-resize.test.ts` (new — ~9 contracts).
-- **Success criteria:** typecheck holds; lint changed-files only — zero new errors; build passes; full vitest suite passes; 9 smoke contracts green; manual iPad QA verifies drag/resize/touch-action.
-- **Depends on:** 19-B2a (this PR).
-- **Requires approval:** YES — drag/resize touch-event work is fiddly; bisect-clarity matters.
-- **Estimated:** ~3-4 hours, ~250 lines.
+- **Defects fixed:**
+  - **Defect 2 — Field drag-to-move via Pointer Events.** `onPointerDown` on the field overlay calls `setPointerCapture()` (load-bearing — keeps events flowing to the field even when the cursor leaves), records pointer + field origin in `dragState`. `onPointerMove` computes percentage delta from `pdfContainerRef`'s rect and clamps with `Math.min(..., 100 - field.width)` / `Math.min(..., 100 - field.height)`. Page-agnostic by construction (percentages, not pixel coordinates). `onPointerUp` clears state. `updateField` routes through `setFields` so the change survives re-renders.
+  - **Defect 3 — 4-corner resize handles.** When `selectedFieldId === field.id`, render 4 absolutely-positioned 12px corner squares (nw/ne/sw/se) offset by -6px to straddle the field corners. Each handle has its own `onPointerDown` that `stopPropagation`s (so the field's drag handler doesn't also fire) and sets `resizeState` with the corner identifier. The move handler runs per-corner math: each corner anchors the OPPOSITE corner during resize (nw drag pins se, etc.). Min-size enforcement with anchor-opposite-corner logic so a deliberately-shrunk field stops at MIN size with the anchored corner fixed. Page-bound clamps (newX < 0, newX + newW > 100, etc.) prevent off-page resize.
+  - **Defect 4 — Touch-event compatibility for iPad.** `touch-action: "none"` inline style on the field overlay AND on each resize handle. Without it, iOS Safari intercepts touch sequences as native scroll/pinch and our Pointer Events never fire. Canvas itself stays touch-action: auto so pinch-zoom between fields still works (admins might want to inspect placement on an A4 PDF).
+- **Min field size:** 3% × 2% percentages (`MIN_FIELD_WIDTH = 3`, `MIN_FIELD_HEIGHT = 2`). Renders as ≈18 × 16px on US Letter — small enough for tight forms (DOS-1736 has 8 fields close together) but big enough that a deliberately-shrunk field stays visible. Pixel-tap-target concerns evaporate because handles always render on the selected field.
+- **Pointer-Events-only convention enforced via smoke contract.** A negative regex pin asserts `onMouseDown=` does NOT appear anywhere in the file. Future copy-paste from Stack Overflow can't silently introduce a parallel mouse-only handler that breaks iPad. (Comments referring to mouse events historically don't match because they lack the `={` JSX prop shape.)
+- **Filed as Phase 5 stub:** `19-fix-followup-keyboard-nudge` — arrow-key precision moves for selected fields. Deferred to keep B2b focused on pointer-driven manipulation.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx` (drag/resize state + 6 handlers + 4 corner handle JSX + 2 constants + ResizeCorner type + touch-action wiring), `tests/smoke/vault-editor-drag-resize.test.ts` (new — 8 contracts), `SLICES.md` (this entry + keyboard-nudge Phase 5 stub).
+- **Success criteria:** typecheck holds at clean-tree 285 (= dirty-tree 287); lint changed-files only — zero new errors; build passes; full vitest suite passes; 8 smoke contracts green; manual iPad QA verifies drag/resize/touch-action.
+- **Depends on:** 19-B2a (merged, commit `c70f2d2`).
+- **Requires approval:** No (proposal pre-approved by Nathan with three refinements: bump MIN to 3%×2%, keep contracts separate, file keyboard-nudge stub).
+- **Outcome:** _filled in at gate-run time_
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -891,6 +892,20 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, possibly extract a `<MultiPagePdfEditor>` component if Option A.
 - **Stop conditions:** Each option has UX trade-offs; surface and ask before implementing.
 - **Requires approval:** YES — UX scope question.
+
+### 19-fix-followup-keyboard-nudge — Arrow-key precision moves for selected fields
+- **Status:** `pending` (Phase 5 polish)
+- **Goal:** When a field is selected in the vault editor, arrow keys should nudge it by a small percentage step (e.g. 0.5%) for sub-pointer precision. Shift+arrow nudges by a larger step (e.g. 5%). Useful when admins are aligning a signature line to an exact baseline on a government form.
+- **Why deferred from slice 19-B2b:** Pointer drag is the primary manipulation path; keyboard nudge is power-user polish. Adding keyboard handlers would inflate B2b past the 290-line budget and overlap with focus-management decisions (where does keyboard focus live? on the canvas? on the right-sidebar field row? on the field overlay itself?) that deserve their own scoping conversation.
+- **Approach (agent proposes details when slice begins):**
+  - Decide where keyboard focus lives — likely the field overlay itself with `tabIndex={0}`.
+  - Add `onKeyDown` handler to the field overlay: ArrowUp/Down/Left/Right call `updateField` with x/y delta, clamped same as drag.
+  - Shift+arrow uses larger step (5% vs 0.5%). Esc deselects.
+  - Smoke contract anchors keyDown handler + delta math.
+- **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, plus 2-3 smoke contracts.
+- **Estimated diff:** ~40-60 lines.
+- **Depends on:** 19-B2b (merged).
+- **Requires approval:** Yes — focus management decision is a small UX call.
 
 ### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)

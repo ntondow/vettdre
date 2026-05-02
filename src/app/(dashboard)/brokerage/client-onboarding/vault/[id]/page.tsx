@@ -64,6 +64,16 @@ const PREFILL_KEYS = [
   { value: "brokerageName", label: "Brokerage Name" },
 ];
 
+// Slice 19-B2b: minimum field size in percent of page. 3% × 2% renders
+// as ≈18 × 16px on a US Letter page — small enough for tight forms (DOS-1736
+// has 8 fields close together) but big enough that a deliberately-shrunk
+// field is still discoverable via its corner handles. Pixel-tap-target
+// concerns evaporate because handles render whenever selectedFieldId === id.
+const MIN_FIELD_WIDTH = 3;
+const MIN_FIELD_HEIGHT = 2;
+
+type ResizeCorner = "nw" | "ne" | "sw" | "se";
+
 // ── Component ────────────────────────────────────────────────
 
 export default function TemplateEditorPage({ params }: { params: Promise<{ id: string }> }) {
@@ -91,6 +101,29 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [renderProgress, setRenderProgress] = useState({ current: 0, total: 0 });
   const [currentPage, setCurrentPage] = useState(0);
+
+  // Slice 19-B2b: drag + resize state. Each is independent — only one
+  // of dragState/resizeState is non-null at a time because the pointer
+  // is captured by exactly one element (field body OR resize handle).
+  // Resize handles call e.stopPropagation() in their pointerDown so the
+  // field's drag handler never fires when the user grabs a corner.
+  const [dragState, setDragState] = useState<{
+    fieldId: string;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+  } | null>(null);
+  const [resizeState, setResizeState] = useState<{
+    fieldId: string;
+    corner: ResizeCorner;
+    startClientX: number;
+    startClientY: number;
+    origX: number;
+    origY: number;
+    origW: number;
+    origH: number;
+  } | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -237,6 +270,143 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
     setHasChanges(true);
   }, [addingFieldType, currentPage]);
 
+  // ── Slice 19-B2b: drag-to-move ──────────────────────────────
+  // Pointer Events API unifies mouse + touch + pen. setPointerCapture()
+  // keeps events flowing to the original element even when the cursor
+  // leaves the field, so a fast drag toward the canvas edge doesn't
+  // drop frames. Boundary clamping uses percentage math (0..100), which
+  // is page-size-agnostic — works for letter, legal, A4, landscape.
+
+  const handleFieldPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, fieldId: string) => {
+    if (addingFieldType) return; // placement mode wins; don't start a drag
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const field = fields.find((f) => f.id === fieldId);
+    if (!field) return;
+    setSelectedFieldId(fieldId);
+    setDragState({
+      fieldId,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      origX: field.x,
+      origY: field.y,
+    });
+  }, [addingFieldType, fields]);
+
+  const handleFieldPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragState) return;
+    const rect = pdfContainerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - dragState.startClientX) / rect.width) * 100;
+    const dyPct = ((e.clientY - dragState.startClientY) / rect.height) * 100;
+    const field = fields.find((f) => f.id === dragState.fieldId);
+    if (!field) return;
+    // Clamp so the field stays fully on the page. Page-agnostic by
+    // construction — percentages don't care about pixel dimensions.
+    const newX = Math.max(0, Math.min(dragState.origX + dxPct, 100 - field.width));
+    const newY = Math.max(0, Math.min(dragState.origY + dyPct, 100 - field.height));
+    updateField(dragState.fieldId, { x: newX, y: newY });
+  }, [dragState, fields, updateField]);
+
+  const handleFieldPointerUp = useCallback(() => {
+    setDragState(null);
+  }, []);
+
+  // ── Slice 19-B2b: 4-corner resize ───────────────────────────
+  // Each corner anchors the OPPOSITE corner. nw-drag pins (origX+origW,
+  // origY+origH); se-drag pins (origX, origY); etc. Min-size enforcement
+  // keeps the anchored corner fixed when the dragged corner crosses it.
+  // Page-bound clamps prevent off-page resize.
+
+  const handleResizePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>, fieldId: string, corner: ResizeCorner) => {
+    e.stopPropagation(); // don't trigger field's drag handler
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const field = fields.find((f) => f.id === fieldId);
+    if (!field) return;
+    setResizeState({
+      fieldId,
+      corner,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      origX: field.x,
+      origY: field.y,
+      origW: field.width,
+      origH: field.height,
+    });
+  }, [fields]);
+
+  const handleResizePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!resizeState) return;
+    const rect = pdfContainerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const dxPct = ((e.clientX - resizeState.startClientX) / rect.width) * 100;
+    const dyPct = ((e.clientY - resizeState.startClientY) / rect.height) * 100;
+
+    const { corner, origX, origY, origW, origH } = resizeState;
+    let x = origX, y = origY, w = origW, h = origH;
+
+    switch (corner) {
+      case "se":
+        // bottom-right: width grows right, height grows down (simplest)
+        w = origW + dxPct;
+        h = origH + dyPct;
+        if (w < MIN_FIELD_WIDTH) w = MIN_FIELD_WIDTH;
+        if (h < MIN_FIELD_HEIGHT) h = MIN_FIELD_HEIGHT;
+        if (x + w > 100) w = 100 - x;
+        if (y + h > 100) h = 100 - y;
+        break;
+      case "ne":
+        // top-right: width grows right, top moves up
+        w = origW + dxPct;
+        y = origY + dyPct;
+        h = origH - dyPct;
+        if (w < MIN_FIELD_WIDTH) w = MIN_FIELD_WIDTH;
+        if (h < MIN_FIELD_HEIGHT) {
+          h = MIN_FIELD_HEIGHT;
+          y = origY + origH - MIN_FIELD_HEIGHT; // bottom edge anchors
+        }
+        if (x + w > 100) w = 100 - x;
+        if (y < 0) { h = h + y; y = 0; }
+        break;
+      case "sw":
+        // bottom-left: left edge moves, height grows down
+        x = origX + dxPct;
+        w = origW - dxPct;
+        h = origH + dyPct;
+        if (w < MIN_FIELD_WIDTH) {
+          w = MIN_FIELD_WIDTH;
+          x = origX + origW - MIN_FIELD_WIDTH; // right edge anchors
+        }
+        if (h < MIN_FIELD_HEIGHT) h = MIN_FIELD_HEIGHT;
+        if (x < 0) { w = w + x; x = 0; }
+        if (y + h > 100) h = 100 - y;
+        break;
+      case "nw":
+        // top-left: both edges move toward origin
+        x = origX + dxPct;
+        y = origY + dyPct;
+        w = origW - dxPct;
+        h = origH - dyPct;
+        if (w < MIN_FIELD_WIDTH) {
+          w = MIN_FIELD_WIDTH;
+          x = origX + origW - MIN_FIELD_WIDTH;
+        }
+        if (h < MIN_FIELD_HEIGHT) {
+          h = MIN_FIELD_HEIGHT;
+          y = origY + origH - MIN_FIELD_HEIGHT;
+        }
+        if (x < 0) { w = w + x; x = 0; }
+        if (y < 0) { h = h + y; y = 0; }
+        break;
+    }
+
+    updateField(resizeState.fieldId, { x, y, width: w, height: h });
+  }, [resizeState, updateField]);
+
+  const handleResizePointerUp = useCallback(() => {
+    setResizeState(null);
+  }, []);
+
   if (loading) {
     return <div className="min-h-dvh bg-slate-50 flex items-center justify-center"><Loader2 className="w-6 h-6 text-blue-600 animate-spin" /></div>;
   }
@@ -356,12 +526,18 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                 draggable={false}
               />
             )}
-            {/* Field overlays — scoped to currentPage (slice 19-B2a). */}
+            {/* Field overlays — scoped to currentPage (slice 19-B2a).
+                Slice 19-B2b: drag-to-move via Pointer Events; the onClick
+                handler stays for keyboard a11y (Enter activates click)
+                and is harmlessly redundant with onPointerDown's selection. */}
             {fields.filter((f) => f.page === currentPage).map((field) => (
               <div
                 key={field.id}
                 onClick={(e) => { e.stopPropagation(); setSelectedFieldId(field.id); }}
-                className={`absolute border-2 rounded-sm flex items-center justify-center text-[10px] font-medium cursor-pointer transition-colors ${
+                onPointerDown={(e) => handleFieldPointerDown(e, field.id)}
+                onPointerMove={handleFieldPointerMove}
+                onPointerUp={handleFieldPointerUp}
+                className={`absolute border-2 rounded-sm flex items-center justify-center text-[10px] font-medium cursor-move transition-colors ${
                   selectedFieldId === field.id
                     ? "border-blue-600 bg-blue-100/60 text-blue-700 z-10"
                     : "border-blue-400/50 bg-blue-50/40 text-blue-600 hover:border-blue-500"
@@ -371,9 +547,35 @@ export default function TemplateEditorPage({ params }: { params: Promise<{ id: s
                   top: `${field.y}%`,
                   width: `${field.width}%`,
                   height: `${field.height}%`,
+                  // Slice 19-B2b: mandatory for iOS Safari — without it,
+                  // a touch-drag gets interpreted as native scroll/pinch
+                  // and our Pointer Events never fire.
+                  touchAction: "none",
                 }}
               >
-                <span className="truncate px-1">{field.label}</span>
+                <span className="truncate px-1 pointer-events-none">{field.label}</span>
+                {/* Slice 19-B2b: 4 corner resize handles, only on selected
+                    field. Each anchors its opposite corner during resize.
+                    stopPropagation in pointerDown so the field's drag
+                    handler doesn't also fire. */}
+                {selectedFieldId === field.id && (["nw", "ne", "sw", "se"] as const).map((corner) => {
+                  const cornerPos: Record<ResizeCorner, React.CSSProperties> = {
+                    nw: { left: "-6px", top: "-6px", cursor: "nw-resize" },
+                    ne: { right: "-6px", top: "-6px", cursor: "ne-resize" },
+                    sw: { left: "-6px", bottom: "-6px", cursor: "sw-resize" },
+                    se: { right: "-6px", bottom: "-6px", cursor: "se-resize" },
+                  };
+                  return (
+                    <div
+                      key={corner}
+                      onPointerDown={(e) => handleResizePointerDown(e, field.id, corner)}
+                      onPointerMove={handleResizePointerMove}
+                      onPointerUp={handleResizePointerUp}
+                      className="absolute w-3 h-3 bg-blue-600 border-2 border-white rounded-sm z-20"
+                      style={{ ...cornerPos[corner], touchAction: "none" }}
+                    />
+                  );
+                })}
               </div>
             ))}
             {/* Placement hint */}
