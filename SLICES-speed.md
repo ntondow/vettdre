@@ -373,7 +373,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z2-lighthouse-ci` off `origin/main`.
 
 ### Z.3 — Prisma slow query log
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Goal:** Wire Prisma `$on('query')` in `src/lib/prisma.ts` to log queries slower than env-configurable threshold (default 200ms dev, 500ms prod). Dev: `console.warn`. Prod: `Sentry.addBreadcrumb` (category: prisma, level: warning) + `console.warn` fallback. PII-safe — log the parameterized query template ONLY, NEVER the params (DB rows can contain emails, addresses, etc.).
 - **Files in scope:**
   - `src/lib/prisma.ts` (add `$on("query")` handler; switch `log` config to fully-object form per Q1; preserve singleton API + `getDatasourceUrl()` connection-pool config; preserve dev/prod stdout asymmetry per Q2)
