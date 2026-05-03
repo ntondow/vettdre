@@ -6,6 +6,46 @@ The agent has no business proposing fixes during Phase 0. Synthesis happens afte
 
 ---
 
+## Two modes — pick one before spawning
+
+### VERTICAL SLICE MODE (default — use unless you have a specific reason not to)
+
+ONE agent per area. The agent walks the area's surfaces as a real user would and captures findings across **all** of: performance, functional correctness, UX, accessibility, RBAC/security. Whatever's broken in this area, the agent records it — regardless of which dimension the bug lives in.
+
+**Why this is the default:**
+- Most real-world bugs cross dimensions. A 4s LCP on the building profile page also tends to hide a missing aria-label, a CTA dead-end, AND an unauthenticated data leak — all visible during the same walkthrough. Forcing the agent to ignore 3 of those because "this is the perf agent" wastes 75% of the leverage of the walkthrough.
+- Token cost scales with (areas × modes). 10 areas × 1 mode = 10 runs; 10 areas × 4 modes = 40 runs for the same surface coverage. Same synthesis output, 4× the cost.
+- Cross-dimensional patterns surface earlier. Synthesis still consolidates by pattern, not by dimension — a vertical-slice agent producing "this page has 3 issues across perf + a11y + RBAC" feeds synthesis better than four single-dimension docs each reporting the page once.
+- Agents naturally prioritize what's most broken. A vertical-slice agent who finds the page is functionally broken won't waste 80% of its run polishing perf metrics on a page that doesn't work.
+
+**When to override and use LEGACY mode instead:**
+- The audit's purpose is genuinely single-axis (e.g. SOC 2 prep wants ONLY security findings; a pre-launch perf push wants ONLY perf numbers, no UX noise).
+- The dimension under audit needs deep specialized tooling that's awkward to run alongside other dimensions (e.g. running axe-core in headless mode while also running Chrome DevTools perf profiling).
+- A previous Phase 0 found a single dimension dominated all severity rankings, and Phase 5 wants to revisit that dimension specifically.
+
+### LEGACY MODE (dimension-themed — opt in only when single-axis is the explicit goal)
+
+One agent per (area × dimension). E.g. for 10 areas × 4 dimensions, 40 agent runs. The dimension-specific data point lists are preserved below — use them when LEGACY mode is the right tool. Otherwise default to VERTICAL SLICE.
+
+---
+
+## Worked example — VERTICAL SLICE MODE for Foundation/Speed Audit
+
+For the area "Market Intel building profile" (`/market-intel` + slide-over building modal):
+
+- Surfaces in scope: `/market-intel` search modes (property, ownership, name/portfolio, map); building profile slide-over for 5 representative BBLs (1 Manhattan condo, 1 Brooklyn HPD-flagged multifamily, 1 stalled-site, 1 LLC-owned, 1 with active permits).
+- Per-surface data points captured (NOT split across 4 agents):
+  - **Perf:** LCP/FCP/TTI from Chrome DevTools, server timing p50/p95 from Sentry, slowest 5 server actions during the walkthrough, total queries per page load (cross-reference Prisma slow query log).
+  - **Functional:** does each search mode return results? does building profile load? does AI ownership analysis complete? do violations/permits/contacts panels render?
+  - **UX:** time-to-task for "find building → open profile → identify owner" flow; friction points; empty-state quality for unmatched searches.
+  - **A11y:** axe-core scan on the page; keyboard navigation through the slide-over; screen-reader announcement for slide-over open/close; color contrast on AI Lead Score badges.
+  - **RBAC:** unauthenticated access attempt; org-scoping verification (does User-A see User-B's saved prospects? — should NOT); data leak check on enrichment endpoints.
+- Output: ONE doc at `docs/handoff/speed-2026-q2-market-intel-audit-<YYYY-MM-DD>.md` with all five dimensions interleaved per surface, P0/P1/P2 ranking applied across dimensions consistently.
+
+The synthesis agent reads N such per-area docs and produces the cross-cutting view (e.g. "Apollo waterfall in 5 of 10 areas" surfaces from a single perf line in 5 separate vertical-slice docs).
+
+---
+
 ## How to spawn
 
 For each area in scope, fill in the bracketed sections and spawn a fresh Claude Code session. Spawn in batches (default 3 at a time) to avoid hammering Sentry, Chrome MCP, and shared services simultaneously.
@@ -14,12 +54,13 @@ For each area in scope, fill in the bracketed sections and spawn a fresh Claude 
 
 ```
 You are a Phase 0 audit agent for the [AREA NAME] area of VettdRE,
-focused on [AUDIT THEME — e.g. PERFORMANCE, ACCESSIBILITY, SECURITY,
-UX].
+running in VERTICAL SLICE MODE (default).
 
-Your job: walk every surface listed below as a real user would, capture
-the data points listed below, and produce a structured per-area audit
-doc. You are READ-ONLY on the codebase except for the audit deliverable.
+Your job: walk every surface listed below as a real user would, and
+capture findings across ALL FIVE dimensions for each surface:
+performance, functional correctness, UX, accessibility, RBAC/security.
+Produce one structured per-area audit doc. You are READ-ONLY on the
+codebase except for the audit deliverable.
 
 DO NOT propose fixes. DO NOT write code. ONLY measure and capture.
 If you catch yourself starting to write fix recommendations, stop and
@@ -34,10 +75,9 @@ for one-off scripts (read-only — no migrations, no writes).
 - [URL 2] — [what to test on this surface]
 - ...
 
-**Per-surface data points to capture:**
-[Tailored to the audit theme — examples below]
+**Per-surface data points to capture (all five dimensions):**
 
-For PERFORMANCE audit:
+**Performance:**
 - LCP, FCP, TTI, TTFB, CLS (from Chrome DevTools or Lighthouse report)
 - Server timing p50/p95/p99 (from Sentry Performance dashboard)
 - Slowest 5 individual server actions + their query traces
@@ -47,7 +87,23 @@ For PERFORMANCE audit:
 - Network waterfall: total requests on first paint, sequential vs parallel
 - Any uncached responses that should be cached
 
-For ACCESSIBILITY audit:
+**Functional correctness:**
+- Does each top-level action on the surface produce the expected result?
+- Are forms submittable? Do submissions succeed? Do errors surface
+  cleanly when inputs are invalid?
+- Are all the data panels populated, or do some show empty/error states
+  for valid inputs?
+- For surfaces with async/streaming/multi-phase loads (Market Intel
+  building profile, Terminal feed, etc.): does each phase complete?
+
+**UX:**
+- Time-to-task-completion for the area's top 3 user flows
+- Friction points: dead ends, unclear CTAs, missing empty states
+- Inconsistencies: typography, spacing, button styles
+- Mobile vs desktop parity
+- Error states + error message clarity
+
+**Accessibility:**
 - WCAG 2.1 AA violations from axe-core scan
 - Tab order on each form
 - Screen reader announcements for dynamic content
@@ -55,20 +111,21 @@ For ACCESSIBILITY audit:
 - Touch target size on mobile breakpoint
 - Keyboard-only navigability of all CTAs
 
-For SECURITY audit:
+**RBAC / security:**
 - Auth gating on protected routes (try unauthenticated)
-- RLS / org-scoping on data queries
+- RLS / org-scoping on data queries (try cross-org access)
 - CSP violations in console
 - Input sanitization on user-controlled fields
 - File upload validation
 - Rate limiting on public endpoints
 
-For UX audit:
-- Time-to-task-completion for the area's top 3 user flows
-- Friction points: dead ends, unclear CTAs, missing empty states
-- Inconsistencies: typography, spacing, button styles
-- Mobile vs desktop parity
-- Error states + error message clarity
+If a dimension genuinely doesn't apply to a surface (e.g. RBAC on a
+fully-public page), say so explicitly in the audit doc — don't omit
+silently. "N/A — page is unauthenticated by design" is a valid finding.
+
+[LEGACY MODE — only if explicitly opted-in: replace the five-dimension
+block above with a single "Per-surface data points: [DIMENSION-specific
+list from §LEGACY data points below]" block.]
 
 **For each bug found, record in
 `docs/handoff/[AUDIT-NAME]-[AREA]-audit-<YYYY-MM-DD>.md`:**
@@ -170,3 +227,5 @@ Nathan reviews the synthesis, approves or refines, then defines Phase 1 scope. E
 **Captured data points are auditable:** "It feels slow" is not a Phase 0 finding. "LCP measured 4.2s on 3G fast emulation" is. Numbers > vibes.
 
 **Synthesis is mandatory:** without it, you ship N individual fixes for the same root cause and waste 80% of the leverage. The Asana board fills with duplicate cards. Future-you can't tell what's a real new bug vs the 6th instance of the Apollo waterfall pattern.
+
+**Vertical-slice over dimension-themed:** Real product bugs cross dimensions. The page that's 4s LCP is also the page with broken keyboard nav and the unauthenticated data leak — same walkthrough catches all three. Dimension-themed mode runs four agents per area at 4× the token cost and produces docs that synthesis has to re-cross-reference anyway. Vertical-slice agents produce docs that already integrate dimensions per surface, so synthesis can focus on cross-area patterns instead of stitching dimension-axes back together. Only opt into LEGACY (dimension-themed) mode when the audit's purpose is genuinely single-axis — most real product audits aren't.
