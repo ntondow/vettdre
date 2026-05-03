@@ -78,6 +78,9 @@ playwright-report/
 test-results/
 playwright/.auth/
 
+# Lighthouse CI (Foundation Audit Z.2 — local-only artifacts)
+.lighthouseci/
+
 # docs/handoff — keep local-only by default. The audit + bootstrap doc are
 # whitelisted because they're agent-reference materials referenced by SLICES.md.
 # Other files in this folder may contain customer data or shared credentials
