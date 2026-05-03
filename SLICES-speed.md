@@ -559,7 +559,7 @@ Sentry DSNs are **public write-only keys** designed for client-bundle exposure (
 - **Branch:** `chore/speed-z4-sentry-spans` off `origin/main`.
 
 ### Z.5 — Cloud Run cold start measurement (LAST Phase Z slice)
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Goal:** Add unauthenticated `/api/health` endpoint returning `uptime_seconds` + minimal status payload, so cold-start latency can be measured. Document the methodology + a 5-row TBD measurements table in `docs/handoff/speed-2026-q2-baselines.md` (parallel to Z.2's TBD pattern). Nathan fills in measurements via post-merge commit. **Do NOT implement keepalive** — that's Phase 1+ work driven by what Z.5's numbers show.
 - **Files in scope:**
   - `src/app/api/health/route.ts` (new — Sentry-wrapped GET handler per Q2(a); no DB hit; payload: `status`, `uptime_seconds`, `timestamp`, `node_env`, `git_sha`)
