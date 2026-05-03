@@ -158,7 +158,7 @@ baselines.
 - **Branch:** `chore/speed-z0a-gh-actions` off `origin/main`.
 
 ### Z.0b — Playwright harness scaffold (local dev target)
-- **Status:** `awaiting_review` (PR #51)
+- **Status:** `done` (PR #51, merged 2026-05-03)
 - **Goal:** Install `@playwright/test`, scaffold `tests/e2e/`, implement first 4 of the kickoff's 5 critical flows against `http://localhost:3000` (deal-submission flow #3 deferred — see Q2). Closes the v2.1.1 caveat that gate verification falls back to manual Chrome MCP walks. **Local dev target** (decided 2026-05-03 by Nathan): no staging infra exists; dedicated staging is 2-3 weeks of work; Cloud Run preview URLs add complexity. Migration to staging is filed as `z0b-followup-staging-target`.
 - **Files in scope:**
   - `package.json` (add `@playwright/test` devDep + `e2e`/`e2e:headed`/`e2e:ui` scripts)
@@ -233,7 +233,7 @@ Future agents picking up follow-ups: the gap at `03-*.spec.ts` is the visual sig
 - **Success criteria:** new smoke test passes (3 contracts); existing 385/385 vitest suite still green; `playwright.config.ts` exists; CI's 4 jobs (typecheck, lint, test, build) all green on PR (verification artifact for CI continuity); `npm run e2e` runs locally — passing/skipping per spec, output pasted into PR comment as Z.0b's verification artifact per kickoff.
 - **Depends on:** PR #50 (Z.0a, merged 2026-05-03) — CI must exist for the smoke test job to run; methodology v2.2 + audit infrastructure docs on `origin/main` (PR #48).
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + variance OK + mapping table ask incorporated).
-- **Outcome:** _filled in at gate-run time. Z.0b's `done` flip lands in Z.1's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1)._
+- **Outcome:** Shipped via PR #51 (merged 2026-05-03). Playwright harness scaffolded with 4 specs (login, contact, gmail, market intel; flow #3 deferred per `z0b-followup-flow-3-deal-submission-seed`). All 4 CI jobs green. Test user provisioning + first local `npm run e2e` deferred per `z0b-followup-verify-e2e-runs` (Path A — speed of Phase Z over full e2e verification of scaffold).
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.0b".
 - **Branch:** `chore/speed-z0b-playwright` off `origin/main`.
 
@@ -378,3 +378,11 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
   - Decide whether to ship all 4 in one slice or split (likely split — Phase 1 capacity-permitting).
 - **Affected surfaces:** `tests/e2e/07-underwrite-loi.spec.ts`, `tests/e2e/08-onboarding-sign.spec.ts`, `tests/e2e/09-bulk-invoice.spec.ts`, `tests/e2e/10-terminal-feed.spec.ts` (numbering per the methodology→spec mapping table in Z.0b's plan-of-record).
 - **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; per kickoff explicit deferral note).
+
+### `z0b-followup-verify-e2e-runs`
+- **Status:** Phase 5 backlog
+- **Background:** Z.0b (PR #51) shipped the playwright harness scaffold with structural smoke contracts + green CI, but local `npm run e2e` was NOT run before merge. Per Path A decision (Nathan, 2026-05-03), test user provisioning + first local run deferred to keep Phase Z momentum.
+- **Why deferred:** Test user provisioning is one-time admin work in the Supabase dashboard (~15 min). Phase Z's goal is "infrastructure exists," not "every test verified live." Smoke contracts pin the structural shape; runtime verification gates Phase 1+ when capacity permits.
+- **Required input before slicing:** None — pure provisioning task. Steps in `docs/playwright-setup.md`.
+- **Affected surfaces:** `playwright/.auth/user.json` (generated locally), `.env.local` (PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD env vars).
+- **Filed:** 2026-05-03 by Nathan (Z.0b merge — Path A choice).
