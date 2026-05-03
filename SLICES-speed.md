@@ -89,14 +89,71 @@ baselines.
 ---
 
 ### Z.0a — GitHub Actions CI skeleton
-- **Status:** `pending`
+- **Status:** `in_progress`
 - **Goal:** Establish `.github/workflows/` with PR-blocking jobs for typecheck, lint, test, build, and smoke contracts. Replaces the v2.1.1 interim manual-checklist pattern with real CI per methodology v2.2 §"Required infrastructure".
-- **Files likely involved:** `.github/workflows/*.yml` (new), `package.json` (npm scripts the jobs invoke).
-- **Smoke contract idea:** at least 1 contract per required job — workflow yml exists + each required job is named in the matrix. Pinned at `tests/smoke/z0a-gh-actions.test.ts`.
-- **Stop conditions:** If CI runner sees 4,484 lint baseline as failing-on-merge, surface — methodology says baseline can grow but must not regress; CI failure on entire baseline is too strict. Propose interim "lint changed-files-only" check until Phase 3 cleanup ships.
-- **Estimated lines:** ~120 (workflow yml + smoke + npm script tweaks).
+- **Files in scope:**
+  - `.github/workflows/ci.yml` (new — single workflow, 4 parallel jobs)
+  - `tests/smoke/z0a-gh-actions.test.ts` (new — 3 contracts)
+- **Smoke contract regex pins (3):**
+  1. **C1 — workflow file shape:** `.github/workflows/ci.yml` exists; contains all 4 job IDs (`typecheck:`, `lint:`, `test:`, `build:`).
+  2. **C2 — triggers:** workflow `on:` block contains both `pull_request:` AND `push:`.
+  3. **C3 — Node version pinned:** workflow uses `node-version: '20'` (matches Dockerfile `FROM node:20-alpine`).
+- **Estimated lines:** ~170 (80 workflow + 60 smoke + 30 SLICES-speed.md).
+
+## Plan of record
+
+**Three-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.6 done with PR #49 outcome line`** — cross-slice flip per the pattern documented in Z.6's plan-of-record. One-line status flip + outcome line filled with PR #49's landed artifacts. Mirrors PRs #45/#46/#47/#48.
+
+2. **`chore(speed): append Z.0a plan-of-record to SLICES-speed.md`** — this commit. Append plan-of-record block to the existing skeletal Z.0a entry; flip status `pending` → `in_progress`. Per methodology v2.2 §"Plan-of-record artifact format" + §2 Plan-of-record gate.
+
+3. **`feat(speed): add GitHub Actions CI workflow with typecheck/lint/test/build`** — `.github/workflows/ci.yml` (4 parallel jobs, ubuntu-latest, Node 20, npm cache enabled, prisma generate where types are needed) + `tests/smoke/z0a-gh-actions.test.ts` (3 contracts).
+
+**Workflow design:**
+- **Triggers:** `pull_request: branches: [main]` AND `push: branches: [main]` (per Q2 — both, scoped to main on push). Feature-branch pushes don't duplicate-run because the PR run covers them.
+- **Permissions:** `contents: read` only (least privilege).
+- **Jobs (4, parallel):**
+  - `typecheck` — `npm ci` → `npx prisma generate` → inline baseline-check shell counting `tsc --noEmit` errors; fails only if `> 285` (CLAUDE.md anchor).
+  - `lint` — `npm ci` → inline baseline-check counting `npm run lint` errors; fails only if `> 4484` (CLAUDE.md anchor). No prisma generate (lint doesn't read generated types — saves ~5s per Q3).
+  - `test` — `npm ci` → `npx prisma generate` → `npm run test`. Vanilla pass/fail at 377/377.
+  - `build` — `npm ci` → `npx prisma generate` → `npm run build`. Vanilla pass/fail.
+- **No deploy step** — Cloud Build keeps doing that. **No e2e** — that's Z.0b. **No Lighthouse** — that's Z.2.
+
+**Why inline baseline-check wrappers:** `tsc --noEmit` exits non-zero with any error. Codebase has 285 pre-existing typecheck errors and 4484 lint errors. Without wrappers, both jobs would be RED forever (until Phase 3 cleanup ships) — defeats branch-protection gating. Wrappers count errors and fail only when `> baseline`. Per Q1, kept inline (4-line shell per job, self-contained yml). If Z.0b/Z.2 add more baseline-checked dimensions (3+), refactor to `scripts/ci-*.sh` then. **Methodology innovation flag (per Nathan's observation):** if the pattern repeats in Z.0b/Z.2, document in v2.3 retro candidate as "baseline-check wrapper" — turns "baselines hold" principle into PR-blocking enforcement. Don't add to methodology now; wait for evidence.
+
+**Status-check naming contract (per Q5 — committed for branch protection stability):**
+- Names: `typecheck`, `lint`, `test`, `build`. **Stable.** Branch protection rules match by job name; renaming requires updating branch protection.
+- Future slices ADD names (Z.0b → `e2e`, Z.2 → `lighthouse-warn`). Never rename existing names. Documented in PR body so the convention persists.
+
+**Branch protection setup (per Q4 — Nathan-side, admin access required):**
+- GitHub Settings → Branches → Add rule for `main` → Require status checks to pass before merging → Require branches up-to-date before merging → Select all 4 status checks (`typecheck`, `lint`, `test`, `build`).
+- PR body includes the verbatim checklist.
+
+**Stop conditions internalized:**
+- If CI typecheck > 285 (clean tree), surface — likely env diff or untracked-file pollution. Methodology: don't anchor silently.
+- If CI lint > 4484, document workflow file in lint-ignore or surface new baseline.
+- If `next build` needs `DATABASE_URL` or other secrets we don't have configured, surface the list — Nathan configures in repo settings.
+- If `npm ci` times out on cold cache, propose dependency-caching strategy refinement.
+- If branch protection requires GitHub PRO/Team plan beyond what's already in place, surface.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered).
+
+**Discovery findings:**
+- `next.config.ts` hardcodes `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL` per CLAUDE.md known-issue → CI build doesn't need them as env vars.
+- `next.config.ts` has `typescript: { ignoreBuildErrors: true }` → `npm run build` succeeds even with the 285-error TS backlog. Strict TS check is `npm run typecheck` (separate job).
+- Sentry source map upload conditional on `SENTRY_AUTH_TOKEN` (defaults disabled in CI per `disable: !process.env.SENTRY_AUTH_TOKEN`) — no Sentry secret required.
+- Prisma generate creates client code only — no DB connection — works fine in CI without `DATABASE_URL`.
+- No existing `.github/workflows/` directory (confirmed with `ls`).
+- `npm run check` script exists but runs all 4 in series → CI splits into parallel jobs for faster feedback.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 377/377 vitest suite still green; `.github/workflows/ci.yml` exists; first PR run goes green on all 4 jobs (the verification artifact for Z.0a per kickoff).
+- **Depends on:** PR #49 (Z.6, merged 2026-05-03) — SLICES-speed.md must exist for the plan-of-record append.
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + variance OK at 170 lines well under 280-line ceiling).
+- **Outcome:** _filled in at gate-run time. Z.0a's `done` flip lands in Z.0b's PR per cross-slice flip pattern (continuing the Z.6 → Z.0a flow)._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.0a".
-- **Branch (when started):** `chore/speed-z0a-gh-actions` off `origin/main`.
+- **Branch:** `chore/speed-z0a-gh-actions` off `origin/main`.
 
 ### Z.0b — Playwright harness scaffold
 - **Status:** `pending`
