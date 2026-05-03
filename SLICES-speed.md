@@ -157,15 +157,85 @@ baselines.
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.0a".
 - **Branch:** `chore/speed-z0a-gh-actions` off `origin/main`.
 
-### Z.0b — Playwright harness scaffold
-- **Status:** `pending`
-- **Goal:** Install `@playwright/test`, scaffold `tests/e2e/`, implement first 5 critical flows (login, create contact, create deal submission, send Gmail reply, market intel address search). Closes the v2.1.1 caveat that gate verification falls back to manual Chrome MCP walks.
-- **Files likely involved:** `package.json` (add `@playwright/test`), `playwright.config.ts` (new), `tests/e2e/*.spec.ts` (new, 5 specs).
-- **Smoke contract idea:** at least 1 contract — playwright config exists + each of the 5 flow specs exist + `npm run e2e` script is wired. Pinned at `tests/smoke/z0b-playwright.test.ts`.
-- **Stop conditions:** If line count exceeds 280, split: Z.0b1 (config + login flow) and Z.0b2 (other 4 flows). If staging URL auth requires complex setup, surface options.
-- **Estimated lines:** ~250 (config + 5 specs + npm script + smoke).
+### Z.0b — Playwright harness scaffold (local dev target)
+- **Status:** `in_progress`
+- **Goal:** Install `@playwright/test`, scaffold `tests/e2e/`, implement first 4 of the kickoff's 5 critical flows against `http://localhost:3000` (deal-submission flow #3 deferred — see Q2). Closes the v2.1.1 caveat that gate verification falls back to manual Chrome MCP walks. **Local dev target** (decided 2026-05-03 by Nathan): no staging infra exists; dedicated staging is 2-3 weeks of work; Cloud Run preview URLs add complexity. Migration to staging is filed as `z0b-followup-staging-target`.
+- **Files in scope:**
+  - `package.json` (add `@playwright/test` devDep + `e2e`/`e2e:headed`/`e2e:ui` scripts)
+  - `playwright.config.ts` (new, ~50 lines — `baseURL` from env w/ `localhost:3000` default, `webServer` auto-starts `next dev`, single chromium project)
+  - `tests/e2e/_setup/auth.ts` (new — login helper; stores auth state to `playwright/.auth/user.json` for spec reuse)
+  - `tests/e2e/_setup/test-data.ts` (new — exports test creds from env, fails loudly if not set)
+  - `tests/e2e/01-login.spec.ts`, `02-create-contact.spec.ts`, `04-send-gmail-reply.spec.ts` (`.skip` placeholder per kickoff), `05-market-intel-search.spec.ts` (4 specs; gap at `03` is intentional per Q3)
+  - `tests/smoke/z0b-playwright.test.ts` (new — 3 contracts)
+  - `.gitignore` (add `playwright-report/`, `test-results/`, `playwright/.auth/`)
+  - `docs/playwright-setup.md` (new, ~30 lines — env vars, test-user provisioning, run instructions)
+- **Smoke contract regex pins (3):**
+  1. **C1 — config exists with env-overridable baseURL:** `playwright.config.ts` contains both `process.env.PLAYWRIGHT_BASE_URL` AND `localhost:3000`.
+  2. **C2 — at least 4 specs:** `tests/e2e/` glob count of `*.spec.ts` files ≥ 4 (was ≥5 in kickoff; adjusted for option (a) defer of flow 3).
+  3. **C3 — npm script wired:** `package.json` `scripts` block contains `"e2e":` key.
+- **Estimated lines:** ~330 NEW authored content. Excludes `package-lock.json` deltas from `npm install @playwright/test` (tooling content, not work content per the same convention used for SLICES-bms.md `git mv` and methodology tracking).
+
+**Methodology → kickoff → spec-file mapping table (per Nathan's ask):**
+
+| Methodology #§"Required infrastructure" flow | Kickoff scope | This slice | Status |
+|---|---|---|---|
+| 1. Login + redirect to dashboard | Flow 1 | `01-login.spec.ts` | Shipped |
+| 2. Create contact → pipeline → advance stage | Flow 2 (simplified — just create) | `02-create-contact.spec.ts` | Shipped (simplified) |
+| 3. Public deal submission → manager approves → invoice | Flow 3 (simplified — just public submit) | _deferred_ | `z0b-followup-flow-3-deal-submission-seed` (needs seed) |
+| 4. Send Gmail reply with template merge fields | Flow 4 | `04-send-gmail-reply.spec.ts` | Shipped (`test.skip()` until test user has Gmail OAuth) |
+| 5. Showing slot creation → public booking → agent sees | _Substituted_ | _deferred_ | `z0b-followup-flow-5-showing-booking` (Twilio + calendar deps make local-dev playwright struggle) |
+| 6. Market intel address search → building profile → prospecting | Flow 5 (kickoff substituted #6 for #5) | `05-market-intel-search.spec.ts` | Shipped |
+| 7-10. Underwrite/onboarding/bulk-invoice/terminal | _deferred_ | — | `z0b-followup-flows-6-10` (capacity/Phase 1) |
+
+Future agents picking up follow-ups: the gap at `03-*.spec.ts` is the visual signal that flow 3 was deferred. When `z0b-followup-flow-3-deal-submission-seed` ships, fill the `03` slot. Methodology flow #5 (showing booking) gets a future `06-showing-booking.spec.ts` (or whichever number is unused at that time) — keep the methodology-flow-number → spec-number mapping consistent with this table.
+
+## Plan of record
+
+**Three-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.0a done with PR #50 outcome line`** — cross-slice flip per documented pattern. SLICES-speed.md only.
+
+2. **`chore(speed): append Z.0b plan-of-record + 5 follow-up stubs`** — this commit. Append plan-of-record (with mapping table) to existing skeletal Z.0b entry; flip status `pending` → `in_progress`; file 5 Phase 5 stubs (see below).
+
+3. **`feat(speed): scaffold playwright harness with first 4 flows (local dev target)`** — `npm install --save-dev @playwright/test`, `playwright.config.ts`, `tests/e2e/` directory + 4 specs + 2 helpers, smoke contract, `.gitignore` updates, setup doc, 3 npm scripts.
+
+**Phase 5 stubs filed in commit 2:**
+1. `z0b-followup-flow-3-deal-submission-seed` — implement deferred flow 3 with seed strategy (Prisma direct insert vs. agent-create chain).
+2. `z0b-followup-flow-5-showing-booking` — implement methodology §"Required infrastructure" flow #5 (substituted by kickoff with market intel for this slice).
+3. `z0b-followup-staging-target` — migrate playwright target from local dev to staging when infra matures (Cloud Run preview / dedicated staging service / test tenant in prod).
+4. `z0b-followup-ci-integration` — wire `npm run e2e` into GH Actions as 5th required status check. Blocked on: staging target OR a CI-friendly DB seeding strategy.
+5. `z0b-followup-flows-6-10` — implement remaining methodology flows (underwrite/LOI, onboarding/sign, bulk invoice, terminal feed). Phase 1 slice when capacity permits.
+
+**Variance from 280-line stop condition:** ~330 lines, ~50-line variance. **Surfaced + approved by Nathan** with the precedent that splitting Z.0b1 (config + login) + Z.0b2 (other 3 flows) would fragment a logically-atomic setup slice. Same precedent class as PR #47 (310-355) and PR #48 (~150 + 2,729 tracked) and PR #49 (~345 + ~1,300 moved).
+
+**Cross-slice flip pattern (continuing the Z.6 → Z.0a → Z.0b chain):** Z.0b's status flow is `in_progress` (commit 2 baseline) → `awaiting_review` (this PR's final amendment commit) → `done` (Z.1's PR, one-line amendment at start). Same pattern as PRs #45/#46/#47/#48/#49/#50. Documented here so the next reader knows where to find Z.0b's `done` flip (it lives in Z.1's PR).
+
+**Stop conditions internalized:**
+- Don't run against prod (URL hardcoded localhost in default; `PLAYWRIGHT_BASE_URL` env var lets users override).
+- Don't store credentials in repo. Test creds come from `.env.local` (gitignored).
+- Test user must be a dedicated playwright test account, NOT Nathan's super_admin login. Provisioning steps documented in PR body + `docs/playwright-setup.md`.
+- DO NOT wire to GH Actions yet. Z.0b ships LOCAL-ONLY. CI integration is `z0b-followup-ci-integration`.
+- DO NOT mock significant data. Tests hit real local dev server with real Prisma queries against Nathan's local DB.
+- If `npm install @playwright/test` adds >100 MB to node_modules and significantly slows install, flag.
+- If `next dev` startup makes `webServer` flaky, propose healthcheck endpoint.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + mapping-table ask incorporated above).
+
+**Discovery findings:**
+- `@playwright/test` appears in `package-lock.json` only as a peer dep of Next.js 16.1.6 — not actually installed. Fresh `npm install --save-dev @playwright/test` needed.
+- No `e2e` script collision; no `dotenv-cli`; `.env.local` already exists for test creds.
+- Login flow uses `supabase.auth.signInWithPassword` → redirects to `/` → `landingForRole(role)` routes to role-specific landing (super_admin → `/dashboard`, owner/admin/manager → `/brokerage/dashboard`, agent → `/brokerage/my-deals`).
+- Flow 3 (deal submission via public token) requires a seeded `DealSubmission` row with the token — fresh local DB has no tokens. Stop condition triggered; Q2 resolved by deferring flow 3 (option (a)).
+- Methodology §"Required infrastructure" flow 5 is showing-booking; kickoff substituted market intel (methodology #6) for it. Q1 resolved by shipping kickoff's 5 + filing methodology #5 as `z0b-followup-flow-5-showing-booking`.
+- Test accounts per methodology §"Test accounts" live in 1Password under "VettdRE — audit test accounts" — Nathan provisions; creds go into `.env.local`.
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 385/385 vitest suite still green; `playwright.config.ts` exists; CI's 4 jobs (typecheck, lint, test, build) all green on PR (verification artifact for CI continuity); `npm run e2e` runs locally — passing/skipping per spec, output pasted into PR comment as Z.0b's verification artifact per kickoff.
+- **Depends on:** PR #50 (Z.0a, merged 2026-05-03) — CI must exist for the smoke test job to run; methodology v2.2 + audit infrastructure docs on `origin/main` (PR #48).
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + variance OK + mapping table ask incorporated).
+- **Outcome:** _filled in at gate-run time. Z.0b's `done` flip lands in Z.1's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1)._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.0b".
-- **Branch (when started):** `chore/speed-z0b-playwright` off `origin/main`.
+- **Branch:** `chore/speed-z0b-playwright` off `origin/main`.
 
 ### Z.1 — Bundle analyzer baseline + report
 - **Status:** `pending`
@@ -257,3 +327,54 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
   - Capture full `tsc --noEmit` output from clean-tree local (via `git stash --include-untracked` per CLAUDE.md protocol) AND from a CI run (download via `gh run download`). Diff per-error file path; categorize errors as: dupe-attribution, real-regression-since-PR#34, tooling-artifact.
 - **Affected surfaces:** `.github/workflows/ci.yml` (threshold may drop after fixes), `CLAUDE.md` (anchor may drop OR be refined with a tighter filter regex), `tsconfig.json` (if config drift discovered between local and CI), potentially individual TS files if real regressions surface.
 - **Filed:** 2026-05-03 by Nathan (during Z.0a CI failure resolution; the methodology-v2.2-caught-this irony documented here as a worked example for future v2.3 retro candidates).
+
+### `z0b-followup-flow-3-deal-submission-seed` — Implement deferred flow 3 (deal submission via public token)
+- **Status:** Phase 5 backlog
+- **Background:** Z.0b's kickoff specified flow 3 = "open public submit-deal token (use a seeded test token), fill fields, submit, confirm success state." Public route `/submit-deal/[token]` requires a `DealSubmission` row to exist with that token. Fresh local DB has no tokens. Z.0b's stop-condition fired ("If any of the 5 flows requires data that doesn't exist in a fresh local DB, STOP and surface"). Resolved by deferring flow 3 to this stub; Z.0b ships 4 flows.
+- **Why deferred:** Adding a seed strategy in Z.0b would have either (a) added a `tests/e2e/_setup/seed.ts` that the kickoff explicitly placed out of scope, or (b) chained an agent-side create flow inside the spec which makes the test fragile (depends on the create-side working). Splitting cleanly: ship harness + 4 flows now; add flow 3 with a deliberate seed strategy later.
+- **Required input before slicing:**
+  - **Option (a) — Prisma direct insert** in `tests/e2e/_setup/seed.ts` at suite-start: insert a `DealSubmission` row with a known token. Pros: deterministic, fast. Cons: introduces a seed script that needs maintenance + may diverge from the create-flow's actual schema over time.
+  - **Option (b) — Agent-create chain inside the spec**: log in as agent → navigate to `/brokerage/deal-submissions` → click "invite submitter" → grab token URL from the UI → continue spec. Pros: tests both create-side and submit-side end-to-end. Cons: fragile (one create-side regression breaks both flows); slower.
+  - **Option (c) — Hybrid**: Prisma seed for the row, but UI navigation to grab the token URL from the dashboard so the spec also exercises the agent-side surfacing.
+- **Affected surfaces:** `tests/e2e/03-create-deal-submission.spec.ts` (new — fills the gap left by Z.0b); potentially `tests/e2e/_setup/seed.ts` (new if option (a) or (c)).
+- **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; stop condition resolution).
+
+### `z0b-followup-flow-5-showing-booking` — Implement methodology §"Required infrastructure" flow #5 (showing slot booking)
+- **Status:** Phase 5 backlog
+- **Background:** Z.0b's kickoff substituted methodology flow #6 (market intel address search) for flow #5 (showing slot booking) in the "first 5" set. Reason cited by Nathan: showing-booking has Twilio + calendar dependencies that local-dev playwright will struggle with; market intel is simpler (just type address, see results). Methodology canonical flow list still names showing-booking as #5; this stub tracks the methodology-vs-shipped-set divergence.
+- **Why deferred:** Twilio SMS (slot booking confirmation) and Google Calendar API (slot creation) need either real credentials in local dev (Nathan-provisioned + scoped for testing) or mocked equivalents. Decision-cost > Z.0b's atomic-scope budget.
+- **Required input before slicing:**
+  - Confirm methodology flow #5 stays as-canonical (showing booking) vs. updating methodology to reflect the substitution.
+  - Decide on Twilio + Google Calendar testing strategy: live-credentials (test phone number, dedicated calendar) vs. mocking layer (e.g. Twilio test mode, Calendar mock fetch).
+  - Identify which side of the booking flow to test first: agent creates slot, OR public booking via `/book/[slug]`, OR both as a chained spec.
+- **Affected surfaces:** `tests/e2e/06-showing-booking.spec.ts` (new — naming convention per the methodology→spec mapping table in Z.0b's plan-of-record); potentially Twilio/Calendar mocking helpers in `tests/e2e/_setup/`.
+- **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; methodology #5 vs kickoff #5 substitution).
+
+### `z0b-followup-staging-target` — Migrate playwright target from local dev to staging environment
+- **Status:** Phase 5 backlog
+- **Background:** Z.0b ships `playwright.config.ts` with `baseURL: process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000'` — local dev target by Nathan's 2026-05-03 decision (no staging infra exists; dedicated staging is 2-3 weeks of work; Cloud Run preview URLs add complexity). Local dev was the fastest path to a working harness. This stub tracks the migration to staging when infra matures.
+- **Why deferred:** Staging infra is a multi-week project (auth, data seeding, deploy pipeline, isolation from prod) that exceeds Z.0b's atomic-scope budget. Audit roadmap risk register (per `audit-roadmap-2026-q2-q4.md`) flags staging as a separate decision point.
+- **Required input before slicing:** staging infra decision — Cloud Run preview URLs (auto-provisioned per PR), dedicated staging service (separate Cloud Run instance + DB), or test tenant in prod (multi-tenant carve-out + cleanup automation). Each has trade-offs around cost, fidelity, and isolation.
+- **Affected surfaces:** `playwright.config.ts` (`baseURL` switch via env var — already env-overridable in Z.0b, so likely just a doc update), `docs/playwright-setup.md` (env var documentation), potentially `cloudbuild.yaml` (if Cloud Run preview URLs become the target).
+- **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; per kickoff explicit deferral note).
+
+### `z0b-followup-ci-integration` — Wire `npm run e2e` into GitHub Actions as 5th required status check
+- **Status:** Phase 5 backlog
+- **Background:** Z.0b ships LOCAL-ONLY per Nathan's 2026-05-03 decision. The kickoff explicitly says "DO NOT wire this to GH Actions yet. The webServer config will time out in CI without a database. Z.0b ships LOCAL-ONLY. CI integration is a follow-up slice." Per Z.0a's status-check naming contract documented in `.github/workflows/ci.yml`, the new job will be named `e2e` (additive — never rename existing names).
+- **Why deferred:** CI integration is blocked on either (a) a staging target so playwright can run against a real running app without needing CI to provision a database, OR (b) a CI-friendly DB seeding strategy that lets `webServer` run `next dev` against an ephemeral DB (Postgres container, sqlite shim, etc.). Both are non-trivial.
+- **Required input before slicing:**
+  - Either ship `z0b-followup-staging-target` first (then CI just hits staging URL), OR design a CI DB seeding strategy.
+  - Decide e2e job timeout (likely 10-15 min initially given playwright + webServer overhead).
+  - Decide whether e2e job is required-for-merge from day 1 or warn-only initially.
+- **Affected surfaces:** `.github/workflows/ci.yml` (new `e2e` job), branch protection (Nathan adds the new required status check), potentially `playwright.config.ts` (CI-specific config block — `retries: 2` already configured per Z.0b plan).
+- **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; per kickoff explicit deferral note).
+
+### `z0b-followup-flows-6-10` — Implement remaining 5 methodology flows from §"Required infrastructure"
+- **Status:** Phase 5 backlog
+- **Background:** Methodology §"Required infrastructure" canonical 10-flow list. Z.0b ships flows {1, 2*, 4, 6} (4 flows; flow 3 deferred per `z0b-followup-flow-3-deal-submission-seed`; flow 5 deferred per `z0b-followup-flow-5-showing-booking`). This stub tracks the remaining 4 flows: #7 (AI underwrite → LOI PDF), #8 (onboarding → public sign → invoice), #9 (bulk invoice generation), #10 (terminal feed + filter + building profile).
+- **Why deferred:** Atomic scope budget. The kickoff explicitly placed flows 6-10 out of scope and named this stub.
+- **Required input before slicing:**
+  - Review each flow against the staging-target decision — flows 7-10 may have heavier data requirements (AI inference latency, PDF generation, terminal feed seeded with NYC events) that argue for staging over local-dev.
+  - Decide whether to ship all 4 in one slice or split (likely split — Phase 1 capacity-permitting).
+- **Affected surfaces:** `tests/e2e/07-underwrite-loi.spec.ts`, `tests/e2e/08-onboarding-sign.spec.ts`, `tests/e2e/09-bulk-invoice.spec.ts`, `tests/e2e/10-terminal-feed.spec.ts` (numbering per the methodology→spec mapping table in Z.0b's plan-of-record).
+- **Filed:** 2026-05-03 by Nathan (during Z.0b discovery; per kickoff explicit deferral note).
