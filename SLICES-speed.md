@@ -89,7 +89,7 @@ baselines.
 ---
 
 ### Z.0a — GitHub Actions CI skeleton
-- **Status:** `in_progress`
+- **Status:** `awaiting_review` (PR #50)
 - **Goal:** Establish `.github/workflows/` with PR-blocking jobs for typecheck, lint, test, build, and smoke contracts. Replaces the v2.1.1 interim manual-checklist pattern with real CI per methodology v2.2 §"Required infrastructure".
 - **Files in scope:**
   - `.github/workflows/ci.yml` (new — single workflow, 4 parallel jobs)
