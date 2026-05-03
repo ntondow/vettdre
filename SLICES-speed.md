@@ -559,7 +559,7 @@ Sentry DSNs are **public write-only keys** designed for client-bundle exposure (
 - **Branch:** `chore/speed-z4-sentry-spans` off `origin/main`.
 
 ### Z.5 — Cloud Run cold start measurement (LAST Phase Z slice)
-- **Status:** `awaiting_review`
+- **Status:** `done`
 - **Goal:** Add unauthenticated `/api/health` endpoint returning `uptime_seconds` + minimal status payload, so cold-start latency can be measured. Document the methodology + a 5-row TBD measurements table in `docs/handoff/speed-2026-q2-baselines.md` (parallel to Z.2's TBD pattern). Nathan fills in measurements via post-merge commit. **Do NOT implement keepalive** — that's Phase 1+ work driven by what Z.5's numbers show.
 - **Files in scope:**
   - `src/app/api/health/route.ts` (new — Sentry-wrapped GET handler per Q2(a); no DB hit; payload: `status`, `uptime_seconds`, `timestamp`, `node_env`, `git_sha`)
@@ -640,21 +640,92 @@ Nathan completes via separate commit on main post-merge (no need for a follow-up
 - **Success criteria:** new smoke test passes (3 contracts); existing 413/413 vitest suite still green (+3 from this slice → 416); local `npm run build` succeeds (route compiles without route-handler convention errors); `/api/health` reachable post-deploy and returns the documented payload; baselines doc has "Cold start baseline" section ready for Nathan's measurements.
 - **Depends on:** PR #55 (Z.4, merged 2026-05-03) — clean baseline + Sentry span pattern landed (Z.5's wrap copies it).
 - **Requires approval:** Pre-approved by Nathan (5 questions answered).
-- **Outcome:** _filled in at gate-run time. Z.5 is the LAST Phase Z slice. After this PR merges + Nathan completes the 5 cold-start measurements, Phase Z is complete and Phase 0 swarm opens. Z.5's `done` flip + the "Phase Z complete" gate header land in the Phase 0 kickoff slice's PR per cross-slice flip pattern._
+- **Outcome:** Shipped via PR #56 (merged 2026-05-03, deployed via build 2cd4a3b6). `/api/health` endpoint live at app.vettdre.com/api/health (Sentry-wrapped, no DB hit, returns `uptime_seconds` + `timestamp` + `node_env` + `git_sha` placeholder). Middleware exempts the route from auth via single-line public-routes addition at top of API group. 3-contract smoke at `tests/smoke/z5-cold-start.test.ts` passes (final suite count 418/418 green). `docs/handoff/speed-2026-q2-baselines.md` gained "Cold start baseline" section with methodology + 5-row TBD table + decision tree (median <1s skip / 1-5s optional / >5s required Cloud Scheduler keepalive or `--min-instances=1`). One Phase 5 stub filed: `z5-followup-unwrap-health-span` (deliberate unwrap when keepalive lands to avoid 1,440 spans/day of noise). Z.5's `done` flip + "Phase Z — Gate" header land in Phase 0 prep slice PR per cross-slice flip pattern. Phase Z complete. Cross-slice flip chain closes here: Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5.
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.5".
-- **Branch:** `chore/speed-z5-cold-start` off `origin/main`.
+- **Branch:** `chore/speed-z5-cold-start` off `origin/main` (merged + deleted).
+
+---
+
+## Phase Z — Gate (signed off 2026-05-03)
+
+Phase Z complete. All 8 setup slices shipped + merged to `main` between
+2026-05-03 (Z.6) and 2026-05-03 (Z.5). Cross-slice flip chain:
+Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5 (closes here in Phase 0
+prep PR).
+
+**Phase Z deliverables (all green):**
+- [x] Per-audit ledger split + `SLICES-speed.md` bootstrap (Z.6, PR #49)
+- [x] GitHub Actions CI skeleton (Z.0a, PR #50) — typecheck + lint baseline + test + build, all 4 required status checks gate `main`
+- [x] Playwright harness scaffold (Z.0b, PR #51) — 4 specs (login, contact, gmail, market intel) green
+- [x] Bundle analyzer baseline + report (Z.1, PR #52) — `npm run analyze` produces report; baselines doc has 316-chunk breakdown + 7.25MB parsed / 2.10MB gzip + top 10 priority routes
+- [x] Lighthouse CI + Web Vitals baseline (Z.2, PR #53) — `npm run lighthouse` works against 13 URLs; 3 public routes captured (login 100/100, privacy 100/100, leasing-agent 97/100), 10 auth-gated TBD until test user provisioned (`z0b-followup-verify-e2e-runs`)
+- [x] Prisma slow query log (Z.3, PR #54) — handler registered with HMR-stacking guard, PII-safe (template only, never params); dev `console.warn`, prod `Sentry.addBreadcrumb` + console fallback
+- [x] Sentry Performance refinement — custom spans + DSN inlining (Z.4, PR #55) — 6 spans wrapped (`data-fusion`, `nyc-opendata`, `firecrawl`, `apollo`, `email-parser` Claude call, `leasing-engine` Claude tool loop); literal DSN in `next.config.ts` env block per CLAUDE.md "Edge env var workaround" pattern
+- [x] Cloud Run cold start measurement (Z.5, PR #56) — `/api/health` endpoint live, baselines doc has cold-start methodology + 5-row TBD table + decision tree
+- [ ] Asana board for Phase 0 swarm tracking _(deferred during Phase Z; SLICES-speed.md remains canonical execution ledger. File `phase-0-followup-asana-setup` if/when stakeholder visibility becomes blocking. Pragmatic deferral approved by Nathan 2026-05-03.)_
+
+**Phase 5 backlog filed during Phase Z:** 10 stubs (verified via `grep -c "^### \`z" SLICES-speed.md`; kickoff narrative claimed 11, actual is 10). All preserved at end of this file under §"Phase 5 — Polish backlog".
 
 ---
 
 ## Phase 0 — Discovery (parallel agent swarm)
 
-To be filled at Phase 0 swarm time. Per methodology v2.2 §"Phase 0 —
-Discovery": one read-only audit agent per area, swarm prompt template
-at `docs/methodology/templates/phase-0-swarm-prompt.md`, areas
-enumerated in `docs/handoff/site-wide-speed-audit-2026-05-02.md`
-§"Phase 0 — Discovery".
+Per methodology v2.2 §"Phase 0 — Discovery": one read-only audit agent
+per area, swarm prompt template at
+`docs/methodology/templates/phase-0-swarm-prompt.md`, areas enumerated
+in `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Phase 0 —
+Discovery".
 
-_Empty until Phase Z gate signed off._
+### Phase 0 prep — widen swarm prompt template + close Phase Z gate
+- **Status:** `in_progress`
+- **Goal:** Three jobs, atomic: (1) close Phase Z gate (flip Z.5 `awaiting_review` → `done` with PR #56 + build 2cd4a3b6 outcome line; insert "Phase Z — Gate (signed off 2026-05-03)" header between Z.5 and Phase 0 sections); (2) widen `docs/methodology/templates/phase-0-swarm-prompt.md` to default to **VERTICAL SLICE MODE** (perf + functional + UX + a11y + RBAC in one walkthrough per area) instead of dimension-themed mode (PERFORMANCE-only, ACCESSIBILITY-only, etc., which forces N agents per area and triples token spend); (3) add 3-contract smoke pinning the gate header + Z.5 done state + template's new VERTICAL SLICE MODE section. The dimension-themed mode is preserved as LEGACY (still useful for dimension-specific deep-dives, e.g. a pure security audit) but no longer the swarm's default.
+- **Files in scope:**
+  - `SLICES-speed.md` (Z.5 done flip + Phase Z gate header + this slice entry per Q3 placement)
+  - `docs/methodology/templates/phase-0-swarm-prompt.md` (add VERTICAL SLICE MODE as new default; frame existing dimension-themed mode as LEGACY; worked example for Foundation/Speed Audit area "Market Intel building profile")
+  - `tests/smoke/phase-0-prep.test.ts` (new — 3 contracts; path corrected from kickoff typo per Q4)
+- **Smoke contract regex pins (3):**
+  1. **C1 — VERTICAL SLICE MODE in template:** `docs/methodology/templates/phase-0-swarm-prompt.md` matches `/VERTICAL SLICE MODE/`.
+  2. **C2 — Phase Z gate header in ledger:** `SLICES-speed.md` matches `/## Phase Z — Gate \(signed off/`.
+  3. **C3 — Z.5 done with PR #56 + build SHA:** `SLICES-speed.md` Z.5 section has status `done` AND outcome line matches BOTH `/PR #56/` AND `/build 2cd4a3b6/`.
+- **Estimated lines:** ~30 ledger edits + ~80 template additions + ~50 smoke + ~40 plan-of-record = ~200. Within 280.
+
+## Plan of record
+
+**Three-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.5 done + Phase Z complete gate header + phase-0-prep plan-of-record`** — this commit. Append plan-of-record (this section); flip Z.5 `awaiting_review` → `done` with PR #56 + build 2cd4a3b6 outcome line; insert "Phase Z — Gate (signed off 2026-05-03)" header with 9-item checklist (8 checked + Asana unchecked per Q5); flip phase-0-prep `pending` → `in_progress`.
+
+2. **`feat(methodology): widen phase-0-swarm-prompt template for vertical-slice mode + smoke contract`** — implementation. Add VERTICAL SLICE MODE section as new default to `docs/methodology/templates/phase-0-swarm-prompt.md`; frame existing dimension-themed mode as LEGACY; add worked example. Create `tests/smoke/phase-0-prep.test.ts` with 3 contracts.
+
+3. **`chore(slices): mark phase-0-prep awaiting_review`** — flip phase-0-prep `in_progress` → `awaiting_review`. Phase-0-prep's `done` flip lands in the FIRST Phase 0 swarm slice's PR per cross-slice flip pattern.
+
+**Q1 — Kickoff verbatim for gate items.** 9 items in the gate checklist exactly as kickoff worded them, except Asana item adjusted per Q5.
+
+**Q2 — Build SHA confirmed.** Phase Z deploy build = `2cd4a3b6` (full UUID `2cd4a3b6-70b5-4344-9ce3-ad87dfbb5807`, deploy SUCCESS at 2026-05-03T23:17). Used in Z.5 outcome line for traceability.
+
+**Q3 — Phase 0 prep entry placement.** Inside Phase 0 section as the first entry. Replaces the "Empty until Phase Z gate signed off" placeholder. Pre-Phase-0-swarm prep work (which this is) belongs in the Phase 0 section so the next agent picking up Phase 0 sees it as the entry point, not buried in Phase Z.
+
+**Q4 — Smoke path typo fix.** Test file at `tests/smoke/phase-0-prep.test.ts` (kickoff said `tests/smoke/phase-0-prep-prep.test.ts` — duplicated word).
+
+**Q5 — Asana item DEVIATION from kickoff.** Kickoff lists Asana board setup as `[x]` checked. Reality: Asana setup was pragmatically deferred during Phase Z because SLICES-speed.md served as the single canonical execution ledger and stakeholder visibility was not yet blocking. **Marked `[ ]` UNCHECKED** with deferral note. If/when stakeholder visibility becomes blocking, file `phase-0-followup-asana-setup` (not pre-filed in Phase 5 backlog now — only file when actually needed, per methodology v2.2 §"Phase 5 stubs are deferred work, not speculative work").
+
+**Q6 — Stub count reconciliation.** Kickoff narrative claimed "11 Phase 5 stubs filed during Phase Z". Verified via `grep -c "^### \`z" SLICES-speed.md` = **10**. The kickoff over-counted by 1; gate header reflects the true count (10). Likely root cause: kickoff was drafted while Z.5 plan-of-record was still being appended (which filed `z5-followup-unwrap-health-span` as the 10th, not 11th). No action needed — captured here for traceability per methodology v2.2 §"Verified-claim audit pattern".
+
+**VERTICAL SLICE MODE rationale (template change):** The dimension-themed mode (PERFORMANCE-only, ACCESSIBILITY-only, SECURITY-only, UX-only) treats each dimension as an independent audit pass per area. For a 10-area audit × 4 dimensions = 40 agent runs. Token cost scales linearly with dimension count, but most bugs in real-world product surfaces cross dimensions (a 4s LCP also hides an a11y skip-link gap, a missing aria-label, AND an unauthenticated data leak — all visible in the same walkthrough). Vertical-slice mode runs ONE agent per area covering all dimensions; the agent captures whatever it finds across the 4 axes. Result: 10 runs instead of 40, cross-dimensional patterns surface earlier (synthesis step still consolidates by pattern, not by dimension), and agents naturally prioritize what's most broken in their area instead of grading one dimension while ignoring obvious other-dimension issues.
+
+The dimension-themed mode is NOT removed — it's preserved as LEGACY for future audits where a pure single-dimension deep dive is genuinely the right tool (e.g. a SOC 2 prep audit that needs ONLY security findings, not noise from perf/UX). New default is vertical-slice; opt into dimension-themed when the audit's purpose is single-axis.
+
+**Cross-slice flip pattern:** Phase-0-prep's `done` flip lands in the FIRST Phase 0 swarm slice's PR (continuing the chain). The chain extends: Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5 → phase-0-prep → [first Phase 0 area].
+
+**Open questions for Nathan:** none after pre-approval round (6 questions answered + Q5 deviation captured + Q6 stub-count reconciliation surfaced).
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 418/418 vitest suite still green (+3 from this slice → 421); local `npm run build` succeeds; SLICES-speed.md gate header reads cleanly; template VERTICAL SLICE MODE section renders coherently when read by next-agent picking up first Phase 0 swarm slice.
+- **Depends on:** PR #56 (Z.5, merged 2026-05-03) — `/api/health` endpoint live + baselines doc with cold-start section.
+- **Requires approval:** Pre-approved by Nathan (6 questions answered).
+- **Outcome:** _filled in at PR-merge time. Phase 0 swarm opens after this PR merges._
+- **Kickoff prompt:** Phase 0 prep narrative (chat, 2026-05-03) — no separate kickoff doc since this is connective tissue between Phase Z and Phase 0, not a kickoff-prompt-document slice.
+- **Branch:** `chore/phase-0-prep` off `origin/main`.
 
 ---
 
