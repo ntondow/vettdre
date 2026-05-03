@@ -81,3 +81,6 @@ __pycache__/
 docs/handoff/*
 !docs/handoff/bms-audit-2026-04-28.md
 !docs/handoff/bms-overhaul-bootstrap.md
+!docs/handoff/bms-overhaul-retrospective-2026-05-02.md
+!docs/handoff/archive/
+!docs/handoff/archive/**

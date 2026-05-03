@@ -2,10 +2,37 @@
 
 **Created:** 2026-04-28 from `docs/handoff/bms-audit-2026-04-28.md` and `docs/handoff/bms-overhaul-bootstrap.md`.
 **Branch:** `feat/bms-overhaul-2026-q2`
-**Audit reference:** `docs/handoff/bms-audit-2026-04-28.md`
+**Audit reference:** `docs/handoff/archive/bms-audit-2026-04-28.md` (archived 2026-05-02 via slice `bms-audit-closeout`)
+**Closeout doc:** `docs/handoff/archive/bms-closeout-2026-05-02.md` (archived 2026-05-02)
+**Retrospective:** `docs/handoff/bms-overhaul-retrospective-2026-05-02.md`
 
 This file is the single source of truth for the work. Claude Code agents update
 status fields as they go. Nathan approves at phase boundaries.
+
+---
+
+## BMS Overhaul — Audit Closed (2026-05-02)
+
+End-of-audit gate per methodology v2.2 §"End-of-audit gate". Closeout shipped via slice `bms-audit-closeout` (PR TBD).
+
+- [x] All Phase N gates signed off (Phase Z, 0, 1, 2, 3, 4 — all merged to `main`)
+- [x] Audit doc archived: `docs/handoff/bms-audit-2026-04-28.md` → `docs/handoff/archive/`
+- [x] Closeout doc archived: `docs/handoff/bms-closeout-2026-05-02.md` → `docs/handoff/archive/`
+- [x] Retrospective written: `docs/handoff/bms-overhaul-retrospective-2026-05-02.md`
+- [ ] **Methodology v2.2 bump DEFERRED** — discovery during this slice surfaced that the entire `docs/methodology/` tree is untracked (5 canonical files, never committed). Tracking the methodology in this PR would mean committing several thousand pre-existing lines, far above Nathan's <30-line threshold for the v2.2 bump. Filed as Phase 5 stub `bms-audit-closeout-followup-methodology-tracking`. The intended v2.2 changes (verified-claim audit pattern + read/write anti-pattern bullet) are documented in the retrospective and in the stub for future pickup.
+
+**Out of scope / deferred (Nathan-side or next-audit):**
+- [ ] **SLICES-bms.md archive** — methodology line 377 calls for `SLICES-<audit>.md → docs/methodology/archive/SLICES-<audit>-<date>.md`. This file is currently named `SLICES.md` (no audit suffix); rename is deferred to next-audit Phase Z setup per closeout doc line 4.
+- [ ] **Asana project archived** — Nathan-side action.
+- [ ] **Rollback drill against latest registry entry** — not in closeout doc Items 1-7; deferred to next audit's Phase Z hygiene.
+- [ ] **Methodology tracking + v2.2 bump** — see deferral note above; filed as Phase 5 stub.
+
+**Carryover into next audit:**
+- Item 4 (Gulino e2e) INCONCLUSIVE — surfaced new bug filed as `22-followup-as-org-onboarding-create` (Phase 5).
+- Item 6 (iPad real-finger smoke test) DEFERRED — requires hardware session.
+- Phase 5 stubs unchanged from PR #46 cleanup pass.
+
+Signed off: Nathan, 2026-05-02.
 
 ---
 
@@ -932,7 +959,7 @@ direction is clear.
 ---
 
 ### slices-stub-naming-cleanup — Normalize Phase 5 stub naming + close gcloudignore outcome + file gcloudignore followup
-- **Status:** `in_progress`
+- **Status:** `done` (PR #46 merged 2026-05-03)
 - **Goal:** Three doc-only changes: (1) rename all 11 existing Phase 5 stubs to the methodology v2.1.1 §8 format `<parent-slice-id>-followup-<short-name>`; (2) close out the `gcloudignore` slice outcome line with verified prod metrics; (3) file the new `gcloudignore-followup-further-reduction` stub captured during slice gcloudignore verification. Pure-additive on stub bodies — keep richer slice-style fields (Goal, Approach, Files, Estimated diff, etc.) and only add methodology fields (Background, Required input, Affected surfaces, Filed) where missing.
 - **Closes bug:** Inconsistent Phase 5 stub IDs that future agents could misroute. The methodology v2.1.1 stub format pins `<parent-slice-id>-followup-<short-name>`; current naming has 4 variant prefixes (`9-ext-`, `20-fix-followup-`, `19-fix-followup-`, `21-fix-followup-`) and one with no parent prefix at all (`deal-pipeline-delete`). Smoke test enforces the format going forward.
 - **Why:** Mechanical mess (renames + field backfills) found above the 8-stub threshold (11 actual). Variance documented; mess is mechanical, not strategic, so single-PR cleanup is the right call (per Nathan's note 2026-05-02 in chat).
@@ -984,6 +1011,60 @@ direction is clear.
 - **Success criteria:** new smoke test passes (3 contracts); full vitest suite still green; SLICES.md still parses (no broken markdown); all 11 stubs renamed per table; new stub filed with all methodology fields.
 - **Depends on:** slice gcloudignore (closes that out in the same PR).
 - **Requires approval:** Pre-approved by Nathan (3 questions answered + variance from 8-threshold acknowledged).
+- **Outcome:** Shipped via PR #46 (merged 2026-05-03). All 11 stubs renamed to methodology format; gcloudignore outcome line filled with prod-verified metrics; new `gcloudignore-followup-further-reduction` stub filed; smoke test pins the format going forward (status flip on this slice's own outcome line was missed in PR #46 — corrected as part of `bms-audit-closeout`).
+
+### bms-audit-closeout — BMS Overhaul audit closeout (file follow-up stub + archive docs + retrospective)
+- **Status:** `in_progress`
+- **Goal:** Close the BMS Overhaul audit per methodology v2.1.1 §"End-of-audit gate". Three artifacts: (1) file new stub `22-followup-as-org-onboarding-create` capturing the bug surfaced during Item 4 verification; (2) archive `bms-audit-2026-04-28.md` and `bms-closeout-2026-05-02.md` to `docs/handoff/archive/`; (3) write retrospective at `docs/handoff/bms-overhaul-retrospective-2026-05-02.md`. **Methodology v2.2 bump DEFERRED** — discovery surfaced that the entire `docs/methodology/` tree is untracked; tracking it inline would exceed Nathan's <30-line threshold. Filed as Phase 5 stub `bms-audit-closeout-followup-methodology-tracking`.
+- **Closes bug (procedural):** End-of-audit gate from methodology — currently no signed-off closeout exists for the BMS audit. Without this gate, the next audit can't begin (methodology line 379+ enforces gate-before-next-audit).
+- **Why this slice exists:** End-of-audit gate is part of the methodology lifecycle, not optional. The closeout doc (`bms-closeout-2026-05-02.md`) listed Item 7 = "Audit closeout — archive doc, close Asana, retro" with Nathan-side action; this slice is the agent-side execution of Item 7's archive + retrospective half.
+
+## Plan of record
+
+**Files to be created/modified:**
+- `SLICES.md` (modify — audit-closed gate header at top of file; flip `slices-stub-naming-cleanup` outcome (silent omission from PR #46); this chore-slice entry; new stub `22-followup-as-org-onboarding-create` at end of Phase 5; new stub `bms-audit-closeout-followup-methodology-tracking` at end of Phase 5; reference-line updates pointing to archived audit doc)
+- `.gitignore` (modify — whitelist `!docs/handoff/bms-overhaul-retrospective-2026-05-02.md` since `docs/handoff/*` is excluded by default)
+- `docs/handoff/bms-closeout-2026-05-02.md` (modify — append "## Final Outcome (2026-05-02)" section before move, recording Items 1-7 disposition)
+- `docs/handoff/bms-audit-2026-04-28.md` (`git mv` → `docs/handoff/archive/bms-audit-2026-04-28.md`)
+- `docs/handoff/bms-closeout-2026-05-02.md` (regular `mv` since file was untracked → `docs/handoff/archive/bms-closeout-2026-05-02.md`; `git add` at archive path)
+- `docs/handoff/bms-overhaul-retrospective-2026-05-02.md` (create — real retro, ≥80 lines: audit summary, key wins, what worked, what didn't, what to change for next audit, B-019 worked-example callout, carryover, sprint stats)
+- ~~`docs/methodology/slice-based-audit.md` (modify — bump v2.1.1 → v2.2 inline)~~ **DEFERRED** — discovery surfaced that `docs/methodology/` is entirely untracked in git. Tracking the methodology tree inline would exceed Nathan's <30-line threshold. Filed as Phase 5 stub `bms-audit-closeout-followup-methodology-tracking` with the staged v2.2 content preserved for future pickup.
+- `tests/smoke/bms-audit-closeout.test.ts` (create — 3 contracts as specified below)
+
+**Smoke contract regex pins (literal regex strings):**
+1. **C1 (Positive — new stub filed):** SLICES.md contains `### \`?22-followup-as-org-onboarding-create\`?` header AND its body contains all 5 methodology fields: `**Status:**`, `**Background:**`, `**Why deferred:**`, `**Required input before slicing:**`, `**Affected surfaces:**`, `**Filed:**`.
+2. **C2 (Positive — archive moves complete):** `fs.existsSync` returns true for `docs/handoff/archive/bms-audit-2026-04-28.md` AND `docs/handoff/archive/bms-closeout-2026-05-02.md`; returns false for `docs/handoff/bms-audit-2026-04-28.md` AND `docs/handoff/bms-closeout-2026-05-02.md`.
+3. **C3 (Positive — retrospective is real):** `docs/handoff/bms-overhaul-retrospective-2026-05-02.md` exists; contains section headers for `Audit summary`, `Key wins` (or `What worked`), `What didn't`, `What to change`, `Carryover`; total file length ≥80 lines (the methodology-suggested retro floor).
+
+**Estimated line count:** ~310-355 net.
+- SLICES.md: ~80 lines (audit-closed gate header + chore-slice entry + new stub + status fix + reference updates).
+- bms-closeout-2026-05-02.md: ~25 lines appended.
+- Retrospective: ~150-200 lines (real retro, not boilerplate).
+- Methodology v2.2: ~15-20 lines.
+- Smoke test: ~80 lines.
+
+**Variance from 300-line stop condition:** approved by Nathan 2026-05-02. Closeout slices naturally touch more docs than feature/fix slices and benefit from one-PR atomicity (single git event for "audit closed" makes the timeline easier to reconstruct). Variance documented here per the variance-documentation pattern (same approach used in PR #46 for the 8-stub threshold variance).
+
+**Stop conditions internalized:**
+- No code changes. Pure doc work.
+- Use `git mv` for archive moves (preserve history, not delete + create).
+- Methodology v2.2 bump must stay <30 lines and contain no new sections — only tightening (per Nathan's threshold). If retro surfaces broader methodology gaps, file as separate v2.2 slice.
+- Don't restructure Phase 5 stubs from PR #46 — only append the new one.
+- Retrospective must be honest (Item 4 inconclusive; B-019 verified-claim history named explicitly).
+
+**Open questions for Nathan:** none after pre-approval round (3 questions answered).
+
+**Discovery findings:**
+- Closeout doc filename was `bms-closeout-2026-05-02.md` (not `bms-2026-05-02.md` as briefed) — preserved through the `git mv`.
+- `docs/handoff/archive/` directory does not exist yet — `git mv` will create it.
+- `slices-stub-naming-cleanup` was still showing `in_progress` despite PR #46 merging at 2026-05-03T00:07:48Z — known omission from PR #46 (the slice flipped slice 22 + gcloudignore but not its own status). Fixed here.
+- Sprint stats since 2026-04-28: 119 commits, +33,500 / -7,885 lines.
+- B-019 history is the most valuable retro finding: audit doc B-019 ("createOnboarding ignores ?as_org=") was claimed verified-fixed by slice 0c2 (SLICES.md:444), but slice 0c2 only threaded the *list page* read surface; the form POST → `createOnboarding` server action was intentionally exempted in `override-scoping.test.ts:77-84` ("legal/audit implications. Defer until product clarifies"). Item 4's Gulino e2e test re-found the bug. The "verified" status was claimed too thinly because the smoke contract excluded the write surface. Drives the v2.2 tightening.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** new smoke test passes (3 contracts); full vitest suite still green; SLICES.md still parses; archive paths exist + old paths gone; retrospective ≥80 lines covering all 5 required sections; methodology v2.2 bump ≤30 lines.
+- **Depends on:** PRs #44, #45, #46 (all merged); slices 22 + gcloudignore + slices-stub-naming-cleanup all `done`.
+- **Requires approval:** Pre-approved by Nathan (3 questions answered + 300-line variance + B-019 retro framing).
 - **Outcome:** _filled in at gate-run time_
 
 ---
@@ -1189,3 +1270,39 @@ inconsistency, or batch into a single sweep when capacity permits.
   - Consider excluding `scripts/` (102 MiB, mostly dupes — needs check that nothing in `cloudbuild.yaml` or `Dockerfile` references scripts/ at build time, and that no runtime CRON jobs invoke scripts/ via Cloud Scheduler).
 - **Affected surfaces:** `.gcloudignore` (file additions), Cloud Build deploy timing, Dockerfile runtime dependencies.
 - **Filed:** 2026-05-02 by Nathan (during slice gcloudignore verification).
+
+### `22-followup-as-org-onboarding-create` — Onboarding `createOnboarding` write path ignores `?as_org=` override (HIGH PRIORITY)
+- **Status:** Phase 5 backlog (HIGH PRIORITY — blocks cross-tenant verification of any onboarding work)
+- **Background:** Surfaced during BMS audit closeout Item 4 (manual end-to-end Gulino onboarding test, 2026-05-02). super_admin under `?as_org=<gulinoOrgId>` clicked "Send Invite" on `/brokerage/client-onboarding/new` — POST returned 200 but no DB record was created in either home org or Gulino. Root cause: `createOnboarding` in `src/app/(dashboard)/brokerage/client-onboarding/actions.ts:271` calls `getAuthContext()` (no `overrideAsOrg` thread); downstream lookups (`prisma.brokerAgent.findFirst({ where: { id: requestedAgentId, orgId: ctx.orgId } })`) hard-code home-org `orgId` and silently return null because the form was prepared under Gulino context. Same class of bug slice 22 fixed for Vault, but in the Onboarding mutation surface.
+
+  **Important history:** This was originally documented as **B-019** in the audit doc and claimed "verified-fixed by slice 0c2" in SLICES.md:444. But slice 0c2 only threaded the *list page* read surface (`getOnboardings`); the form POST → `createOnboarding` server action was **intentionally exempted** in `tests/smoke/override-scoping.test.ts:77-84` with the comment: "createOnboarding ties the onboarding document to the calling agent's identity — overriding org while keeping the agent record has legal/audit implications. Defer until product clarifies whether super_admin can create on behalf of another org's agent." So this is not a regression — it's a documented deferral that was incorrectly summarized as "verified" because only the read surface was checked. Drives the methodology v2.2 tightening (verified-claim audit pattern under §6 Production verification).
+
+  **Real Gulino agents (logged in directly) can create onboardings normally** — Gulino has been live since 2026-04-28 with no createOnboarding issues. The bug is specifically: super_admin cross-tenant write via `?as_org=` silently fails. This blocks cross-tenant verification of ANY onboarding-related work until fixed; manual workaround is to log into the target tenant directly.
+- **Why deferred:** Three plausible paths, each with different costs / blast radius. Pick one before slicing.
+- **Required input before slicing:**
+  - **Option (a) — Product/legal clarification on super_admin cross-tenant write semantics.** Original deferral reason. The agent identity coupling means a super_admin creating an onboarding under `?as_org=<otherOrg>` would file the doc under the *target tenant's* agent record, even though the actor is super_admin from a different tenant. This raises legal/audit questions (who's the agent of record? Does the target tenant's brokerage own the relationship? What does the audit log say?). If product/legal decides it's fine, then thread the override.
+  - **Option (b) — Conscious decision to apply slice 22's per-callsite pattern without legal sign-off.** Slice 22 set the precedent for cross-tenant write (Vault `createDocumentTemplate`). Vault has no agent-identity coupling so the call was easy. createOnboarding has the coupling, so this option = "we're treating super_admin as a delegated actor for the target tenant; agent of record = the target tenant's selected agent (`input.agentId`); audit log records both `super_admin` actor and `as_org` override." This is internally consistent but bypasses the legal conversation.
+  - **Option (c) — Wait for slice `3.Y` (structural OrgContext wrapper).** SLICES.md `3.Y` proposes replacing per-callsite override threading with a single OrgContext wrapper that every Prisma query must use, making it impossible to forget threading without a typecheck error. That slice solves this class systemically. If 3.Y is in the next-audit scope, defer until 3.Y ships.
+- **Affected surfaces:** `src/app/(dashboard)/brokerage/client-onboarding/actions.ts` (`createOnboarding` line 271 primary; audit `voidOnboarding`, `deleteOnboarding`, `archiveOnboarding`, `generateInvoiceFromOnboarding`, `resendOnboarding` for similar patterns — they do thread `overrideAsOrg` per `tests/smoke/override-scoping.test.ts` so they're likely fine, but verify under `?as_org=` test with super_admin actor). Update `tests/smoke/override-scoping.test.ts` to remove the `createOnboarding` exemption once Option (a) or (b) is chosen.
+- **Filed:** 2026-05-02 by Nathan (during BMS audit closeout, Item 4 verification).
+
+### `bms-audit-closeout-followup-methodology-tracking` — Track `docs/methodology/` in git + apply v2.2 bump
+- **Status:** Phase 5 backlog
+- **Background:** Surfaced during slice `bms-audit-closeout` (this slice). The entire `docs/methodology/` tree is untracked in git — 5 canonical files (`slice-based-audit.md`, 3 templates under `docs/methodology/templates/`, 1 archive entry under `docs/methodology/archive/`), never committed. The methodology has been referenced extensively across PRs #44, #45, #46 + the BMS closeout doc + this retrospective, but no agent or contributor has run `git add` on it. Origin/main has no methodology history at all (`git log origin/main -- docs/methodology/slice-based-audit.md` returns empty). This was the dominant blocker that forced the v2.2 bump out of `bms-audit-closeout` — committing the methodology inline would mean adding several-thousand pre-existing lines, far above Nathan's <30-line threshold for the v2.2 bump.
+- **Why deferred:** Mixing "track several thousand pre-existing methodology lines" with "narrow v2.2 tightening" in one PR violates the threshold rule and makes the diff unreviewable as a methodology change. Splitting cleanly: track-then-bump, two slices.
+- **Required input before slicing:**
+  - Decide whether the methodology tree should be tracked (likely yes — it's the cited source of truth).
+  - Confirm scope: just `slice-based-audit.md` + templates, or also `archive/`?
+  - Confirm `docs/methodology/` doesn't currently match any `.gitignore` pattern (verified during this slice's discovery: `git check-ignore -v docs/methodology/slice-based-audit.md` returned empty).
+- **Approach (intended):**
+  - PR 1 (this stub): `git add docs/methodology/slice-based-audit.md` + templates + archive contents. Initial-tracking commit. No content changes; just bring into git.
+  - PR 2 (v2.2 bump, see staged content below): apply the narrow v2.2 tightening on top of the now-tracked file.
+  - Could also be combined into one PR with a clear two-commit split: "chore: track docs/methodology" + "feat(methodology): bump to v2.2". Cleaner reviewer experience.
+- **Staged v2.2 content** (intended to land once tracking ships — kept here so the work isn't lost):
+  - **Header bump:** `# Slice-Based Audit Methodology (v2.1.1)` → `(v2.2)`. Add v2.2 patch note at top of file (~3 lines).
+  - **§6 Production verification — append paragraph (~7 lines):**
+    > **Verified-claim audit pattern (added v2.2).** When a slice claims it fixed a *class* of bugs (cross-tenant override, RBAC enforcement, validation rule, etc.), verification must walk every variant in that class — read AND write paths, all callsites — not just the variants that have explicit smoke contracts. Smoke contracts can't catch a write-path bug if the write-path callsite is exempted from the contract matrix. **Worked example (BMS audit B-019):** slice 0c2 threaded `?as_org=` through the onboarding *list page* and was claimed "B-019 verified." But the form POST → `createOnboarding` server action was intentionally exempted from `override-scoping.test.ts`'s `FILES_UNDER_TEST` matrix. The exemption was a deferral, not a fix. Item 4 manual e2e found the bug 4 days later. Lesson: **a class-fix's verification artifact must enumerate every callsite in the class and confirm each was either threaded OR explicitly exempted with a documented reason and a follow-up stub.** "Read surface threaded → class verified" is the failure mode this rule prevents.
+  - **§9 Common agent failure modes — new bullet (~2 lines):**
+    > - **Read surface ≠ write surface** (agent claims a class-fix is verified after threading reads only; ask explicitly "did you walk the write surface too, or just the read surface?" — see §6 verified-claim audit pattern + B-019 worked example).
+- **Affected surfaces:** `docs/methodology/slice-based-audit.md` (track + bump); `docs/methodology/templates/*.md` (track); `docs/methodology/archive/slice-based-audit-v2-2026-05-02.md` (track).
+- **Filed:** 2026-05-02 by Nathan (during BMS audit closeout — discovery surfaced the untracked-methodology gap; v2.2 bump was approved inline but blocked by the threshold rule once the tracking gap was discovered).

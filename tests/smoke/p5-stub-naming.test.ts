@@ -23,10 +23,17 @@ const SLICES = read("SLICES.md");
 
 // Extract just the Phase 5 section (everything after the "## Phase 5 —
 // Polish backlog" heading). Stop at EOF since Phase 5 is the last section.
+//
+// Anchor with ^ + m flag so the indexOf-equivalent only matches the
+// actual section header, not paragraph-prose mentions of the literal
+// string elsewhere in the doc (e.g. plan-of-record bodies that
+// reference the Phase 5 section name in their description).
 function getPhase5Section(): string {
-  const start = SLICES.indexOf("## Phase 5 — Polish backlog");
-  if (start === -1) throw new Error("Phase 5 section not found");
-  return SLICES.slice(start);
+  const match = SLICES.match(/^## Phase 5 — Polish backlog$/m);
+  if (!match || match.index === undefined) {
+    throw new Error("Phase 5 section header not found");
+  }
+  return SLICES.slice(match.index);
 }
 
 describe("Slice gcloudignore — closeout outcome line", () => {
