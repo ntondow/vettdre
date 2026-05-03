@@ -825,7 +825,7 @@ Phase 0 status as of 2026-04-29:
 - **Outcome:** Shipped via PR #44 (merged 2026-05-02, build 9c9eb72d). Prod verification via Chrome MCP 2026-05-02: super_admin viewing Vault under `?as_org=<otherOrgId>` now sees target tenant's templates on both list and detail surfaces; `?as_org=` preserved on intra-vault navigation; orange override banner displays correctly throughout. Non-super_admin `?as_org` requests silently ignored as designed (auth-context.ts unchanged).
 
 ### gcloudignore — Augment `.gcloudignore` to cut Cloud Build upload size
-- **Status:** `in_progress`
+- **Status:** `done` (PR #45 merged 2026-05-02)
 - **Goal:** Reduce `gcloud builds submit` source upload from ~664 MiB to ~30 MiB by augmenting the existing `.gcloudignore` to filter out sibling-project working directories and Finder-dupe `.ts/.tsx` files. Saves 1–2 minutes per deploy; compounds across all future deploys.
 - **Why:** Existing `.gcloudignore` (created 2026-03-30) covers the obvious node_modules/.next/.git basics and `*.md` (which catches Finder-dupe markdown), but misses two ~hundreds-of-MB sibling-project dirs (`mobile/`, `NEW LISTINGS PROJECT agents/`) and the `.ts`/`.tsx` Finder dupes (~14,800 files) that have accumulated under the working tree.
 - **Approach:** Pure additive. Don't restructure existing patterns. Don't touch `cloudbuild.yaml` or `.dockerignore` (out of scope). Don't exclude `data/zillow/*.csv` — Dockerfile:66 ships `data/` into runner stage, runtime dependency unverified, kept in upload as a safety default.
@@ -868,7 +868,7 @@ Phase 0 status as of 2026-04-29:
 - **Success criteria:** smoke tests pass; full vitest suite still green; `.gcloudignore` syntactically valid (no trailing pattern errors); next deploy upload size drops materially (Nathan to verify post-merge — target ≤30 MiB, actual to be measured).
 - **Depends on:** Slice 22-as-org-vault (this slice closes that out in the same PR).
 - **Requires approval:** Pre-approved by Nathan (3 adjustments incorporated: confirmed-safe dir list, slice 22 outcome wording, build ID).
-- **Outcome:** _filled in at gate-run time_
+- **Outcome:** Shipped via PR #45 (merged 2026-05-02, build 55d8db5e). Cloud Build source tarball reduced 269.08 MiB → 132.88 MiB (50.6% reduction, ~136 MiB saved per deploy). Sibling-project dirs (`mobile/`, `NEW LISTINGS PROJECT agents/`) and `.ts/.tsx` Finder dupes accounted for the bulk. Further reduction opportunities filed as `gcloudignore-followup-further-reduction` (Phase 5 stub).
 
 ### 3.Y — Structural fix for override-context propagation
 - **Status:** `pending`
@@ -931,14 +931,75 @@ direction is clear.
 
 ---
 
+### slices-stub-naming-cleanup — Normalize Phase 5 stub naming + close gcloudignore outcome + file gcloudignore followup
+- **Status:** `in_progress`
+- **Goal:** Three doc-only changes: (1) rename all 11 existing Phase 5 stubs to the methodology v2.1.1 §8 format `<parent-slice-id>-followup-<short-name>`; (2) close out the `gcloudignore` slice outcome line with verified prod metrics; (3) file the new `gcloudignore-followup-further-reduction` stub captured during slice gcloudignore verification. Pure-additive on stub bodies — keep richer slice-style fields (Goal, Approach, Files, Estimated diff, etc.) and only add methodology fields (Background, Required input, Affected surfaces, Filed) where missing.
+- **Closes bug:** Inconsistent Phase 5 stub IDs that future agents could misroute. The methodology v2.1.1 stub format pins `<parent-slice-id>-followup-<short-name>`; current naming has 4 variant prefixes (`9-ext-`, `20-fix-followup-`, `19-fix-followup-`, `21-fix-followup-`) and one with no parent prefix at all (`deal-pipeline-delete`). Smoke test enforces the format going forward.
+- **Why:** Mechanical mess (renames + field backfills) found above the 8-stub threshold (11 actual). Variance documented; mess is mechanical, not strategic, so single-PR cleanup is the right call (per Nathan's note 2026-05-02 in chat).
+
+## Plan of record
+
+**Files to be created/modified:**
+- `SLICES.md` (modify — close `gcloudignore` outcome line; rename 11 Phase 5 stub headers per the table below; backfill methodology fields on each stub; append new `gcloudignore-followup-further-reduction` stub; this chore-slice entry)
+- `tests/smoke/p5-stub-naming.test.ts` (create — 3 contracts as specified below)
+
+**Stub rename table (11 renames, all under `## Phase 5 — Polish backlog`):**
+| Current ID | Parent | New ID |
+|---|---|---|
+| `9-ext-inline` | `9-ext` | `9-ext-followup-inline-emoji` |
+| `20-fix-followup-term-display` | `20-fixes-B` | `20-fixes-B-followup-term-display` |
+| `20-fix-followup-client-email` | `20-fixes-A` | `20-fixes-A-followup-client-email` |
+| `19-fix-followup-doctype-enum` | `19-B1` | `19-B1-followup-doctype-enum` |
+| `19-fix-followup-vault-rbac` | `19-B1` | `19-B1-followup-vault-rbac` |
+| `19-fix-followup-ia-cleanup` | `19-B1` | `19-B1-followup-ia-cleanup` |
+| `19-fix-followup-doc-references` | `19-B1` | `19-B1-followup-doc-references` |
+| `19-fix-followup-cross-page-move` | `19-B2a` (Nathan-confirmed) | `19-B2a-followup-cross-page-move` |
+| `19-fix-followup-keyboard-nudge` | `19-B2b` | `19-B2b-followup-keyboard-nudge` |
+| `21-fix-followup-volume-aggregates` | `21` (no `-fix-` infix; parent has no `-fix`) | `21-followup-volume-aggregates` |
+| `deal-pipeline-delete` | `9-ext` (file discovered during 9-ext audit) | `9-ext-followup-delete-deal-pipeline` |
+
+**Smoke contract regex pins (literal regex strings):**
+1. **C1 (Positive — slice gcloudignore closed):** `gcloudignore` slice section status is `done`; outcome line contains `PR #45`, `build 55d8db5e`, and a reduction figure (`50.6%` or `269.08`/`132.88`).
+2. **C2 (Positive — new stub filed):** SLICES.md contains `### gcloudignore-followup-further-reduction` (with optional backticks per methodology template) AND its body contains all 5 methodology fields: `**Status:**`, `**Background:**`, `**Why deferred:**`, `**Required input before slicing:**`, `**Affected surfaces:**`, `**Filed:**`.
+3. **C3 (Cardinality — every Phase 5 stub matches `<slice-id>-followup-<short-name>`):** iterate `###` headers between `## Phase 5 — Polish backlog` and EOF; each must match `/^### `?[\w.\-]+-followup-[\w\-]+`?( —|$)/`. Backticks optional per methodology template (some stubs render IDs in code-formatting; both forms are valid).
+
+**Estimated line count:** ~120 net (+11 rename header lines, +50-60 lines of methodology-field backfills (~5 lines/stub × 11), +25 lines new stub body, +50 lines smoke test, +15 lines new chore-slice entry minus 2 for outcome line replacement = ~115 net additions). Above the 50-line ceiling for chore slices but under the 150-line stop condition. Variance is mechanical (rename + backfill), so allowed in one PR per Nathan's 2026-05-02 chat note.
+
+**Stop conditions internalized:**
+- Don't change scope or content of existing stub bodies. Pure-additive on fields. Keep all richer slice-style fields (Estimated diff, Depends on, Requires approval, Approach, Files) — they have value above the methodology minimum.
+- Don't file `20-fix-followup-sortorder-audit` even though it's referenced at line 668 with no entry — out of scope per Nathan's "don't add OTHER new stubs" rule. Documented as future-cleanup observation in PR body.
+- Don't touch unrelated SLICES.md sections (Phases 0-3 slice histories untouched).
+- If line count exceeds 150 net, stop and reassess.
+
+**Open questions for Nathan:** none after pre-approval round (3 questions answered: cross-page-move parent = `19-B2a`; pure-additive field strategy; sortorder-audit orphan = leave alone).
+
+**Variance from 8-stub threshold:** found 11 stubs (3 over). Per Nathan's 2026-05-02 chat note: "11 stubs is 3 over the threshold. The mess is mechanical (renames + backfills), not strategic. Proceed in one PR. Document the variance from the 8-threshold in the plan-of-record." Documented here.
+
+**Discovery findings:**
+- 11 stubs in `## Phase 5 — Polish backlog` (line 934+); 4 distinct ID prefix variants, plus one with no parent prefix (`deal-pipeline-delete`).
+- `20-fix-followup-sortorder-audit` referenced at line 668 in slice 20-fixes-D's "defect dropped" note but has no `###` entry. Mentioned-but-not-filed; out of scope here.
+- Methodology v2.1.1 §8 stub format = `Background / Why deferred / Required input before slicing / Affected surfaces / Filed`. Most existing stubs use slice-style fields (Goal/Approach/Files/Estimated diff/Depends/Requires approval). Pure-additive: ADD missing methodology fields, KEEP existing slice-style fields.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** new smoke test passes (3 contracts); full vitest suite still green; SLICES.md still parses (no broken markdown); all 11 stubs renamed per table; new stub filed with all methodology fields.
+- **Depends on:** slice gcloudignore (closes that out in the same PR).
+- **Requires approval:** Pre-approved by Nathan (3 questions answered + variance from 8-threshold acknowledged).
+- **Outcome:** _filled in at gate-run time_
+
+---
+
 ## Phase 5 — Polish backlog
 
 Low-priority cleanup slices filed during Phase 4 but explicitly deferred to
 keep individual slices reviewable. Pick up only if Gulino flags a specific
 inconsistency, or batch into a single sweep when capacity permits.
 
-### 9-ext-inline — Inline button-text emoji migration (deferred from 9-ext)
+### `9-ext-followup-inline-emoji` — Inline button-text emoji migration (deferred from 9-ext)
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced during slice 9-ext (emoji → lucide nav-icon migration). Inline emoji uses inside button labels, header text, and link prefixes need per-instance design decisions about layout/spacing rather than a mechanical typed-props swap, so 9-ext deliberately deferred them.
+- **Required input before slicing:** Per-file design call (per-instance: drop emoji vs replace with lucide vs keep + add gap).
+- **Affected surfaces:** see "Files in scope" below.
+- **Filed:** 2026-04-29 by Nathan (during slice 9-ext audit; renamed 2026-05-02).
 - **Goal:** Migrate emoji embedded directly inside button labels, header text, and inline link prefixes — the cases slice 9-ext deliberately deferred because each needs a per-instance design decision about layout/spacing rather than a typed-props swap.
 - **Why deferred from slice 9-ext:** typed-props icons (e.g. `icon: LucideIcon` on a config array) migrate mechanically with no visual change beyond the icon glyph. Inline emoji like `<button>✉️ Email</button>` change layout because lucide components are SVG with explicit width/height — replacing the emoji with `<Mail className="w-4 h-4" /> Email` shifts spacing, baseline alignment, and gap requirements. Shipping inline migrations alongside typed-props would inflate the diff and bury the "easy" structural changes inside per-instance design judgments.
 - **Files in scope** (audit-confirmed during slice 9-ext, all surfaces touched but not migrated):
@@ -961,8 +1022,12 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Depends on:** 9-ext (merged).
 - **Requires approval:** No, but propose-then-implement per-file given the layout-shift risk.
 
-### 20-fix-followup-term-display — Audit agent-side term display + reminder cron for stale math
+### `20-fixes-B-followup-term-display` — Audit agent-side term display + reminder cron for stale math
 - **Status:** `pending` (Phase 5 polish — only ship if Gulino flags drift)
+- **Background:** Surfaced during slice 20-fixes-B's signing-flow P1 audit. Defect #11 (termDays display drift) was dropped from 20-fixes-B after re-verification confirmed the *public* signing UI uses absolute dates (`effectiveThrough`); this stub captures the residual concern that *agent-side* surfaces and the reminder cron may still compute "X days remaining" from `(expiresAt - createdAt)` instead of `(expiresAt - now)`.
+- **Required input before slicing:** None — independent audit. If audit finds drift in the reminder cron, surface before fixing (external-facing communications).
+- **Affected surfaces:** `src/app/(dashboard)/brokerage/client-onboarding/**` (agent dashboard onboarding list + actions); `src/lib/onboarding-notifications.ts` reminder cron caller (compute site for `daysRemaining` parameter passed to `sendOnboardingReminder` / `sendOnboardingReminderSms`).
+- **Filed:** 2026-05-01 by Nathan (during slice 20-fixes-B closeout; renamed 2026-05-02).
 - **Goal:** Audit *agent-side* surfaces (`/brokerage/client-onboarding/*`) and the reminder cron (`onboarding-notifications.ts` + caller) for places that compute or display "X days remaining" from `(expiresAt - createdAt)` instead of `(expiresAt - now)`, which would show the original term length instead of remaining time.
 - **Why deferred from slice 20-fixes-B:** Slice 20's audit flagged termDays as a potential drift bug. On re-verification of the *public signing UI* (the slice 20-fixes-B scope), the verify route always returns both `effectiveThrough` (absolute date) and `termDays` (original term length) derived from the same `expiresAt`. The client.tsx welcome panel uses `effectiveThrough || ${termDays} days` — and since `effectiveThrough` is always set when `termDays` is, the fallback is dead in practice. The user sees the correct absolute date "Effective Through April 19, 2026". So the public flow is fine. But the audit's concern could legitimately apply to surfaces outside that scope: the agent dashboard onboarding list might show "expires in 14 days" for an onboarding created 13 days ago; the reminder cron's `daysRemaining` parameter is computed by the caller, not by the verify route, and might reuse stale math.
 - **Approach (when picked up):**
@@ -975,8 +1040,12 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Depends on:** none. Independent slice.
 - **Requires approval:** No.
 
-### 20-fix-followup-client-email — Wire client-facing completion email
+### `20-fixes-A-followup-client-email` — Wire client-facing completion email
 - **Status:** `pending` (Phase 5 polish — only ship if Gulino asks)
+- **Background:** Surfaced during slice 20-fixes-A. The signing-complete UI used to claim "A copy of all signed documents has been emailed to you" — but no client email was actually wired. 20-fixes-A removed the false claim and replaced it with honest copy ("Your agent has been notified..."). This stub captures the deferred work to make the original claim true.
+- **Required input before slicing:** Decision on PDF attachment vs download-links-only delivery (PDF attachments raise spam-filter risk + privacy considerations). Spam-filter testing with a Gulino-domain test address before declaring done.
+- **Affected surfaces:** `src/lib/onboarding-notifications.ts` (new helper); `src/app/api/onboarding/[token]/sign/route.ts` (`runPostCompletionWorkflow` invocation site); `src/components/onboarding/signing-complete.tsx` (restore the "emailed to you" line ONLY after email send is verified working in prod).
+- **Filed:** 2026-05-01 by Nathan (during slice 20-fixes-A closeout; renamed 2026-05-02).
 - **Goal:** Send the signing client a transactional email after they complete signing, with secure download links to each signed PDF (the per-doc `?docType=` URLs already exposed).
 - **Why deferred from slice 20-fixes-A:** Slice 20-fixes-A removed the false claim "A copy of all signed documents has been emailed to you" from the completion screen and replaced it with honest copy ("Your agent has been notified. They'll be in touch shortly with next steps."). Wiring a real client email tonight would have meant: building a Resend template for the completion notification, deciding on email-vs-link-vs-attachment delivery (PDF attachments raise spam-filter risk + privacy considerations), error handling/retry, plus testing on the public-token download path. Honest UX shipped tonight beats false UX with potential legal/trust risk; the real feature can ship later when there's time to do it right.
 - **Approach (when picked up):**
@@ -991,8 +1060,12 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Depends on:** 20-fixes-A (merged); ideally also 20-fixes-B (P1 idempotency fix on the post-completion workflow — duplicate Contact race) so we don't email twice on a double-click.
 - **Requires approval:** Yes if PDF attachment path chosen (new Resend feature scope); No if download-links-only.
 
-### 19-fix-followup-doctype-enum — Custom templates use generic docType
+### `19-B1-followup-doctype-enum` — Custom templates use generic docType
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced as a pre-existing bug during slice 19-B1's vault-visibility audit. `actions.ts:353` hardcodes `docType: "tenant_rep_agreement"` for ALL custom templates because `OnboardingDocTypeValue` is a 3-value enum.
+- **Required input before slicing:** Choice between Option A (relax `OnboardingDocTypeValue` to `string`, no migration) vs Option B (add `customDocType: String?` column on `OnboardingDocument`, schema migration required). Schema-touching path needs migration plan.
+- **Affected surfaces:** `src/lib/onboarding-types.ts`, `src/app/(dashboard)/brokerage/client-onboarding/actions.ts`, possibly `prisma/schema.prisma`.
+- **Filed:** 2026-05-01 by Nathan (during slice 19-B1; renamed 2026-05-02).
 - **Goal:** Stop hardcoding `docType: "tenant_rep_agreement"` for ALL custom templates in `src/app/(dashboard)/brokerage/client-onboarding/actions.ts:353`. Audit logs claim every custom template is a tenant rep agreement, which breaks any agent-side display or reporting that filters by docType.
 - **Why deferred from slice 19-B1:** Real fix requires either (a) extending `OnboardingDocTypeValue` enum to allow string-based custom types or (b) adding a `customDocType` column on `OnboardingDocument`. Both are schema-touching work that requires migration planning. Slice 19-B1's iOS migration + visibility was urgent; this is technical-debt cleanup that doesn't affect production correctness today (routes query by `template.id`, not `docType`).
 - **Approach (agent proposes details when slice begins):**
@@ -1002,8 +1075,12 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Stop conditions:** Schema migration if Option B chosen; surface and ask before applying.
 - **Requires approval:** YES if Option B (schema change).
 
-### 19-fix-followup-vault-rbac — Vault server actions don't enforce role
+### `19-B1-followup-vault-rbac` — Vault server actions don't enforce role
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced as a pre-existing bug during slice 19-B1's audit. B1 added a nav-level RBAC gate (`manage_templates` on `PAGE_PERMISSION_MAP`) that closes the discovery vector for normal users, but the vault server actions still only check `orgId` — direct-URL access remains open.
+- **Required input before slicing:** None — straightforward role-tier enforcement.
+- **Affected surfaces:** `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts` (4 mutation actions: `createDocumentTemplate`, `updateDocumentTemplate`, `deleteDocumentTemplate`, `updateTemplateFields`). `getDocumentTemplates` is read-only and intentionally stays open since the /new picker reads it for all roles.
+- **Filed:** 2026-05-01 by Nathan (during slice 19-B1; renamed 2026-05-02).
 - **Goal:** Add role-tier enforcement (`manage_templates` permission) to `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts` server actions. Today they check `getCurrentOrgContext()` for `orgId` only — agents who direct-URL `/vault` (bypassing the subnav RBAC gate that 19-B1 added) can upload, delete, and edit-fields on org templates.
 - **Why deferred from slice 19-B1:** Pre-existing bug, not introduced by B1. B1's nav-level gate (manage_templates on PAGE_PERMISSION_MAP) closes the discovery vector for normal users, but the underlying server actions remain open. Hardening the actions is a bigger lift (auth helper integration, error-shape decisions for unauthorized access) that would have inflated B1's scope.
 - **Approach:**
@@ -1012,23 +1089,35 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Files:** `src/app/(dashboard)/brokerage/client-onboarding/vault-actions.ts`, plus 4-5 smoke contracts asserting role-gate enforcement.
 - **Estimated diff:** ~40-60 lines.
 
-### 19-fix-followup-ia-cleanup — Revisit vault URL location
+### `19-B1-followup-ia-cleanup` — Revisit vault URL location
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced during slice 19-B1's vault-visibility ship. Original SLICES.md spec suggested settings-tab placement for the vault; current implementation nested it under `client-onboarding/`. URL-move decision deferred until we observe how Gulino's admins actually use it post-B2 ship.
+- **Required input before slicing:** Telemetry/feedback from Gulino post-B2 ship ("had to dig to find it" → consider the move). Decision on redirect strategy for the old URL.
+- **Affected surfaces:** route rename + redirect — TBD; touches sidebar (`brokerage/layout.tsx`), `/new` picker link, brokerage subnav, deep-link bookmarks.
+- **Filed:** 2026-05-01 by Nathan (during slice 19-B1; renamed 2026-05-02).
 - **Goal:** Decide whether `/brokerage/client-onboarding/vault` should move to `/brokerage/settings/templates` (or `/settings/brokerage/templates`) once we know how Gulino's admins actually use it. Original SLICES.md spec suggested settings-tab placement; current implementation lives nested under client-onboarding.
 - **Why deferred from slice 19-B1:** URL move is its own scoping conversation (settings-vs-onboarding nesting touches IA, deep-link bookmarks, redirect logic). Better to ship 19-B1 + 19-B2 first, observe usage, then decide.
 - **Approach:** Look at telemetry/feedback from Gulino post-B2 ship. If admins report "I had to dig to find it," consider the move. Add a redirect from the old URL.
 - **Files:** rename + redirect — TBD.
 - **Stop conditions:** URL changes invalidate bookmarks; need redirect; touches sidebar + brokerage subnav + /new picker link.
 
-### 19-fix-followup-doc-references — Document the existing vault in CLAUDE.md + SLICES.md
+### `19-B1-followup-doc-references` — Document the existing vault in CLAUDE.md + SLICES.md
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced during slice 19-B1's audit. CLAUDE.md (under "Client Onboarding Tool" section) and SLICES.md (slice 19 audit history) currently don't reference the existing vault implementation that pre-dates the slice 19 audit. Future agents starting on slice 19-related work would have to repeat the discovery process.
+- **Required input before slicing:** None — pure doc cleanup.
+- **Affected surfaces:** `CLAUDE.md` (Client Onboarding Tool section), `SLICES.md` (slice 19 audit history).
+- **Filed:** 2026-05-01 by Nathan (during slice 19-B1; renamed 2026-05-02).
 - **Goal:** CLAUDE.md (under "Client Onboarding Tool" section) and SLICES.md (slice 19 audit history) currently don't reference the existing vault implementation that pre-dates the slice 19 audit. Fix the docs so future agents starting on slice 19-related work don't repeat the discovery process.
 - **Why deferred from slice 19-B1:** Doc-cleanup pass is non-blocking and would inflate the B1 PR diff with prose changes that don't affect production behavior.
 - **Files:** `CLAUDE.md`, `SLICES.md`.
 - **Estimated diff:** ~30-50 lines, doc-only.
 
-### 19-fix-followup-cross-page-move — Drag fields across page boundaries
+### `19-B2a-followup-cross-page-move` — Drag fields across page boundaries
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced during slice 19-B2a's page-tab renderer ship. The editor renders one page at a time (B2a's design), so cross-page drag has no destination canvas to receive the drop. Manual recovery via the Page selector exists but power-user UX is gappy.
+- **Required input before slicing:** UX decision among Option A (stacked-pages drag mode), Option B (boundary-snap auto-page-flip), Option C (drag-and-drop with explicit "Move to page" dialog). Each has trade-offs.
+- **Affected surfaces:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`, possibly extract a `<MultiPagePdfEditor>` component if Option A.
+- **Filed:** 2026-05-02 by Nathan (during slice 19-B2a; renamed 2026-05-02).
 - **Goal:** Allow users to drag a field from page N to page N+1 by dragging it across a page boundary, instead of clamping at the boundary edge.
 - **Why deferred from slice 19-B2a/B2b:** The editor renders one page at a time (B2a's design). For cross-page drag to work, the editor would need a multi-page-visible mode where pages are stacked vertically and the user can scroll/drag between them, OR a "snap to page N" gesture when the pointer reaches the boundary. Both are real product features that deserve their own scoping conversation. The Page selector in the field editor sidebar (defect 6 in B2a) gives users a manual recovery path that's enough for B2's scope: select field → change Page dropdown.
 - **Approach (agent proposes details when slice begins):**
@@ -1039,8 +1128,12 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Stop conditions:** Each option has UX trade-offs; surface and ask before implementing.
 - **Requires approval:** YES — UX scope question.
 
-### 19-fix-followup-keyboard-nudge — Arrow-key precision moves for selected fields
+### `19-B2b-followup-keyboard-nudge` — Arrow-key precision moves for selected fields
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Surfaced during slice 19-B2b's drag-resize ship. Pointer drag is the primary manipulation path; keyboard nudge is power-user polish that admins want when aligning a signature line to an exact baseline on a government form. Adding keyboard handlers would have inflated B2b past its 290-line budget and overlapped with focus-management decisions deserving their own scoping conversation.
+- **Required input before slicing:** Focus-management call (where keyboard focus lives — canvas, right-sidebar field row, or field overlay itself with `tabIndex={0}`).
+- **Affected surfaces:** `src/app/(dashboard)/brokerage/client-onboarding/vault/[id]/page.tsx`.
+- **Filed:** 2026-05-02 by Nathan (during slice 19-B2b; renamed 2026-05-02).
 - **Goal:** When a field is selected in the vault editor, arrow keys should nudge it by a small percentage step (e.g. 0.5%) for sub-pointer precision. Shift+arrow nudges by a larger step (e.g. 5%). Useful when admins are aligning a signature line to an exact baseline on a government form.
 - **Why deferred from slice 19-B2b:** Pointer drag is the primary manipulation path; keyboard nudge is power-user polish. Adding keyboard handlers would inflate B2b past the 290-line budget and overlap with focus-management decisions (where does keyboard focus live? on the canvas? on the right-sidebar field row? on the field overlay itself?) that deserve their own scoping conversation.
 - **Approach (agent proposes details when slice begins):**
@@ -1053,7 +1146,7 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Depends on:** 19-B2b (merged).
 - **Requires approval:** Yes — focus management decision is a small UX call.
 
-### 21-fix-followup-volume-aggregates — Aggregate transactionValue computations still mix annual rent into "totalVolume"
+### `21-followup-volume-aggregates` — Aggregate transactionValue computations still mix annual rent into "totalVolume"
 - **Status:** `phase-5-stub`
 - **Background:** Slice 21 fixed per-row "Value" display for rentals (annual rent was misleadingly displayed as the deal headline). Aggregate computations in `agents/actions.ts`, `earnings/actions.ts`, `reports/actions.ts`, `reports/revenue/actions.ts` still sum `transactionValue` across all transaction types — so dashboard "total volume" cards include annual rent for rentals.
 - **Why deferred:** `agents/[id]/page.tsx:514-517` uses `stats.totalVolume` to calculate the agent's commission tier for `volume_based` commission plans. Excluding rentals from `totalVolume` would silently shift which tier an agent lands in — a paycheck-impacting change that needs a stakeholder conversation with the brokerage owner BEFORE the math is changed.
@@ -1062,11 +1155,17 @@ inconsistency, or batch into a single sweep when capacity permits.
   - Decision on metric naming: redefine `totalVolume` to exclude rentals, OR add a parallel `saleVolume` / `commissionEarned` stat alongside `totalVolume` for backward compatibility.
   - Communication plan for agents on volume-based plans whose tier might shift.
 - **Affected surfaces if redefining totalVolume:** agent profile stat cards, agent earnings dashboard, brokerage reports overview, revenue breakdown, commission tier calc on agent detail page (`agents/[id]/page.tsx:514-517`).
+- **Filed:** 2026-05-02 by Nathan (during slice 21 closeout; renamed 2026-05-02).
 - **Depends on:** 21 (per-row fix already merged).
 - **Requires approval:** YES — financial-KPI definition change.
 
-### deal-pipeline-delete — Remove dead-code deal-pipeline.tsx
+### `9-ext-followup-delete-deal-pipeline` — Remove dead-code deal-pipeline.tsx
 - **Status:** `pending` (Phase 5 polish)
+- **Background:** Discovered during slice 9-ext's file-list audit. `src/app/(dashboard)/deals/deal-pipeline.tsx` is dead code — exported as `DealPipeline` but `grep -rn "DealPipeline\b"` finds zero importers. The live deal pipeline UI is in `src/app/(dashboard)/deals/pipeline/page.tsx`; `deal-pipeline.tsx` is an older version that was superseded but never removed. Migrating its emoji during 9-ext would have been waste, so 9-ext skipped it.
+- **Why deferred:** Filing as a separate slice removes the temptation for future emoji/icon/typography sweeps to keep migrating it; deletion is its own concern with its own verification (re-run grep just before deletion + build passes).
+- **Required input before slicing:** None.
+- **Affected surfaces:** delete `src/app/(dashboard)/deals/deal-pipeline.tsx` (594 lines, 1 file).
+- **Filed:** 2026-04-29 by Nathan (during slice 9-ext audit; renamed 2026-05-02).
 - **Goal:** Delete `src/app/(dashboard)/deals/deal-pipeline.tsx`. The file is dead code — exported as `DealPipeline` but `grep -rn "DealPipeline\b"` finds zero importers. The live deal pipeline UI is in `src/app/(dashboard)/deals/pipeline/page.tsx`; `deal-pipeline.tsx` is an older version that was superseded but never removed.
 - **Why a separate slice:** discovered during slice 9-ext file-list audit. Migrating dead code's emoji would have been waste, so 9-ext skipped it. Deleting it here removes the temptation for future emoji/icon/typography sweeps to keep migrating it.
 - **Verification before deletion:**
@@ -1078,3 +1177,15 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Smoke contracts:** none — deletion is its own contract (build + zero importers proof).
 - **Depends on:** none.
 - **Requires approval:** No.
+
+### `gcloudignore-followup-further-reduction` — Further `.gcloudignore` reduction opportunities
+- **Status:** Phase 5 backlog
+- **Background:** Slice `gcloudignore` (PR #45, merged 2026-05-02) reduced Cloud Build tarball from 269.08 MiB → 132.88 MiB (50.6%). Further reduction is possible but each opportunity has unverified runtime/build risk and was deferred from the initial slice to keep blast radius bounded.
+- **Why deferred:** Each opportunity needs runtime verification before exclusion to avoid breaking deploys. The initial slice took the safe-by-default path (don't exclude anything whose runtime use is unverified).
+- **Required input before slicing:**
+  - Verify whether `data/zillow/*.csv` is still loaded at runtime (Dockerfile:66 does `COPY --from=builder /app/data ./data`; if `lib/zillow-data.ts` reads from there, can't exclude — 137 MiB).
+  - Audit for Finder dupes that don't match `* [0-9]*.{ts,tsx,csv,json,md}` patterns (other extensions, no-extension files).
+  - Evaluate excluding `tests/` (13 MiB, mostly dupes — needs check that no production code imports from tests/).
+  - Consider excluding `scripts/` (102 MiB, mostly dupes — needs check that nothing in `cloudbuild.yaml` or `Dockerfile` references scripts/ at build time, and that no runtime CRON jobs invoke scripts/ via Cloud Scheduler).
+- **Affected surfaces:** `.gcloudignore` (file additions), Cloud Build deploy timing, Dockerfile runtime dependencies.
+- **Filed:** 2026-05-02 by Nathan (during slice gcloudignore verification).
