@@ -4,7 +4,8 @@
 // closeout docs at expected paths; retrospective written with all
 // required sections.
 //
-// Static-source assertions over file system + SLICES.md + retrospective
+// Static-source assertions over file system + SLICES-bms.md (renamed
+// from SLICES.md in slice Z.6) + retrospective
 // content. The closeout is doc-only; no behavior to assert. The
 // contract here is that the artifacts EXIST at the right paths and
 // contain the right structure.
@@ -24,7 +25,7 @@ function exists(rel: string): boolean {
 }
 
 describe("Slice bms-audit-closeout — new stub `22-followup-as-org-onboarding-create`", () => {
-  const slices = read("SLICES.md");
+  const slices = read("SLICES-bms.md");
 
   // Scope to the stub section. Backticks optional per methodology format.
   // Anchor with ^ to avoid matching paragraph-prose mentions of the ID

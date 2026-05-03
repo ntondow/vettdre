@@ -1,4 +1,6 @@
-# BMS Overhaul — Slice List (SLICES.md)
+# BMS Overhaul — Slice List (SLICES-bms.md)
+
+> **Renamed from `SLICES.md` in slice Z.6 (Foundation/Speed audit setup) for the per-audit split — methodology v2.2 §"Split convention". Top-level `SLICES.md` is now the audit ledger index. All BMS audit content is unchanged below this header.**
 
 **Created:** 2026-04-28 from `docs/handoff/bms-audit-2026-04-28.md` and `docs/handoff/bms-overhaul-bootstrap.md`.
 **Branch:** `feat/bms-overhaul-2026-q2`
