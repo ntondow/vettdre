@@ -38,7 +38,7 @@ plan, methodology version pin, CI harness, e2e harness, observability
 baselines.
 
 ### Z.6 — Per-audit ledger split + SLICES-speed.md bootstrap
-- **Status:** `awaiting_review` (PR #49)
+- **Status:** `done` (PR #49, merged 2026-05-03)
 - **Goal:** Split top-level `SLICES.md` into per-audit ledgers (`SLICES-bms.md` + `SLICES-speed.md`); rebuild top-level `SLICES.md` as audit ledger index; pre-file 7 skeletal Phase Z entries (Z.0a, Z.0b, Z.1-Z.5) so the next slice (Z.0a) has a real plan-of-record location. **Re-ordered to ship FIRST in Phase Z** (kickoff doc lists this last as Z.6, but every other Phase Z slice references SLICES-speed.md, so this must exist before they ship).
 - **Files in scope:**
   - `SLICES.md` (rename → `SLICES-bms.md` via `git mv`; recreate as new index)
@@ -84,7 +84,7 @@ baselines.
 - **Success criteria:** new smoke test passes (4 contracts); existing 363/363 vitest suite still green; typecheck baseline ≤285 holds; build clean. `git log --follow SLICES-bms.md` shows BMS commit history (rename preserved).
 - **Depends on:** PR #48 (`bms-audit-closeout-followup-methodology-tracking`, merged 2026-05-03) — methodology v2.2 §"Split convention" and audit infrastructure docs must exist on `origin/main`.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + variance + cross-slice flip pattern documented).
-- **Outcome:** _filled in at gate-run time. Z.6's `done` flip lands in Z.0a's PR per cross-slice flip pattern documented above; pin the cross-PR reference here when filling in._
+- **Outcome:** Shipped via PR #49 (merged 2026-05-03, commit b5a8cc5). Three artifacts landed: (1) `git mv SLICES.md SLICES-bms.md` with history preserved (`git log --follow SLICES-bms.md` shows the BMS commit chain pre-rename); (2) new top-level `SLICES.md` as ~30-line audit ledger index with rows for BMS Overhaul (Closed) and Foundation/Speed Audit (Active); (3) `SLICES-speed.md` (this file) with 8 Phase Z entries pre-filed and 14-case smoke contract at `tests/smoke/slices-split.test.ts`. Targeted reference cleanup in CLAUDE.md BMS section + `src/app/page.tsx` + 4 smoke test comments + retrospective line 81. Cross-slice flip per documented pattern: Z.6 status flipped from `awaiting_review` to `done` in this slice's (Z.0a's) opening commit. Variance from 280-line stop condition (~345 lines total) approved + documented; precedent: PR #47 (310-355) and PR #48 (~150 + 2,729 tracked).
 
 ---
 
