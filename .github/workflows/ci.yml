@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Status-check naming contract (do not rename — branch protection rules
+# match by job ID; renaming requires updating GitHub branch protection
+# in lockstep). Future slices ADD names (Z.0b → e2e, Z.2 → lighthouse-warn);
+# never rename existing.
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Typecheck (baseline ≤ 285)
+        # Inline baseline-check wrapper. tsc exits non-zero on any error;
+        # the codebase has 285 pre-existing TS errors that Phase 3 cleanup
+        # will close. Until then, fail only on regression (count > 285).
+        # See SLICES-bms.md "Typecheck baseline (Phase 4, 2026-05-01)" for
+        # the anchor's measurement protocol.
+        run: |
+          set -o pipefail
+          count=$(npx tsc --noEmit 2>&1 | grep -cE "error TS" || true)
+          echo "Typecheck errors: $count (baseline: 285)"
+          if [ "$count" -gt 285 ]; then
+            echo "::error::Typecheck baseline regressed ($count > 285). Fix or revert before merge."
+            exit 1
+          fi
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Lint (baseline ≤ 4484)
+        # Inline baseline-check wrapper. eslint exits non-zero on any error;
+        # the codebase has 4484 pre-existing lint errors. Same pattern as
+        # typecheck. See SLICES-bms.md "Lint baseline (Phase 3 mid)".
+        run: |
+          set -o pipefail
+          count=$(npm run lint 2>&1 | grep -cE "^[[:space:]]+[0-9]+:[0-9]+[[:space:]]+error" || true)
+          echo "Lint errors: $count (baseline: 4484)"
+          if [ "$count" -gt 4484 ]; then
+            echo "::error::Lint baseline regressed ($count > 4484). Fix or revert before merge."
+            exit 1
+          fi
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run build
