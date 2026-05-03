@@ -238,14 +238,77 @@ Future agents picking up follow-ups: the gap at `03-*.spec.ts` is the visual sig
 - **Branch:** `chore/speed-z0b-playwright` off `origin/main`.
 
 ### Z.1 — Bundle analyzer baseline + report
-- **Status:** `pending`
-- **Goal:** Add `@next/bundle-analyzer`, wire behind `ANALYZE=true` env flag, capture baseline edge + client bundle sizes for top 10 routes. Commit baseline numbers to `docs/handoff/speed-2026-q2-baselines.md`. Purely observational — no code refactor.
-- **Files likely involved:** `next.config.ts` (wrap with analyzer), `package.json` (add devDep + `analyze` script), `docs/handoff/speed-2026-q2-baselines.md` (new — baseline doc).
-- **Smoke contract idea (2):** `package.json` has `analyze` script with `ANALYZE=true`; `next.config.ts` wraps config with bundle analyzer behind env flag (regex pin `withBundleAnalyzer\(.+\)` or equivalent).
-- **Stop conditions:** If analyzer is incompatible with Next.js 16 / Turbopack, surface alternatives.
-- **Estimated lines:** ~80 (config + baseline doc).
+- **Status:** `in_progress`
+- **Goal:** Add `@next/bundle-analyzer@16.1.6` (matches Next.js exact version), wire behind `ANALYZE=true` env flag, capture real baseline edge + client bundle sizes for top 10 routes by running `ANALYZE=true npm run build` locally. Commit baseline numbers to `docs/handoff/speed-2026-q2-baselines.md`. Purely observational — no code refactor.
+- **Files in scope:**
+  - `package.json` (add `@next/bundle-analyzer` devDep + `analyze` script)
+  - `next.config.ts` (wrap with `withBundleAnalyzer({ enabled: process.env.ANALYZE === "true" })`; preserve hardcoded `NEXT_PUBLIC_*` env per CLAUDE.md known issue; preserve outer `withSentryConfig` wrap)
+  - `docs/handoff/speed-2026-q2-baselines.md` (new — header + methodology note + 10 route sections + aggregate stats + webpack-vs-Turbopack known-limitation callout)
+  - `tests/smoke/z1-bundle-analyzer.test.ts` (new — 3 contracts)
+- **Smoke contract regex pins (3):**
+  1. **C1 — `analyze` npm script wired:** `package.json` `scripts` block contains `"analyze":` with `ANALYZE=true` substring.
+  2. **C2 — config wrapped:** `next.config.ts` references both `withBundleAnalyzer` AND `process.env.ANALYZE`.
+  3. **C3 — baselines doc populated:** `docs/handoff/speed-2026-q2-baselines.md` exists with ≥10 `### ` route headers.
+- **Estimated lines:** ~250 (config wrap ~5 + npm script 2 + baselines doc ~120 + smoke ~60 + SLICES-speed.md ~60). Under 280-line ceiling — no variance.
+
+## Plan of record
+
+**Three-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.0b done with PR #51 outcome line + file z0b-followup-verify-e2e-runs`** — cross-slice flip per documented pattern (verbatim outcome from kickoff) + new Phase 5 stub for Path A deferral.
+
+2. **`chore(speed): append Z.1 plan-of-record + capture v2.3 retro candidates`** — this commit. Append plan-of-record; flip Z.1 `pending` → `in_progress`; capture two v2.3 retro candidates per Nathan's notes (CI bundle capture if local-vs-CI bundle drift surfaces; per-audit subdirectory pattern for Phase Z deliverables).
+
+3. **`feat(speed): add bundle analyzer + baseline report`** — install `@next/bundle-analyzer@16.1.6`, wrap `next.config.ts` (analyzer inside Sentry), add `analyze` script, run `ANALYZE=true npm run build` locally, capture per-route numbers in `speed-2026-q2-baselines.md`, ship smoke contract.
+
+**Wrap order in `next.config.ts`:**
+```ts
+const withBundleAnalyzer = bundleAnalyzer({ enabled: process.env.ANALYZE === "true" });
+export default withSentryConfig(withBundleAnalyzer(nextConfig), { ... });
+```
+Default ANALYZE unset → analyzer disabled → behavior identical to today. Hardcoded `NEXT_PUBLIC_*` env preserved (CLAUDE.md known issue stays intact).
+
+**Top 10 routes for baseline (from CLAUDE.md project structure):**
+1. `/dashboard` — Home dashboard
+2. `/contacts` — CRM contacts list
+3. `/pipeline` — Kanban deal board
+4. `/messages` — Gmail inbox (likely large per messages-view.tsx pattern)
+5. `/calendar` — 1900-line component per CLAUDE.md known issue
+6. `/market-intel` — NYC property intelligence (17 NYC API integrations)
+7. `/deals` — Deal Modeler / Underwriting (15+ sub-pages root)
+8. `/terminal` — NYC Real Estate Terminal
+9. `/brokerage/transactions` — BMS transactions pipeline
+10. `/leasing/setup` — AI Leasing Agent setup wizard
+
+**Webpack-vs-Turbopack risk callout (per Q1):** Baselines doc will include a "Known limitation" section noting that `@next/bundle-analyzer` wraps webpack. Our build is webpack today (`next build` without `--turbopack` flag); if a future slice switches build to Turbopack, the analyzer silently becomes a no-op until Vercel ships a Turbopack-native analyzer. ~3 lines of cheap insurance against silent regression.
+
+**v2.3 retro candidates surfaced during this slice (don't act now, just capture):**
+- **CI vs local bundle capture.** Z.0a's worked example showed real local-vs-CI baseline drift for typecheck. Bundle analyzer is much more deterministic than typecheck (raw webpack output, no heuristics-based filters), so local capture is acceptable here. But if a future slice observes local-vs-CI bundle size drift, file `z1-followup-ci-bundle-capture` and reconsider. For now: local is fine.
+- **Per-audit subdirectory pattern for Phase Z deliverables.** This slice creates `docs/handoff/speed-2026-q2-baselines.md` at the flat root of `docs/handoff/`. If we run multiple audits with this Phase-Z-deliverable-doc pattern, per-audit subdirs (`docs/handoff/speed-2026-q2/baselines.md`, etc.) may scale better. Methodology v2.3 candidate; not a blocker for Z.1.
+
+**Stop conditions internalized:**
+- If `@next/bundle-analyzer@16.1.6` install fails with peer-dep conflicts → STOP, propose alternatives.
+- If `ANALYZE=true npm run build` fails → STOP, capture error + propose fix.
+- If wrap breaks the hardcoded `NEXT_PUBLIC_*` env preservation → STOP, surface (load-bearing for Cloud Run).
+- If reports land outside `.next/analyze/` → add `.gitignore` patterns.
+- If line count > 280 → surface.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + 2 v2.3 retro notes captured above).
+
+**Discovery findings:**
+- `@next/bundle-analyzer@16.1.6` exists at the exact same version as our Next.js. Single dep: `webpack-bundle-analyzer@4.10.1`.
+- No bundle analyzer currently in package.json or lock.
+- Build path is webpack, NOT Turbopack. `package.json` script is plain `next build` (no `--turbopack` flag). Next 16 build defaults to webpack unless flag passed; dev server is the Turbopack one. CLAUDE.md's "Turbopack edge bundling" workaround is about *dev server + Cloud Run inlining*, not the build.
+- `next.config.ts` is already wrapped with `withSentryConfig`. Standard pattern: `withSentryConfig(withBundleAnalyzer(nextConfig), {...})` — analyzer wraps inside Sentry.
+- `.next/` is already gitignored, so analyzer reports written to `.next/analyze/` won't accidentally commit.
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 390/390 vitest suite still green; `ANALYZE=true npm run build` succeeds and emits report HTML files in `.next/analyze/`; `speed-2026-q2-baselines.md` contains real per-route numbers (not placeholders) + 10 route sections + webpack-vs-Turbopack callout.
+- **Depends on:** PR #51 (Z.0b, merged 2026-05-03) — playwright harness shipped + audit infrastructure stable on `origin/main`.
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + 2 v2.3 retro notes captured).
+- **Outcome:** _filled in at gate-run time. Z.1's `done` flip lands in Z.2's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2)._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.1".
-- **Branch (when started):** `chore/speed-z1-bundle-analyzer` off `origin/main`.
+- **Branch:** `chore/speed-z1-bundle-analyzer` off `origin/main`.
 
 ### Z.2 — Lighthouse CI + Web Vitals baseline
 - **Status:** `pending`
