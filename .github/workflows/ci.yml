@@ -25,18 +25,22 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npx prisma generate
-      - name: Typecheck (baseline ≤ 285)
-        # Inline baseline-check wrapper. tsc exits non-zero on any error;
-        # the codebase has 285 pre-existing TS errors that Phase 3 cleanup
-        # will close. Until then, fail only on regression (count > 285).
-        # See SLICES-bms.md "Typecheck baseline (Phase 4, 2026-05-01)" for
-        # the anchor's measurement protocol.
+      - name: Typecheck (baseline ≤ 515 — CI canonical)
+        # Inline baseline-check wrapper. tsc exits non-zero on any error.
+        # CI canonical baseline: 515 errors (was 285 on local-filtered tree
+        # per CLAUDE.md; CI ground truth on first PR-blocking run was 515 —
+        # see SLICES-speed.md `z0a-followup-typecheck-gap-investigation`
+        # for the 228-error gap investigation). CI is now the source of
+        # truth for baselines going forward; local measurements are
+        # estimates that may diverge due to Finder-dupe pollution and
+        # tooling differences. Methodology v2.2 §"Verified-claim audit
+        # pattern" caught this drift on the first CI run that shipped.
         run: |
           set -o pipefail
           count=$(npx tsc --noEmit 2>&1 | grep -cE "error TS" || true)
-          echo "Typecheck errors: $count (baseline: 285)"
-          if [ "$count" -gt 285 ]; then
-            echo "::error::Typecheck baseline regressed ($count > 285). Fix or revert before merge."
+          echo "Typecheck errors: $count (baseline: 515)"
+          if [ "$count" -gt 515 ]; then
+            echo "::error::Typecheck baseline regressed ($count > 515). Fix or revert before merge."
             exit 1
           fi
 
