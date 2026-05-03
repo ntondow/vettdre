@@ -354,62 +354,26 @@ so we can query slow-query traces.
 Stop and propose plan first.
 ```
 
-### Z.4 — Sentry Performance enable + server action timing
+### Z.4 — Sentry Performance refinement (RE-SCOPED — was "enable Sentry Performance")
 
-```
-Slice Z.4 — turn on Sentry Performance tracing for server actions and
-API routes, with a sampling rate calibrated for Phase 0 audit volume.
+**Re-scope history (TWO rounds of corrections — kept as historical narrative for future agents):**
 
-**The bug:**
-We have NEXT_PUBLIC_SENTRY_DSN configured per CLAUDE.md but performance
-tracing isn't enabled. Server action timing, API route p50/p95/p99,
-cold start traces — all unmeasured.
+- **Original framing (this section, pre-2026-05-03):** "We have NEXT_PUBLIC_SENTRY_DSN configured per CLAUDE.md but performance tracing isn't enabled. Server action timing, API route p50/p95/p99, cold start traces — all unmeasured. Enable Sentry Performance with tracesSampleRate 0.1." Stale.
+- **Round 1 correction (Z.3 discovery, 2026-05-03):** Sentry Performance is **already enabled**. `sentry.server.config.ts` and `sentry.edge.config.ts` both call `Sentry.init({ tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1, ... })`. Captured in Z.3's plan-of-record retro section as the trigger for Z.4's first re-scope.
+- **Round 2 correction (Z.4 discovery, 2026-05-03):** Round 1's re-scoped kickoff added "client-side Sentry is unconfigured (no `sentry.client.config.ts`)." Technically true (no `sentry.client.config.ts` at root) but **misleading** — `src/instrumentation-client.ts` exists and IS the modern Next.js 15+ file convention for client-side Sentry init. Adding `sentry.client.config.ts` would COLLIDE with this. Captured as a v2.3 methodology candidate: discovery for framework-integration slices should enumerate ALL file naming conventions for the framework version, not just legacy ones the kickoff author was familiar with.
 
-**The fix:**
-Enable Sentry Performance with tracesSampleRate calibrated for our
-expected volume (start at 0.1 = 10% of requests, adjust after Phase 0).
-Add custom spans around server actions, NYC API calls, AI inference
-calls.
+**Final scope as shipped (Z.4 PR):**
+1. Defensive DSN hardcode in `next.config.ts` `env` block — mirrors the documented Supabase workaround pattern in CLAUDE.md "Edge env var workaround" (Sentry DSN is a public write-only key, same security category as the already-hardcoded `NEXT_PUBLIC_SUPABASE_ANON_KEY`).
+2. Six `Sentry.startSpan` wraps on high-traffic server-side surfaces: `data-fusion-engine.ts` (`fetchBuildingIntelligence`), `nyc-opendata.ts` (`queryNYC`), `firecrawl.ts` (`firecrawlSearch`), `apollo.ts` (`apolloEnrichPerson`), `email-parser.ts` (Claude `messages.create`), `leasing-engine.ts` (Claude `messages.create` in tool loop).
+3. Canonical span-pattern doc-comment in `data-fusion-engine.ts` for future agents to copy.
+4. Smoke contracts at `tests/smoke/z4-sentry-performance.test.ts` (4 contracts including PII-safety negative).
 
-**Discovery instructions:**
-- Read sentry.client.config.* and sentry.server.config.* if they exist
-- Check if @sentry/nextjs is installed
-- If neither, this slice expands to "install Sentry" too — surface
-  scope question
-- Identify the highest-traffic server actions to wrap with spans first
-  (probably contacts, deals, market-intel, terminal feed)
+**What this slice did NOT ship (and why):**
+- No `sentry.client.config.ts` (would collide with `src/instrumentation-client.ts`).
+- No prod-side DSN-error verification (cannot reach deployed Chrome console from agent environment). Deferred to `z4-followup-verify-prod-dsn-inlining` per Phase 5 stub.
+- More than 6 spans (6-cap per kickoff Q5 — additional surfaces are follow-up slice candidates).
 
-**Implementation intent:**
-- Sentry Performance enabled in server runtime
-- tracesSampleRate: 0.1 initially
-- Custom spans wrapping: lib/data-fusion-engine.ts entry, lib/nyc-opendata.ts
-  fetch wrappers, lib/firecrawl.ts calls, AI inference (Claude) calls,
-  Apollo + PDL calls
-- Server action wrapping pattern documented in code comment so future
-  agents can copy
-
-**Constraints:**
-- Don't enable on client-side initially (server-side performance is the
-  bigger lever; client perf comes from Lighthouse CI in Z.2)
-- Don't capture request bodies (PII)
-- Sample rate adjustable via env var
-
-**Smoke contracts (2):**
-1. Positive: Sentry init has tracesSampleRate set from env var
-2. Positive: at least one custom span exists in lib/data-fusion-engine.ts
-   or lib/nyc-opendata.ts
-
-**Stop conditions:**
-- If Sentry isn't installed at all, stop — slice grows beyond Phase Z
-  scope.
-- If existing Sentry setup uses a custom transport or Sentry version
-  that doesn't support Performance, surface options.
-
-**Branch:** chore/speed-z4-sentry-performance off origin/main
-**PR title:** chore(speed): enable Sentry Performance with custom spans
-
-Stop and propose plan first.
-```
+**Branch:** `chore/speed-z4-sentry-spans` off `origin/main`
 
 ### Z.5 — Cloud Run cold start measurement
 
