@@ -677,7 +677,7 @@ in `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Phase 0 —
 Discovery".
 
 ### Phase 0 prep — widen swarm prompt template + close Phase Z gate
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Goal:** Three jobs, atomic: (1) close Phase Z gate (flip Z.5 `awaiting_review` → `done` with PR #56 + build 2cd4a3b6 outcome line; insert "Phase Z — Gate (signed off 2026-05-03)" header between Z.5 and Phase 0 sections); (2) widen `docs/methodology/templates/phase-0-swarm-prompt.md` to default to **VERTICAL SLICE MODE** (perf + functional + UX + a11y + RBAC in one walkthrough per area) instead of dimension-themed mode (PERFORMANCE-only, ACCESSIBILITY-only, etc., which forces N agents per area and triples token spend); (3) add 3-contract smoke pinning the gate header + Z.5 done state + template's new VERTICAL SLICE MODE section. The dimension-themed mode is preserved as LEGACY (still useful for dimension-specific deep-dives, e.g. a pure security audit) but no longer the swarm's default.
 - **Files in scope:**
   - `SLICES-speed.md` (Z.5 done flip + Phase Z gate header + this slice entry per Q3 placement)
