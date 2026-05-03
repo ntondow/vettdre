@@ -238,7 +238,7 @@ Future agents picking up follow-ups: the gap at `03-*.spec.ts` is the visual sig
 - **Branch:** `chore/speed-z0b-playwright` off `origin/main`.
 
 ### Z.1 — Bundle analyzer baseline + report
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Goal:** Add `@next/bundle-analyzer@16.1.6` (matches Next.js exact version), wire behind `ANALYZE=true` env flag, capture real baseline edge + client bundle sizes for top 10 routes by running `ANALYZE=true npm run build` locally. Commit baseline numbers to `docs/handoff/speed-2026-q2-baselines.md`. Purely observational — no code refactor.
 - **Files in scope:**
   - `package.json` (add `@next/bundle-analyzer` devDep + `analyze` script)
