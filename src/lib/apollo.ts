@@ -10,6 +10,7 @@
 // Organization Search: costs credits
 
 import { normalizeName, jaroWinklerSimilarity } from "./entity-resolver";
+import * as Sentry from "@sentry/nextjs";
 
 const APOLLO_BASE = "https://api.apollo.io/api/v1";
 
@@ -78,6 +79,9 @@ export async function apolloEnrichPerson(
   domain?: string,
   email?: string,
 ): Promise<ApolloPersonResult | null> {
+ return Sentry.startSpan(
+  { name: "apollo.enrichPerson", op: "http.client.apollo" },
+  async () => {
   if (!process.env.APOLLO_API_KEY) return null;
 
   const [firstName, ...lastParts] = name.trim().split(/\s+/);
@@ -149,6 +153,8 @@ export async function apolloEnrichPerson(
     console.error("[APOLLO] People enrichment error:", err);
     return null;
   }
+  },
+ );
 }
 
 // ============================================================

@@ -21,6 +21,7 @@ import {
   resolveValue,
 } from "./entity-resolver";
 import { cacheManager, SOURCE_CONFIG } from "./cache-manager";
+import * as Sentry from "@sentry/nextjs";
 
 // ---- Performance Profiling ----
 
@@ -180,7 +181,34 @@ const LL97_PENALTY_PER_TON = 268;
 // MAIN: fetchBuildingIntelligence
 // ============================================================
 
+// Foundation/Speed Audit Z.4 — Sentry custom span pattern reference.
+//
+// Wrap any meaningful boundary (NYC API call, AI inference, external HTTP
+// fetch) in Sentry.startSpan so traces show per-call timing. The 6
+// surfaces wrapped in slice Z.4 (this file + nyc-opendata, firecrawl,
+// apollo, email-parser, leasing-engine) are the canonical examples;
+// future slices can add more by copying the shape below.
+//
+// Pattern:
+//   import * as Sentry from "@sentry/nextjs";
+//   return Sentry.startSpan(
+//     { name: "<descriptive-name>", op: "<category>.<subcategory>" },
+//     async (span) => {
+//       // your work here; throw normally — Sentry captures errors
+//     },
+//   );
+//
+// PII safety: never put query params, request bodies, or user-provided
+// strings into the span's data field. Span name + op are public-safe;
+// data is not. (Smoke test C4 in z4-sentry-performance enforces this.)
 export async function fetchBuildingIntelligence(bbl: string): Promise<BuildingIntelligence> {
+  return Sentry.startSpan(
+    { name: "data-fusion.fetchBuildingIntelligence", op: "data-fusion" },
+    () => fetchBuildingIntelligenceImpl(bbl),
+  );
+}
+
+async function fetchBuildingIntelligenceImpl(bbl: string): Promise<BuildingIntelligence> {
   // Normalize BBL to 10 digits
   const bbl10 = bbl.replace(/\D/g, "").padEnd(10, "0").slice(0, 10);
   const boroCode = bbl10[0];

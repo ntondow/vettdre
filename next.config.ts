@@ -23,6 +23,13 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_SUPABASE_URL: "https://dhphradjmajfjuvshyra.supabase.co",
     NEXT_PUBLIC_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRocGhyYWRqbWFqZmp1dnNoeXJhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzExNTY3MjIsImV4cCI6MjA4NjczMjcyMn0.NA3iZnmbcZUwMc_EJp6w0Qc_gzNjYAjn68Z1QrWdawc",
     NEXT_PUBLIC_APP_URL: "https://app.vettdre.com",
+    // Foundation/Speed Audit Z.4 — defensive DSN inlining (mirrors Supabase
+    // workaround above per CLAUDE.md "Edge env var workaround" known issue).
+    // Sentry DSN is a public write-only key designed for client-bundle
+    // exposure — same security category as NEXT_PUBLIC_SUPABASE_ANON_KEY.
+    // Hardcoding the literal value (not process.env.X) is what makes
+    // Turbopack edge inlining reliable for the production build.
+    NEXT_PUBLIC_SENTRY_DSN: "https://3c5724a8460aedb074481a61d104706b@o4511003412463616.ingest.us.sentry.io/4511003426226176",
   },
   async headers() {
     return [

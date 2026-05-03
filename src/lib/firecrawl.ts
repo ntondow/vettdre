@@ -1,5 +1,7 @@
 "use server";
 
+import * as Sentry from "@sentry/nextjs";
+
 // ============================================================
 // Firecrawl API — Core Client
 //
@@ -201,6 +203,9 @@ export async function firecrawlSearch(
   query: string,
   options: FirecrawlSearchOptions = {},
 ): Promise<FirecrawlSearchResult[]> {
+ return Sentry.startSpan(
+  { name: "firecrawl.search", op: "http.client.firecrawl" },
+  async () => {
   checkBudgetReset();
 
   // Budget check (search costs ~1 credit per result)
@@ -244,6 +249,8 @@ export async function firecrawlSearch(
 
   setCache(cacheKey, response.data);
   return response.data;
+  },
+ );
 }
 
 // ============================================================

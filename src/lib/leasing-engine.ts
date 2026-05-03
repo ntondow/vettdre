@@ -5,6 +5,7 @@
 // ============================================================
 
 import Anthropic from "@anthropic-ai/sdk";
+import * as Sentry from "@sentry/nextjs";
 import prisma from "@/lib/prisma";
 import { getTwilio } from "@/lib/twilio";
 import { generateSystemPrompt, generateConversationContext } from "@/lib/leasing-prompt";
@@ -805,13 +806,16 @@ export async function processInboundMessage(
     while (callCount < MAX_CLAUDE_CALLS) {
       callCount++;
 
-      const response = await anthropic.messages.create({
-        model: AI_MODEL,
-        max_tokens: 512,
-        system: systemPrompt,
-        messages: currentMessages,
-        tools: TOOLS,
-      }, { timeout: CLAUDE_TIMEOUT_MS });
+      const response = await Sentry.startSpan(
+        { name: "leasing-engine.claude.messages", op: "ai.claude.leasing" },
+        () => anthropic.messages.create({
+          model: AI_MODEL,
+          max_tokens: 512,
+          system: systemPrompt,
+          messages: currentMessages,
+          tools: TOOLS,
+        }, { timeout: CLAUDE_TIMEOUT_MS }),
+      );
 
       tokensUsed += (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
 
