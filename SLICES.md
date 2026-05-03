@@ -19,13 +19,13 @@ End-of-audit gate per methodology v2.2 §"End-of-audit gate". Closeout shipped v
 - [x] Audit doc archived: `docs/handoff/bms-audit-2026-04-28.md` → `docs/handoff/archive/`
 - [x] Closeout doc archived: `docs/handoff/bms-closeout-2026-05-02.md` → `docs/handoff/archive/`
 - [x] Retrospective written: `docs/handoff/bms-overhaul-retrospective-2026-05-02.md`
-- [ ] **Methodology v2.2 bump DEFERRED** — discovery during this slice surfaced that the entire `docs/methodology/` tree is untracked (5 canonical files, never committed). Tracking the methodology in this PR would mean committing several thousand pre-existing lines, far above Nathan's <30-line threshold for the v2.2 bump. Filed as Phase 5 stub `bms-audit-closeout-followup-methodology-tracking`. The intended v2.2 changes (verified-claim audit pattern + read/write anti-pattern bullet) are documented in the retrospective and in the stub for future pickup.
+- [x] **Methodology v2.2 bump shipped** — promoted Phase 5 stub `bms-audit-closeout-followup-methodology-tracking` to an active slice (this PR). Tracks the entire `docs/methodology/` tree (5 files, never previously committed) + 3 audit-infrastructure handoff docs (`audit-sprint-plan-2026-05-02.md`, `site-wide-speed-audit-2026-05-02.md`, `audit-roadmap-2026-q2-q4.md`) and applies the staged v2.2 tightening (verified-claim audit pattern in §6 + read/write surface bullet in §9, ≤30 lines of content change). Originally deferred from PR #47 because tracking 2,300+ pre-existing lines would have exceeded the <30-line threshold for a v2.2 bump.
 
 **Out of scope / deferred (Nathan-side or next-audit):**
 - [ ] **SLICES-bms.md archive** — methodology line 377 calls for `SLICES-<audit>.md → docs/methodology/archive/SLICES-<audit>-<date>.md`. This file is currently named `SLICES.md` (no audit suffix); rename is deferred to next-audit Phase Z setup per closeout doc line 4.
 - [ ] **Asana project archived** — Nathan-side action.
 - [ ] **Rollback drill against latest registry entry** — not in closeout doc Items 1-7; deferred to next audit's Phase Z hygiene.
-- [ ] **Methodology tracking + v2.2 bump** — see deferral note above; filed as Phase 5 stub.
+- [x] **Methodology tracking + v2.2 bump** — shipped via slice `bms-audit-closeout-followup-methodology-tracking` (this PR). See updated gate item above.
 
 **Carryover into next audit:**
 - Item 4 (Gulino e2e) INCONCLUSIVE — surfaced new bug filed as `22-followup-as-org-onboarding-create` (Phase 5).
@@ -1014,7 +1014,7 @@ direction is clear.
 - **Outcome:** Shipped via PR #46 (merged 2026-05-03). All 11 stubs renamed to methodology format; gcloudignore outcome line filled with prod-verified metrics; new `gcloudignore-followup-further-reduction` stub filed; smoke test pins the format going forward (status flip on this slice's own outcome line was missed in PR #46 — corrected as part of `bms-audit-closeout`).
 
 ### bms-audit-closeout — BMS Overhaul audit closeout (file follow-up stub + archive docs + retrospective)
-- **Status:** `in_progress`
+- **Status:** `done` (PR #47, merged 2026-05-03)
 - **Goal:** Close the BMS Overhaul audit per methodology v2.1.1 §"End-of-audit gate". Three artifacts: (1) file new stub `22-followup-as-org-onboarding-create` capturing the bug surfaced during Item 4 verification; (2) archive `bms-audit-2026-04-28.md` and `bms-closeout-2026-05-02.md` to `docs/handoff/archive/`; (3) write retrospective at `docs/handoff/bms-overhaul-retrospective-2026-05-02.md`. **Methodology v2.2 bump DEFERRED** — discovery surfaced that the entire `docs/methodology/` tree is untracked; tracking it inline would exceed Nathan's <30-line threshold. Filed as Phase 5 stub `bms-audit-closeout-followup-methodology-tracking`.
 - **Closes bug (procedural):** End-of-audit gate from methodology — currently no signed-off closeout exists for the BMS audit. Without this gate, the next audit can't begin (methodology line 379+ enforces gate-before-next-audit).
 - **Why this slice exists:** End-of-audit gate is part of the methodology lifecycle, not optional. The closeout doc (`bms-closeout-2026-05-02.md`) listed Item 7 = "Audit closeout — archive doc, close Asana, retro" with Nathan-side action; this slice is the agent-side execution of Item 7's archive + retrospective half.
@@ -1065,6 +1065,69 @@ direction is clear.
 - **Success criteria:** new smoke test passes (3 contracts); full vitest suite still green; SLICES.md still parses; archive paths exist + old paths gone; retrospective ≥80 lines covering all 5 required sections; methodology v2.2 bump ≤30 lines.
 - **Depends on:** PRs #44, #45, #46 (all merged); slices 22 + gcloudignore + slices-stub-naming-cleanup all `done`.
 - **Requires approval:** Pre-approved by Nathan (3 questions answered + 300-line variance + B-019 retro framing).
+- **Outcome:** Shipped via PR #47 (merged 2026-05-03T11:18:30Z). Three artifacts landed: (1) new stub `22-followup-as-org-onboarding-create` filed with all 5 methodology fields + 3-option Required-input matrix; (2) audit + closeout docs `git mv`'d to `docs/handoff/archive/` (gitignore whitelist added for the archive subdir); (3) retrospective at `docs/handoff/bms-overhaul-retrospective-2026-05-02.md` (101 lines, all 5 sections + B-019 worked example + meta-finding callout that `docs/methodology/` is untracked). Methodology v2.2 bump deferred to follow-up slice `bms-audit-closeout-followup-methodology-tracking` per the threshold rule. Status flip on this slice's own outcome line was missed in PR #47 — corrected as part of `bms-audit-closeout-followup-methodology-tracking` (same pattern this PR's parent fixed for slice `slices-stub-naming-cleanup`).
+
+### bms-audit-closeout-followup-methodology-tracking — Track `docs/methodology/` + audit infrastructure docs in git + apply staged v2.2 bump
+- **Status:** `in_progress`
+- **Goal:** Bring the entire `docs/methodology/` tree (5 files, ~2,330 lines) and 3 audit-infrastructure handoff docs (`audit-sprint-plan-2026-05-02.md`, `site-wide-speed-audit-2026-05-02.md`, `audit-roadmap-2026-q2-q4.md`, ~1,053 lines combined) into git, then apply the narrow v2.2 methodology bump (verified-claim audit pattern + read/write surface bullet, ≤30 lines of actual content change). Promotion of Phase 5 stub of the same name. **Blocker for the Foundation Audit kickoff** — every Foundation slice in `audit-sprint-plan-2026-05-02.md` and `site-wide-speed-audit-2026-05-02.md` references the methodology + roadmap; tracking those docs is gate-zero for the next audit.
+- **Closes bug (procedural):** Methodology v2.2 bump was approved during slice `bms-audit-closeout` discovery and deferred when discovery surfaced the methodology tree was untracked. Without tracking, the v2.2 bump can't ship as a reviewable diff (committing 2,330 pre-existing lines + ~30 lines of tightening in one PR is unreviewable as a methodology change). This slice resolves the deferral.
+- **Why this slice exists:** End-of-BMS-audit / start-of-Foundation-audit handoff requires the methodology and roadmap to live on `origin/main`, not in agent-local working trees. Until this PR lands, `audit-sprint-plan-2026-05-02.md` (referenced by Foundation Z.0a/Z.0b slices) and `audit-roadmap-2026-q2-q4.md` (the master backlog Nathan wrote post-decision) are *phantom files* — every Foundation slice's "Files referenced" line points to paths that don't exist on origin.
+
+## Plan of record
+
+**Three-commit choreography (one PR):**
+1. `chore(methodology): track docs/methodology/ + audit infrastructure docs in git` — `.gitignore` whitelist for the 3 handoff docs (`docs/handoff/*` excludes by default; methodology tree not in any pattern); `git add` 8 files (5 methodology + 3 handoff). NO content edits. Rationale: keep the "tracking event" as a clean, content-free initial-tracking commit so the diff is browsable as "what's the surface area being tracked" — not mixed with content changes.
+2. `feat(methodology): bump to v2.2 with verified-claim audit pattern` — `slice-based-audit.md` only: header `(v2.1.1)` → `(v2.2)`, ~3-line v2.2 patch note at top, append §6 "Verified-claim audit pattern (added v2.2)" paragraph (verbatim from stub), append §9 "Read surface ≠ write surface" bullet (verbatim from stub), update version-diff entry near bottom. ≤30 lines of actual content change per Nathan's threshold.
+3. `chore(handoff): update v2.1.1 references to v2.2 across audit docs` — TARGETED edits per approved table:
+   - `docs/handoff/audit-sprint-plan-2026-05-02.md:5` (header) v2.1.1 → v2.2; `:158` rewrite "After Z.0a + Z.0b ship, methodology bumps to v2.2..." → "Methodology bumped to v2.2 in slice `bms-audit-closeout-followup-methodology-tracking` (this PR); Z.0a/Z.0b will further close the v2.1.1 CI/playwright caveats." Lines 10 (historical narrative) left alone.
+   - `docs/handoff/site-wide-speed-audit-2026-05-02.md:48,53,107,119,134,178` v2.1.1 → v2.2 (live methodology refs in unshipped slices). Line 42 (historical) left alone.
+   - `docs/handoff/bms-overhaul-retrospective-2026-05-02.md:7` factual correction: "Methodology shipped to: v2.2 (this slice; was v2.1.1 at audit start)" → "v2.1.1 at audit start; v2.2 ships in follow-up slice `bms-audit-closeout-followup-methodology-tracking`". Lines 27, 51, 64, 66, 71 (historical narrative within the retro itself) left alone.
+   - SLICES.md updates included in this commit too: gate header line 22 (DEFERRED → done with PR ref); line 28 disposition update; "Promoted to active slice" note on the existing stub at the bottom of Phase 5.
+
+**Files to be created/modified:**
+- `.gitignore` (modify — 3 whitelist lines under existing `docs/handoff/*` block)
+- `docs/methodology/slice-based-audit.md` (track + bump to v2.2)
+- `docs/methodology/templates/kickoff-prompt.md` (track only)
+- `docs/methodology/templates/migration-script-skeleton.md` (track only)
+- `docs/methodology/templates/phase-0-swarm-prompt.md` (track only)
+- `docs/methodology/archive/slice-based-audit-v2-2026-05-02.md` (track only)
+- `docs/handoff/audit-sprint-plan-2026-05-02.md` (track + 2 line edits)
+- `docs/handoff/site-wide-speed-audit-2026-05-02.md` (track + 6 line edits)
+- `docs/handoff/audit-roadmap-2026-q2-q4.md` (track only — Nathan already wrote it referencing v2.2)
+- `docs/handoff/bms-overhaul-retrospective-2026-05-02.md` (modify — line 7 factual correction)
+- `SLICES.md` (modify — this entry, gate header flip, stub promotion note)
+- `tests/smoke/methodology-tracking.test.ts` (create — 5 contracts)
+
+**Smoke contract regex pins (literal regex strings):**
+1. **C1 (Methodology tracked):** `git ls-files docs/methodology/slice-based-audit.md` returns the path (i.e. file is tracked, not just present on disk).
+2. **C2 (v2.2 header pinned):** `slice-based-audit.md` matches `/^# Slice-Based Audit Methodology \(v2\.2\)$/m`.
+3. **C3 (Verified-claim audit pattern present):** `slice-based-audit.md` contains both `Verified-claim audit pattern` AND `B-019` (worked-example callout).
+4. **C4 (§9 bullet present):** `slice-based-audit.md` contains `Read surface ≠ write surface`.
+5. **C5 (Audit roadmap tracked + Foundation referenced):** `git ls-files docs/handoff/audit-roadmap-2026-q2-q4.md` returns the path AND file contains `Foundation` (verifies the tracked content is the right doc, not a stub).
+
+**Estimated line count:** ~150 lines of *work* (≤30 v2.2 + ~10 reference cleanup + ~80 smoke + ~30 SLICES.md). The 2,726 lines being tracked are excluded from the work budget per the kickoff-prompt convention ("tracking pre-existing files is content, not work").
+
+**Variance from 300-line stop condition:** N/A — actual edit count is well under 300; tracking event adds line-count to the diff but no review surface (browseable as "did these files exist? yes/no"). Nathan pre-approved the split-vs-bundle decision (Q1 of approval round answered "TARGETED reference cleanup, not blanket").
+
+**Stop conditions internalized:**
+- v2.2 bump must stay <30 lines of actual content change. If §6 / §9 edits balloon, split into a v2.2-content-only follow-up.
+- Reference cleanup is TARGETED — only the lines specified in the approved table. Don't blanket-replace v2.1.1 across the docs (some lines are historical narrative and must stay).
+- Don't reorder or restructure existing methodology content. Only the explicit append-points in §6 / §9 + the header bump.
+- Don't merge to main; PR only.
+
+**Open questions for Nathan:** none after pre-approval round (3 questions answered, plus retro line 7 factual-correction confirmation).
+
+**Discovery findings:**
+- `git check-ignore -v` confirmed: methodology files NOT blocked by any pattern (just untracked). 3 handoff docs blocked by `.gitignore:81 docs/handoff/*` — need explicit `!` whitelists.
+- `audit-roadmap-2026-q2-q4.md` already references v2.2 at line 4 (Nathan wrote it post-decision) — no edit needed.
+- `slice-based-audit.md` header is `(v2.1.1)` as expected baseline.
+- Retrospective line 7 ("Methodology shipped to: v2.2 (this slice...)") was factually wrong at PR #47 merge time — v2.2 didn't ship in `bms-audit-closeout`, it deferred. Correction is a factual fix, not a version bump; called out explicitly in this PR's body.
+- Sibling pattern: PR #47 fixed PR #46's silent omission of `slices-stub-naming-cleanup`'s outcome line; this PR fixes PR #47's silent omission of `bms-audit-closeout`'s outcome line. Each closeout slice has historically forgotten to flip its own status; the next-audit Phase Z hygiene check (per retrospective line 70) should formalize an automated check for this.
+
+- **Files:** see Plan of record above.
+- **Success criteria:** new smoke test passes (5 contracts); full vitest suite still green; typecheck baseline ≤285; lint baseline ≤4484 on changed files only; `git ls-files docs/methodology/slice-based-audit.md` returns the path on the merged branch; v2.2 bump diff is ≤30 lines; reference cleanup is TARGETED (only approved lines).
+- **Depends on:** PR #47 (`bms-audit-closeout`, merged) — promotes that PR's deferred Phase 5 stub.
+- **Requires approval:** Pre-approved by Nathan (3 questions answered + retro line 7 factual-correction confirmed).
 - **Outcome:** _filled in at gate-run time_
 
 ---
@@ -1287,7 +1350,7 @@ inconsistency, or batch into a single sweep when capacity permits.
 - **Filed:** 2026-05-02 by Nathan (during BMS audit closeout, Item 4 verification).
 
 ### `bms-audit-closeout-followup-methodology-tracking` — Track `docs/methodology/` in git + apply v2.2 bump
-- **Status:** Phase 5 backlog
+- **Status:** **Promoted to active slice — see `bms-audit-closeout-followup-methodology-tracking` in the regular slice ledger above (in_progress, this PR).** Stub body retained below as audit trail of original filing context.
 - **Background:** Surfaced during slice `bms-audit-closeout` (this slice). The entire `docs/methodology/` tree is untracked in git — 5 canonical files (`slice-based-audit.md`, 3 templates under `docs/methodology/templates/`, 1 archive entry under `docs/methodology/archive/`), never committed. The methodology has been referenced extensively across PRs #44, #45, #46 + the BMS closeout doc + this retrospective, but no agent or contributor has run `git add` on it. Origin/main has no methodology history at all (`git log origin/main -- docs/methodology/slice-based-audit.md` returns empty). This was the dominant blocker that forced the v2.2 bump out of `bms-audit-closeout` — committing the methodology inline would mean adding several-thousand pre-existing lines, far above Nathan's <30-line threshold for the v2.2 bump.
 - **Why deferred:** Mixing "track several thousand pre-existing methodology lines" with "narrow v2.2 tightening" in one PR violates the threshold rule and makes the diff unreviewable as a methodology change. Splitting cleanly: track-then-bump, two slices.
 - **Required input before slicing:**

@@ -2,7 +2,7 @@
 
 **Sprint goal:** Close out BMS audit + ship Phase Z infrastructure for site-wide speed audit + complete Phase 0 discovery swarm.
 **Sprint length:** ~2 weeks (10-12 working days).
-**Methodology:** v2.1.1 (`docs/methodology/slice-based-audit.md`).
+**Methodology:** v2.2 (`docs/methodology/slice-based-audit.md`).
 **Owner:** Nathan, with Claude Code as agent.
 
 **2026-05-02 update:** pre-flight check surfaced major blockers:
@@ -155,7 +155,7 @@ In strict order (each slice depends on the previous):
 
 **Day 6 (morning):** Z.0b — Playwright harness scaffold + first 5 flows. Kickoff prompt at §"Z.0b" of speed audit doc. Remaining 5 flows go to a Phase 1 follow-up slice.
 
-After Z.0a + Z.0b ship, methodology bumps to v2.2 with the v2.1.1 caveats removed.
+Methodology bumped to v2.2 in slice `bms-audit-closeout-followup-methodology-tracking` (this PR); Z.0a/Z.0b will further close the v2.1.1 CI/playwright caveats once shipped.
 
 **Day 6:** Z.1 — bundle analyzer + baseline report.
 

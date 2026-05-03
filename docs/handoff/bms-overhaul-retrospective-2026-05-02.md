@@ -4,7 +4,7 @@
 **Trigger:** Gulino BMS launch demo on 2026-04-28 went poorly. "Confusing icons, hard to know where to go, tons of bugs."
 **Audit doc (archived):** `docs/handoff/archive/bms-audit-2026-04-28.md`
 **Closeout doc (archived):** `docs/handoff/archive/bms-closeout-2026-05-02.md`
-**Methodology shipped to:** v2.2 (this slice; was v2.1.1 at audit start)
+**Methodology shipped to:** v2.1.1 at audit start; v2.2 ships in follow-up slice `bms-audit-closeout-followup-methodology-tracking` (factual correction — original line claimed v2.2 shipped here, but the bump was deferred when discovery surfaced the methodology tree was untracked)
 
 ---
 

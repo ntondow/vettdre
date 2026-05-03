@@ -45,14 +45,14 @@ Before any audit begins, this infrastructure must exist. Each item below is a Ph
 
 ```
 Slice Z.0a — establish GitHub Actions CI with the four required jobs from
-methodology v2.1.1.
+methodology v2.2.
 
 **The bug:**
 The repo has no `.github/workflows/` directory. CI is Cloud Build only,
 which runs deploy on push to main. There is no PR-blocking check for
-typecheck, lint, test, build, or smoke contracts. Methodology v2.1.1
-deferred this requirement but the speed audit can't enforce smoke
-contract regressions without it.
+typecheck, lint, test, build, or smoke contracts. Methodology v2.2
+deferred this requirement (v2.1.1 caveat carried forward) but the speed
+audit can't enforce smoke contract regressions without it.
 
 **The fix:**
 Add minimal GH Actions workflow at `.github/workflows/ci.yml` with four
@@ -104,7 +104,7 @@ protection on main to require all four green before merge.
 **PR title:** chore(speed): add GitHub Actions CI with typecheck/lint/test/build
 **Closes:** Z.0a in SLICES-speed.md
 
-**v2.1.1 required:** plan-of-record in SLICES-speed.md before code; smoke contracts at `tests/smoke/z0a-gh-actions.test.ts`; verification screenshot to `docs/handoff/screenshots/z0a-prod.png`.
+**v2.2 required:** plan-of-record in SLICES-speed.md before code; smoke contracts at `tests/smoke/z0a-gh-actions.test.ts`; verification screenshot to `docs/handoff/screenshots/z0a-prod.png`.
 
 Stop and propose plan first.
 ```
@@ -116,7 +116,7 @@ Slice Z.0b — install playwright + scaffold harness + implement first 5
 critical flows.
 
 **The bug:**
-No playwright in the repo. Methodology v2.1.1 requires e2e harness for
+No playwright in the repo. Methodology v2.2 requires e2e harness for
 end-of-phase gates. Without it, gate verification falls back to manual
 Chrome MCP walks which don't scale across audits.
 
@@ -131,7 +131,7 @@ to a separate Phase 1 slice (estimated <280 line ceiling demands the split).
   or a Cloud Run preview URL — Nathan tell agent)
 - Check what auth flow staging uses (Supabase Auth — likely needs a test
   user)
-- Confirm the methodology v2.1.1 flows list at §"Required infrastructure"
+- Confirm the methodology v2.2 flows list at §"Required infrastructure"
   → "Playwright e2e harness"
 - Check if any existing test setup uses dotenv-cli — playwright will need
   staging env vars
@@ -175,7 +175,7 @@ to a separate Phase 1 slice (estimated <280 line ceiling demands the split).
 **Closes:** Z.0b in SLICES-speed.md
 **Files Phase 1 follow-up:** `z0b-followup-flows-6-10` for remaining flows.
 
-**v2.1.1 required:** plan-of-record in SLICES-speed.md before code; smoke contracts at `tests/smoke/z0b-playwright.test.ts`; verification = local `npm run e2e` output.
+**v2.2 required:** plan-of-record in SLICES-speed.md before code; smoke contracts at `tests/smoke/z0b-playwright.test.ts`; verification = local `npm run e2e` output.
 
 Stop and propose plan first.
 ```
