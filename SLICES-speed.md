@@ -312,7 +312,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z1-bundle-analyzer` off `origin/main`.
 
 ### Z.2 — Lighthouse CI + Web Vitals baseline
-- **Status:** `awaiting_review`
+- **Status:** `done`
 - **Scope reduction (per Nathan, 2026-05-03):** **LOCAL CAPTURE ONLY** for this slice — same Path A precedent as Z.0b's playwright-local-only deferral. Wiring Lighthouse into GitHub Actions is filed as `z2-followup-ci-integration`. Reasons mirror Z.0b: booting `npm run start` against a CI-friendly DB + injecting auth = significant infra work beyond Z.2's baseline-capture goal.
 - **Goal:** Install `@lhci/cli`, configure for the 10 priority routes (same set as Z.1), capture local baseline numbers, append a "Core Web Vitals baseline" section to the existing `docs/handoff/speed-2026-q2-baselines.md` (one doc, not a new one — keep all Foundation baselines colocated). Warn-only assertions: LCP < 2.5s, FCP < 1.8s, TTI < 3.8s, CLS < 0.1, TTFB < 800ms.
 - **Files in scope:**
@@ -368,7 +368,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Success criteria:** new smoke test passes (3 contracts); existing 396/396 vitest suite still green (+3 from this slice → 399); `npm run lighthouse` succeeds for the 3 public routes and produces `.lighthouseci/` artifacts; `speed-2026-q2-baselines.md` "Core Web Vitals baseline" section contains 10 TBD rows + real numbers for 3 public routes + methodology note + Turbopack-default callout.
 - **Depends on:** PR #52 (Z.1, merged 2026-05-03) — bundle analyzer scaffold + baselines doc already present on `origin/main` (Z.2 appends to the doc Z.1 created).
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + 1 v2.3 retro note captured).
-- **Outcome:** _filled in at gate-run time. Z.2's `done` flip lands in Z.3's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3)._
+- **Outcome:** Shipped via PR #53 (merged 2026-05-03). `@lhci/cli@0.15.1` + `lighthouserc.cjs` scaffolded with all 10 priority routes pre-staged (commented in; 1-line uncomment after test user provisioning). Real Web Vitals captured for 3 reachable public surfaces: `/login` (100/100, LCP 0.49s), `/privacy` (100/100, LCP 0.37s), `/leasing-agent` (97/100, LCP 1.29s) — all CLS=0, all under Web Vitals "good" thresholds. 10 priority routes documented as TBD pending `z0b-followup-verify-e2e-runs` (test user provisioning is shared blocker per cross-ref in stub). `z2-followup-ci-integration` filed for CI wiring. v2.3 retro candidate captured: "Public routes ≠ priority routes for SaaS apps — tooling slices need pre-auth capture planned from start."
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.2".
 - **Branch:** `chore/speed-z2-lighthouse-ci` off `origin/main`.
 
