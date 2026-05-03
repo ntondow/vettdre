@@ -373,7 +373,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z2-lighthouse-ci` off `origin/main`.
 
 ### Z.3 — Prisma slow query log
-- **Status:** `awaiting_review`
+- **Status:** `done`
 - **Goal:** Wire Prisma `$on('query')` in `src/lib/prisma.ts` to log queries slower than env-configurable threshold (default 200ms dev, 500ms prod). Dev: `console.warn`. Prod: `Sentry.addBreadcrumb` (category: prisma, level: warning) + `console.warn` fallback. PII-safe — log the parameterized query template ONLY, NEVER the params (DB rows can contain emails, addresses, etc.).
 - **Files in scope:**
   - `src/lib/prisma.ts` (add `$on("query")` handler; switch `log` config to fully-object form per Q1; preserve singleton API + `getDatasourceUrl()` connection-pool config; preserve dev/prod stdout asymmetry per Q2)
@@ -458,7 +458,7 @@ prisma.$on("query", (e) => {
 - **Success criteria:** new smoke test passes (3 contracts); existing 403/403 vitest suite still green (+3 from this slice → 406); local `npm run dev` produces `[prisma slow query]` console output for at least one heavy route (e.g. `/messages` or `/market-intel`); typecheck holds at baseline (≤515 CI canonical) — Z.3 introduces zero new errors in files it touches.
 - **Depends on:** PR #53 (Z.2, merged 2026-05-03) — clean baseline on `origin/main`.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + Z.4 re-scoping finding captured + Sentry DSN issue noted for later filing).
-- **Outcome:** _filled in at gate-run time. Z.3's `done` flip lands in Z.4's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4)._
+- **Outcome:** Shipped via PR #54 (merged 2026-05-03). Prisma slow query handler registered in `lib/prisma.ts` with HMR-stacking guard (`globalForPrisma.prismaSlowQueryHandlerRegistered`) + PII-safe payload (`e.query` template only, never `e.params`) + threshold env-configurable (`PRISMA_SLOW_QUERY_MS_DEV` default 200, `_PROD` default 500) + Sentry breadcrumb in prod with `console.warn` fallback in dev. Verified via standalone probe: `SELECT COUNT(*)` on users at 240ms tripped the dev threshold cleanly with `$1` placeholder confirming PII safety. Z.4 stale-kickoff finding ("Sentry Performance is already enabled") captured in plan-of-record retro section, drove this slice's re-scope.
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.3".
 - **Branch:** `chore/speed-z3-prisma-slow-query` off `origin/main`.
 
