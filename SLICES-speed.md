@@ -238,7 +238,7 @@ Future agents picking up follow-ups: the gap at `03-*.spec.ts` is the visual sig
 - **Branch:** `chore/speed-z0b-playwright` off `origin/main`.
 
 ### Z.1 — Bundle analyzer baseline + report
-- **Status:** `awaiting_review`
+- **Status:** `done`
 - **Goal:** Add `@next/bundle-analyzer@16.1.6` (matches Next.js exact version), wire behind `ANALYZE=true` env flag, capture real baseline edge + client bundle sizes for top 10 routes by running `ANALYZE=true npm run build` locally. Commit baseline numbers to `docs/handoff/speed-2026-q2-baselines.md`. Purely observational — no code refactor.
 - **Files in scope:**
   - `package.json` (add `@next/bundle-analyzer` devDep + `analyze` script)
@@ -307,7 +307,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Success criteria:** new smoke test passes (3 contracts); existing 390/390 vitest suite still green; `npm run analyze` (= `ANALYZE=true next build --webpack`) succeeds and emits report HTML files in `.next/analyze/`; `speed-2026-q2-baselines.md` contains real per-route numbers (not placeholders) + 10 priority routes + webpack-vs-Turbopack callout (reframed: "Turbopack is the default; analyzer uses --webpack fallback").
 - **Depends on:** PR #51 (Z.0b, merged 2026-05-03) — playwright harness shipped + audit infrastructure stable on `origin/main`.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + 2 v2.3 retro notes captured).
-- **Outcome:** _filled in at gate-run time. Z.1's `done` flip lands in Z.2's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2)._
+- **Outcome:** Shipped via PR #52 (merged 2026-05-03). Bundle analyzer scaffolded with `@next/bundle-analyzer` wrapping `next.config.ts` behind `ANALYZE=true`. Real baseline numbers captured for 10 priority routes (heaviest: `/market-intel` 31.1 kB gz, `/deals/new` 33.1 kB gz). Three findings surfaced: (1) Next 16 default build is Turbopack not webpack — analyze script forces `--webpack` so analyzer has webpack stats to instrument; webpack-vs-Turbopack caveat documented; (2) per-route First Load JS not auto-extractable in this analyzer version, captured page-chunk sizes instead; (3) local typecheck reads 287 vs CLAUDE.md 285 anchor — preexisting +2 drift, CI canonical 515 is what blocks PRs.
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.1".
 - **Branch:** `chore/speed-z1-bundle-analyzer` off `origin/main`.
 
@@ -449,4 +449,13 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Why deferred:** Test user provisioning is one-time admin work in the Supabase dashboard (~15 min). Phase Z's goal is "infrastructure exists," not "every test verified live." Smoke contracts pin the structural shape; runtime verification gates Phase 1+ when capacity permits.
 - **Required input before slicing:** None — pure provisioning task. Steps in `docs/playwright-setup.md`.
 - **Affected surfaces:** `playwright/.auth/user.json` (generated locally), `.env.local` (PLAYWRIGHT_TEST_EMAIL + PLAYWRIGHT_TEST_PASSWORD env vars).
+- **Also unblocks:** Z.2's auth-gated baseline capture — all 10 priority routes are auth-gated, so Z.2 shipped with `TBD — pending test user provisioning` for those rows. Once this stub's provisioning lands, Z.2's TBD rows can be filled by re-running `npm run lighthouse` against the now-loginnable test user. (Discovered during Z.2 plan-of-record: methodology assumed some priority routes would be public; for SaaS apps the priority set and the public set rarely overlap.)
 - **Filed:** 2026-05-03 by Nathan (Z.0b merge — Path A choice).
+
+### `z2-followup-ci-integration`
+- **Status:** Phase 5 backlog
+- **Background:** Z.2 (PR TBD) shipped Lighthouse CI tooling + baseline capture for local runs. Wiring `npm run lighthouse` into GitHub Actions as a 6th status check (warn-only initially, then fail-on-regression once thresholds are calibrated) was deferred per the same pattern as `z0b-followup-ci-integration`. Both depend on a CI strategy for booting the Next.js server + handling auth.
+- **Why deferred:** Running Lighthouse in CI requires booting `npm run start` against a CI-friendly DB + injecting auth — significant infra work beyond Z.2's baseline-capture goal. Either solve it once for both playwright + Lighthouse (combined CI integration slice) or solve separately.
+- **Required input before slicing:** Decision on CI server-boot strategy (use a Cloud Run preview URL? boot ephemeral local + dummy DB? share infra with `z0b-followup-ci-integration`?).
+- **Affected surfaces:** `.github/workflows/ci.yml` (new job), `lighthouserc.cjs` (CI-specific config branch), possibly `package-lock.json`.
+- **Filed:** 2026-05-03 by Nathan (Z.2 shipping, CI wire deferred for Z.0b parity).
