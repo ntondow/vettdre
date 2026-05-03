@@ -373,14 +373,94 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z2-lighthouse-ci` off `origin/main`.
 
 ### Z.3 — Prisma slow query log
-- **Status:** `pending`
-- **Goal:** Wire Prisma `$on('query')` to log queries slower than threshold (200ms dev, 500ms prod). Send to Sentry as performance breadcrumb in prod. Aids Phase 0 N+1 / missing-index detection.
-- **Files likely involved:** `lib/prisma.ts` (singleton — add slow-query handler), `instrumentation.ts` if exists (sentry wiring).
-- **Smoke contract idea (2):** `lib/prisma.ts` has `$on("query", ...)` with threshold filter; does NOT log every query unconditionally in production.
-- **Stop conditions:** If Sentry isn't installed yet, stop — that's Z.4 first.
-- **Estimated lines:** ~60.
+- **Status:** `in_progress`
+- **Goal:** Wire Prisma `$on('query')` in `src/lib/prisma.ts` to log queries slower than env-configurable threshold (default 200ms dev, 500ms prod). Dev: `console.warn`. Prod: `Sentry.addBreadcrumb` (category: prisma, level: warning) + `console.warn` fallback. PII-safe — log the parameterized query template ONLY, NEVER the params (DB rows can contain emails, addresses, etc.).
+- **Files in scope:**
+  - `src/lib/prisma.ts` (add `$on("query")` handler; switch `log` config to fully-object form per Q1; preserve singleton API + `getDatasourceUrl()` connection-pool config; preserve dev/prod stdout asymmetry per Q2)
+  - `tests/smoke/z3-prisma-slow-query.test.ts` (new — 3 contracts)
+- **Smoke contract regex pins (3):**
+  1. **C1 — `$on("query", ...)` registered:** `src/lib/prisma.ts` matches `/\$on\(\s*["']query["']/`.
+  2. **C2 — threshold env var read:** `src/lib/prisma.ts` matches `/process\.env\.PRISMA_SLOW_QUERY_MS_(DEV|PROD)/`.
+  3. **C3 — no unconditional query-string log spam:** `src/lib/prisma.ts` does NOT match `/log:\s*\[\s*["']query["']\s*\]/` (the literal-string single-element form that prints every query to stdout). Our config uses the object/event form, so this regex must NOT match.
+- **Estimated lines:** ~50 code (prisma.ts) + ~70 smoke + ~70 plan-of-record + ~80 SLICES-speed.md retro/finding capture = ~270 total. Within 280-line ceiling.
+
+## Plan of record
+
+**Four-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.2 done with PR #53 outcome line`** — cross-slice flip per documented pattern. Verbatim outcome from kickoff.
+
+2. **`chore(speed): append Z.3 plan-of-record + capture Z.4 stale-kickoff finding`** — this commit. Append plan-of-record; flip Z.3 `pending` → `in_progress`; capture **CRITICAL FINDING** (per Nathan, 2026-05-03) about Z.4's kickoff being stale (Sentry Performance is ALREADY enabled in `sentry.server.config.ts` + `sentry.edge.config.ts`; tracesSampleRate is 0.1 prod / 1.0 dev) — this needs to feed Z.4's re-scoping when we get there.
+
+3. **`feat(speed): instrument Prisma slow query log (Foundation Z.3)`** — modify `src/lib/prisma.ts` to switch `log` to fully-object form with event-based query emission, register `$on("query")` handler, env-configurable threshold, dev/prod branching per Q3. Ship 3-contract smoke test.
+
+4. **`chore(slices): mark Z.3 awaiting_review`** — flip Z.3 `in_progress` → `awaiting_review`. Z.3's `done` flip lands in Z.4's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4).
+
+**Log config shape (per Q1 fully-object + Q2 preserve asymmetry):**
+
+```ts
+log: process.env.NODE_ENV === "development"
+  ? [
+      { emit: "event", level: "query" },
+      { emit: "stdout", level: "error" },
+      { emit: "stdout", level: "warn" },
+    ]
+  : [
+      { emit: "event", level: "query" },
+      { emit: "stdout", level: "error" },
+    ]
+```
+
+Event-based query emission is in BOTH environments (per kickoff) — the threshold filter in the handler prevents prod log spam. Stdout error/warn behavior matches existing config exactly (no behavioral regression for non-query Prisma logs).
+
+**Handler shape (per Q3 — match kickoff verbatim):**
+
+```ts
+prisma.$on("query", (e) => {
+  const threshold = isDev ? devThreshold : prodThreshold;
+  if (e.duration < threshold) return;
+  const payload = { duration_ms: e.duration, query: e.query, target: e.target };
+  if (isDev) {
+    console.warn("[prisma slow query]", payload);
+  } else {
+    // Sentry breadcrumb is safe to call even if init failed — it
+    // becomes a no-op rather than throwing. console.warn fallback
+    // ensures Cloud Run logs still capture the event regardless.
+    if (typeof Sentry?.addBreadcrumb === "function") {
+      Sentry.addBreadcrumb({
+        category: "prisma",
+        level: "warning",
+        message: "slow-query",
+        data: payload,
+      });
+    }
+    console.warn("[prisma slow query]", payload);
+  }
+});
+```
+
+**PII safety (load-bearing comment in code):** `e.params` is intentionally excluded — Prisma serializes actual values into params (emails, addresses, names). Only `e.query` (parameterized SQL template, e.g. `SELECT ... WHERE email = ?`) is logged.
+
+**Critical finding to capture in retro candidates (per Nathan, 2026-05-03):**
+- **Z.4 kickoff is stale.** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.4" claims the work is "enable Sentry Performance" — but `sentry.server.config.ts` and `sentry.edge.config.ts` already call `Sentry.init({ tracesSampleRate: process.env.NODE_ENV === "development" ? 1.0 : 0.1, ... })`. Performance tracing is on. Z.4 needs **re-scoping** when we get there — likely to "refine custom spans on highest-traffic surfaces (data-fusion-engine, nyc-opendata, firecrawl, AI inference) + verify DSN inlining works in prod" rather than the kickoff's framing.
+- **Sentry DSN known issue.** Nathan observed `Invalid Sentry Dsn: $NEXT_PUBLIC_SENTRY_DSN` in browser console at some point but it's NOT documented in CLAUDE.md or any handoff doc. Discovery during Z.3 confirmed: DSN is wired in `cloudbuild.yaml` as a build-time secret, but the literal-`$`-prefix in the observed message suggests Turbopack edge bundling failed to interpolate the env var (same root cause as the `NEXT_PUBLIC_SUPABASE_*` workaround in `next.config.ts`). When Z.4 kicks off, **first action**: reproduce the DSN error → if confirmed, file `z4-followup-document-known-dsn-issue` (or fold into Z.4 itself depending on scope). For Z.3's scope: Sentry breadcrumb path is a no-op if DSN init failed, which is fine — `console.warn` fallback ensures Cloud Run logs still capture slow queries.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + Z.4 re-scoping flagged for capture).
+
+**Discovery findings:**
+- `src/lib/prisma.ts` is ~25 lines: `globalForPrisma` singleton, `getDatasourceUrl()` connection-pool config, `log: ["error", "warn"]` (dev) / `["error"]` (prod), default export.
+- Sentry server + edge configs both call `Sentry.init({ dsn: process.env.NEXT_PUBLIC_SENTRY_DSN, tracesSampleRate: 0.1 prod / 1.0 dev, environment, enableLogs: true })`. **Performance is already enabled.** (Confirmed: this is the basis for the Z.4 re-scoping note above.)
+- No existing slow-query logging anywhere in `src/`.
+- No existing `Sentry.addBreadcrumb` calls anywhere in `src/`.
+- Prisma 5.22 supports `$on("query", ...)` with the constructor `log: [{ emit: "event", level: "query" }]` shape. TypeScript inference may require `as const` or explicit `Prisma.PrismaClientOptions["log"]` annotation; will surface during typecheck if needed (per Q4).
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 403/403 vitest suite still green (+3 from this slice → 406); local `npm run dev` produces `[prisma slow query]` console output for at least one heavy route (e.g. `/messages` or `/market-intel`); typecheck holds at baseline (≤515 CI canonical) — Z.3 introduces zero new errors in files it touches.
+- **Depends on:** PR #53 (Z.2, merged 2026-05-03) — clean baseline on `origin/main`.
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + Z.4 re-scoping finding captured + Sentry DSN issue noted for later filing).
+- **Outcome:** _filled in at gate-run time. Z.3's `done` flip lands in Z.4's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4)._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.3".
-- **Branch (when started):** `chore/speed-z3-prisma-slow-query` off `origin/main`.
+- **Branch:** `chore/speed-z3-prisma-slow-query` off `origin/main`.
 
 ### Z.4 — Sentry Performance enable + server action timing
 - **Status:** `pending`
