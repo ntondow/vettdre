@@ -177,3 +177,82 @@ Documented in detail at the top of `lighthouserc.cjs`. Summary:
 5. Re-run `npm run lighthouse`; replace TBD rows above with the median-of-3 numbers.
 
 This work is bundled into whichever slice unblocks `z0b-followup-verify-e2e-runs` — both blockers share the test user as their gating dependency.
+
+---
+
+# Cold start baseline
+
+**Slice:** Z.5 — Cloud Run cold start measurement (LAST Phase Z slice)
+**Captured:** 2026-05-03 (scaffold) / TBD (measurements)
+**Branch:** `chore/speed-z5-cold-start`
+**Source:** Manual `curl https://app.vettdre.com/api/health` runs against the deployed Cloud Run service, post-Z.5-merge + post-deploy.
+
+## Methodology
+
+1. **Confirm Cloud Run scaling config:** `gcloud run services describe vettdre --region us-east1 --format="value(spec.template.spec.containerConcurrency, spec.template.metadata.annotations)"`. Should report `min-instances=0, max-instances=10` per `cloudbuild.yaml`.
+2. **Force scale-to-0** if traffic is keeping the service warm: wait ~15-20 minutes of idle, OR set `--min-instances=0` explicitly via `gcloud run services update vettdre --region us-east1 --min-instances=0` (this is already the default; only needed if a prior slice changed it).
+3. **Run #1 (cold):** `time curl -s https://app.vettdre.com/api/health | jq .` — record total request time + the `uptime_seconds` field from the response. `uptime_seconds < 5` → cold start.
+4. **Wait ~20 minutes idle** between runs to ensure each starts cold. (Cloud Run typically scales down after ~15 min of zero traffic, but this varies; longer is safer.)
+5. **Repeat for Runs #2-5.** Capture timestamps so the table reflects elapsed gaps.
+6. **Compute median + p95** across the 5 cold measurements. Warm measurements (uptime_seconds > 60) are recorded but excluded from the cold-start aggregate.
+
+## 5 cold-start measurements — TBD pending Nathan's post-merge runs
+
+Numbers below are placeholders. Nathan fills them in via a separate commit on `main` post-Z.5-merge + post-deploy. Same TBD pattern as Z.2's auth-gated route table.
+
+| Run | Timestamp (UTC) | Request latency (ms) | Response `uptime_seconds` | Classification |
+|---|---|---:|---:|---|
+| 1 | TBD | TBD | TBD | TBD (cold/warm) |
+| 2 | TBD | TBD | TBD | TBD |
+| 3 | TBD | TBD | TBD | TBD |
+| 4 | TBD | TBD | TBD | TBD |
+| 5 | TBD | TBD | TBD | TBD |
+
+**Cold-start aggregate (5 runs):**
+
+| Metric | Value |
+|---|---|
+| Median request latency | TBD |
+| p95 request latency | TBD |
+| Median `uptime_seconds` on first response | TBD |
+
+## Decision tree (driven by median request latency)
+
+This drives the Phase 1 keepalive decision. **Z.5 explicitly does NOT implement keepalive** — that's a Phase 1 scope decision based on these numbers.
+
+- **Median < 1s:** cold start is not a bottleneck. **Skip the keepalive work entirely.** Phase 1 should not invest in Cloud Scheduler or `--min-instances=1` on this basis.
+- **Median 1-5s:** keepalive is **optional**, depends on UX impact assessment. Phase 1 should decide based on:
+  - User-perceived impact at the entry routes (do users frequently hit `/login` or `/dashboard` cold?)
+  - Cost trade-off: `--min-instances=1` on a 1Gi/1CPU container ≈ $30-50/mo always-on; Cloud Scheduler keepalive (1 ping/min) is negligible.
+- **Median > 5s:** keepalive is **likely required**. Phase 1 work item:
+  - **Preferred:** Cloud Scheduler keepalive cron pinging `/api/health` every 5-10 min. Cheap; preserves auto-scaling on traffic spikes.
+  - **Alternative:** `--min-instances=1` in `cloudbuild.yaml`. Higher cost, but eliminates cold starts entirely (not just on the keepalive path).
+  - At this point, `z5-followup-unwrap-health-span` triggers — the Sentry span wrap on `/api/health` becomes noise once keepalive is pinging it ~1,440x/day.
+- **Median > 15s:** **stop and investigate before any keepalive work.** Likely cause: Docker image bloat (`@googleworkspace/cli` global install adds significant time), Prisma client init lag, or Sentry SDK init blocking startup. Fix the root cause first; keepalive on a 15s startup is a band-aid, not a solution.
+
+## Re-baseline triggers (cold-start)
+
+Re-run the 5 measurements + update this section when:
+1. `Dockerfile` changes (new global installs, base image bump, build steps reordered).
+2. `cloudbuild.yaml` scaling config changes (`--memory`, `--cpu`, `--min-instances`).
+3. A heavy server-side dependency lands (large npm install, native binary, large model file).
+4. Cloud Run runtime version bumps (Google migrates underlying Node version or pod-init strategy).
+5. Quarterly anyway — same cadence as the bundle and CWV baselines above.
+
+## How to capture (Nathan's reference card)
+
+```bash
+# 1. Confirm scale-to-0 is in effect and wait for idle
+gcloud run services describe vettdre --region us-east1 --format=yaml | grep -A1 minScale
+
+# 2. (Optional) force scale-to-0 if needed
+gcloud run services update vettdre --region us-east1 --min-instances=0
+
+# 3. Wait ~20 min idle, then probe
+echo "Run 1: $(date -u)" && time curl -s https://app.vettdre.com/api/health | jq .
+
+# 4. Wait 20 min, repeat for runs 2-5
+# 5. Edit the TBD table above with timestamps + latencies + uptime values
+# 6. Compute median + p95 from the 5 runs
+# 7. Match against the decision tree above; record any Phase 1 follow-up
+```

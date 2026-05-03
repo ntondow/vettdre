@@ -104,6 +104,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/chat/") ||
     pathname.startsWith("/privacy") ||
     pathname.startsWith("/support") ||
+    pathname.startsWith("/api/health") ||
     pathname.startsWith("/api/onboarding") ||
     pathname.startsWith("/api/screen/") ||
     pathname.startsWith("/api/screening/") ||
