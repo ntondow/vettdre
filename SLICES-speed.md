@@ -558,15 +558,91 @@ Sentry DSNs are **public write-only keys** designed for client-bundle exposure (
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.4" (post this PR's update).
 - **Branch:** `chore/speed-z4-sentry-spans` off `origin/main`.
 
-### Z.5 — Cloud Run cold start measurement
-- **Status:** `pending`
-- **Goal:** Measure baseline cold start time (container start → first response). Add `/api/health` endpoint with `process.uptime()` payload for cold-start detection. Document numbers in `speed-2026-q2-baselines.md`. **Don't implement keepalive** — that's a Phase 1 decision.
-- **Files likely involved:** `src/app/api/health/route.ts` (new, unauthenticated), `docs/handoff/speed-2026-q2-baselines.md` (extend).
-- **Smoke contract idea (1):** `/api/health` endpoint exists and returns `uptime` field.
-- **Stop conditions:** If cold starts are <1s, propose skipping the keepalive Phase 1 work entirely. If >15s, surface — likely Docker bloat or startup script issue.
-- **Estimated lines:** ~50.
+### Z.5 — Cloud Run cold start measurement (LAST Phase Z slice)
+- **Status:** `in_progress`
+- **Goal:** Add unauthenticated `/api/health` endpoint returning `uptime_seconds` + minimal status payload, so cold-start latency can be measured. Document the methodology + a 5-row TBD measurements table in `docs/handoff/speed-2026-q2-baselines.md` (parallel to Z.2's TBD pattern). Nathan fills in measurements via post-merge commit. **Do NOT implement keepalive** — that's Phase 1+ work driven by what Z.5's numbers show.
+- **Files in scope:**
+  - `src/app/api/health/route.ts` (new — Sentry-wrapped GET handler per Q2(a); no DB hit; payload: `status`, `uptime_seconds`, `timestamp`, `node_env`, `git_sha`)
+  - `src/lib/supabase/middleware.ts` (+1 line: `pathname.startsWith("/api/health")` inserted at TOP of API public-routes group per Q3, grouped with `/api/book` / `/api/automations/cron` / etc.)
+  - `tests/smoke/z5-cold-start.test.ts` (new — 3 contracts; path corrected from kickoff typo per Q5)
+  - `docs/handoff/speed-2026-q2-baselines.md` (append "Cold start baseline" section: methodology + 5-row TBD table + decision tree)
+- **Smoke contract regex pins (3):**
+  1. **C1 — health route exists with GET handler:** `src/app/api/health/route.ts` exists and matches `/export\s+(async\s+)?function\s+GET/`.
+  2. **C2 — payload contract:** route source matches BOTH `/uptime_seconds/` AND `/status/` (regex pin on the response keys).
+  3. **C3 — middleware exempts health route:** `src/lib/supabase/middleware.ts` matches `/pathname\.startsWith\(["']\/api\/health/`.
+- **Estimated lines:** ~30 code + ~70 smoke + ~80 doc append + ~80 plan-of-record + ~15 follow-up stub = ~275. Within 280.
+
+## Plan of record
+
+**Four-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.4 done with PR #55 outcome line`** — cross-slice flip per documented pattern.
+
+2. **`chore(speed): append Z.5 plan-of-record + file z5-followup-unwrap-health-span`** — this commit. Append plan-of-record; flip Z.5 `pending` → `in_progress`; file new Phase 5 stub for the Sentry-span unwrap when Cloud Scheduler keepalive lands (per Q2(a)).
+
+3. **`feat(speed): add /api/health endpoint + cold-start baseline scaffold (Foundation Z.5)`** — implementation. New route handler with `Sentry.startSpan` wrap; middleware public-routes update; 3-contract smoke; baselines doc gets "Cold start baseline" section with TBD-row table + methodology + decision tree.
+
+4. **`chore(slices): mark Z.5 awaiting_review`** — flip Z.5 `in_progress` → `awaiting_review`. **Z.5 is the LAST Phase Z slice.** After this PR merges + Nathan completes the 5 cold-start measurements (separate post-merge commit), Phase Z is complete and Phase 0 swarm opens. Z.5's `done` flip lands in the Phase 0 kickoff slice's PR per cross-slice flip pattern.
+
+**Endpoint payload shape (per Q1 — keep `git_sha` placeholder):**
+
+```ts
+{
+  status: "ok",
+  uptime_seconds: process.uptime(),
+  timestamp: new Date().toISOString(),
+  node_env: process.env.NODE_ENV,
+  git_sha: process.env.GIT_COMMIT_SHA ?? "unknown",
+}
+```
+
+`git_sha` is harmless when unset — Cloud Build can populate via `_COMMIT_SHA` substitution later (out of scope for this slice; flagging here so future agent who wires it knows the field is already in place).
+
+**Sentry span wrap (per Q2(a) — keep wrap, file follow-up):**
+
+```ts
+return Sentry.startSpan(
+  { name: "health.check", op: "http.server.health" },
+  async () => NextResponse.json({ ... }),
+);
+```
+
+The wrap shows cold-start latency in Sentry traces — useful for Phase 0 + Phase 1 cold-start analysis. **Trade-off acknowledged:** when Cloud Scheduler keepalive lands (Phase 1+), every ping creates a span = noise. Filed `z5-followup-unwrap-health-span` to address deliberately when we're already in keepalive territory.
+
+**Public-routes insertion point (per Q3 — top of API group for readability):**
+
+Insert `pathname.startsWith("/api/health") ||` next to `pathname.startsWith("/api/onboarding") ||` (the first `/api/*` entry in the OR-chain). Grouped semantically with the other unauthenticated API routes.
+
+**TBD-rows pattern (per Q4 — agent ships skeleton, Nathan fills numbers):**
+
+Same approach as Z.2's auth-gated baseline rows. Doc gets:
+- "Cold start baseline" section header
+- Methodology subsection (curl pattern, idle-gap timing, expected scale-to-0 behavior on Cloud Run)
+- 5-row TBD table (Run #1-5: timestamp, request latency ms, response uptime_seconds, classification cold/warm)
+- Median + p95 placeholders
+- Decision tree: "if median > 5s → propose Cloud Scheduler keepalive in Phase 1 OR `--min-instances=1`; if 1-5s → keepalive optional, depends on UX impact; if <1s → skip keepalive entirely (cold start is not a bottleneck)"
+
+Nathan completes via separate commit on main post-merge (no need for a follow-up PR; baselines doc edits are atomic).
+
+**Smoke path corrected per Q5:** `tests/smoke/z5-cold-start.test.ts` (kickoff had typo `tests/smoke/zcold-start.test.ts`).
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + 1 new follow-up stub filed).
+
+**Discovery findings:**
+- `/api/health/briefs/route.ts` exists as a sub-route. The leaf `/api/health/route.ts` does NOT — no collision; adding the leaf is fine (different URL paths in App Router).
+- `cloudbuild.yaml` confirms cold starts are real: `--min-instances 0`, `--max-instances 10`, `--memory 1Gi`, `--cpu 1`, `--concurrency 80`, `--timeout 300`. Container scales to 0 when idle.
+- `Dockerfile` is multi-stage with standalone output — minimal cold-start surface, but production runner installs `@googleworkspace/cli` globally per CLAUDE.md (adds startup time).
+- `src/lib/supabase/middleware.ts` public-routes is a simple `pathname.startsWith(...)` OR-chain at lines 93-130. One-line addition.
+- Rate-limiting at top of `updateSession` applies to ALL `/api/*` routes (60 req/min per IP). Fine for Cloud Scheduler keepalive AND Nathan's 5 manual cold-start tests (~20 min apart).
+- `docs/methodology/templates/phase-0-swarm-prompt.md` exists (confirmed for handoff narrative after Z.5 ships).
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 413/413 vitest suite still green (+3 from this slice → 416); local `npm run build` succeeds (route compiles without route-handler convention errors); `/api/health` reachable post-deploy and returns the documented payload; baselines doc has "Cold start baseline" section ready for Nathan's measurements.
+- **Depends on:** PR #55 (Z.4, merged 2026-05-03) — clean baseline + Sentry span pattern landed (Z.5's wrap copies it).
+- **Requires approval:** Pre-approved by Nathan (5 questions answered).
+- **Outcome:** _filled in at gate-run time. Z.5 is the LAST Phase Z slice. After this PR merges + Nathan completes the 5 cold-start measurements, Phase Z is complete and Phase 0 swarm opens. Z.5's `done` flip + the "Phase Z complete" gate header land in the Phase 0 kickoff slice's PR per cross-slice flip pattern._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.5".
-- **Branch (when started):** `chore/speed-z5-cold-start-baseline` off `origin/main`.
+- **Branch:** `chore/speed-z5-cold-start` off `origin/main`.
 
 ---
 
@@ -689,3 +765,12 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
   4. **If the error DOES appear:** the hardcode didn't fix it; investigate alternative inlining mechanism (e.g. webpack `DefinePlugin` config inside `withSentryConfig`, or `instrumentation-client.ts` running before env-var injection completes). File a hot-fix slice based on findings.
 - **Affected surfaces:** purely observational unless step 4 fires; in that case, likely `next.config.ts` (alternative inlining mechanism) or `src/instrumentation-client.ts` (DSN fallback).
 - **Filed:** 2026-05-03 by Nathan (Z.4 shipping, prod verification deferred for environment-access reasons).
+
+### `z5-followup-unwrap-health-span`
+- **Status:** Phase 5 backlog (hold until Cloud Scheduler keepalive lands)
+- **Background:** Z.5 (PR TBD) wrapped the `/api/health` GET handler in `Sentry.startSpan({ name: "health.check", op: "http.server.health" }, ...)` per Q2(a) approval. Useful during Phase 0 + early Phase 1 for cold-start visibility in Sentry traces. **Trade-off acknowledged at slice time:** when Cloud Scheduler keepalive lands (Phase 1+), every ping creates a span — at 1 ping/min that's ~1,440 spans/day of pure noise.
+- **Trigger:** when the slice that wires Cloud Scheduler keepalive ships (likely a Phase 1 slice driven by Z.5's measurements via the decision tree in the baselines doc).
+- **Required input before slicing:** confirmation that keepalive is wired and pinging `/api/health` regularly. Without keepalive, the span wrap stays useful — don't unwrap prematurely.
+- **Affected surfaces:** `src/app/api/health/route.ts` (remove the `Sentry.startSpan` wrap; keep the JSON payload intact). Smoke test C2 (payload shape) keeps passing; no smoke contract pins the span wrap explicitly so removing it is safe.
+- **Decision when slicing:** consider whether to drop the span entirely or replace with `Sentry.setTag("health-ping", true)` so keepalive pings can be filtered out at the Sentry dashboard level — preserves visibility for non-keepalive traffic (e.g. external monitoring tools, manual probes) while suppressing noise.
+- **Filed:** 2026-05-03 by Nathan (Z.5 shipping, deliberate deferral for when keepalive lands).
