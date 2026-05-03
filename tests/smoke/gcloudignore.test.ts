@@ -1,7 +1,7 @@
 // Slice gcloudignore smoke — verify the .gcloudignore file pins the
 // critical exclusions that keep `gcloud builds submit` upload size
 // bounded, and verify slice 22-as-org-vault is recorded as shipped in
-// SLICES.md.
+// SLICES-bms.md (renamed from SLICES.md in slice Z.6).
 //
 // Why pin patterns statically: .gcloudignore is interpreted by gcloud,
 // not loaded at runtime. There's no behavior to assert beyond "this
@@ -48,8 +48,8 @@ describe("Slice gcloudignore — .gcloudignore pins critical exclusions", () => 
   });
 });
 
-describe("Slice gcloudignore — slice 22-as-org-vault closed in SLICES.md", () => {
-  const src = read("SLICES.md");
+describe("Slice gcloudignore — slice 22-as-org-vault closed in SLICES-bms.md", () => {
+  const src = read("SLICES-bms.md");
 
   // Scope to the slice 22 section so other slices' status lines can't
   // accidentally satisfy the regex.

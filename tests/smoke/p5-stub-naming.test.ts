@@ -4,7 +4,8 @@
 // new `gcloudignore-followup-further-reduction` stub is filed with all
 // methodology fields.
 //
-// Static-source assertions over SLICES.md content. Phase 5 stubs are
+// Static-source assertions over SLICES-bms.md content (renamed from
+// SLICES.md in slice Z.6). Phase 5 stubs are
 // authored as documentation; the contract here is purely structural —
 // pin the naming format so a future agent who files a stub with an
 // inconsistent ID trips this test immediately.
@@ -19,7 +20,7 @@ function read(rel: string): string {
   return fs.readFileSync(path.join(ROOT, rel), "utf8");
 }
 
-const SLICES = read("SLICES.md");
+const SLICES = read("SLICES-bms.md");
 
 // Extract just the Phase 5 section (everything after the "## Phase 5 —
 // Polish backlog" heading). Stop at EOF since Phase 5 is the last section.
