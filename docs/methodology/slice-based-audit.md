@@ -1,6 +1,8 @@
-# Slice-Based Audit Methodology (v2.1.1)
+# Slice-Based Audit Methodology (v2.2)
 
 **Status:** durable. This doc is the playbook for any VettdRE audit — single area or site-wide. Status snapshots live elsewhere (SLICES.md, Asana, audit docs in `docs/handoff/`). This doc is the methodology only.
+
+**v2.2 patch (2026-05-02):** end-of-BMS-audit retrospective surfaced the B-019 verified-claim mistake — slice 0c2 was claimed "B-019 verified" after threading the read surface, but the write surface (form POST → `createOnboarding`) was exempted from the smoke contract matrix and the bug stayed live until Item 4's Gulino e2e re-found it 4 days later. v2.2 adds a **verified-claim audit pattern** (§6) and a **read-surface ≠ write-surface** anti-pattern (§9) so future class-fix verifications must enumerate every callsite. The v2.1.1 CI/playwright caveats below remain in force until Foundation Audit Z.0a + Z.0b ship.
 
 **v2.1.1 patch (2026-05-02):** pre-flight discovered GitHub Actions CI and playwright harness do NOT exist in the repo. v2.1 commits to both as required infrastructure but they're TBD. Until they ship as speed audit Z.0a + Z.0b slices, the following interim rules apply:
 - Smoke contracts run via `npm run test -- tests/smoke/<slice-id>.test.ts` locally during PR review. PR reviewer (Nathan) verifies green output before merge approval.
@@ -207,6 +209,8 @@ After merge + deploy, verify in real prod via Chrome MCP. Three modes, each with
 
 **A slice is not "verified" without one of these three artifacts in the PR comment.** Default-lazy verification ("looks fine") is the failure mode this prevents.
 
+**Verified-claim audit pattern (added v2.2).** When a slice claims it fixed a *class* of bugs (cross-tenant override, RBAC enforcement, validation rule, etc.), verification must walk every variant in that class — read AND write paths, all callsites — not just the variants that have explicit smoke contracts. Smoke contracts can't catch a write-path bug if the write-path callsite is exempted from the contract matrix. **Worked example (BMS audit B-019):** slice 0c2 threaded `?as_org=` through the onboarding *list page* and was claimed "B-019 verified." But the form POST → `createOnboarding` server action was intentionally exempted from `override-scoping.test.ts`'s `FILES_UNDER_TEST` matrix. The exemption was a deferral, not a fix. Item 4 manual e2e found the bug 4 days later. Lesson: **a class-fix's verification artifact must enumerate every callsite in the class and confirm each was either threaded OR explicitly exempted with a documented reason and a follow-up stub.** "Read surface threaded → class verified" is the failure mode this rule prevents.
+
 ### 7. What to do if verification reveals a bug AFTER merge
 
 Two paths, choose deliberately:
@@ -247,6 +251,7 @@ Agents are confident even when wrong. When something feels off, ask. The clarifi
 - **Confidence on RBAC** (agent often asserts a role check is sufficient when it isn't; verify against `bms-permissions.ts` or auth code directly).
 - **Over-trust of comment text** (agent reads JSX comments as code intent; comments lie).
 - **Pattern matching to wrong precedent** (agent applies pattern from area A to area B without checking if the constraints differ — e.g. team-context vs org-context).
+- **Read surface ≠ write surface** (agent claims a class-fix is verified after threading reads only; ask explicitly "did you walk the write surface too, or just the read surface?" — see §6 verified-claim audit pattern + B-019 worked example).
 
 When the agent and you disagree and you suspect you might be wrong: verify against an independent path (read the actual file yourself, check git blame, run a quick prisma query, ask a second agent). Don't capitulate without verification; don't dig in without verification either.
 
@@ -640,7 +645,7 @@ See "Phase 5 stubs" section above for the copy-paste template.
 
 ## Versioning this doc
 
-**Version:** 2.1.1 (2026-05-02).
+**Version:** 2.2 (2026-05-02).
 
 **When to bump:**
 - **Major (v3, v4...):** any new core principle, any structural change to the slice loop, any change to required infrastructure. Triggers: post-incident retrospective surfacing systemic gap; site-wide audit completion surfacing new patterns.
