@@ -147,8 +147,10 @@ baselines.
 - No existing `.github/workflows/` directory (confirmed with `ls`).
 - `npm run check` script exists but runs all 4 in series → CI splits into parallel jobs for faster feedback.
 
-- **Files:** see Plan of record above.
-- **Success criteria:** new smoke test passes (3 contracts); existing 377/377 vitest suite still green; `.github/workflows/ci.yml` exists; first PR run goes green on all 4 jobs (the verification artifact for Z.0a per kickoff).
+**Discovery during CI (2026-05-03 amendment):** First PR-blocking CI run failed typecheck — local-filtered count was 287 (= 285 clean baseline + 2 dupe drift per CLAUDE.md), CI clean-checkout count was 515. **228-error gap.** Methodology v2.2 §"Verified-claim audit pattern" caught this on the first run that could enforce it — the v2.2 tightening shipped in PR #48 just two hours before this CI ran, and the worked example is now self-referential. Resolution: re-anchor CI threshold from 285 to 515 (CI canonical going forward); preserve the 285 anchor in CLAUDE.md as historical context; file Phase 5 stub `z0a-followup-typecheck-gap-investigation` with three working hypotheses for diff-and-categorize triage. **Methodology innovation flag (per Nathan's prior observation):** the inline baseline-check wrapper not only enforces baselines — it surfaces local-vs-CI drift on the first run, a stronger property than the methodology anticipated. Worth documenting in v2.3 retro candidate.
+
+- **Files:** see Plan of record above + amendment touches `.github/workflows/ci.yml` (threshold), `CLAUDE.md` (new 515 anchor below 285 anchor), `SLICES-speed.md` (new Phase 5 stub + this Discovery section).
+- **Success criteria:** new smoke test passes (3 contracts); existing 377/377 vitest suite still green; `.github/workflows/ci.yml` exists; first PR run goes green on all 4 jobs **after the 285→515 amendment** (the verification artifact for Z.0a per kickoff).
 - **Depends on:** PR #49 (Z.6, merged 2026-05-03) — SLICES-speed.md must exist for the plan-of-record append.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + variance OK at 170 lines well under 280-line ceiling).
 - **Outcome:** _filled in at gate-run time. Z.0a's `done` flip lands in Z.0b's PR per cross-slice flip pattern (continuing the Z.6 → Z.0a flow)._
@@ -244,4 +246,14 @@ _Empty until Phase 0 reports land + Nathan assigns phase scopes._
 Stubs deferred during Phase 1+ execution. Same format as methodology
 v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 
-_Empty — populated as slices ship and surface deferrable work._
+### `z0a-followup-typecheck-gap-investigation` — Investigate the 228-error gap between local-filtered tsc and CI clean-checkout
+- **Status:** Phase 5 backlog
+- **Background:** Z.0a's first PR-blocking CI run revealed a 228-error gap between the local-filtered typecheck count (287, per CLAUDE.md canonical filter `^[^(]* [0-9]+(\.test)?\.tsx?\(`) and CI's clean-checkout count (515). Z.0a's CI threshold was re-anchored from 285 to 515 to unblock the slice; the gap itself is preserved here for triage. Methodology v2.2 §"Verified-claim audit pattern" (shipped 2 hours earlier in PR #48) caught the drift on the first CI run that could enforce it — exactly the failure mode v2.2 was designed to surface.
+- **Why deferred:** Investigating 228 errors requires capturing full `tsc --noEmit` output from BOTH local clean-tree and CI, then diffing and categorizing per-error. Not blocking — re-anchoring to 515 lets Z.0a ship and the rest of Phase Z proceed. May surface real regressions worth fixing OR be entirely tooling artifact.
+- **Required input before slicing:**
+  - **Hypothesis (a) — Local filter regex incomplete.** The CLAUDE.md filter excludes errors from dupe FILES (e.g. `auth-context 100.ts`) but may not exclude errors from dupe DIRECTORIES (e.g. errors emitted from a non-dupe file but referencing a type in a dupe directory's barrel re-export). If true: refine the filter regex; local count likely converges with CI count.
+  - **Hypothesis (b) — Silent regression across PRs #44-#49 before CI existed to catch it.** Five PRs landed between the 285 anchor (PR #34, 2026-05-01) and PR #49 (2026-05-03) with no CI gate. The methodology's "surface baseline mismatches" rule was followed only when *measured* mismatches were observed; CI-vs-local mismatches couldn't be observed pre-Z.0a. If true: the 228 errors are real and Phase 3 cleanup scope grows.
+  - **Hypothesis (c) — Tooling drift.** TS version via lockfile race, prisma generate output diff, Node version difference between local (varies) and CI (Node 20). If true: identify the specific tool delta and either bring CI in line with local OR adopt CI as canonical (which is now the policy).
+  - Capture full `tsc --noEmit` output from clean-tree local (via `git stash --include-untracked` per CLAUDE.md protocol) AND from a CI run (download via `gh run download`). Diff per-error file path; categorize errors as: dupe-attribution, real-regression-since-PR#34, tooling-artifact.
+- **Affected surfaces:** `.github/workflows/ci.yml` (threshold may drop after fixes), `CLAUDE.md` (anchor may drop OR be refined with a tighter filter regex), `tsconfig.json` (if config drift discovered between local and CI), potentially individual TS files if real regressions surface.
+- **Filed:** 2026-05-03 by Nathan (during Z.0a CI failure resolution; the methodology-v2.2-caught-this irony documented here as a worked example for future v2.3 retro candidates).
