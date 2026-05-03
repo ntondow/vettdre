@@ -158,7 +158,7 @@ baselines.
 - **Branch:** `chore/speed-z0a-gh-actions` off `origin/main`.
 
 ### Z.0b — Playwright harness scaffold (local dev target)
-- **Status:** `in_progress`
+- **Status:** `awaiting_review` (PR #51)
 - **Goal:** Install `@playwright/test`, scaffold `tests/e2e/`, implement first 4 of the kickoff's 5 critical flows against `http://localhost:3000` (deal-submission flow #3 deferred — see Q2). Closes the v2.1.1 caveat that gate verification falls back to manual Chrome MCP walks. **Local dev target** (decided 2026-05-03 by Nathan): no staging infra exists; dedicated staging is 2-3 weeks of work; Cloud Run preview URLs add complexity. Migration to staging is filed as `z0b-followup-staging-target`.
 - **Files in scope:**
   - `package.json` (add `@playwright/test` devDep + `e2e`/`e2e:headed`/`e2e:ui` scripts)
