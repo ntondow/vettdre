@@ -312,7 +312,7 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z1-bundle-analyzer` off `origin/main`.
 
 ### Z.2 — Lighthouse CI + Web Vitals baseline
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Scope reduction (per Nathan, 2026-05-03):** **LOCAL CAPTURE ONLY** for this slice — same Path A precedent as Z.0b's playwright-local-only deferral. Wiring Lighthouse into GitHub Actions is filed as `z2-followup-ci-integration`. Reasons mirror Z.0b: booting `npm run start` against a CI-friendly DB + injecting auth = significant infra work beyond Z.2's baseline-capture goal.
 - **Goal:** Install `@lhci/cli`, configure for the 10 priority routes (same set as Z.1), capture local baseline numbers, append a "Core Web Vitals baseline" section to the existing `docs/handoff/speed-2026-q2-baselines.md` (one doc, not a new one — keep all Foundation baselines colocated). Warn-only assertions: LCP < 2.5s, FCP < 1.8s, TTI < 3.8s, CLS < 0.1, TTFB < 800ms.
 - **Files in scope:**
