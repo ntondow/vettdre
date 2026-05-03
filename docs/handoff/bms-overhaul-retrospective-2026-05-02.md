@@ -78,7 +78,7 @@ The BMS Overhaul audit started with an 18-bug + 38-UX-issue inventory after Guli
 - **DEFERRED:** Item 6 iPad real-finger smoke test — requires hardware session.
 - **Phase 5 stubs unchanged from PR #46 cleanup pass:** all 11 renamed stubs + new `gcloudignore-followup-further-reduction` + this slice's new `22-followup-as-org-onboarding-create` = 13 stubs in queue.
 - **Methodology candidates filed above** for v2.3 review.
-- **`SLICES.md` rename to `SLICES-bms.md`** deferred to next-audit Phase Z setup per closeout doc line 4. Next audit (site-wide speed audit) opens with this rename as a Z setup task.
+- **`SLICES.md` rename to `SLICES-bms.md`** shipped in Foundation/Speed audit slice Z.6. Top-level `SLICES.md` is now the audit ledger index pointing at per-audit files (`SLICES-bms.md`, `SLICES-speed.md`). Originally deferred per closeout doc line 4; the Foundation audit opened with this rename as its Phase Z setup task.
 
 ---
 

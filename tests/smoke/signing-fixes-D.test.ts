@@ -4,7 +4,7 @@
 // shape of the fix so a later refactor can't silently regress it. Runtime
 // mobile/network behavior is covered by Nathan's post-deploy checklist.
 //
-// Defects (10 of 11 from P2 — #23 dropped, see SLICES.md):
+// Defects (10 of 11 from P2 — #23 dropped, see SLICES-bms.md):
 //   #14  verify route — fire-and-forget the expired-cache update so the
 //        GET response isn't blocked on a write.
 //   #15  sign route — cap audit-log fieldValues at 500 chars to bound JSON

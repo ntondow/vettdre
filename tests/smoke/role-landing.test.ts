@@ -24,7 +24,7 @@ function readSource(rel: string): string {
 
 describe("Slice 1b — Role-aware default landing", () => {
   describe("landingForRole(role) — role-to-path table", () => {
-    it("super_admin → /dashboard (interim, see SLICES.md 3.Z)", () => {
+    it("super_admin → /dashboard (interim, see SLICES-bms.md 3.Z)", () => {
       expect(landingForRole("super_admin")).toBe("/dashboard");
     });
 
@@ -136,10 +136,10 @@ describe("Slice 1b — Role-aware default landing", () => {
   // Only "agent" is identical across both vocabularies — that's why this
   // contract is scoped to it. End-to-end coverage for owner/admin/manager
   // landing requires a Prisma fixture or mocked getCurrentBrokerageRole;
-  // tracked as `slice 6-ext` in SLICES.md (Phase 3 polish).
+  // tracked as `slice 6-ext` in SLICES-bms.md (Phase 3 polish).
   //
   // super_admin is also skipped — lands on /dashboard which is outside
-  // the BMS scope (not in PAGE_PERMISSION_MAP); per SLICES.md 3.Z a
+  // the BMS scope (not in PAGE_PERMISSION_MAP); per SLICES-bms.md 3.Z a
   // dedicated admin surface will replace it.
 
   describe("Slice 6 — agent landing is permission-compatible (B-018)", () => {
@@ -181,7 +181,7 @@ describe("Slice 1b — Role-aware default landing", () => {
   // ── Why super_admin and agent are excluded from this loop ──────────
   //
   // - super_admin lands on /dashboard, which is NOT in PAGE_PERMISSION_MAP
-  //   (it's outside the BMS scope). Per SLICES.md 3.Z, a dedicated admin
+  //   (it's outside the BMS scope). Per SLICES-bms.md 3.Z, a dedicated admin
   //   surface will replace the interim /dashboard landing; until then
   //   canAccessPage("...", "/dashboard") returns false by design. Adding
   //   super_admin to this loop would fail every run for a non-bug reason.
