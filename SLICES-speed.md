@@ -312,14 +312,65 @@ Default ANALYZE unset → analyzer disabled → behavior identical to today. Har
 - **Branch:** `chore/speed-z1-bundle-analyzer` off `origin/main`.
 
 ### Z.2 — Lighthouse CI + Web Vitals baseline
-- **Status:** `pending`
-- **Goal:** Capture Core Web Vitals (LCP, FCP, TTI, TTFB, CLS) for top 10 routes on every PR via Lighthouse CI, with one-time baseline capture. Warn-only initially.
-- **Files likely involved:** `lighthouserc.json` (new), `.github/workflows/lighthouse.yml` (new — depends on Z.0a), `package.json` (add `@lhci/cli` + `lighthouse` script), `docs/handoff/speed-2026-q2-baselines.md` (extend with Web Vitals section).
-- **Smoke contract idea (2):** `lighthouserc.json` exists with ≥10 URLs; `npm run lighthouse` script exists.
-- **Stop conditions:** Depends on Z.0a (no CI = no Lighthouse CI). Authenticated route testing may need a separate slice if cookie injection setup is complex.
-- **Estimated lines:** ~150 (lighthouserc + workflow + baseline rows).
+- **Status:** `in_progress`
+- **Scope reduction (per Nathan, 2026-05-03):** **LOCAL CAPTURE ONLY** for this slice — same Path A precedent as Z.0b's playwright-local-only deferral. Wiring Lighthouse into GitHub Actions is filed as `z2-followup-ci-integration`. Reasons mirror Z.0b: booting `npm run start` against a CI-friendly DB + injecting auth = significant infra work beyond Z.2's baseline-capture goal.
+- **Goal:** Install `@lhci/cli`, configure for the 10 priority routes (same set as Z.1), capture local baseline numbers, append a "Core Web Vitals baseline" section to the existing `docs/handoff/speed-2026-q2-baselines.md` (one doc, not a new one — keep all Foundation baselines colocated). Warn-only assertions: LCP < 2.5s, FCP < 1.8s, TTI < 3.8s, CLS < 0.1, TTFB < 800ms.
+- **Files in scope:**
+  - `package.json` (add `@lhci/cli` devDep + `lighthouse` + `lighthouse:report` scripts)
+  - `lighthouserc.cjs` (new — 10 URLs, `numberOfRuns: 3` median, warn-only assertions, `LIGHTHOUSE_BASE_URL` env override defaulting to `http://localhost:3000`, no `puppeteerScript` for now per Q1 path (a))
+  - `docs/handoff/speed-2026-q2-baselines.md` (append "Core Web Vitals baseline" section — does NOT restructure Z.1's content)
+  - `tests/smoke/z2-lighthouse-ci.test.ts` (new — 3 contracts)
+  - `.gitignore` (+1 line: `.lighthouseci/` — lhci's report output dir)
+- **Smoke contract regex pins (3):**
+  1. **C1 — `lighthouse` npm script wired:** `package.json` `scripts` block contains `"lighthouse":` keyed to `lhci collect`.
+  2. **C2 — config exists with ≥10 URLs:** `lighthouserc.cjs` exists; counts ≥10 entries in the URL list (regex match on `http`-prefixed strings inside `url:` array).
+  3. **C3 — baselines doc populated:** `docs/handoff/speed-2026-q2-baselines.md` contains a "Core Web Vitals baseline" section header AND ≥10 route × metric rows (TBD rows count — the contract is structural, not numerical, per Q4).
+- **Estimated lines:** ~200 code (config ~70 + scripts +2 + smoke ~80 + .gitignore +1 + plan-of-record ~50) + ~120 doc data appended (mostly TBD table + 3 public-route real-number rows + methodology note). Within 280-line code budget per kickoff's data-content carve-out.
+
+## Plan of record
+
+**Four-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.1 done with PR #52 outcome line + file z2-followup-ci-integration`** — cross-slice flip per documented pattern (verbatim outcome from kickoff) + new Phase 5 stub for CI deferral + one-line cross-ref to `z0b-followup-verify-e2e-runs` noting shared blocker.
+
+2. **`chore(speed): append Z.2 plan-of-record + capture v2.3 retro candidate`** — this commit. Append plan-of-record; flip Z.2 `pending` → `in_progress`; capture one v2.3 retro candidate (auth-gated priority routes finding — see retro section below).
+
+3. **`feat(speed): add Lighthouse CI tooling + Core Web Vitals baseline (Foundation Z.2)`** — install `@lhci/cli`, write `lighthouserc.cjs`, add npm scripts, run `npm run lighthouse` locally against the 3 reachable public routes, append "Core Web Vitals baseline" section to baselines doc with TBD rows for 10 priority routes + real numbers for public routes, ship smoke contract.
+
+4. **`chore(slices): mark Z.2 awaiting_review (implementation done, opening PR)`** — flip Z.2 `in_progress` → `awaiting_review`. Z.2's `done` flip lands in Z.3's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3).
+
+**Why `.cjs` not `.json` (per Q3):** Header comments earn their lines explaining the local-only posture, the TBD rationale for auth-gated routes, and the auth path forward (puppeteerScript stub once test user provisioned). JSON can't host that context. Negligible cost — config is ~70 lines either way.
+
+**Why TBD rows count for smoke contract C3 (per Q4):** The contract is structural ("matrix exists with ≥10 routes documented"), not "all numbers captured." Requiring real numbers would block Z.2 from shipping until test user provisioning happens, which contradicts Path A. Future agents who fill in TBD rows don't need to update the smoke — the contract still holds.
+
+**Auth path forward (post-merge, when test user provisioned):**
+- Add `puppeteerScript: "lighthouse/auth-puppeteer.cjs"` to `lighthouserc.cjs`
+- Write `lighthouse/auth-puppeteer.cjs` that uses `PLAYWRIGHT_TEST_EMAIL`/`PLAYWRIGHT_TEST_PASSWORD` env vars to fill the `/login` form and submit
+- Re-run `npm run lighthouse`; replace TBD rows in baselines doc with median-of-3 numbers
+- This work is bundled into whichever slice unblocks `z0b-followup-verify-e2e-runs`
+
+**Webpack-vs-Turbopack note (different from Z.1's caveat):** Lighthouse measures the locally-served output of `npm run start` (production build, Turbopack). Cloud Run also uses Turbopack. So unlike Z.1 — where the analyzer measured a webpack-bundled view that isn't what production serves — Z.2's numbers ARE representative of the production-default compiler. The caveat to document is the OPPOSITE direction: Z.1 was webpack-only-by-necessity; Z.2 is Turbopack-by-default.
+
+**Methodology v2.3 retro candidate (single, captured here per Nathan's note):**
+- **Public routes ≠ priority routes for SaaS apps.** The Z.2 kickoff implicitly assumed at least some of the 10 priority routes would be measurable without auth. Discovery showed all 10 sit under `(dashboard)/` and middleware redirects to `/login`. For SaaS perf tooling slices, "priority routes" is the post-auth product surface; "public routes" is auth + marketing + tokenized invites. They rarely overlap. Future Phase 5 audit-tooling kickoffs (and the methodology doc itself) should plan for pre-auth capture from the start — either by provisioning the test user as a Phase Z entry slice, or by accepting the TBD-rows + later-fill pattern up front. Filed for v2.3 §"Required infrastructure" addition.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + 1 v2.3 retro note captured above).
+
+**Discovery findings:**
+- `@lhci/cli@0.15.1` is the current latest. No `engines` field; transitive `lighthouse@12.6.1` requires Node ≥18 — fine on Node 20+ (laptop is Node 25.x).
+- Test user is NOT provisioned (per Z.0b's `z0b-followup-verify-e2e-runs` deferral). Confirmed by reading `tests/e2e/_setup/test-data.ts` — `PLAYWRIGHT_TEST_EMAIL`/`PLAYWRIGHT_TEST_PASSWORD` read from `.env.local`, fail loudly if missing.
+- **All 10 priority routes are auth-gated.** Verified: every route in `/dashboard`, `/contacts`, `/pipeline`, `/messages`, `/calendar`, `/market-intel`, `/deals`, `/terminal`, `/brokerage/transactions`, `/leasing/setup` is under the `(dashboard)/` route group, which `src/middleware.ts` redirects to `/login` for unauthenticated requests. So local Lighthouse runs against these routes without auth would measure the redirect, not the page.
+- Reachable public routes for partial baseline: `/login`, `/leasing-agent` (marketing landing), `/privacy`. Token-required public routes (`/book/[slug]`, `/submit-deal/[token]`, `/sign/[token]`, `/chat/[configSlug]`) need real tokens to render meaningfully — skip.
+- `lhci`'s `puppeteerScript` typically requires `npm i puppeteer` (~100 MB). Skipping for now; the future stub can use lhci's `chrome-launcher` (already a transitive dep) for a lighter approach.
+- `tests/e2e/_setup/auth.ts` uses playwright form-fill, not `storageState`. Not directly reusable in lhci without rewrite. Future puppeteerScript will replicate the same form-fill pattern (`/login` page, fill email + password, submit, wait for non-`/login` URL).
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (3 contracts); existing 396/396 vitest suite still green (+3 from this slice → 399); `npm run lighthouse` succeeds for the 3 public routes and produces `.lighthouseci/` artifacts; `speed-2026-q2-baselines.md` "Core Web Vitals baseline" section contains 10 TBD rows + real numbers for 3 public routes + methodology note + Turbopack-default callout.
+- **Depends on:** PR #52 (Z.1, merged 2026-05-03) — bundle analyzer scaffold + baselines doc already present on `origin/main` (Z.2 appends to the doc Z.1 created).
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + 1 v2.3 retro note captured).
+- **Outcome:** _filled in at gate-run time. Z.2's `done` flip lands in Z.3's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3)._
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.2".
-- **Branch (when started):** `chore/speed-z2-lighthouse-ci` off `origin/main`.
+- **Branch:** `chore/speed-z2-lighthouse-ci` off `origin/main`.
 
 ### Z.3 — Prisma slow query log
 - **Status:** `pending`
