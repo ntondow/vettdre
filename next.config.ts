@@ -1,5 +1,14 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
+import bundleAnalyzer from "@next/bundle-analyzer";
+
+// Foundation/Speed Audit Z.1 — bundle analyzer wrap.
+// Activated only when ANALYZE=true (via `npm run analyze`). Default
+// build behavior unchanged. Wraps INSIDE Sentry so Sentry's source-map
+// + tunnel config remains the outermost layer.
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === "true",
+});
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -58,7 +67,7 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withSentryConfig(nextConfig, {
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
   // Sentry org and project slugs (update after creating Sentry project)
   org: "vettdre",
   project: "vettdre-nextjs",
