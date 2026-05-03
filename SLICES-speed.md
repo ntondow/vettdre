@@ -462,15 +462,101 @@ prisma.$on("query", (e) => {
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.3".
 - **Branch:** `chore/speed-z3-prisma-slow-query` off `origin/main`.
 
-### Z.4 — Sentry Performance enable + server action timing
-- **Status:** `pending`
-- **Goal:** Enable Sentry Performance (`tracesSampleRate: 0.1`), wrap highest-traffic server actions + lib/data-fusion-engine + lib/nyc-opendata + lib/firecrawl + AI inference + Apollo/PDL with custom spans. Server-side only initially.
-- **Files likely involved:** `sentry.server.config.*` (new or modify), `lib/data-fusion-engine.ts`, `lib/nyc-opendata.ts`, `lib/firecrawl.ts`, server actions in highest-traffic areas.
-- **Smoke contract idea (2):** Sentry init has `tracesSampleRate` from env var; ≥1 custom span exists in `lib/data-fusion-engine.ts` or `lib/nyc-opendata.ts`.
-- **Stop conditions:** If Sentry isn't installed at all, this slice expands beyond Phase Z scope — surface options.
-- **Estimated lines:** ~150.
-- **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.4".
-- **Branch (when started):** `chore/speed-z4-sentry-performance` off `origin/main`.
+### Z.4 — Sentry Performance refinement (RE-SCOPED) — custom spans + DSN inlining
+- **Status:** `in_progress`
+- **Re-scope history (TWO rounds of stale-kickoff corrections — important for future agents):**
+  - **Round 1 (Z.3 discovery, captured in Z.3 plan-of-record retro):** Original Z.4 kickoff in `docs/handoff/site-wide-speed-audit-2026-05-02.md` claimed "enable Sentry Performance." Discovery during Z.3 confirmed Performance is **already** enabled in `sentry.server.config.ts` + `sentry.edge.config.ts` (`tracesSampleRate: 0.1 prod / 1.0 dev`). The handoff doc was updated for Z.4's re-scope after Z.3 shipped.
+  - **Round 2 (Z.4 discovery — this slice, 2026-05-03):** The re-scoped kickoff also missed that **`src/instrumentation-client.ts` exists** as the modern Next.js 15+ file convention for client-side Sentry init. The kickoff said "no `sentry.client.config.ts` — client-side Sentry is unconfigured" — technically true (no `sentry.client.config.ts`) but misleading: client Sentry IS configured via `src/instrumentation-client.ts`, which calls `Sentry.init({ dsn, tracesSampleRate, environment, integrations: [replayIntegration], replaysSessionSampleRate: 0.1, replaysOnErrorSampleRate: 1.0 })`. Adding `sentry.client.config.ts` would COLLIDE with this. Z.4 skips that step entirely.
+- **Goal:** (1) Defensive DSN hardcode in `next.config.ts` `env` block (mirrors Supabase workaround per CLAUDE.md known issue) — cheap insurance against Turbopack edge bundling losing the env var in prod. (2) Add `Sentry.startSpan` wraps on 6 high-traffic server-side surfaces with one canonical doc-comment in `data-fusion-engine.ts` showing the pattern. (3) Update the speed audit handoff doc Z.4 section with the corrected re-scope narrative.
+- **Files in scope:**
+  - `next.config.ts` (+1 line: literal DSN value in `env` block per Q1)
+  - `src/lib/data-fusion-engine.ts` (~10 lines: span wrap on `fetchBuildingIntelligence` + canonical span-pattern doc comment per Q4)
+  - `src/lib/nyc-opendata.ts` (~5 lines: span wrap on `queryNYC` generic SODA fetch helper)
+  - `src/lib/firecrawl.ts` (~5 lines: span wrap on `firecrawlSearch`)
+  - `src/lib/apollo.ts` (~5 lines: span wrap on `apolloEnrichPerson`)
+  - `src/lib/email-parser.ts` (~5 lines: span wrap on Claude `messages.create` inside `parseEmailWithAI`)
+  - `src/lib/leasing-engine.ts` (~5 lines: span wrap on Claude `messages.create` in tool-loop)
+  - `tests/smoke/z4-sentry-performance.test.ts` (new — 4 contracts, ~90 lines)
+  - `docs/handoff/site-wide-speed-audit-2026-05-02.md` (~15 lines: Z.4 section update with re-scope narrative)
+- **Smoke contract regex pins (4):**
+  1. **C1 — client-side Sentry init exists:** `src/instrumentation-client.ts` exists and matches `/Sentry\.init\(/`. (Replaces the kickoff's "sentry.client.config.ts exists" pin — corrected to the actual modern file convention.)
+  2. **C2 — `next.config.ts` includes `NEXT_PUBLIC_SENTRY_DSN` in its `env` block:** matches `/NEXT_PUBLIC_SENTRY_DSN:/`.
+  3. **C3 — ≥6 source files contain `Sentry.startSpan` calls:** counted across the named lib/ files via filesystem scan.
+  4. **C4 — no PII captured in span data:** scan all 6 modified lib files; ensure no `Sentry.startSpan` call has `data:` containing keys `params`, `body`, or `request`. Pin via regex: `/Sentry\.startSpan\([^)]*data:\s*\{[^}]*(params|body|request)/` must NOT match.
+- **Estimated lines:** ~50 code + ~90 smoke + ~110 plan-of-record + ~15 handoff doc + ~30 follow-up stub = ~295. **Slightly above 280 ceiling — variance approved by Nathan in Q5 ("exactly 6 spans, anything above is a follow-up slice").** Variance lives in the plan-of-record + handoff-doc edits, both of which are documentation. Code+smoke total is ~140 — well under budget.
+
+## Plan of record
+
+**Four-commit choreography (one PR):**
+
+1. **`chore(slices): flip Z.3 done with PR #54 outcome line`** — cross-slice flip per documented pattern. Verbatim outcome from kickoff.
+
+2. **`chore(speed): append Z.4 plan-of-record + handoff doc Z.4 re-scope + file z4-followup-verify-prod-dsn-inlining`** — this commit. Append plan-of-record; flip Z.4 `pending` → `in_progress`; capture two stale-kickoff facts in retro candidates; update `docs/handoff/site-wide-speed-audit-2026-05-02.md` Z.4 section with corrected re-scope narrative; file new Phase 5 stub for prod DSN verification.
+
+3. **`feat(speed): Sentry Performance refinement — DSN inlining + 6 custom spans (Foundation Z.4)`** — implementation. Hardcode DSN in `next.config.ts` env block; add `Sentry.startSpan` wraps on 6 surfaces; canonical pattern doc-comment in `data-fusion-engine.ts`; ship 4-contract smoke test.
+
+4. **`chore(slices): mark Z.4 awaiting_review`** — flip Z.4 `in_progress` → `awaiting_review`. Z.4's `done` flip lands in Z.5's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5).
+
+**DSN hardcode shape (per Q1 — match Supabase workaround pattern):**
+
+```ts
+env: {
+  NEXT_PUBLIC_SUPABASE_URL: "https://...",  // existing
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: "...",      // existing
+  NEXT_PUBLIC_APP_URL: "https://app.vettdre.com",  // existing
+  NEXT_PUBLIC_SENTRY_DSN: "https://...@...ingest.us.sentry.io/...",  // NEW
+}
+```
+
+Sentry DSNs are **public write-only keys** designed for client-bundle exposure (per Q1) — same security category as the already-hardcoded `NEXT_PUBLIC_SUPABASE_ANON_KEY`. Hardcoding the literal value (not `process.env.NEXT_PUBLIC_SENTRY_DSN`) is what makes edge inlining reliable per CLAUDE.md known issue.
+
+**Span pattern (per Q4 — canonical doc-comment in data-fusion-engine.ts):**
+
+```ts
+// Foundation/Speed Audit Z.4 — Sentry custom span pattern reference.
+//
+// Wrap any meaningful boundary (NYC API call, AI inference, external
+// HTTP fetch) in Sentry.startSpan so traces show per-call timing. The
+// 6 surfaces wrapped in this slice (data-fusion-engine,
+// nyc-opendata, firecrawl, apollo, email-parser, leasing-engine) are
+// the canonical examples; future slices can add more by copying the
+// shape below.
+//
+// Pattern:
+//   import * as Sentry from "@sentry/nextjs";
+//   return Sentry.startSpan(
+//     { name: "<descriptive-name>", op: "<category>.<subcategory>" },
+//     async (span) => {
+//       // your work here; throw normally — Sentry captures errors
+//     },
+//   );
+//
+// PII safety: never put query params, request bodies, or user-provided
+// strings into the span's data field. Span name + op are public-safe;
+// data is not. (Smoke test C4 enforces this.)
+```
+
+**Retro candidates captured (per Nathan, 2026-05-03 — TWO this slice):**
+1. **"Sentry Performance is already enabled"** (already captured in Z.3's plan-of-record retro section; preserved here as the trigger for Z.4's first re-scope).
+2. **"Client-side Sentry was technically configured via `src/instrumentation-client.ts`"** — the re-scoped Z.4 kickoff missed this file. Future agents should grep for **both** `sentry.client.config*` AND `instrumentation-client*` when checking client-side Sentry state. **v2.3 methodology candidate:** discovery instructions for slices touching framework integrations should enumerate ALL file naming conventions for that framework version, not just the legacy ones the kickoff author was familiar with. Expand discovery checklist for Next.js + Sentry slices to include the modern `src/instrumentation*.ts` convention as well as the legacy `sentry.{client,server,edge}.config.ts` root files.
+
+**Open questions for Nathan:** none after pre-approval round (5 questions answered + 2 stale-kickoff facts + 1 v2.3 retro candidate captured).
+
+**Discovery findings:**
+- `sentry.server.config.ts` + `sentry.edge.config.ts` exist and call `Sentry.init({ dsn: process.env.NEXT_PUBLIC_SENTRY_DSN, tracesSampleRate: 0.1 prod / 1.0 dev, environment, ... })`. Performance is on (Z.3 finding, confirmed).
+- `src/instrumentation-client.ts` exists and calls `Sentry.init({ dsn, tracesSampleRate, environment, integrations: [replayIntegration], replaysSessionSampleRate: 0.1, replaysOnErrorSampleRate: 1.0 })` plus exports `onRouterTransitionStart` for App Router instrumentation. **This is the modern client-side Sentry init.**
+- `src/instrumentation.ts` exports `register()` that imports server/edge configs based on `NEXT_RUNTIME`, plus `onRequestError = Sentry.captureRequestError` for App Router error capture.
+- DSN inlining works in DEV — verified by grepping the dev bundle for the literal `3c5724a8` DSN-prefix; found in `Documents_vettdre_src_instrumentation-client_ts_*.js`. Prod-side inlining unverified (cannot reach deployed Chrome console from this environment); filed as `z4-followup-verify-prod-dsn-inlining`.
+- `@sentry/nextjs@^10.42.0` exports `startSpan` from server, edge, AND client builds (verified via `node_modules/@sentry/nextjs/build/types/.../nextSpan.d.ts`). Pattern: `Sentry.startSpan({ name, op }, async (span) => { ... })`.
+- 6 span insertion points verified: `data-fusion-engine.ts:183` (`fetchBuildingIntelligence`), `nyc-opendata.ts:148` (`queryNYC` generic SODA helper), `firecrawl.ts:200` (`firecrawlSearch`), `apollo.ts:75` (`apolloEnrichPerson`), `email-parser.ts:52+` (Claude `messages.create` inside `parseEmailWithAI`), `leasing-engine.ts:808` (Claude `messages.create` inside tool loop).
+
+- **Files:** see Files in scope above.
+- **Success criteria:** new smoke test passes (4 contracts); existing 407/407 vitest suite still green (+4 from this slice → 411); local `npm run build` boots without Sentry-init errors; no PII in any span data field (C4 enforces); local typecheck holds at baseline (≤515 CI canonical); prod DSN-inlining verification deferred to `z4-followup-verify-prod-dsn-inlining`.
+- **Depends on:** PR #54 (Z.3, merged 2026-05-03) — clean baseline.
+- **Requires approval:** Pre-approved by Nathan (5 questions answered + 2 stale-kickoff facts + 1 v2.3 methodology candidate captured).
+- **Outcome:** _filled in at gate-run time. Z.4's `done` flip lands in Z.5's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5)._
+- **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.4" (post this PR's update).
+- **Branch:** `chore/speed-z4-sentry-spans` off `origin/main`.
 
 ### Z.5 — Cloud Run cold start measurement
 - **Status:** `pending`
@@ -590,3 +676,16 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Required input before slicing:** Decision on CI server-boot strategy (use a Cloud Run preview URL? boot ephemeral local + dummy DB? share infra with `z0b-followup-ci-integration`?).
 - **Affected surfaces:** `.github/workflows/ci.yml` (new job), `lighthouserc.cjs` (CI-specific config branch), possibly `package-lock.json`.
 - **Filed:** 2026-05-03 by Nathan (Z.2 shipping, CI wire deferred for Z.0b parity).
+
+### `z4-followup-verify-prod-dsn-inlining`
+- **Status:** Phase 5 backlog
+- **Background:** Z.4 (PR TBD) hardcoded the Sentry DSN literal value in `next.config.ts`'s `env` block as defensive insurance against the Turbopack edge-bundling issue documented in CLAUDE.md (same root cause as the `NEXT_PUBLIC_SUPABASE_*` workaround). In dev, DSN inlining was verified working: grep of the dev bundle found the literal `3c5724a8` DSN prefix in `Documents_vettdre_src_instrumentation-client_ts_*.js`. **Prod-side inlining was NOT verified** because the agent running Z.4 cannot reach the deployed Chrome console.
+- **Why deferred:** Verification requires opening `https://app.vettdre.com` in Chrome post-Z.4-merge and checking DevTools console. Pure access constraint; no code work for this stub if verification passes.
+- **Required input before slicing:** Deployed prod access (Nathan or whoever has the laptop+browser).
+- **Verification steps:**
+  1. After Z.4 merges and the next deploy ships, open `https://app.vettdre.com` in Chrome.
+  2. Open DevTools console; navigate around (login, dashboard, market-intel).
+  3. **If `Invalid Sentry Dsn: $NEXT_PUBLIC_SENTRY_DSN` does NOT appear:** Z.4's hardcode worked. Mark this stub `verified` and close.
+  4. **If the error DOES appear:** the hardcode didn't fix it; investigate alternative inlining mechanism (e.g. webpack `DefinePlugin` config inside `withSentryConfig`, or `instrumentation-client.ts` running before env-var injection completes). File a hot-fix slice based on findings.
+- **Affected surfaces:** purely observational unless step 4 fires; in that case, likely `next.config.ts` (alternative inlining mechanism) or `src/instrumentation-client.ts` (DSN fallback).
+- **Filed:** 2026-05-03 by Nathan (Z.4 shipping, prod verification deferred for environment-access reasons).
