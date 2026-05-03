@@ -928,7 +928,9 @@ Digital document signing workflow for onboarding new clients. Agents create onbo
 ## Agent operating principles for the BMS overhaul loop (added 2026-04-28)
 
 This section governs Claude Code agents working on the BMS overhaul. The slice-list
-is in SLICES.md. The audit + redesign rationale is in `docs/handoff/bms-audit-2026-04-28.md`.
+is in `SLICES-bms.md` (renamed from `SLICES.md` in slice Z.6 of the Foundation/Speed audit;
+top-level `SLICES.md` is now the audit ledger index). The audit + redesign rationale is
+in `docs/handoff/bms-audit-2026-04-28.md`.
 
 ### Core rules
 
@@ -949,8 +951,8 @@ is in SLICES.md. The audit + redesign rationale is in `docs/handoff/bms-audit-20
 4. **Never modify infrastructure files** (`cloudbuild.yaml`, `Dockerfile`, secrets,
    GCP config) without explicit approval in chat.
 5. **Never modify another slice's work.** If your slice exposes a bug in a previous
-   slice, file a follow-up slice in `SLICES.md` and finish your current one.
-6. **Update SLICES.md as you go.** Mark slice status (`pending` → `in_progress` →
+   slice, file a follow-up slice in `SLICES-bms.md` and finish your current one.
+6. **Update `SLICES-bms.md` as you go.** Mark slice status (`pending` → `in_progress` →
    `awaiting_review` → `done`). Add notes if you encountered surprises.
 
 ### Workflow per slice
@@ -961,7 +963,7 @@ integration branches. The `feat/bms-overhaul-2026-q2` style of stacking 16
 slice branches before integration is abandoned — it caused the 2026-04-30 P0
 where a deploy from `main` rolled back all 15 unmerged slices.
 
-1. Read the slice in `SLICES.md`.
+1. Read the slice in `SLICES-bms.md`.
 2. Read the audit doc section it references.
 3. Read the files listed in "files likely involved."
 4. **Propose a plan in chat to Nathan before writing code** if any of these apply:
@@ -981,7 +983,7 @@ where a deploy from `main` rolled back all 15 unmerged slices.
    `fix(scope): description`.
 10. Push. Open PR against `main` with body referencing the slice ID and the
     audit bug IDs it closes.
-11. Mark slice `awaiting_review` in `SLICES.md`.
+11. Mark slice `awaiting_review` in `SLICES-bms.md`.
 12. STOP. Ping Nathan with the PR link. Do not merge. Do not start the next
     slice until the current one is merged.
 13. After merge: locally `git checkout main && git pull` and `git branch -d
@@ -1003,7 +1005,7 @@ Stop and ask Nathan when:
 After completing all slices in a phase:
 1. Run typecheck + test + build once more to confirm clean state.
 2. **Run the lint baseline check.** `npm run lint 2>&1 | grep -cE "^\s+\d+:\d+\s+error"`. Compare to the recorded baseline (see below). If the count grew, identify which slice introduced new lint errors and fix them in that slice before declaring the phase done. The number must equal or be below baseline at every phase gate.
-3. Update `SLICES.md` phase status to `awaiting_review`.
+3. Update `SLICES-bms.md` phase status to `awaiting_review`.
 4. Summarize the phase in chat: PR links, what changed, lint count delta, what to verify.
 5. Ask Nathan: "Phase N complete. Approve to start Phase N+1?"
 6. Wait. Don't start the next phase until told.
@@ -1044,4 +1046,4 @@ Before claiming a baseline number ("typecheck holds at N", "lint at M"), the mea
 - Modify `lib/team-context.ts` (the org-context choke point).
 - Touch any `cloudbuild*`, `Dockerfile*`, `.env*`, or GCP secret config.
 - Force-push, merge to main, deploy.
-- Reorder or remove slices from `SLICES.md`.
+- Reorder or remove slices from `SLICES-bms.md`.

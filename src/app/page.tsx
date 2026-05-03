@@ -33,11 +33,11 @@ export default async function RootPage() {
 
 // Exported for the smoke test — pure function, role string in / path
 // out, no auth or DB. Keep this in sync with the table in slice 1b's
-// proposal (SLICES.md → 1b).
+// proposal (SLICES-bms.md → 1b).
 export function landingForRole(role: string | undefined | null): string {
   switch (role) {
     case "super_admin":
-      // Interim destination — see SLICES.md → 3.Z (Admin Home for
+      // Interim destination — see SLICES-bms.md → 3.Z (Admin Home for
       // super_admin) for the dedicated admin surface that will replace
       // /dashboard for this role.
       return "/dashboard";

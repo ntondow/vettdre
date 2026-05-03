@@ -49,7 +49,7 @@ const FILES_UNDER_TEST = [
 // surfaces, internal helpers, public token-flows, etc.). Add with a comment
 // explaining why. Anything tagged TODO-0c-followup is a real surface that
 // should be threaded — left out to keep the slice scope manageable; track in
-// SLICES.md and tighten in a follow-up commit.
+// SLICES-bms.md and tighten in a follow-up commit.
 const EXEMPT_EXPORTS: Record<string, string[]> = {
   // Pure validator — no DB, no auth.
   "src/app/(dashboard)/brokerage/invoices/actions.ts": ["validateExcelData"],
@@ -103,7 +103,7 @@ const EXEMPT_EXPORTS: Record<string, string[]> = {
   // threaded the read paths (getTransaction, getDealTimeline) used by the
   // transaction detail page. Most write exports still rely on the local helper
   // without forwarding options. Defer to a follow-up commit; tracked in
-  // SLICES.md.
+  // SLICES-bms.md.
   "src/app/(dashboard)/brokerage/transactions/actions.ts": [
     "ensureDefaultTemplates",
     "createTransactionFromSubmission",

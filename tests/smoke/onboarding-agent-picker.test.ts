@@ -61,7 +61,7 @@ describe("Slice 7a — Agent picker on Onboarding form (B-024)", () => {
   });
 
   it("(c) honored manager path: getAgentRosterForOnboarding returns active+pending+invited agents (not just active)", () => {
-    // Roster scope rationale per SLICES.md slice 7a: brokerage admins file
+    // Roster scope rationale per SLICES-bms.md slice 7a: brokerage admins file
     // onboardings on behalf of newly-hired agents BEFORE first login.
     // pending/invited must be in the IN-clause; suspended/terminated must NOT.
     expect(actionsSrc).toMatch(
