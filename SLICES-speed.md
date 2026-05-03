@@ -463,7 +463,7 @@ prisma.$on("query", (e) => {
 - **Branch:** `chore/speed-z3-prisma-slow-query` off `origin/main`.
 
 ### Z.4 — Sentry Performance refinement (RE-SCOPED) — custom spans + DSN inlining
-- **Status:** `in_progress`
+- **Status:** `awaiting_review`
 - **Re-scope history (TWO rounds of stale-kickoff corrections — important for future agents):**
   - **Round 1 (Z.3 discovery, captured in Z.3 plan-of-record retro):** Original Z.4 kickoff in `docs/handoff/site-wide-speed-audit-2026-05-02.md` claimed "enable Sentry Performance." Discovery during Z.3 confirmed Performance is **already** enabled in `sentry.server.config.ts` + `sentry.edge.config.ts` (`tracesSampleRate: 0.1 prod / 1.0 dev`). The handoff doc was updated for Z.4's re-scope after Z.3 shipped.
   - **Round 2 (Z.4 discovery — this slice, 2026-05-03):** The re-scoped kickoff also missed that **`src/instrumentation-client.ts` exists** as the modern Next.js 15+ file convention for client-side Sentry init. The kickoff said "no `sentry.client.config.ts` — client-side Sentry is unconfigured" — technically true (no `sentry.client.config.ts`) but misleading: client Sentry IS configured via `src/instrumentation-client.ts`, which calls `Sentry.init({ dsn, tracesSampleRate, environment, integrations: [replayIntegration], replaysSessionSampleRate: 0.1, replaysOnErrorSampleRate: 1.0 })`. Adding `sentry.client.config.ts` would COLLIDE with this. Z.4 skips that step entirely.
