@@ -463,7 +463,7 @@ prisma.$on("query", (e) => {
 - **Branch:** `chore/speed-z3-prisma-slow-query` off `origin/main`.
 
 ### Z.4 — Sentry Performance refinement (RE-SCOPED) — custom spans + DSN inlining
-- **Status:** `awaiting_review`
+- **Status:** `done`
 - **Re-scope history (TWO rounds of stale-kickoff corrections — important for future agents):**
   - **Round 1 (Z.3 discovery, captured in Z.3 plan-of-record retro):** Original Z.4 kickoff in `docs/handoff/site-wide-speed-audit-2026-05-02.md` claimed "enable Sentry Performance." Discovery during Z.3 confirmed Performance is **already** enabled in `sentry.server.config.ts` + `sentry.edge.config.ts` (`tracesSampleRate: 0.1 prod / 1.0 dev`). The handoff doc was updated for Z.4's re-scope after Z.3 shipped.
   - **Round 2 (Z.4 discovery — this slice, 2026-05-03):** The re-scoped kickoff also missed that **`src/instrumentation-client.ts` exists** as the modern Next.js 15+ file convention for client-side Sentry init. The kickoff said "no `sentry.client.config.ts` — client-side Sentry is unconfigured" — technically true (no `sentry.client.config.ts`) but misleading: client Sentry IS configured via `src/instrumentation-client.ts`, which calls `Sentry.init({ dsn, tracesSampleRate, environment, integrations: [replayIntegration], replaysSessionSampleRate: 0.1, replaysOnErrorSampleRate: 1.0 })`. Adding `sentry.client.config.ts` would COLLIDE with this. Z.4 skips that step entirely.
@@ -554,7 +554,7 @@ Sentry DSNs are **public write-only keys** designed for client-bundle exposure (
 - **Success criteria:** new smoke test passes (4 contracts); existing 407/407 vitest suite still green (+4 from this slice → 411); local `npm run build` boots without Sentry-init errors; no PII in any span data field (C4 enforces); local typecheck holds at baseline (≤515 CI canonical); prod DSN-inlining verification deferred to `z4-followup-verify-prod-dsn-inlining`.
 - **Depends on:** PR #54 (Z.3, merged 2026-05-03) — clean baseline.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + 2 stale-kickoff facts + 1 v2.3 methodology candidate captured).
-- **Outcome:** _filled in at gate-run time. Z.4's `done` flip lands in Z.5's PR per cross-slice flip pattern (continuing Z.6 → Z.0a → Z.0b → Z.1 → Z.2 → Z.3 → Z.4 → Z.5)._
+- **Outcome:** Shipped via PR #55 (merged 2026-05-03). Sentry Performance was already enabled (Z.3 finding); Z.4 re-scoped to (1) skip `sentry.client.config.ts` (collides with `src/instrumentation-client.ts` modern Next.js 15+ pattern), (2) defensive DSN literal hardcode in `next.config.ts` mirroring Supabase workaround, (3) 6 custom spans across 6 hot surfaces (data-fusion-engine, nyc-opendata, firecrawl, apollo, email-parser, leasing-engine). `z4-followup-verify-prod-dsn-inlining` filed for Nathan's post-merge prod-side verification (deployed Chrome console check). v2.3 methodology candidate captured: framework-integration discovery should enumerate ALL file naming conventions (e.g. both `sentry.{client,server,edge}.config.ts` AND `src/instrumentation*.ts`).
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.4" (post this PR's update).
 - **Branch:** `chore/speed-z4-sentry-spans` off `origin/main`.
 
