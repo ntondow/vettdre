@@ -89,7 +89,7 @@ baselines.
 ---
 
 ### Z.0a — GitHub Actions CI skeleton
-- **Status:** `awaiting_review` (PR #50)
+- **Status:** `done` (PR #50, merged 2026-05-03)
 - **Goal:** Establish `.github/workflows/` with PR-blocking jobs for typecheck, lint, test, build, and smoke contracts. Replaces the v2.1.1 interim manual-checklist pattern with real CI per methodology v2.2 §"Required infrastructure".
 - **Files in scope:**
   - `.github/workflows/ci.yml` (new — single workflow, 4 parallel jobs)
@@ -153,7 +153,7 @@ baselines.
 - **Success criteria:** new smoke test passes (3 contracts); existing 377/377 vitest suite still green; `.github/workflows/ci.yml` exists; first PR run goes green on all 4 jobs **after the 285→515 amendment** (the verification artifact for Z.0a per kickoff).
 - **Depends on:** PR #49 (Z.6, merged 2026-05-03) — SLICES-speed.md must exist for the plan-of-record append.
 - **Requires approval:** Pre-approved by Nathan (5 questions answered + variance OK at 170 lines well under 280-line ceiling).
-- **Outcome:** _filled in at gate-run time. Z.0a's `done` flip lands in Z.0b's PR per cross-slice flip pattern (continuing the Z.6 → Z.0a flow)._
+- **Outcome:** Shipped via PR #50 (merged 2026-05-03). 4-job CI live on `origin/main` with branch protection. First CI run caught typecheck baseline drift (285 → 515 re-anchored to CI canonical) — methodology v2.2 §verified-claim audit pattern caught its first drift. See `z0a-followup-typecheck-gap-investigation`.
 - **Kickoff prompt:** `docs/handoff/site-wide-speed-audit-2026-05-02.md` §"Z.0a".
 - **Branch:** `chore/speed-z0a-gh-actions` off `origin/main`.
 
