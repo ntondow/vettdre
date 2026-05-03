@@ -38,7 +38,7 @@ plan, methodology version pin, CI harness, e2e harness, observability
 baselines.
 
 ### Z.6 — Per-audit ledger split + SLICES-speed.md bootstrap
-- **Status:** `in_progress`
+- **Status:** `awaiting_review` (PR #49)
 - **Goal:** Split top-level `SLICES.md` into per-audit ledgers (`SLICES-bms.md` + `SLICES-speed.md`); rebuild top-level `SLICES.md` as audit ledger index; pre-file 7 skeletal Phase Z entries (Z.0a, Z.0b, Z.1-Z.5) so the next slice (Z.0a) has a real plan-of-record location. **Re-ordered to ship FIRST in Phase Z** (kickoff doc lists this last as Z.6, but every other Phase Z slice references SLICES-speed.md, so this must exist before they ship).
 - **Files in scope:**
   - `SLICES.md` (rename → `SLICES-bms.md` via `git mv`; recreate as new index)
