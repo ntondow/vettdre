@@ -1,6 +1,8 @@
 // NYC Open Data (Socrata SODA API) — Free, no auth required
 // Docs: https://dev.socrata.com/foundry/data.cityofnewyork.us/
 
+import * as Sentry from "@sentry/nextjs";
+
 const BASE = "https://data.cityofnewyork.us/resource";
 
 // ACRIS Real Property Sales
@@ -91,6 +93,9 @@ export interface Violation {
 }
 
 export async function searchSalesHistory(address: string, borough: string, zip?: string): Promise<SalesRecord[]> {
+ return Sentry.startSpan(
+  { name: "nyc-opendata.searchSalesHistory", op: "http.client.nyc-opendata" },
+  async () => {
   // Parse house number from address
   const parts = address.trim().split(/\s+/);
   const houseNumber = parts[0];
@@ -140,6 +145,8 @@ export async function searchSalesHistory(address: string, borough: string, zip?:
     console.error("Sales search error:", err);
     return [];
   }
+  },
+ );
 }
 
 export async function searchPermits(houseNumber: string, streetName: string, borough: string): Promise<Permit[]> {
