@@ -96,7 +96,12 @@ export function SkeletonSection({ title, icon, children, className = "" }: {
   children: ReactNode;
   className?: string;
 }) {
-  const IconComponent = typeof icon === "function" ? icon : null;
+  // Lucide icons are forwardRef objects ({$$typeof, render, displayName}), not
+  // plain functions. A function-only typecheck mis-classifies them and falls
+  // through to a string-render branch, dropping the forwardRef object into
+  // ReactNode position → React error #31. Treat anything non-string as a
+  // component (covers forwardRef, memo, lazy, plain function components).
+  const IconComponent = icon && typeof icon !== "string" ? icon : null;
   return (
     <div className={`bg-white rounded-xl border border-slate-200 ${className}`}>
       <div className="flex items-center justify-between p-5">
