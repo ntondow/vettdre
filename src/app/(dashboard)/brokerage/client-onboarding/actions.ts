@@ -2,6 +2,7 @@
 
 import * as Sentry from "@sentry/nextjs";
 import prisma from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 import { getCurrentOrgContext } from "@/lib/auth-context";
 import { hasPermission } from "@/lib/bms-permissions";
 import { logSubmissionAction, logInvoiceAction, logTransactionAction } from "@/lib/bms-audit";
