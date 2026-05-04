@@ -96,3 +96,4 @@ docs/handoff/*
 !docs/handoff/speed-2026-q2-baselines.md
 !docs/handoff/archive/
 !docs/handoff/archive/**
+!docs/handoff/speed-2026-q2-*.md
