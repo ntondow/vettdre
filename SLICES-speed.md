@@ -737,6 +737,59 @@ hot pages).
 
 _Empty until Phase 0 reports land + Nathan assigns phase scopes._
 
+### Phase 1 hot-fixes
+
+P0 surfacings caught **during** the Phase 0 swarm that block other Phase 0
+agents OR break a core production flow. Hot-fixes ship immediately as
+single-slice PRs off `origin/main`; do NOT batch with Phase 1 area work
+that hasn't been scoped yet. Each hot-fix closes a specific Phase 0
+audit-doc finding.
+
+### `phase-1-hotfix-react31-skeleton-icon` — React error #31 crash on Market Intel "Full Profile"
+- **Status:** `in_progress`
+- **Closes:** Phase 0 finding F-2.1 from `docs/handoff/speed-2026-q2-market-intel-audit-2026-05-03.md` (PR #58).
+- **Goal:** Fix the React error #31 that bombs the Market Intel route to its error boundary when a user opens a building profile from search. Same render path is reused by the Terminal right panel per CLAUDE.md, so this fix unblocks both surfaces.
+- **Root cause:** `src/components/ui/skeleton-shimmer.tsx:99` detects component-vs-emoji icons via `typeof icon === "function"`. Lucide icons are `React.forwardRef(...)` objects (`{$$typeof, render, displayName}`), not functions. The check returns `false` for Lucide icons; the dual-mode branch falls through to `<span>{icon as string}</span>`; React tries to render the forwardRef object as a child → React #31. Trigger path: `BuildingProfile` mounts with `loading=true` (no `plutoData` prop from search) → renders `BuildingProfileSkeleton` → which has 3 `<SkeletonSection icon={Lucide}>` callsites added by commit `6bfa7cd` (slice 9-ext, 2026-05-01) → crash. Verified by reading `node_modules/lucide-react/dist/esm/createLucideIcon.js` (v0.564.0): `forwardRef(({className, ...props}, ref) => createElement(Icon, ...))`.
+- **Files in scope:**
+  - `src/components/ui/skeleton-shimmer.tsx` (1-line fix + comment explaining the forwardRef trap)
+  - `tests/smoke/hotfix-building-profile-react31.test.tsx` (new — 3 Vitest contracts)
+  - `SLICES-speed.md` (this entry + retro candidate below + rewalk stub at end of Phase 5)
+- **Smoke contract pins (3) — pin the FIX SURFACE per methodology v2.2:**
+  1. **C1 — Lucide forwardRef render no-throw.** Render `<SkeletonSection icon={BarChart3}>` via `@testing-library/react`; assert the `lucide-bar-chart-3` class lands in the DOM. Reproduces the bug pre-fix; verifies post-fix.
+  2. **C2 — Emoji string regression-protect.** Render `<SkeletonSection icon="📊">`; assert the emoji lands in the DOM. Defends `dashboard/loading.tsx` and `leasing/loading.tsx` callers (5+ emoji-string usage sites still in production).
+  3. **C3 — Bug-pattern regex pin.** Read `skeleton-shimmer.tsx`; assert it does NOT contain `/typeof\s+icon\s*===\s*["']function["']/`. Defends against accidental revert.
+- **Estimated lines:** ~6 source change (1 functional + 5-line comment) + ~70 test file + ~80 ledger = ~156. Well under 50-line cap on production code.
+- **Branch:** `fix/hotfix-building-profile-react31` off `origin/main`.
+- **Verification (post-merge + post-deploy):** Nathan re-walks Market Intel ("350 Park Ave" → Full Profile → all 6 panels render) AND Terminal (feed → click event → right-panel BuildingProfile renders). Screenshots pasted in PR comment. Close `phase-0-followup-market-intel-rewalk` after both confirmed.
+
+#### Plan of record
+
+**One-commit choreography (one PR):**
+
+1. **`fix(market-intel): hot-fix React #31 crash in building profile (Phase 0 finding F-2.1)`** — single commit. Apply the 1-line `skeleton-shimmer.tsx` fix; add 3-contract Vitest smoke at `tests/smoke/hotfix-building-profile-react31.test.tsx`; append this plan-of-record + retro candidate + rewalk stub to `SLICES-speed.md`.
+
+**Q(a) — Reproduction strategy.** Skipped dev-server reproduction; relied on deductive root-cause chain (Lucide source verified, `typeof` semantics deterministic, callsite traced from BuildingProfile loading-state → Skeleton → SkeletonSection). The Vitest C1 contract IS the reproduction — it fails pre-fix and passes post-fix, more durable than a one-time manual walk.
+
+**Q(b) — Contract scope DEVIATION from F-2.1 brief.** Brief specified 3 contracts targeting `building-profile.tsx` (regex against `\{[A-Z]…\}`). Replaced with 3 contracts targeting the actual fix surface (`skeleton-shimmer.tsx`). Per methodology v2.2 §"Verified-claim audit pattern": contracts must pin the actual fix surface, not where the bug was first observed. The brief's heuristic regex would have given false-sense-of-safety since the bug isn't in `building-profile.tsx`.
+
+**Q(c) — Slice 9-ext (emoji→Lucide migration) is NOT reverted.** The migration intent is correct; the bug is in the shared utility consumed by it. Fix the utility once; 9-ext's callsite changes stand.
+
+**Q(d) — v2.3 retro candidate captured.** See "Retro candidate for methodology v2.3" below.
+
+**Why this didn't surface in CI:** Slice 9-ext (commit `6bfa7cd`, 2026-05-01) shipped with all three signal gates green — `npx tsc --noEmit` filtered baseline matched (288), `npx eslint` zero new errors on touched files, `npm run build` exit 0. The runtime crash hid because no test exercised the loading-state render path; `SkeletonSection` was type-correct (the `string | LucideIcon` union accepts both arms) but runtime-incorrect (the `typeof === "function"` check is wrong for the LucideIcon arm). All three CI gates are necessary but not sufficient for components that mount only in conditional render paths.
+
+**Retro candidate for methodology v2.3:**
+
+> **"Type-correct + lint-clean + unit-test-clean does NOT mean runtime-safe for components mounted in conditional render paths."**
+>
+> **Worked example:** Slice 9-ext (PR #46, 2026-05-01) added Lucide icon usage to `BuildingProfileSkeleton` — a component that renders only when `BuildingProfile.loading === true`. The migration shipped with all three signal gates green. The runtime React #31 crash hid until production users hit the loading state on the search → Full Profile flow. Phase 0 Market Intel audit (PR #58, 2026-05-03) caught it. Hot-fix shipped as `phase-1-hotfix-react31-skeleton-icon` (this slice, PR #TBD).
+>
+> **Proposed v2.3 rule:** When a slice adds a component to (or modifies the rendered output of) a skeleton, error boundary, fallback, or any other component mounted only on a conditional render path, the slice MUST ship a Vitest *render* contract — `render(<TheComponent ... />)` with `@testing-library/react`, asserting no throw. A regex contract is insufficient for these surfaces because the bug shape is rendering-time, not source-text-time. Existing regex-against-source contracts catch source-shape regressions (e.g. "import was removed"); render contracts catch runtime contracts (e.g. "the component still renders without throwing").
+>
+> **Heuristic for "conditional render path":** the component is unreachable when `loading === false`, OR when the user is on the happy path, OR when no error has been thrown, OR when the user lacks a feature flag, OR when the data fetch returned non-null. Any of those = conditional render path = render contract required.
+>
+> **Why not blanket-mandate render contracts on every slice:** render contracts are 5-10x slower than regex contracts (jsdom/happy-dom + React reconciler vs. `readFileSync` + `match`). Mandating them everywhere bloats the test suite and slows the CI loop. The conditional-render heuristic targets the slice scope where regex contracts genuinely don't capture the bug shape.
+
 ---
 
 ## Phase 5 — Polish backlog
@@ -845,3 +898,20 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Affected surfaces:** `src/app/api/health/route.ts` (remove the `Sentry.startSpan` wrap; keep the JSON payload intact). Smoke test C2 (payload shape) keeps passing; no smoke contract pins the span wrap explicitly so removing it is safe.
 - **Decision when slicing:** consider whether to drop the span entirely or replace with `Sentry.setTag("health-ping", true)` so keepalive pings can be filtered out at the Sentry dashboard level — preserves visibility for non-keepalive traffic (e.g. external monitoring tools, manual probes) while suppressing noise.
 - **Filed:** 2026-05-03 by Nathan (Z.5 shipping, deliberate deferral for when keepalive lands).
+
+### `phase-0-followup-market-intel-rewalk`
+- **Status:** Phase 5 backlog (hold until `phase-1-hotfix-react31-skeleton-icon` ships AND deploys to prod)
+- **Background:** Phase 0 Market Intel audit (PR #58, 2026-05-03) hit a P0 React #31 crash on the very first surface walked ("350 Park Ave" → Full Profile). The audit captured F-2.1 as the P0 finding and stopped the walk-through there to keep audit scope atomic. Several surfaces planned in the audit kickoff were NOT walked because BuildingProfile was unrenderable: (1) cross-tenant prospecting flow (save building → prospecting list → CSV export), (2) mobile breakpoint behavior on the slide-over (`md:` → mobile bottom-sheet variant), (3) axe-core a11y scan of building profile + neighborhood filter, (4) full BBL sample (kickoff aimed for ~10 BBLs across 5 boroughs to surface borough-specific NYC Open Data quirks; only 1 BBL was tested before the crash blocked the walk).
+- **Trigger:** `phase-1-hotfix-react31-skeleton-icon` merges + deploys to prod + Nathan re-walks the original Phase 0 surface ("350 Park Ave" → Full Profile + Terminal feed → event → right panel) AND confirms both render. Then this stub is sliceable.
+- **Why deferred:** The hot-fix is one-line scope; bundling 4 deferred audit surfaces into the same slice would (a) blow the 50-line cap, (b) couple a urgent prod-fix to non-urgent audit follow-up, (c) prevent the hot-fix from shipping today. Per methodology v2.2 §"P0 hot-fixes ship single-purpose."
+- **Required input before slicing:**
+  - Confirm the hot-fix actually fixed Market Intel + Terminal in prod (not just dev). Screenshots from Nathan's re-walk in the hot-fix PR comment.
+  - Decide whether to ship as 1 slice (all 4 surfaces) or 4 slices. Likely 1 slice since each surface is a single audit walk-through, not an implementation. Final form: an updated audit doc commit + Phase 1 fix-list if surfaces uncover new findings.
+  - Decide whether to use vertical-slice mode (per Phase 0 prep template change) or revert to dimension-themed mode for the a11y axe scan specifically (axe-core output is dimension-pure).
+- **Affected surfaces:** `docs/handoff/speed-2026-q2-market-intel-audit-2026-05-03.md` (append re-walk findings as F-2.2+ entries), potentially `SLICES-speed.md` (file new Phase 1 area slices if findings warrant), `tests/smoke/` (if new contracts emerge from re-walk).
+- **Scope guardrails:**
+  - Cross-tenant prospecting check should test multi-tenant isolation: log in as Org A, save a building to a prospecting list; switch to Org B (separate browser session), confirm the prospecting list and the building are NOT visible.
+  - Mobile breakpoint check should resize browser to 375x667 (iPhone SE) and 768x1024 (iPad) and walk the same 6 panels; capture any layout breaks or unreachable controls.
+  - Axe-core scan should run `npx @axe-core/cli https://app.vettdre.com/market-intel?tab=search` after logging in; capture critical + serious findings only (skip minor/moderate for this audit pass — would balloon the scope).
+  - Full BBL sample: pre-pick 10 BBLs (2 per borough) before walking, so the walk is deterministic and reproducible. Use a mix of Class 1 (single-family), Class 2 (multifamily), Class 4 (commercial) to surface class-specific code paths.
+- **Filed:** 2026-05-03 by Nathan (during Phase 0 Market Intel audit; F-2.1 hot-fix scope-cut).

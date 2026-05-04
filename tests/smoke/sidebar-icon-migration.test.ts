@@ -441,11 +441,15 @@ describe("Slice 9-ext — skeleton-shimmer.tsx SkeletonSection accepts both icon
   });
 
   it("renders both branches: lucide component AND legacy string", () => {
-    // Function-typeof check distinguishes the lucide branch (component)
-    // from the string branch — locking in the dual-mode render so a
-    // future "simplify to one or the other" edit fails the contract
-    // until the leasing-skeleton caller also migrates.
-    expect(skeletonShimmerSrc).toMatch(/typeof\s+icon\s*===\s*"function"/);
+    // Non-string check distinguishes the component branch from the legacy
+    // string branch — locking in the dual-mode render so a future
+    // "simplify to one or the other" edit fails the contract until the
+    // leasing-skeleton caller also migrates. Updated 2026-05-03 by the
+    // phase-1-hotfix-react31-skeleton-icon slice: the original
+    // `typeof icon === "function"` predicate mis-classified Lucide's
+    // forwardRef objects (whose typeof is "object") and triggered React
+    // error #31 in production. Now `icon && typeof icon !== "string"`.
+    expect(skeletonShimmerSrc).toMatch(/icon\s*&&\s*typeof\s+icon\s*!==\s*["']string["']/);
     expect(skeletonShimmerSrc).toMatch(/<IconComponent\s+className=/);
     expect(skeletonShimmerSrc).toMatch(/<span\s+className="text-lg">\{icon\s+as\s+string\}</);
   });
