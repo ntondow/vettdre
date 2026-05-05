@@ -1027,6 +1027,17 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Out of scope:** Notification toggle behavior, push-notification subscription flow.
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-6).
 
+### `phase-0-followup-bms-stat-delta-color-semantics` (P3)
+- **Status:** Phase 5 backlog
+- **Background:** BMS dashboard stat-row delta arrows use red color uniformly for "↗ new" indicators regardless of whether "new" is good (revenue, closed deals) or neutral (invoices, expenses). E.g., PENDING INVOICES with "$1,485 ↗ new" in red could read as alarming when actually "you're owed more money than last period." Surfaced 2026-05-05 during Phase 0 walk #8 (admin persona lens).
+- **Discovery instructions:** Read `src/app/(dashboard)/brokerage/dashboard/page.tsx` (or equivalent) to find the stat-card component. Inspect color logic — likely a single `<DeltaIndicator value={delta} />` that maps positive deltas to green and negative to red without context awareness. Check whether stat cards have a per-card "good_direction" prop or similar.
+- **Hypotheses to confirm/refute:** (a) stat-card component is generic and applies uniform color logic; (b) component already has variant support but dashboard wires them all the same way.
+- **Why deferred:** Phase 0 finding (P3) — Phase 1 work. Pure UX polish, no data layer change.
+- **Required input before slicing:** Decide color semantics per card: HOUSE REVENUE up=green, AGENT PAYOUTS up=neutral (cost), PENDING INVOICES up=neutral or context-dependent (good if "you're owed more" / bad if "uncollected"), CLOSED DEALS up=green.
+- **Affected surfaces:** likely `src/components/bms/stat-card.tsx` (or wherever the delta indicator lives), `src/app/(dashboard)/brokerage/dashboard/page.tsx` for wiring per-card semantics.
+- **Out of scope:** Other surfaces using the same component (would inherit the fix automatically; no scope-creep needed).
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-6).
+
 ---
 
 ## Phase 1 enhancement candidates
@@ -1156,3 +1167,48 @@ Enhancement opportunities surfaced by Phase 0 persona-lens walks. Different shap
 - **Impact:** Common owner workflow. Currently absent or buried.
 - **Effort:** S (~3-5 days — config flag + auto-reply behavior)
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A8).
+
+### `enhancement-bms-needs-your-attention-card` (B-A1, P1)
+- **Persona:** Brokerage admin / owner
+- **JTBD:** "Friday afternoon weekly review — spot what needs my attention."
+- **Current friction:** Dashboard answers "what happened" (revenue, payouts, invoices, closed). Doesn't answer "what should I do." JTBD specifically says "spot agents who need help and money I'm owed" — that's proactive triage, not retrospective metrics.
+- **Proposed enhancement:** Top-of-dashboard card surfacing 3-5 admin actions algorithmically: 🚨 "Marcus Chen is 40% behind quarterly goal — coach or reassign"; 💰 "$3,200 invoice to Acme Holdings is 14 days overdue — send reminder"; ⚠️ "Sarah's NY License expires May 15 (10 days) — renewal needed"; 📞 "5 deal submissions awaiting your review"; 📅 "3 transactions stuck in 'Under Contract' >30 days". Each row has a 1-click action button (Send reminder / Coach / View / Renew).
+- **Impact:** Direct JTBD. Transforms dashboard from retrospective to action-oriented. The most leverage on this whole walk.
+- **Effort:** M (~2-3 weeks — query layer + rules engine + UI)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A1).
+
+### `enhancement-bms-top-performers-vs-needs-coaching` (B-A2, P1)
+- **Persona:** Brokerage admin / owner
+- **JTBD:** "Friday afternoon weekly review — spot what needs my attention."
+- **Current friction:** Dashboard has Top performers card (in skeleton state during walk — no data). Top performers is half the picture; admin equally needs to see who's UNDERPERFORMING relative to their goal trajectory or peer benchmark.
+- **Proposed enhancement:** Two-column card: "Top performers" (top 3 by revenue/closed deals/etc.) + "Needs coaching" (bottom 3 relative to their goal — not absolute, since absolute would always show new agents). Each row clickable to agent detail.
+- **Impact:** Admin can run a 2-minute check across both ends of the bell curve weekly. Currently they'd have to navigate to Reports → Agent Production and manually rank.
+- **Effort:** S (~3-5 days — extends existing Top performers component)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A2).
+
+### `enhancement-bms-pending-invoices-quick-reminder` (B-A3, P2)
+- **Persona:** Brokerage admin / owner
+- **JTBD:** "Friday afternoon weekly review — spot what needs my attention."
+- **Current friction:** Dashboard PENDING INVOICES shows total ($1,485) with delta. Admin's next question is always "who owes me what, when did I send it, when is it due." Currently they click into Invoices index, scroll, sort. Multiple steps.
+- **Proposed enhancement:** Hover/expand on the PENDING INVOICES card → show top 3 oldest invoices with: agent / client / amount / days outstanding / "Send reminder" button. Drill-through to full invoice on click. Admin can clear stale invoices in 30 seconds without leaving the dashboard.
+- **Impact:** Direct JTBD ("money I'm owed"). Reduces clicks for the highest-frequency admin action.
+- **Effort:** S (~3-5 days — card variant + reminder action)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A3).
+
+### `enhancement-bms-forward-revenue-forecast` (B-A4, P2)
+- **Persona:** Brokerage admin / owner
+- **JTBD:** "Friday afternoon weekly review — spot what needs my attention."
+- **Current friction:** Stats are all retrospective (what closed, what's pending, vs prior 30d). Admin doing weekly review wants forward visibility: "$X expected to close this month based on stage probabilities." Currently absent.
+- **Proposed enhancement:** Add a "Pipeline forecast" card to dashboard showing: total pipeline $ (deals in any stage), weighted forecast $ (each deal × stage probability), expected-close-this-month $. Use stage-conversion data from `Transaction.stage` history to compute probabilities per stage.
+- **Impact:** Lets admin set realistic monthly targets + spot stalled deals (deals weighted at $0 = stuck). Foundation for any goal-tracking feature.
+- **Effort:** M (~2-3 weeks — needs historical stage-conversion calculation; no UI lift on its own)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A4).
+
+### `enhancement-bms-agent-goals-on-roster` (B-A5, P3)
+- **Persona:** Brokerage admin / owner
+- **JTBD:** "Friday afternoon weekly review — spot what needs my attention."
+- **Current friction:** Agent roster (`/brokerage/agents`) shows lifecycle filter chips but no goal-tracking column on the table itself. Admin has to navigate to Reports → Agent Production to see per-agent goal progress. Two-screen task.
+- **Proposed enhancement:** Add a "Goal progress" column to the agent roster table: each row shows agent's current period progress as a percentage bar (e.g., "Q2: 67% — on track" or "Q2: 32% — at risk"). Color-coded (green/yellow/red). Click row → agent detail with full goal breakdown.
+- **Impact:** One-screen agent management. Combines roster + performance into the surface admins use most.
+- **Effort:** M (~1-2 weeks — leverages existing AgentGoal model, adds calculation + column)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A5).
