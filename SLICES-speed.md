@@ -949,3 +949,14 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Affected surfaces:** `src/app/api/intel/buildings/[bbl]/route.ts`, `src/app/api/intel/buildings/[bbl]/signals/route.ts`, BuildingProfile component (display "Limited data" badge when `coverage === "partial"`), possibly Sentry filter rules (suppress non-error 404s).
 - **Out of scope:** Retroactively backfilling enrichment for sparse BBLs — separate Phase 1+ initiative driven by Phase Z's enrichment pipeline metrics.
 - **Filed:** 2026-05-04 by Cowork during Phase 0 Terminal audit (`docs/handoff/speed-2026-q2-terminal-audit-2026-05-04.md`, finding T-22).
+
+### `phase-0-followup-underwriting-pipeline-modeler-metric-divergence` (P1)
+- **Status:** Phase 5 backlog
+- **Background:** Pipeline kanban displays IRR/Cap/Price metrics that diverge from the same deal's Modeler workspace metrics (e.g., 258 Bedford Avenue: kanban 58.6% IRR vs workspace 94.40% IRR; kanban $3.9M PP vs workspace $3,851,889). Cap rates align within rounding. Likely root cause: kanban shows a snapshot from screening-stage AI assumptions while workspace recomputes on load with live FRED rates and re-run AI assumptions. User can't tell which surface is "true" for "should I open this deal?" decisions.
+- **Discovery instructions:** Read `lib/ai-assumptions.ts` to understand when AI assumptions run (deal create vs every workspace load). Read pipeline kanban card data source (`app/(dashboard)/deals/pipeline/*` and the relevant server action) to see whether kanban hydrates from cached `Deal.computedMetrics` or recomputes. Compare with workspace `app/(dashboard)/deals/new/page.tsx` Modeler render path. Check `DealAnalysis` schema for which fields are stored vs computed.
+- **Hypotheses to confirm/refute:** (a) AI-assumptions runs every workspace load with non-deterministic output; (b) FRED rates fetched at workspace-load drift from kanban-cached rates; (c) kanban shows screening-stage values that are intentionally frozen but the freeze isn't documented.
+- **Why deferred:** Phase 0 finding (P1) — Phase 1 work. Resolution requires deciding whether kanban is "snapshot view" or "live view," then enforcing consistently. Probably the right answer is snapshot-with-timestamp, but needs product call.
+- **Required input before slicing:** Decide: snapshot-and-display-timestamp vs recompute-everywhere-on-render. Default lean: snapshot at screening, display "as of <date>" on kanban, link to "Refresh" action.
+- **Affected surfaces:** `lib/ai-assumptions.ts`, `app/(dashboard)/deals/pipeline/*`, `app/(dashboard)/deals/new/page.tsx`, possibly `prisma/schema.prisma` (`DealAnalysis.metricsSnapshot` JSON column).
+- **Out of scope:** Cap-rate engine accuracy; FRED rate fetch logic.
+- **Filed:** 2026-05-04 by Cowork during Phase 0 Underwriting audit (`docs/handoff/speed-2026-q2-underwriting-audit-2026-05-04.md`, finding U-14).
