@@ -1005,6 +1005,28 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Out of scope:** Migrating individual `Deal` rows to `Transaction` schema (separate Phase 1+ data migration if needed); UX redesign of the resulting BMS-only experience (separate UX walk after migration is finalized).
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #5 (`docs/handoff/speed-2026-q2-calendar-properties-audit-2026-05-05.md`, finding Prop-11; cross-references walk #4 P-1).
 
+### `phase-0-followup-leasing-todays-usage-card-relocation` (P2)
+- **Status:** Phase 5 backlog
+- **Background:** `/leasing` landing page surfaces a "Today's Usage" card showing tier-quota metering (X/25 msgs, 0 sent | 0 received, resets-in countdown). For the owner persona doing a weekly pulse-check, this is product-tier billing noise on a business-performance surface. Surfaced 2026-05-05 during Phase 0 walk #7 with owner persona lens.
+- **Discovery instructions:** Read `src/app/(dashboard)/leasing/page.tsx` to find the "Today's Usage" component. Check if it conditionally renders based on tier or always renders. Decide: move to Settings → Billing, or collapse to a footer one-liner, or render only when nearing the cap (>80%).
+- **Hypotheses to confirm/refute:** (a) component was added during initial leasing-limits implementation as visible reassurance for tier-aware product mgmt; (b) target audience for this card is the operator/admin, not the owner persona — needs persona-aware rendering.
+- **Why deferred:** Phase 0 finding (P2) — Phase 1 work. Pure UX move; no data layer change.
+- **Required input before slicing:** Decide between three options above. Default lean: relocate to Settings → Plan limits with a small "X% of daily quota used" footer line on /leasing.
+- **Affected surfaces:** `src/app/(dashboard)/leasing/page.tsx` (remove or collapse), possibly `src/app/(dashboard)/settings/billing/page.tsx` (add tier-quota detail), possibly a new shared component for the footer line.
+- **Out of scope:** Tier-quota enforcement logic in `lib/leasing-limits.ts` (separate concern); plan-tier display in upgrade flow.
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-5).
+
+### `phase-0-followup-leasing-notification-banner-copy-rewrite` (P2)
+- **Status:** Phase 5 backlog
+- **Background:** Notification banner on `/leasing` reads "Get instant alerts when your AI needs help. [Enable notifications] [Not now]". For owner persona, "your AI needs help" implies the AI is struggling, undermining the value prop of "AI handles lease-up for you." Better framing: "Get instant alerts when an escalation requires your input." Surfaced 2026-05-05 during Phase 0 walk #7 (owner persona lens).
+- **Discovery instructions:** Find the notification banner component. Likely in `src/app/(dashboard)/leasing/page.tsx` or a shared notifications component. Verify copy is hardcoded vs. config-driven. If config-driven, update the config; if hardcoded, refactor to a string constant + update.
+- **Hypotheses to confirm/refute:** (a) copy was written for broker persona during MVP and never updated for owner; (b) copy is shared across personas and needs persona-aware variants.
+- **Why deferred:** Phase 0 finding (P2) — Phase 1 work. Pure copy change.
+- **Required input before slicing:** Confirm the new copy lands well — propose 3 variants and pick one. Default: "Get instant alerts when an escalation requires your input."
+- **Affected surfaces:** `src/app/(dashboard)/leasing/page.tsx` (or wherever the banner lives), possibly i18n strings file if one exists.
+- **Out of scope:** Notification toggle behavior, push-notification subscription flow.
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-6).
+
 ---
 
 ## Phase 1 enhancement candidates
@@ -1062,3 +1084,75 @@ Enhancement opportunities surfaced by Phase 0 persona-lens walks. Different shap
 - **Impact:** Big paradigm shift but high payoff. Turns Messages from "another inbox to drown in" into "today's action list."
 - **Effort:** L (~1-2 months — paradigm shift, needs design + iteration)
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-5).
+
+### `enhancement-leasing-owner-dashboard-replacement` (LP-A1, P1)
+- **Persona:** Owner / Landlord
+- **JTBD:** "60-second pulse-check on my building's lease-up — how many inquiries did the AI handle, how many tours did it book, where did prospects drop off, where did the AI escalate to me, and is my lease-up on track."
+- **Current friction:** Current `/leasing` is a conversation list with summary tiles. Owner's first need is "how is my building performing this week?" — they care about lease-up velocity and AI-handled volume, not which specific conversation is at the top of the list.
+- **Proposed enhancement:** Convert `/leasing` (or add a new `/leasing/dashboard` that becomes default) to a true performance dashboard: Top: weekly lease-up funnel (Inquiries → Tours → Applications → Leases) with conversion rates; Middle: AI-handled vs. human-escalated split (clear that the AI is doing the work, with explicit count of escalations needing owner attention); Lower: per-building / per-unit performance leaderboard ("532 Neptune Ave: 12 inquiries, 3 tours, 1 lease — on track" vs. "20-15 24th St: 4 inquiries, 0 tours — needs attention"); Sidebar: cross-building benchmarks (you vs. similar buildings via `LeasingBenchmark` model in CLAUDE.md schema). The conversation list moves to `/leasing/conversations` as a power-user / drill-down surface.
+- **Impact:** Direct owner JTBD. Replaces 30 minutes of clicking with a 60-second pulse-check. Justifies the product subscription on its own.
+- **Effort:** L (~1-2 months — major IA shift, multiple components)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A1).
+
+### `enhancement-leasing-building-unit-pivots` (LP-A2, P1)
+- **Persona:** Owner / Landlord
+- **JTBD:** "See how each building / unit is performing without scrolling through conversation-level filters."
+- **Current friction:** All filters are conversation-level (Active / Qualified / Showing / Escalated). Owner thinks "how is 532 Neptune Ave doing?" not "show me all my conversations."
+- **Proposed enhancement:** Add a "By Building" or "By Unit" pivot affordance. Per-building card view: each building in a card showing inquiries/tours/applications/leases for the period, with a sparkline showing trend + status indicator (on-track / at-risk / under-performing). Click into a building → sub-view of units, each with same metrics.
+- **Impact:** Aligns the data model with how owners actually think. Especially valuable for owners with multiple buildings — they can spot which building is dragging the portfolio.
+- **Effort:** M (~2-3 weeks — new query layer + UI views)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A2).
+
+### `enhancement-leasing-escalations-queue-1-click-resolve` (LP-A3, P1)
+- **Persona:** Owner / Landlord
+- **JTBD:** "Clear AI-escalated conversations in 60 seconds without navigating away from the dashboard."
+- **Current friction:** "Escalated" is one of 5 filter chips with no count badge. Owner JTBD specifically says "where did the AI escalate to me" — that's the AI's most important communication, but it's de-emphasized.
+- **Proposed enhancement:** Promote escalations to a top-level component. Pinned at the top of `/leasing`: "**3 escalations need your input**" red banner with each escalation as a row showing prospect name + AI's reason for escalating + suggested response + "Approve" / "Edit" / "Take over" buttons. Owner can clear all 3 in 60 seconds without leaving the page. Backend: per `LeasingConversation.escalationReason` enum in CLAUDE.md schema. Surface this as a queue.
+- **Impact:** Closes the loop on the AI's "I need help" handoff. Direct owner JTBD. Without this, escalations sit unhandled and the AI looks broken.
+- **Effort:** M (~2-3 weeks — surface + workflow)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A3).
+
+### `enhancement-leasing-analytics-empty-state-skeleton` (LP-A4, P2)
+- **Persona:** Owner / Landlord
+- **JTBD:** "See what analytics will appear once the AI has been running long enough to produce data."
+- **Current friction:** `/leasing/analytics` shows "Not enough data yet" with no skeleton. Owner can't see what's coming.
+- **Proposed enhancement:** Render greyed-out skeleton metric cards in the empty state — "Conversion funnel (your data here)", "Response time distribution (your data here)", "Tour booking rate (your data here)", etc. Manages expectations + previews product value.
+- **Impact:** Onboarding clarity. Owner immediately sees "ah, this is what I'll get once the AI runs for a few weeks."
+- **Effort:** S (~3-5 days — pure UI work)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A4).
+
+### `enhancement-leasing-cross-building-benchmarks-widget` (LP-A5, P2)
+- **Persona:** Owner / Landlord
+- **JTBD:** "Self-benchmark my buildings against similar buildings without asking VettdRE."
+- **Current friction:** `LeasingBenchmark` model exists in schema (per CLAUDE.md: "anonymous percentiles" across buildings). But there's no visible "you vs. similar buildings" comparison anywhere on the landing page.
+- **Proposed enhancement:** Sidebar widget on `/leasing` (or a card on the proposed dashboard): "Your buildings vs. similar 30-50 unit Brooklyn multifamily — Inquiry-to-tour conversion: 18% (your) vs. 24% (median) — needs attention." Helps owner triage which buildings to focus on.
+- **Impact:** Owner can self-benchmark without asking VettdRE for "are these numbers good?" Direct retention play.
+- **Effort:** M (~1-2 weeks — leverages existing LeasingBenchmark model)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A5).
+
+### `enhancement-leasing-ai-value-receipt-headline` (LP-A6, P2)
+- **Persona:** Owner / Landlord
+- **JTBD:** "Know how much work the AI did this week so I can justify the subscription cost (to myself or my partners)."
+- **Current friction:** Owner is paying for the AI to do work. The product currently doesn't TELL them how much work it did. Without a clear value-receipt, retention/upgrade decisions get harder.
+- **Proposed enhancement:** Headline metric on `/leasing` dashboard: "**This week: AI handled 47 conversations → 12 tours booked → 3 leases signed. Saved you ~14 hours.**" Hours-saved calculation = avg time per inquiry × count. Configurable per-org rate.
+- **Impact:** Re-justifies the product on every visit. Helps with renewal conversations too.
+- **Effort:** S (~3-5 days — calculated metric + headline component)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A6).
+
+### `enhancement-leasing-calendar-tour-integration` (LP-A7, P3)
+- **Persona:** Owner / Landlord
+- **JTBD:** "See AI-booked tours on my calendar without context-switching between Leasing and Calendar."
+- **Current friction:** When the AI books a tour, that should appear in the owner's calendar. Currently unclear if the AI's tour-bookings flow into `/calendar` (yesterday's walk #5 showed empty calendar). Cross-area integration uncertain.
+- **Proposed enhancement:** Verify and surface: AI-booked tours appear on the owner's calendar with a "📞 AI-booked" badge. From the calendar event, owner can drill into the originating Leasing conversation. Stitches Leasing + Calendar.
+- **Impact:** Owner doesn't have to context-switch to know about tours coming up.
+- **Effort:** M (~1-2 weeks — cross-area, needs verification of current state first)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A7).
+
+### `enhancement-leasing-pause-ai-per-property-toggle` (LP-A8, P3)
+- **Persona:** Owner / Landlord
+- **JTBD:** "Pause AI inquiries on a specific building during renovation / unit-reserved / temporary holds without digging into Settings."
+- **Current friction:** Sometimes owners need to pause leasing on a building (mid-renovation, unit reserved, etc). Currently unclear how to do this — would have to dig into Settings or the property config.
+- **Proposed enhancement:** Per-building toggle on the Owner Dashboard: "Pause AI for 532 Neptune Ave" with a reason selector (under renovation / unit reserved / temporary hold / other). When paused, AI auto-replies "We're temporarily not accepting inquiries on this property — please check back in [date]." Resume on a click.
+- **Impact:** Common owner workflow. Currently absent or buried.
+- **Effort:** S (~3-5 days — config flag + auto-reply behavior)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #7 (`docs/handoff/speed-2026-q2-leasing-audit-2026-05-05.md`, finding LP-A8).
