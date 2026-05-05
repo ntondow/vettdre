@@ -971,3 +971,72 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Affected surfaces:** `src/app/(dashboard)/pipeline/page.tsx` (and entire directory), `next.config.ts` (redirect/rewrite config), `CLAUDE.md` (Feature Details "Pipeline" section), `src/components/layout/sidebar.tsx` (if restoring nav link), `prisma/schema.prisma` (if `Deal` model is dead, eventual cleanup).
 - **Out of scope:** Migrating any existing `Deal` model rows to `Transaction` (data migration is separate Phase 1+ work if needed).
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #4 (`docs/handoff/speed-2026-q2-dashboard-contacts-pipeline-audit-2026-05-05.md`, finding P-1).
+
+### `phase-0-followup-messages-leads-classifier-tightening` (P2)
+- **Status:** Phase 5 backlog
+- **Background:** "Leads" filter on `/messages` returns ~70% false positives (newsletters from Zillow / American Express / Chu's Meat Market all classified as Leads). Surfaced 2026-05-05 during Phase 0 walk #6 with broker persona lens — broker JTBD ("find stale lead") wastes time scrolling through misclassified noise.
+- **Discovery instructions:** Read `lib/email-categorizer.ts` to understand how categorization assigns the `lead` label. Check whether the classifier uses (a) sender domain + heuristics or (b) AI prompt-based classification or (c) both. Sample DB: query `EmailMessage` rows where `category = 'lead'` and inspect senders — quantify the false-positive rate. Cross-reference `lib/email-parser.ts` for any AI-driven classification logic.
+- **Hypotheses to confirm/refute:** (a) classifier defaults to "lead" when no other category matches, catching newsletters as fallback; (b) classifier checks for keywords like "rental" / "showing" / "available" but doesn't filter sender against newsletter domains; (c) classifier is AI-driven but the prompt over-includes.
+- **Why deferred:** Phase 0 finding (P2) — Phase 1 work. Fix is tightening classification logic + possibly adding domain blacklist for known newsletter senders.
+- **Required input before slicing:** Sample DB query results to confirm false-positive rate. Decide: blacklist-based filter (fast, brittle) vs. retrain AI classifier (slow, robust) vs. confidence-threshold filter (medium, simple).
+- **Affected surfaces:** `lib/email-categorizer.ts`, possibly `lib/email-parser.ts`, possibly a new domain-blacklist table or config in Settings.
+- **Out of scope:** Sentiment scoring, urgency tagging — those work fine.
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding M-4).
+
+---
+
+## Phase 1 enhancement candidates
+
+Enhancement opportunities surfaced by Phase 0 persona-lens walks. Different shape than the defect stubs above — these aren't bugs to fix but missing capabilities to build. Field schema:
+- **Persona:** which user role (Broker / Agent · Owner / Landlord · Developer / Investor)
+- **JTBD:** the job-to-be-done framing
+- **Current friction:** what the user has to do today and where it breaks down
+- **Proposed enhancement:** specific capability that would close the gap
+- **Impact:** estimated user benefit
+- **Effort:** rough sizing (S = days, M = weeks, L = months)
+- **Filed:** date + walk reference
+
+### `enhancement-messages-stale-leads-smart-inbox` (E-1, P1)
+- **Persona:** Broker / Agent
+- **JTBD:** "Find threads that need my attention without manually scrolling 361 unread emails."
+- **Current friction:** The broker's most common workflow is "find threads that need my attention." The current filters (All / Leads / Personal / News / Snoozed / Pinned) require the broker to manually triage by eyeballing dates. There's no algorithmic surface for "you haven't responded to these contacts in N days and they're warm."
+- **Proposed enhancement:** A new smart-inbox view called "Needs Follow-Up" that surfaces threads where: `last_inbound_email_at > last_outbound_email_at` (they emailed last); `now - last_inbound_email_at > 3 days` (stale, configurable); `contact.status NOT IN ("closed_lost", "closed_won")` (still actionable); optionally weighted by lead score, deal value, or last_inbound_temperature (AI-detected). UI: replace the empty reading pane on first load with this view. Default `/messages` lands here, not on the linear date-sorted inbox.
+- **Impact:** Turns Messages from a 361-unread overwhelm-firehose into a 5-item action list. Direct broker JTBD.
+- **Effort:** M (~1-2 weeks — new query + UI surface + Phase 5 stub for fine-tuning thresholds)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-1).
+
+### `enhancement-messages-ai-drafted-reply-button` (E-2, P1)
+- **Persona:** Broker / Agent
+- **JTBD:** "Send a thoughtful contextual reply without writing it from scratch when no template fits."
+- **Current friction:** Quick-reply templates are 6 fixed leasing-flow strings ("Thanks for reaching out", "Schedule showing", "Follow up", "New listing alert", "Check in"). For Elizabeth's billing dispute, *none* of them fit. The broker has to write a custom reply from scratch — exactly the friction AI is supposed to eliminate.
+- **Proposed enhancement:** Add a "**✨ AI draft**" button alongside the 6 templates. On click, AI reads the thread (it already generates a summary at the top — same model could draft) and produces a context-aware reply, e.g. "Hi Elizabeth, I'll reach out to mariaL@revonaproperties.com today and confirm the charges are reversed within 48 hours. I'll keep you posted." Draft populates the reply box; broker reviews + sends.
+- **Impact:** Saves 3-5 minutes per reply for any thread that doesn't fit a template. For brokers handling 50+ replies/day, that's 2.5-4 hours saved/week.
+- **Effort:** S (~3-5 days — leverages existing AI thread summary infra)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-2).
+
+### `enhancement-messages-inline-cadence-affordance` (E-3, P1)
+- **Persona:** Broker / Agent
+- **JTBD:** "Set up a follow-up cadence inline without leaving the inbox to configure an automation."
+- **Current friction:** To set up "follow up if no response in 3 days," broker has to: 1) Leave Messages; 2) Navigate to `/settings/automations`; 3) Create a new automation; 4) Configure trigger (no_activity for this contact); 5) Configure action (send_email with template); 6) Link back to this conversation. Six steps across two surfaces. Real brokers won't do this — they'll either set a manual reminder somewhere else or drop the ball.
+- **Proposed enhancement:** Inline cadence button below the reply box: "🔁 Set follow-up cadence". On click, modal asks: "Follow up if no response in [3 days] with [template]. Stop after [3 attempts] or once they reply." Saves the cadence to Automations under the hood; broker stays in the inbox.
+- **Impact:** Eliminates the multi-surface coordination tax. Drops dropped balls. Direct broker JTBD.
+- **Effort:** M (~1-2 weeks — modal + Automations integration + smoke contracts)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-3).
+
+### `enhancement-messages-entity-aware-crm-sidebar` (E-4, P2)
+- **Persona:** Broker / Agent
+- **JTBD:** "See related buildings, deals, and transactions for the current thread instead of generic Create-Lead CTAs on ongoing conversations."
+- **Current friction:** Right sidebar shows "Create Lead" + "Create Contact" CTAs even for ongoing conversations. For Elizabeth's thread (clearly an existing deal — Nathan and team already replied, building reference 49 Murdock Court 4G already extracted), the more useful CTAs would be: "Open building profile for 49 Murdock Court" (deep-link to Market Intel); "View existing deal" (if the building has an active deal/listing); "Pull transaction/lease record" (if BMS has a record).
+- **Proposed enhancement:** AI-powered entity detection in the sidebar. If thread mentions a known building (extracted via AI summary, already done), show "View 49 Murdock Court" instead of (or alongside) "Create Lead". Promote to "Create Lead" only when no entity matches. Detection runs server-side, cached per thread.
+- **Impact:** Turns Messages from a sender-centric inbox into a deal-aware workspace. Aligns with the audit-doc cross-area finding from walk #5 (CRM-vs-BMS architecture is unifying — Messages should reflect that).
+- **Effort:** M (~1-2 weeks — entity detection + sidebar variant)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-4).
+
+### `enhancement-messages-triage-stacks` (E-5, P3 — ambitious)
+- **Persona:** Broker / Agent
+- **JTBD:** "Triage 361 unread to the 5-10 that matter today without scrolling a linear date-sorted firehose."
+- **Current friction:** "361 unread" is overwhelming and not actionable. Brokers don't need to read 361 emails. They need to triage to the 5-10 that matter.
+- **Proposed enhancement:** Replace the linear date-sorted inbox with **AI-curated semantic stacks**: 🔥 **Hot leads** (high lead-score, recent, hand-raised); 🤝 **Awaiting your reply** (they emailed last, you haven't responded, > 24h); 📅 **Showings to confirm** (calendar invites or showing-scheduled threads); 💰 **Vendor / billing** (bills, vendor responses, ops noise); 📰 **Newsletters** (collapsed by default). Within each stack, threads sorted by urgency (lead-score × staleness × deal-value). Linear date view available behind a toggle for power users.
+- **Impact:** Big paradigm shift but high payoff. Turns Messages from "another inbox to drown in" into "today's action list."
+- **Effort:** L (~1-2 months — paradigm shift, needs design + iteration)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #6 (`docs/handoff/speed-2026-q2-messages-audit-2026-05-05.md`, finding E-5).
