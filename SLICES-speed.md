@@ -1038,6 +1038,25 @@ v2.2 §"Phase 5 stubs": `<parent-slice-id>-followup-<short-name>`.
 - **Out of scope:** Other surfaces using the same component (would inherit the fix automatically; no scope-creep needed).
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-6).
 
+### `phase-0-followup-public-chat-error-fallback-cta` (P2)
+- **Status:** Phase 5 backlog
+- **Background:** /chat/[invalid] and /book/[invalid] error pages dead-end the prospect with no fallback CTA. "This chat is not available" / "No Available Slots" — accurate copy but the prospect has nowhere to go. For real prospects clicking outdated marketing links, expired Streeteasy ads, or shared-from-friend links, this is a conversion-killer. Surfaced 2026-05-05 during Phase 0 walk #10 (prospect persona lens).
+- **Discovery instructions:** Find the error-state components for `/chat/[configSlug]` and `/book/[slug]`. Likely in `src/app/chat/[configSlug]/page.tsx` and `src/app/book/[slug]/page.tsx`. Identify whether the error states are component-level conditionals or full route handlers. Determine: (a) what fallback target exists for "browse other listings" — currently nothing, would need PC-A1 enhancement; (b) what per-org fallback contact info exists in BrandSettings or org config that could surface in the error state.
+- **Hypotheses to confirm/refute:** (a) error states are simple conditional renders — easy to add CTAs; (b) BrandSettings already has fallback contact fields — easy to wire; (c) need a new `OrgFallbackConfig` model.
+- **Why deferred:** Phase 0 finding (P2) — Phase 1 work. Bounded fix; no architectural change unless paired with PC-A1 (public listings front door) for the "browse other units" CTA.
+- **Required input before slicing:** Decide which fallback CTAs to ship: (a) "Email [org-fallback]" only (cheapest, ships standalone); (b) "Email [org-fallback]" + "Browse other units" (depends on PC-A1 existing); (c) full fallback hierarchy (in-org fallback → vettdre.com listings page → external).
+- **Affected surfaces:** `src/app/chat/[configSlug]/page.tsx`, `src/app/book/[slug]/page.tsx`, possibly `prisma/schema.prisma` (new fallback fields on `BrandSettings` or `Organization`), possibly settings UI to configure fallback.
+- **Out of scope:** Building the full /listings front door (separate PC-A1 enhancement); SEO-optimizing the error pages.
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (`docs/handoff/speed-2026-q2-public-chat-booking-audit-2026-05-05.md`, finding PC-2/PB-2).
+
+### `phase-0-followup-chat-no-slug-404-redirect` (P3)
+- **Status:** Phase 5 backlog
+- **Background:** `/chat` (no slug) renders the bare default Next.js 404 page ("404 / This page could not be found.") instead of either redirecting to a marketing page or rendering the custom "chat not available" page used for invalid slugs. Polish inconsistency. Surfaced 2026-05-05 during Phase 0 walk #10.
+- **Discovery instructions:** Check whether `src/app/chat/page.tsx` exists (probably doesn't — would explain the 404 default). Decide: (a) add a `chat/page.tsx` that redirects to `/leasing-agent` (marketing) or to `/listings` (PC-A1 front door); (b) add `chat/page.tsx` that renders the same "chat not available" custom page used for invalid slugs.
+- **Why deferred:** Phase 0 finding (P3) — pure polish. Pairs naturally with the PC-A2 fallback-CTA work.
+- **Affected surfaces:** `src/app/chat/page.tsx` (new file).
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (finding PC-4).
+
 ---
 
 ## Phase 1 enhancement candidates
@@ -1212,3 +1231,39 @@ Enhancement opportunities surfaced by Phase 0 persona-lens walks. Different shap
 - **Impact:** One-screen agent management. Combines roster + performance into the surface admins use most.
 - **Effort:** M (~1-2 weeks — leverages existing AgentGoal model, adds calculation + column)
 - **Filed:** 2026-05-05 by Cowork during Phase 0 walk #8 (`docs/handoff/speed-2026-q2-bms-audit-2026-05-05.md`, finding B-A5).
+
+### `enhancement-public-listings-front-door` (PC-A1, P1)
+- **Persona:** Prospect / tenant
+- **JTBD:** "Ask a question or book a tour without friction."
+- **Current friction:** VettdRE has no public-facing prospect entry point. The marketing page at /leasing-agent is OWNER-targeted (selling the AI agent product to NYC landlords). Prospects can only reach /chat or /book via deep links provided by an owner/broker. There's no SEO surface, no "Available units in Brooklyn" page, no organic prospect funnel.
+- **Proposed enhancement:** Build a public listings discovery page at `/listings` or `/units`: Map view + list view of all units across all VettdRE-leased buildings; Filter by neighborhood, BR count, rent, move-in date; Each unit card → "Schedule a tour" deep-links to /book/[slug]; "Ask a question" deep-links to /chat/[configSlug]; SEO-optimized metadata per unit + neighborhood landing pages; Optional: "Find your next apartment in NYC" branded experience.
+- **Impact:** Strategic. Currently VettdRE relies entirely on owner-side marketing to drive prospects. A public front door: Captures organic search demand for NYC apartments (massive); Cross-sells units across buildings (one prospect for Building A might also be a fit for Building B); Reduces dependence on owner-side marketing budgets; Creates a network effect (more owners → more units → more prospects → more conversions → more owners). **Caveat:** This is a major product investment, not a quick fix. But it's the highest-leverage enhancement surfaced across all 10 walks.
+- **Effort:** L (1-3 months — listings index + filters + map + SEO + per-unit detail page; could ship MVP in 4-6 weeks)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (`docs/handoff/speed-2026-q2-public-chat-booking-audit-2026-05-05.md`, finding PC-A1).
+
+### `enhancement-public-dead-end-fallback-ctas` (PC-A2, P2)
+- **Persona:** Prospect / tenant
+- **JTBD:** "Ask a question or book a tour without friction."
+- **Current friction:** /chat/[invalid] and /book/[invalid] error states have no escape hatch. Prospects bounce.
+- **Proposed enhancement:** Add fallback CTAs to both error pages: "Browse available units →" (links to /listings — depends on PC-A1); "Have a question? Email us at [brokerage email]" (configurable per-org fallback); "View other properties from [Brokerage Name]" (links to brokerage's public profile).
+- **Impact:** Direct prospect-conversion improvement. Even capturing 5% of dead-end prospects is meaningful if any non-trivial volume hits these URLs.
+- **Effort:** S (3-5 days — copy + CTA + link config — depends on what fallback target exists)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (`docs/handoff/speed-2026-q2-public-chat-booking-audit-2026-05-05.md`, finding PC-A2).
+
+### `enhancement-public-embeddable-chat-widget` (PC-A3, P2)
+- **Persona:** Prospect / tenant
+- **JTBD:** "Ask a question or book a tour without friction."
+- **Current friction:** /chat/[configSlug] is a hosted, full-page experience. For prospects already on a building's website, they have to LEAVE the marketing site to chat. Higher friction = lower engagement.
+- **Proposed enhancement:** Provide an embed script: `<script src="https://app.vettdre.com/embed/chat.js" data-config="[configSlug]"></script>`. Renders a floating chat bubble on the building's site. Click → opens chat widget inline (modal or sidebar). Prospect never leaves the marketing site.
+- **Impact:** Higher conversion because the prospect doesn't break flow. Standard pattern for chat tools (Intercom, Drift, Crisp). VettdRE Leasing Agent should support this as a deployment option.
+- **Effort:** M (2-3 weeks — embed script + iframe sandbox + cross-origin postMessage + theming for host site)
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (`docs/handoff/speed-2026-q2-public-chat-booking-audit-2026-05-05.md`, finding PC-A3).
+
+### `enhancement-public-booking-flow-no-account-audit` (PC-A4, P3)
+- **Persona:** Prospect / tenant
+- **JTBD:** "Ask a question or book a tour without friction."
+- **Current friction:** I couldn't walk the happy booking path due to test data gap, but per CLAUDE.md the /book/[slug] flow is "no auth" — good. Common anti-pattern in booking products is forcing prospect signup before tour confirmation. CLAUDE.md says VettdRE doesn't do this; verify it stays that way.
+- **Proposed enhancement:** Audit the booking flow once test data exists to confirm: (1) prospect can book without creating an account; (2) confirmation goes via email/SMS only; (3) prospect can reschedule via the same link without signup; (4) "Add to calendar" .ics download works without auth. If any of these break the no-friction principle, that's a finding.
+- **Impact:** Preserves the no-friction prospect experience. Catches regression risk early.
+- **Effort:** Audit only (3-5 days when test data exists). Fixes scoped per finding.
+- **Filed:** 2026-05-05 by Cowork during Phase 0 walk #10 (`docs/handoff/speed-2026-q2-public-chat-booking-audit-2026-05-05.md`, finding PC-A4).
